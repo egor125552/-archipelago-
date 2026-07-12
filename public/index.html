@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#061a24">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Эхо-Архипелаг — аудио-спасение</title>
+  <link rel="stylesheet" href="styles.css?v=2">
+</head>
+<body data-accessibility="touch" data-role="captain">
+  <a class="skip" href="#main">К игре</a>
+  <main id="main">
+    <section id="startScreen" class="start-shell" aria-labelledby="title">
+      <p class="eyebrow">быстрая кооперативная аудио-игра</p>
+      <h1 id="title">Эхо-Архипелаг</h1>
+      <p>Шторм разорвал караван. Спаси двух людей и доведи лодку до гавани. Наушники рекомендуются.</p>
+
+      <fieldset class="panel mode-picker">
+        <legend>Сначала выбери управление</legend>
+        <button id="modeTouch" aria-pressed="true">Без VoiceOver — удержание пальцем</button>
+        <button id="modeReader" aria-pressed="false">С VoiceOver или другим экранным диктором</button>
+        <p id="modeHint" class="hint"></p>
+      </fieldset>
+
+      <section class="panel">
+        <h2>Одиночная игра</h2>
+        <p>Ты — капитан. Помощник автоматически подстраховывает насос и ремонт, но маршрут и риск выбираешь ты.</p>
+        <button id="soloButton" class="primary">Начать одиночную спасательную операцию</button>
+      </section>
+
+      <section class="panel coop-panel">
+        <h2>Два игрока</h2>
+        <p>Капитан рулит и управляет ходом. Второй игрок ведёт сонар, насос, ремонт и спасательный трос.</p>
+        <label for="roomInput">Код комнаты</label>
+        <input id="roomInput" maxlength="8" autocomplete="off" placeholder="например, VOLNA">
+        <div class="grid2">
+          <button id="hostLocal">Создать локальную комнату</button>
+          <button id="joinLocal">Войти локально</button>
+          <button id="hostPeer">Создать интернет-комнату</button>
+          <button id="joinPeer">Войти через интернет</button>
+        </div>
+        <p id="networkStatus" class="hint" role="status">Локальная комната работает между двумя вкладками. Интернет-комната использует WebRTC. Ошибки подключения сопровождаются отдельным звуком.</p>
+      </section>
+    </section>
+
+    <section id="gameScreen" hidden aria-labelledby="gameTitle">
+      <header class="game-header">
+        <div>
+          <p class="eyebrow"><span id="roleLabel">Капитан</span></p>
+          <h1 id="gameTitle" tabindex="-1">Эхо-Архипелаг</h1>
+        </div>
+        <div class="game-header-actions">
+          <button id="statusButton" class="small">Озвучить статус</button>
+          <button id="speechButton" class="small" aria-pressed="true">Игровая озвучка: включена</button>
+          <button id="soundButton" class="small">Звук: включён</button>
+        </div>
+      </header>
+
+      <div id="liveStatus" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+      <p id="missionMessage" class="mission"></p>
+      <p id="engineWarning" class="warning" hidden aria-live="polite"></p>
+
+      <section class="status-strip" aria-label="Состояние лодки">
+        <div><span>Скорость</span><strong id="speed">0</strong></div>
+        <div><span>Курс</span><strong id="heading">0°</strong></div>
+        <div><span>Корпус</span><strong id="hull">100%</strong></div>
+        <div><span>Вода</span><strong id="water">0%</strong></div>
+        <div><span>Топливо</span><strong id="fuel">100%</strong></div>
+        <div><span>Мотор</span><strong id="temperature">24°</strong></div>
+        <div><span>Спасено</span><strong id="rescued">0/2</strong></div>
+        <div><span>Время</span><strong id="time">240 с</strong></div>
+      </section>
+
+      <section class="control-deck" aria-label="Постоянная раскладка управления">
+        <button id="sonarButton" class="control sonar" aria-label="Сонар. Одно нажатие показывает направление ближайшей цели">СОНАР</button>
+        <button id="leftButton" class="control left" aria-label="Поворот влево. Без VoiceOver удерживай. С VoiceOver нажимай короткими импульсами">◀ ЛЕВО</button>
+        <button id="throttleButton" class="control throttle" aria-label="Газ вперёд. Без VoiceOver удерживай">ГАЗ ▲</button>
+        <button id="rightButton" class="control right" aria-label="Поворот вправо. Без VoiceOver удерживай. С VoiceOver нажимай короткими импульсами">ПРАВО ▶</button>
+        <button id="reverseButton" class="control reverse" aria-label="Сбросить ход и дать задний ход. Удерживай">ТОРМОЗ ▼</button>
+        <button id="quickAction" class="control quick primary" aria-label="Быстрое контекстное действие">БЫСТРОЕ ДЕЙСТВИЕ</button>
+      </section>
+
+      <section class="systems panel" aria-label="Системы и спасение">
+        <button id="pumpButton">Удерживать насос</button>
+        <button id="rescueButton">Удерживать спасательный трос</button>
+        <button id="repairButton">Проверить двигатель</button>
+        <button id="anchorButton">Сбросить плавучий тормоз</button>
+      </section>
+
+      <details class="panel help">
+        <summary>Управление на компьютере</summary>
+        <p>Стрелки — ход и поворот. S — сонар. Пробел — быстрое действие. P — насос. R — спасательный трос.</p>
+      </details>
+
+      <section id="resultPanel" class="panel result" hidden>
+        <h2>Операция завершена</h2>
+        <p id="resultText"></p>
+        <button id="restartButton" class="primary">Начать новую операцию</button>
+      </section>
+    </section>
+  </main>
+
+  <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js" defer></script>
+  <script type="module" src="src/app.js?v=2"></script>
+</body>
+</html>
