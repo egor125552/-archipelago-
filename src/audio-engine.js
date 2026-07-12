@@ -133,8 +133,9 @@ export class AudioEngine {
       } else if (event.type === "rescue-complete") this.play("rescue", {gain: 0.74});
       else if (event.type === "repair" || event.type === "repair-complete") this.play("repair", {gain: 0.58});
       else if (event.type === "win") this.play("win", {gain: 0.86});
-      else if (event.type === "engine-stall" || event.type === "lose") this.play("warning", {gain: 0.62, rate: 1.05});
-      else if (event.type === "ui-deny") this.play("deny", {gain: 0.66, rate: 0.92});
+      else if (event.type === "engine-stall" || event.type === "lose" || event.type === "warning") {
+        this.play("warning", {gain: event.critical ? 0.72 : 0.52, rate: event.critical ? 0.92 : 1.05});
+      } else if (event.type === "ui-deny") this.play("deny", {gain: 0.66, rate: 0.92});
     }
   }
 }
