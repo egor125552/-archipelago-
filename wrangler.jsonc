@@ -3,7 +3,7 @@
   "name": "echo-archipelago",
   "compatibility_date": "2026-07-13",
   "assets": {
-    "directory": ".",
+    "directory": "./public",
     "not_found_handling": "single-page-application",
     "html_handling": "auto-trailing-slash"
   }
