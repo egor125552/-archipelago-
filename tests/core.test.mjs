@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {createGame, startGame, setControl, command, step, getView, CONFIG} from "../src/game-core.js";
+import {createGame, startGame, setControl, command, step, getView, CONFIG} from "../public/src/game-core.js";
 
 function run(state, seconds, dt = 0.05) {
   for (let t = 0; t < seconds; t += dt) step(state, dt);
