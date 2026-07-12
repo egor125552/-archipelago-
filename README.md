@@ -10,6 +10,7 @@
 - Одиночная игра с помощником и кооператив капитан/оператор.
 - Записанные CC0-звуки воды, дождя, двигателя, насоса и столкновений.
 - Озвучка игровых сообщений русским голосом со скоростью `1.18`; в режиме VoiceOver встроенная речь по умолчанию выключена.
+- Кнопка «Начать новую операцию» сбрасывает таймер, сеть, звук и игровое состояние без перезагрузки страницы.
 
 ## Локальный запуск
 
@@ -19,7 +20,7 @@ npm test
 npm run serve
 ```
 
-Открой `http://localhost:4173/public/`.
+Открой `http://localhost:4173/`.
 
 ## Cloudflare Workers Static Assets
 
@@ -29,4 +30,12 @@ npx wrangler login
 npm run deploy
 ```
 
-В Cloudflare Builds выбери репозиторий `egor125552/-archipelago-`, ветку `main`, оставь Root directory пустым и задай Deploy command: `npx wrangler deploy`.
+Для автоматического деплоя через Cloudflare Builds:
+
+- Repository: `egor125552/-archipelago-`
+- Production branch: `main`
+- Root directory: оставить пустым
+- Build command: `npm test`
+- Deploy command: `npx wrangler deploy`
+
+После подключения каждый коммит в `main` будет запускать проверку и публикацию.
