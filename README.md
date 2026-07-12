@@ -35,7 +35,7 @@ npm run deploy
 - Repository: `egor125552/-archipelago-`
 - Production branch: `main`
 - Root directory: оставить пустым
-- Build command: `npm test`
+- Build command: `npm install && npm test`
 - Deploy command: `npx wrangler deploy`
 
 После подключения каждый коммит в `main` будет запускать проверку и публикацию.
