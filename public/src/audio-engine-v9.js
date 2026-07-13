@@ -1,6 +1,6 @@
 "use strict";
 
-import {AudioEngine as V8AudioEngine} from "./audio-engine-v8.js?base=1";
+import {AudioEngine as V8AudioEngine} from "./audio-engine-v8.js?base=3";
 
 const RIVER_SOUNDS = Object.freeze({
   riverIdle: "/assets/audio/river-ambience.ogg",
@@ -22,10 +22,15 @@ export class AudioEngine extends V8AudioEngine {
     this.legacyLoopsCleared = false;
     this.floodFilter = null;
     this.nextFloodAlarmAt = 0;
+    this.localPreloadPromise = null;
   }
 
   async init() {
     await super.init();
+    // Base init starts preload without awaiting it. Wait only for the bundled
+    // river recordings so the first launch cannot begin with silent water;
+    // remote fallback libraries may continue downloading in the background.
+    if (this.localPreloadPromise) await this.localPreloadPromise;
     if (!this.ctx || !this.compressor || this.floodFilter) return;
     this.floodFilter = this.ctx.createBiquadFilter();
     this.floodFilter.type = "lowpass";
@@ -38,13 +43,13 @@ export class AudioEngine extends V8AudioEngine {
   async preload() {
     const inheritedPreload = super.preload();
     if (!this.ctx) return;
-    const localPreload = Promise.allSettled(Object.entries(RIVER_SOUNDS).map(async ([name, url]) => {
+    this.localPreloadPromise = Promise.allSettled(Object.entries(RIVER_SOUNDS).map(async ([name, url]) => {
       const response = await fetch(url, {mode: "cors", cache: "force-cache"});
       if (!response.ok) throw new Error(`${name}: ${response.status}`);
       const buffer = await this.ctx.decodeAudioData(await response.arrayBuffer());
       this.buffers.set(name, buffer);
     }));
-    await Promise.allSettled([inheritedPreload, localPreload]);
+    await Promise.allSettled([inheritedPreload, this.localPreloadPromise]);
   }
 
   clearInheritedLoopsOnce() {
@@ -77,13 +82,13 @@ export class AudioEngine extends V8AudioEngine {
       rate: urgent ? 1.02 : 0.94,
       lowpass: 7600,
       offset: 0.1,
-      duration: urgent ? 1.15 : 1.85,
+      duration: urgent ? 1.18 : 2.12,
     });
     // The synthesized pair remains audible if the recorded siren could not be
     // downloaded, and makes the repeating alarm distinct from sonar cues.
     this.playSynthPip({frequency: urgent ? 225 : 310, gain: urgent ? 0.14 : 0.1, duration: 0.18});
     this.playSynthPip({frequency: urgent ? 185 : 265, gain: urgent ? 0.13 : 0.09, duration: 0.2, delay: 0.28});
-    this.nextFloodAlarmAt = this.ctx.currentTime + (urgent ? 1.35 : 2.65);
+    this.nextFloodAlarmAt = this.ctx.currentTime + (urgent ? 1.28 : 2.34);
   }
 
   update(view) {
@@ -178,9 +183,9 @@ export class AudioEngine extends V8AudioEngine {
           duration: 0.65,
         });
       } else if (event.type === "flood-emergency-start") {
-        this.playExcerpt("warningReal", {gain: 0.46, rate: 0.94, lowpass: 7200, offset: 0.1, duration: 1.45});
+        this.playExcerpt("warningReal", {gain: 0.46, rate: 0.94, lowpass: 7200, offset: 0.1, duration: 2.08});
         this.playSynthPip({frequency: 360, gain: 0.1, duration: 0.16, delay: 0.2});
-        if (this.ctx) this.nextFloodAlarmAt = this.ctx.currentTime + 2.4;
+        if (this.ctx) this.nextFloodAlarmAt = this.ctx.currentTime + 2.2;
       } else if (event.type === "flood-emergency-warning") {
         this.playSynthPip({frequency: event.critical ? 230 : 310, gain: event.critical ? 0.13 : 0.09, duration: 0.18});
       } else if (event.type === "flood-emergency-recovered") {
@@ -204,6 +209,19 @@ export class AudioEngine extends V8AudioEngine {
       } else if (event.type === "approach-assist") {
         this.playSynthPip({frequency: 560, gain: 0.07, duration: 0.09});
         this.playSynthPip({frequency: 690, gain: 0.07, duration: 0.08, delay: 0.14});
+      } else if (event.type === "risk-route-toggle") {
+        this.playSynthPip({frequency: event.enabled ? 920 : 520, gain: 0.075, duration: 0.08});
+        this.playSynthPip({frequency: event.enabled ? 690 : 440, gain: 0.07, duration: 0.1, delay: 0.14});
+      } else if (event.type === "risk-gate-cleared") {
+        this.playSynthPip({frequency: 760, gain: 0.08, duration: 0.08});
+        this.playSynthPip({frequency: 980, gain: 0.085, duration: 0.09, delay: 0.13});
+        this.playSynthPip({frequency: 1220, gain: 0.08, duration: 0.1, delay: 0.27});
+      } else if (event.type === "risk-gate-entered") {
+        this.playSynthPip({pan: event.pan || 0, frequency: 700, gain: 0.07, duration: 0.08});
+        this.playSynthPip({pan: event.pan || 0, frequency: 820, gain: 0.075, duration: 0.08, delay: 0.13});
+      } else if (event.type === "risk-gate-failed") {
+        this.playSynthPip({frequency: 360, gain: 0.085, duration: 0.12});
+        this.playSynthPip({frequency: 280, gain: 0.075, duration: 0.14, delay: 0.17});
       } else {
         super.handle([event]);
       }

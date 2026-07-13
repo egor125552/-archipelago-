@@ -60,7 +60,7 @@ p { line-height: 1.5; }
   display: grid;
   grid-template-columns: 1fr 1.08fr 1fr;
   grid-template-areas:
-    ". sonar ."
+    ". sonar route"
     "left throttle right"
     "reverse quick quick";
   gap: .55rem;
@@ -69,6 +69,7 @@ p { line-height: 1.5; }
 }
 .control { min-height: 5.2rem; user-select: none; -webkit-user-select: none; }
 .sonar { grid-area: sonar; }
+.route-mode { grid-area: route; min-height: 5.2rem; font-size: .78rem; }
 .left { grid-area: left; }
 .throttle { grid-area: throttle; }
 .right { grid-area: right; }

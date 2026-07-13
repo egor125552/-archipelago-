@@ -1,6 +1,6 @@
 "use strict";
 
-import {AudioEngine as BaseAudioEngine} from "./audio-engine.js?base=1";
+import {AudioEngine as BaseAudioEngine} from "./audio-engine.js?base=3";
 
 const ROOT = "https://raw.githubusercontent.com/lavenderdotpet/CC0-Public-Domain-Sounds/main/";
 const EXTRA_SOUNDS = Object.freeze({

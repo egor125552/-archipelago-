@@ -151,6 +151,12 @@ function situationHint() {
     return "Лодка почти остановлена. Нажми Заделать пробоину. После установки пластины включи насос, чтобы убрать воду.";
   }
   if (water > 30) return `В лодке ${Math.round(water)} процентов воды. Включи насос повторным нажатием и выключи, когда уровень снизится.`;
+  if (currentView.riskRoute?.active) {
+    const failed = currentView.riskRoute.gateFailed
+      ? " На этом подходе уже было столкновение: проход можно закончить, но бонус не начислится."
+      : ` Чистое прохождение даст 150 очков и 100 жетонов после победы.`;
+    return `Рискованный маршрут: ${currentView.riskRoute.gateLabel}, примерно ${Math.round(currentView.navigation?.guideDistance || 0)} метров. Держи высокий маяк по центру вручную; автоподруливание временно приостановлено.${failed}`;
+  }
   if (current.rescued < 2) {
     const targetDistance = currentView.navigation?.guideDistance ?? currentView.navigation?.targetDistance ?? currentView.nearestSurvivorDistance;
     const angle = currentView.navigation?.targetRelativeAngle;
@@ -278,7 +284,15 @@ function statusText() {
   const emergencyText = currentView.damageControl?.floodEmergency
     ? `Аварийный режим. Осталось ${Math.ceil(currentView.damageControl.floodEmergencyRemaining)} секунд. Для спасения: вода не выше ${currentView.damageControl.recoveryWaterTarget}, течь не выше ${currentView.damageControl.recoveryLeakTarget.toFixed(1)}, корпус не ниже ${currentView.damageControl.recoveryHullTarget}. Насос ${currentView.boat.pumpActive ? "работает" : "выключен"}.`
     : "";
-  return `${currentView.message} ${emergencyText} ${levelText} Скорость ${currentView.boat.speed.toFixed(1)} узла. Курс ${Math.round((currentView.boat.heading + 360) % 360)} градусов. Корпус ${Math.round(currentView.boat.hull)} процентов. ${armorText} Вода ${Math.round(currentView.boat.water)} процентов. ${repairText} Спасено ${currentView.rescued} из двух. ${assistText} ${brakeText} ${timeText}`;
+  const pendingText = currentView.riskRoute?.selectionPending
+    ? ` После следующего сонара включится ${currentView.riskRoute.selectedRisk ? "рискованный" : "обычный"} режим.`
+    : "";
+  const riskText = currentView.riskRoute?.enabled
+    ? currentView.riskRoute.active
+      ? `Рискованный маршрут активен: ${currentView.riskRoute.gateLabel}. Чистых ворот ${currentView.riskRoute.cleanGates}.${pendingText}`
+      : `Текущий режим рискованный. Чистых ворот ${currentView.riskRoute.cleanGates}.${pendingText}`
+    : `Текущий маршрут обычный.${pendingText}`;
+  return `${currentView.message} ${emergencyText} ${levelText} Скорость ${currentView.boat.speed.toFixed(1)} узла. Курс ${Math.round((currentView.boat.heading + 360) % 360)} градусов. Корпус ${Math.round(currentView.boat.hull)} процентов. ${armorText} Вода ${Math.round(currentView.boat.water)} процентов. ${repairText} Спасено ${currentView.rescued} из двух. ${assistText} ${riskText} ${brakeText} ${timeText}`;
 }
 
 function syncControls() {
@@ -306,7 +320,11 @@ function syncControls() {
 
   const pumpButton = byId("pumpButton");
   if (pumpButton) {
-    const text = current.controls.pump ? "Насос работает — нажми для выключения" : "Включить насос";
+    const text = current.controls.pump
+      ? "Ручной насос усилен — нажми для выключения"
+      : currentView?.boat?.pumpActive
+        ? "Помощник откачивает — нажми для усиления"
+        : "Включить насос";
     if (pumpButton.textContent !== text) pumpButton.textContent = text;
   }
 
@@ -323,7 +341,9 @@ function syncControls() {
   if (assistButton && currentView?.navigation) {
     const enabled = Boolean(currentView.navigation.assistEnabled);
     assistButton.setAttribute("aria-pressed", String(enabled));
-    assistButton.textContent = `Навигационный помощник: ${enabled ? "включён" : "выключен"}`;
+    assistButton.textContent = currentView.riskRoute?.active
+      ? "Навигационный помощник: пауза на рискованном проходе"
+      : `Навигационный помощник: ${enabled ? "включён" : "выключен"}`;
   }
 
   const time = byId("time");

@@ -1,6 +1,6 @@
 "use strict";
 
-import * as base from "./game-core-v11.js?base=2";
+import * as base from "./game-core-v11.js?base=3";
 import {collisionSeverity} from "./collision-model.js";
 
 export const CONFIG = Object.freeze({
@@ -131,6 +131,11 @@ function beginCoastBrake(state) {
 
 function applyCoastBrake(state, dt, events) {
   const progress = state.progression;
+  if (state.phase !== "playing" || state.won || state.lost) {
+    progress.coastBrakeActive = false;
+    progress.coastBrakeElapsed = 0;
+    return;
+  }
   if (!progress.upgrades.coastBrake) return;
   if (state.controls.forward || state.controls.reverse || state.damageControl?.floodEmergency) {
     progress.coastBrakeActive = false;
@@ -162,6 +167,7 @@ function applyCoastBrake(state, dt, events) {
 }
 
 function applyPumpUpgrade(state, dt) {
+  if (state.phase !== "playing" || state.won || state.lost) return;
   const requested = Boolean(state.controls.pump)
     || (state.mode === "solo" && state.boat.water > 34 && !state.controls.rescue);
   if (!state.progression.upgrades.highFlowPump || !requested) return;
@@ -173,8 +179,9 @@ function finalizeReward(state, events) {
   const level = state.progression.level;
   const hullBonus = Math.round(Math.max(0, state.boat.hull) * 2.5);
   const stormBonus = state.timed ? 300 : 0;
+  const riskBonus = Math.max(0, Math.round(Number(state.riskRoute?.creditBonus) || 0));
   const collisionPenalty = Math.min(240, state.progression.collisionCount * 60);
-  const reward = Math.max(250, OPERATIONS[level].rewardBase + hullBonus + stormBonus - collisionPenalty);
+  const reward = Math.max(250, OPERATIONS[level].rewardBase + hullBonus + stormBonus + riskBonus - collisionPenalty);
   state.progression.rewardCredits = reward;
   state.progression.rewardFinalized = true;
   const unlock = level === 1
@@ -182,8 +189,9 @@ function finalizeReward(state, events) {
     : level === 2
       ? " Открыт уровень 3 и катер «Касатка»."
       : " Все три операции открыты.";
-  state.message += ` Награда: ${reward} жетонов спасслужбы.${unlock}`;
-  events.push({type: "operation-reward", reward, level, unlockedLevel: Math.min(3, level + 1)});
+  const riskText = riskBonus > 0 ? ` В том числе ${riskBonus} за чистые рискованные проходы.` : "";
+  state.message += ` Награда: ${reward} жетонов спасслужбы.${riskText}${unlock}`;
+  events.push({type: "operation-reward", reward, level, riskBonus, unlockedLevel: Math.min(3, level + 1)});
 }
 
 export function createGame(options = {}) {

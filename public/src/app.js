@@ -14,7 +14,7 @@ import {
   saveProfile,
   selectBoat,
   selectOperation,
-} from "./progression.js?v=15.0";
+} from "./progression.js?v=16.0";
 
 const $ = id => document.getElementById(id);
 const stateBox = {state: null};
@@ -36,6 +36,12 @@ let recordedResultState = null;
 
 function vibrate(pattern) { try { navigator.vibrate?.(pattern); } catch (_) {} }
 function randomRoom() { return Math.random().toString(36).slice(2, 6).toUpperCase(); }
+
+function resumeGameAudio() {
+  const context = audio?.ctx;
+  if (!context || context.state !== "suspended") return;
+  context.resume().catch(() => {});
+}
 
 function setText(id, value) {
   const text = String(value ?? "");
@@ -89,6 +95,8 @@ function speak(text, force = false) {
   utterance.rate = SPEECH_RATE;
   utterance.pitch = 1;
   if (selectedVoice) utterance.voice = selectedVoice;
+  utterance.onend = resumeGameAudio;
+  utterance.onerror = resumeGameAudio;
   window.speechSynthesis.speak(utterance);
 }
 
@@ -127,7 +135,8 @@ function setProgressionStatus(text, announce = false) {
 }
 
 function renderProgressionMenu() {
-  setText("profileSummary", `Жетоны: ${profile.credits}. Победы: ${profile.wins} из ${profile.runs}. Лучший счёт: ${profile.bestScore}.`);
+  const records = OPERATIONS.map(operation => `уровень ${operation.id}: ${profile.bestByLevel?.[operation.id] || 0}`).join(", ");
+  setText("profileSummary", `Жетоны: ${profile.credits}. Победы: ${profile.wins} из ${profile.runs}. Лучший счёт: ${profile.bestScore}. Рекорды — ${records}.`);
   for (const operation of OPERATIONS) {
     const button = $(`operation${operation.id}`);
     if (!button) continue;
@@ -260,6 +269,8 @@ async function hostCoop(kind) {
     setNetworkStatus(`Комната ${roomCode}: капитан подключён.`);
     showGame(); render(true); startLoop();
   } catch (error) {
+    transport?.close();
+    transport = null;
     setNetworkStatus(`Не удалось открыть комнату: ${error.message}`);
     audio.play("deny", {gain: 0.55});
   }
@@ -282,6 +293,8 @@ async function joinCoop(kind) {
     setNetworkStatus(`Комната ${roomCode}: второй игрок подключён.`);
     showGame(); render(true); startLoop();
   } catch (error) {
+    transport?.close();
+    transport = null;
     setNetworkStatus(`Не удалось войти: ${error.message}`);
     audio.play("deny", {gain: 0.55});
   }
@@ -289,6 +302,22 @@ async function joinCoop(kind) {
 
 function handleNetworkMessage(message) {
   if (!message || !stateBox.state) return;
+  if (message.type === "network-error" || message.type === "network-closed") {
+    if (role === "captain") {
+      for (const control of ["pump", "rescue", "hullRepair"]) {
+        setControl(stateBox.state, control, false, "crew");
+      }
+    }
+    const text = message.type === "network-error"
+      ? `Ошибка связи с напарником: ${message.message || "соединение потеряно"}. Активные системы оператора безопасно выключены.`
+      : "Связь с напарником закрыта. Активные системы оператора безопасно выключены; операцию можно перезапустить с карты.";
+    stateBox.state.message = text;
+    setNetworkStatus(text);
+    audio.play("deny", {gain: 0.55});
+    vibrate([40, 45, 40]);
+    render(true);
+    return;
+  }
   if (role === "captain") {
     if (message.type === "control") setControl(stateBox.state, message.control, message.active, "crew");
     if (message.type === "command") {
@@ -332,7 +361,7 @@ function startLoop() {
     }
     if (events.length || now - lastUiRender >= 200) {
       lastUiRender = now;
-      render(Boolean(events.length));
+      render();
     }
     raf = requestAnimationFrame(frame);
   };
@@ -354,6 +383,14 @@ function render(forceAnnouncement = false) {
   setText("temperature", `${Math.round(view.boat.engineTemp)}°`);
   setText("rescued", `${view.rescued}/2`);
   setText("time", view.timed ? `${Math.ceil(view.remaining)} с` : "Без лимита");
+  const risk = view.riskRoute;
+  setText("riskRouteState", !risk?.available
+    ? "закрыт"
+    : risk.active
+      ? risk.selectionPending ? "риск; смена ждёт сонар" : "рискованный"
+      : risk.selectionPending
+        ? `${risk.selectedRisk ? "риск" : "обычный"} выбран`
+        : risk.enabled ? "рискованный" : "обычный");
   setText("quickAction", view.quickLabel);
 
   const captainLocked = view.mode === "coop" && role === "crew";
@@ -361,6 +398,16 @@ function render(forceAnnouncement = false) {
   for (const id of ["leftButton", "rightButton", "throttleButton", "reverseButton", "anchorButton"]) setAriaDisabled(id, captainLocked);
   for (const id of ["sonarButton", "pumpButton", "rescueButton"]) setAriaDisabled(id, crewLocked);
   setAriaDisabled("repairButton", crewLocked || !view.canRepair);
+  setAriaDisabled("routeModeButton", !risk?.available || crewLocked);
+  const routeButton = $("routeModeButton");
+  if (routeButton) {
+    routeButton.setAttribute("aria-pressed", String(Boolean(risk?.selectedRisk)));
+    setText("routeModeButton", !risk?.available
+      ? "МАРШРУТ: ОБЫЧНЫЙ — риск откроется на уровне 2"
+      : risk.selectedRisk
+        ? `МАРШРУТ: РИСКОВАННЫЙ${risk.selectionPending ? " — НАЖМИ СОНАР" : ""}`
+        : `МАРШРУТ: ОБЫЧНЫЙ${risk.selectionPending ? " — НАЖМИ СОНАР" : ""}`);
+  }
   $("pumpButton").classList.toggle("active", view.boat.pumpActive);
   setHidden("engineWarning", !view.boat.engineStalled && view.boat.engineTemp < 88);
   setText("engineWarning", view.boat.engineStalled ? "Двигатель заглох" : "Двигатель перегревается");
@@ -494,6 +541,7 @@ $("joinLocal").addEventListener("click", () => joinCoop("local"));
 $("hostPeer").addEventListener("click", () => hostCoop("peer"));
 $("joinPeer").addEventListener("click", () => joinCoop("peer"));
 $("sonarButton").addEventListener("click", () => sendCommand("sonar"));
+$("routeModeButton").addEventListener("click", () => sendCommand("risk-route-toggle"));
 $("quickAction").addEventListener("click", () => sendCommand("quick"));
 $("repairButton").addEventListener("click", () => sendCommand("repair"));
 $("anchorButton").addEventListener("click", () => sendCommand("anchor"));
@@ -554,6 +602,11 @@ if ("speechSynthesis" in window) {
   refreshVoice();
   window.speechSynthesis.onvoiceschanged = refreshVoice;
 }
+window.addEventListener("focus", resumeGameAudio, {passive: true});
+window.addEventListener("pageshow", resumeGameAudio, {passive: true});
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) resumeGameAudio();
+}, {passive: true});
 setMode("touch");
 renderProgressionMenu();
 window.__echoArchipelago = {
@@ -561,7 +614,7 @@ window.__echoArchipelago = {
   setState: value => { stateBox.state = value; render(true); },
   command: sendCommand,
   control: sendControl,
-  step: seconds => { const events = step(stateBox.state, seconds); audio.handle(events); render(Boolean(events.length)); return events; },
+  step: seconds => { const events = step(stateBox.state, seconds); audio.handle(events); render(); return events; },
   startSolo: beginSolo,
   resetOperation,
   getView: () => stateBox.state && getView(stateBox.state),

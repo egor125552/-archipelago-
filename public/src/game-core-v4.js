@@ -1,6 +1,6 @@
 "use strict";
 
-import * as base from "./game-core.js?base=1";
+import * as base from "./game-core.js?base=3";
 
 export const CONFIG = Object.freeze({...base.CONFIG, turnRate: 1.18});
 

@@ -1,6 +1,6 @@
 "use strict";
 
-import {AudioEngine as V4AudioEngine} from "./audio-engine-v4.js?base=1";
+import {AudioEngine as V4AudioEngine} from "./audio-engine-v4.js?base=3";
 
 const ROOT = "https://raw.githubusercontent.com/lavenderdotpet/CC0-Public-Domain-Sounds/main/";
 

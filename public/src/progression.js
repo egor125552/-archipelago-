@@ -4,8 +4,8 @@ export const PROFILE_KEY = "echo-archipelago-profile-v1";
 
 export const OPERATIONS = Object.freeze([
   Object.freeze({id: 1, name: "Тихая бухта", description: "Учебная спасательная операция с открытыми прямыми маршрутами."}),
-  Object.freeze({id: 2, name: "Проход среди обломков", description: "Два узких, но честных прохода. Магазин спасслужбы уже доступен."}),
-  Object.freeze({id: 3, name: "Северный фарватер", description: "Два поля обломков и новый устойчивый катер «Касатка»."}),
+  Object.freeze({id: 2, name: "Проход среди обломков", description: "Открываются магазин и выбор у сонара: надёжный обычный маршрут или добровольный узкий проход с бонусом."}),
+  Object.freeze({id: 3, name: "Северный фарватер", description: "Цепочка рискованных проходов, больше наград и новый устойчивый катер «Касатка»."}),
 ]);
 
 export const SHOP_ITEMS = Object.freeze([

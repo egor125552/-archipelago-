@@ -1,6 +1,6 @@
 "use strict";
 
-import {AudioEngine as V7AudioEngine} from "./audio-engine-v7-1.js?base=1";
+import {AudioEngine as V7AudioEngine} from "./audio-engine-v7-1.js?base=3";
 
 export class AudioEngine extends V7AudioEngine {
   constructor() {

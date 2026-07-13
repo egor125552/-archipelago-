@@ -1,6 +1,6 @@
 "use strict";
 
-import {AudioEngine as V9AudioEngine} from "./audio-engine-v9.js?base=2";
+import {AudioEngine as V9AudioEngine} from "./audio-engine-v9.js?base=3";
 
 export class AudioEngine extends V9AudioEngine {
   update(view) {

@@ -311,11 +311,14 @@ export function step(state, dt) {
   const aiPump = state.mode === "solo" && boat.water > 34 && !state.controls.rescue;
   boat.pumpActive = pumpRequested || aiPump;
   if (boat.pumpActive) {
-    boat.water = clamp(boat.water - dt * (aiPump ? 4.8 : 7.5), 0, 100);
-    boat.leak = clamp(boat.leak - dt * (aiPump ? 0.06 : 0.09), 0, 16);
+    // A deliberate player action must always take priority over the slower
+    // solo helper. Previously aiPump stayed true while the manual pump was
+    // held, so pressing the button produced no extra flow at all.
+    boat.water = clamp(boat.water - dt * (pumpRequested ? 7.5 : 4.8), 0, 100);
+    boat.leak = clamp(boat.leak - dt * (pumpRequested ? 0.09 : 0.06), 0, 16);
   }
 
-  if (state.mode === "solo" && boat.engineStalled && Math.abs(boat.speed) < 2.2) {
+  if (state.mode === "solo" && boat.engineStalled && boat.fuel > 0.01 && Math.abs(boat.speed) < 2.2) {
     boat.repairProgress = clamp(boat.repairProgress + dt * 17, 0, 100);
     if (boat.repairProgress >= 100) {
       boat.engineStalled = false;
