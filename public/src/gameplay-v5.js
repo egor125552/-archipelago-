@@ -36,6 +36,16 @@ function say(text) {
   window.speechSynthesis.speak(utterance);
 }
 
+function stopEvent(event) {
+  event.preventDefault();
+  event.stopImmediatePropagation();
+}
+
+function setHeld(button, active) {
+  button.classList.toggle("held", active);
+  button.setAttribute("aria-pressed", String(active));
+}
+
 function setPace(timed) {
   timedMode = Boolean(timed);
   window.__echoNextTimed = timedMode;
@@ -55,10 +65,7 @@ function applyPaceToNextSession() {
     if (current) {
       current.timed = timedMode;
       clearInterval(timer);
-      if (!timedMode) {
-        const time = byId("time");
-        if (time) time.textContent = "Без лимита";
-      }
+      if (!timedMode && byId("time")) byId("time").textContent = "Без лимита";
     } else if (attempts > 50) clearInterval(timer);
   }, 25);
 }
@@ -66,18 +73,7 @@ function applyPaceToNextSession() {
 function courseText() {
   const current = state();
   if (!current) return "";
-  const heading = Math.round((current.boat.heading + 360) % 360);
-  return `Курс ${heading} градусов.`;
-}
-
-function stopEvent(event) {
-  event.preventDefault();
-  event.stopImmediatePropagation();
-}
-
-function setHeld(button, active) {
-  button.classList.toggle("held", active);
-  button.setAttribute("aria-pressed", String(active));
+  return `Курс ${Math.round((current.boat.heading + 360) % 360)} градусов.`;
 }
 
 function situationHint() {
@@ -136,6 +132,7 @@ function bindReliableControl(button, control) {
     try { button.setPointerCapture?.(pointerId); } catch (_) {}
     active = Boolean(gameApi()?.control?.(control, true));
     if (active) setHeld(button, true);
+    else if (control === "hullRepair") say("В кооперативе корпус ремонтирует системный оператор.");
   }, true);
   button.addEventListener("pointerup", release, true);
   button.addEventListener("pointercancel", release, true);
@@ -183,8 +180,7 @@ function statusText() {
 
 function syncControls() {
   const current = state();
-  const currentView = view();
-  if (!current || !currentView) return;
+  if (!current) return;
 
   for (const control of toggleControls) {
     const active = Boolean(current.controls?.[control]);
@@ -196,28 +192,30 @@ function syncControls() {
 
   const rescueButton = byId("rescueButton");
   if (rescueButton) {
-    const percent = Math.round((currentView.rescueProgress || 0) * 100);
-    rescueButton.textContent = current.controls.rescue
-      ? `Трос подан: ${percent}% — нажми для отмены`
-      : "Подать спасательный трос";
-    rescueButton.setAttribute("aria-label", current.controls.rescue
-      ? `Спасательный трос активен, прогресс ${percent} процентов. Нажми для отмены`
+    const active = Boolean(current.controls.rescue);
+    const text = active ? "Трос подан — нажми для отмены" : "Подать спасательный трос";
+    if (rescueButton.textContent !== text) rescueButton.textContent = text;
+    rescueButton.setAttribute("aria-label", active
+      ? "Спасательный трос активен. Нажми для отмены"
       : "Подать спасательный трос. Подойди ближе двенадцати метров и снизь скорость ниже четырёх узлов");
   }
 
   const pumpButton = byId("pumpButton");
-  if (pumpButton) pumpButton.textContent = current.controls.pump ? "Насос работает — нажми для выключения" : "Включить насос";
+  if (pumpButton) {
+    const text = current.controls.pump ? "Насос работает — нажми для выключения" : "Включить насос";
+    if (pumpButton.textContent !== text) pumpButton.textContent = text;
+  }
 
   const repairHullButton = byId("repairHullButton");
   if (repairHullButton) {
     const captainLocked = current.mode === "coop" && document.body.dataset.role === "captain";
     repairHullButton.setAttribute("aria-disabled", String(captainLocked));
-    const percent = Math.round((current.boat.hullRepairProgress || 0) / 3.1 * 100);
     const patches = current.boat.repairPatches ?? 0;
-    repairHullButton.textContent = current.controls.hullRepair
-      ? `Заделка пробоины: ${Math.min(99, percent)}%`
-      : `Заделать пробоину — пластин ${patches}`;
-    repairHullButton.setAttribute("aria-label", `Заделать пробоину. Нужно почти остановить лодку. Ремонтных пластин ${patches}`);
+    const text = current.controls.hullRepair ? "Заделка пробоины выполняется" : `Заделать пробоину — пластин ${patches}`;
+    if (repairHullButton.textContent !== text) repairHullButton.textContent = text;
+    repairHullButton.setAttribute("aria-label", captainLocked
+      ? "Ремонт корпуса доступен системному оператору"
+      : `Заделать пробоину. Нужно почти остановить лодку. Ремонтных пластин ${patches}`);
   }
 
   const time = byId("time");
@@ -242,6 +240,6 @@ byId("actionHintButton")?.addEventListener("click", event => {
   say(situationHint());
 }, true);
 
-setInterval(syncControls, 180);
+setInterval(syncControls, 220);
 setPace(false);
 window.__echoGameplayV5 = {situationHint, statusText, syncControls};
