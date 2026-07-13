@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#061a24">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <title>Эхо-Архипелаг — аудио-спасение</title>
-  <link rel="stylesheet" href="styles.css?v=13.0">
+  <link rel="stylesheet" href="styles.css?v=14.0">
 </head>
 <body data-accessibility="touch" data-role="captain">
   <a class="skip" href="#main">К игре</a>
@@ -29,6 +29,32 @@
         <button id="paceTimed" aria-pressed="false">Штормовой режим — 4 минуты</button>
         <p id="paceHint" class="hint">Свободный режим: таймер не завершает операцию. Опасности, топливо и повреждения остаются.</p>
       </fieldset>
+
+      <section id="progressionPanel" class="panel progression-panel" aria-labelledby="progressionTitle">
+        <h2 id="progressionTitle">Карта операций</h2>
+        <p id="profileSummary" class="profile-summary"></p>
+        <fieldset class="mode-picker operation-picker">
+          <legend>Выбери уровень</legend>
+          <button id="operation1" aria-pressed="true">Уровень 1 — Тихая бухта</button>
+          <button id="operation2" aria-pressed="false">Уровень 2 — закрыт</button>
+          <button id="operation3" aria-pressed="false">Уровень 3 — закрыт</button>
+          <p id="operationDescription" class="hint"></p>
+        </fieldset>
+        <fieldset class="mode-picker boat-picker">
+          <legend>Лодка</legend>
+          <button id="boatStrizh" aria-pressed="true">Катер «Стриж» — выбран</button>
+          <button id="boatKasatka" aria-pressed="false">Катер «Касатка» — откроется на уровне 3</button>
+          <p id="boatDescription" class="hint"></p>
+        </fieldset>
+        <section id="shopPanel" class="shop" hidden aria-labelledby="shopTitle">
+          <h3 id="shopTitle">Магазин спасслужбы</h3>
+          <p>Покупки постоянные и действуют во всех следующих одиночных операциях.</p>
+          <button id="buyCoastBrake"></button>
+          <button id="buyMiniArmor"></button>
+          <button id="buyHighFlowPump"></button>
+        </section>
+        <p id="progressionStatus" class="hint" role="status" aria-live="polite"></p>
+      </section>
 
       <section class="panel">
         <h2>Одиночная игра</h2>
@@ -72,8 +98,10 @@
       <p id="floodEmergencyStatus" class="warning" hidden></p>
 
       <section class="status-strip" aria-label="Состояние лодки">
+        <div><span>Уровень</span><strong id="operationLevel">1</strong></div><div><span>Лодка</span><strong id="boatName">Стриж</strong></div>
         <div><span>Скорость</span><strong id="speed">0</strong></div><div><span>Ход</span><strong id="movementState">стоит</strong></div>
         <div><span>Курс</span><strong id="heading">0°</strong></div><div><span>Корпус</span><strong id="hull">100%</strong></div>
+        <div><span>Броня</span><strong id="armor">нет</strong></div>
         <div><span>Вода</span><strong id="water">0%</strong></div><div><span>Топливо</span><strong id="fuel">100%</strong></div>
         <div><span>Мотор</span><strong id="temperature">24°</strong></div><div><span>Спасено</span><strong id="rescued">0/2</strong></div>
         <div><span>Время</span><strong id="time">Без лимита</strong></div>
@@ -112,17 +140,21 @@
         <summary>Как устроена бухта и сонар</summary>
         <p>Сонар закрепляет следующего человека, а после двух спасений — центр Южной гавани. Промежуточных точек и скрытых переключений больше нет. Двойной центральный сигнал захватывает прямой курс: при отпущенном руле игра автоматически держит цель точно впереди. Основные прямые коридоры очищены от препятствий. У человека лодка сама замедлится до зоны троса, а у гавани — до безопасной швартовочной скорости.</p>
       </details>
-      <section id="resultPanel" class="panel result" hidden><h2>Операция завершена</h2><p id="resultText"></p><button id="restartButton" class="primary">Начать новую операцию</button></section>
+      <details class="panel help">
+        <summary>Уровни, жетоны и сильные столкновения</summary>
+        <p>За завершённую операцию выдаются жетоны спасслужбы. После первого уровня открываются второй уровень и магазин, после второго — третий уровень и катер «Касатка». На большой скорости урон растёт нелинейно: полный ход может сразу привести корпус в аварийное состояние. Обломки на уровнях 2 и 3 образуют слышимые проходы, но центральная линия маяка остаётся свободной.</p>
+      </details>
+      <section id="resultPanel" class="panel result" hidden><h2>Операция завершена</h2><p id="resultText"></p><p id="rewardText"></p><button id="restartButton" class="primary">Вернуться к карте операций</button></section>
     </section>
   </main>
   <script type="importmap">
-    {"imports":{"/src/game-core.js":"/src/game-core-v11.js?v=13.0","/src/audio-engine.js":"/src/audio-engine-v9.js?v=13.0"}}
+    {"imports":{"/src/game-core.js":"/src/game-core-v12.js?v=14.0","/src/audio-engine.js":"/src/audio-engine-v10.js?v=14.0"}}
   </script>
   <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js" defer></script>
-  <script type="module" src="src/app.js?v=13.0"></script>
-  <script type="module" src="src/room-ui-fix.js?v=13.0"></script>
-  <script type="module" src="src/gameplay-v6.js?v=13.0"></script>
-  <script type="module" src="src/gameplay-v8.js?v=13.0"></script>
-  <script type="module" src="src/gameplay-v9.js?v=13.0"></script>
+  <script type="module" src="src/app.js?v=14.0"></script>
+  <script type="module" src="src/room-ui-fix.js?v=14.0"></script>
+  <script type="module" src="src/gameplay-v6.js?v=14.0"></script>
+  <script type="module" src="src/gameplay-v8.js?v=14.0"></script>
+  <script type="module" src="src/gameplay-v9.js?v=14.0"></script>
 </body>
 </html>

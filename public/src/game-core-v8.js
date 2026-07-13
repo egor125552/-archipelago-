@@ -1,6 +1,7 @@
 "use strict";
 
 import * as base from "./game-core-v7-1.js?base=1";
+import {applyCollisionDamage, collisionSeverity} from "./collision-model.js";
 
 export const CONFIG = Object.freeze({
   ...base.CONFIG,
@@ -166,11 +167,19 @@ function keepObstacleSolid(state, previous, previousSpeed, collisionTimes, event
     const collidedInBase = (state.collisions[hazard.id] ?? -999) !== (collisionTimes[hazard.id] ?? -999);
     if (!collidedInBase && elapsed(state) - (state.collisions[hazard.id] ?? -999) > 1.25) {
       state.collisions[hazard.id] = elapsed(state);
-      const severity = clamp(Math.abs(previousSpeed) / 8, 0.35, 1.45);
-      const damage = hazard.damage * severity;
-      state.boat.hull = clamp(state.boat.hull - damage, 0, 100);
-      state.boat.leak = clamp(state.boat.leak + damage * 0.13, 0, 16);
-      events.push({type: "collision", severity, pan: bearingTo(state, hazard).pan, hazardId: hazard.id});
+      const impactSpeed = Math.abs(previousSpeed);
+      const severity = collisionSeverity(impactSpeed);
+      const impact = applyCollisionDamage(state.boat, hazard.damage * severity);
+      events.push({
+        type: "collision",
+        severity,
+        damage: impact.damage,
+        absorbed: impact.absorbed,
+        armor: impact.armor,
+        impactSpeed,
+        pan: bearingTo(state, hazard).pan,
+        hazardId: hazard.id,
+      });
     }
 
     // A held mobile control must not keep feeding the engine into the same
@@ -180,7 +189,10 @@ function keepObstacleSolid(state, previous, previousSpeed, collisionTimes, event
     state.controls.reverse = false;
     state.boat.speed = 0;
     state.boat.throttle = 0;
-    state.message = `Удар о ${hazard.label || (hazard.type === "reef" ? "риф" : "обломки")}. Лодка остановлена с этой стороны препятствия. Отверни и снова дай газ.`;
+    const collision = [...events].reverse().find(event => event.type === "collision" && (!event.hazardId || event.hazardId === hazard.id));
+    const damageText = collision?.damage > 0 ? ` Потеря корпуса: ${Math.round(collision.damage)} процентов.` : "";
+    const armorText = collision?.absorbed > 0 ? ` Броня поглотила ${Math.round(collision.absorbed)}.` : "";
+    state.message = `Удар о ${hazard.label || (hazard.type === "reef" ? "риф" : "обломки")}.${damageText}${armorText} Лодка остановлена с этой стороны препятствия. Отверни и снова дай газ.`;
   }
 }
 

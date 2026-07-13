@@ -1,5 +1,7 @@
 "use strict";
 
+import {applyCollisionDamage, collisionSeverity} from "./collision-model.js";
+
 export const CONFIG = Object.freeze({
   tickRate: 20,
   maxSpeed: 18,
@@ -258,12 +260,14 @@ export function step(state, dt) {
   boat.throttle += (thrust - boat.throttle) * Math.min(1, dt * 4.5);
 
   if (boat.engineStalled) boat.throttle = Math.min(0, boat.throttle);
-  const targetSpeed = boat.throttle >= 0 ? boat.throttle * CONFIG.maxSpeed : boat.throttle * Math.abs(CONFIG.reverseSpeed);
-  boat.speed += clamp(targetSpeed - boat.speed, -CONFIG.acceleration * dt, CONFIG.acceleration * dt);
+  const maxSpeed = CONFIG.maxSpeed * (Number(boat.maxSpeedMultiplier) || 1);
+  const acceleration = CONFIG.acceleration * (Number(boat.accelerationMultiplier) || 1);
+  const targetSpeed = boat.throttle >= 0 ? boat.throttle * maxSpeed : boat.throttle * Math.abs(CONFIG.reverseSpeed);
+  boat.speed += clamp(targetSpeed - boat.speed, -acceleration * dt, acceleration * dt);
   boat.speed *= Math.max(0, 1 - CONFIG.drag * dt * (0.12 + Math.abs(boat.speed) / CONFIG.maxSpeed * 0.16));
 
   const turnFactor = clamp(Math.abs(boat.speed) / 4.5, 0.18, 1.25);
-  boat.heading = wrapDeg(boat.heading + boat.rudder * CONFIG.turnRate * turnFactor * dt * 60 * Math.sign(boat.speed || 1));
+  boat.heading = wrapDeg(boat.heading + boat.rudder * CONFIG.turnRate * (Number(boat.turnRateMultiplier) || 1) * turnFactor * dt * 60 * Math.sign(boat.speed || 1));
   const headingRad = rad(boat.heading);
   const stormPush = state.world.storm.intensity * 0.24;
   boat.x += (Math.sin(headingRad) * boat.speed + state.world.current.x + stormPush) * dt;
@@ -271,7 +275,7 @@ export function step(state, dt) {
 
   const load = Math.max(0, boat.throttle);
   boat.fuel = clamp(boat.fuel - dt * (0.035 + load * load * 0.22), 0, 100);
-  const targetTemp = 28 + load * 92 + Math.max(0, boat.water - 45) * 0.12;
+  const targetTemp = 28 + load * 92 * (Number(boat.engineHeatMultiplier) || 1) + Math.max(0, boat.water - 45) * 0.12;
   boat.engineTemp += (targetTemp - boat.engineTemp) * dt * (load > 0 ? 0.12 : 0.08);
   if (boat.fuel <= 0.01) {
     boat.engineStalled = true;
@@ -291,14 +295,14 @@ export function step(state, dt) {
     const last = state.collisions[hazard.id] ?? -999;
     if (contact && state.elapsed - last > 1.25) {
       state.collisions[hazard.id] = state.elapsed;
-      const severity = clamp(Math.abs(boat.speed) / 8, 0.35, 1.6);
-      const damage = hazard.damage * severity;
-      boat.hull = clamp(boat.hull - damage, 0, 100);
-      boat.leak = clamp(boat.leak + damage * 0.13, 0, 16);
+      const impactSpeed = Math.abs(boat.speed);
+      const severity = collisionSeverity(impactSpeed);
+      const impact = applyCollisionDamage(boat, hazard.damage * severity);
       boat.speed *= -0.22;
-      state.message = `Удар о ${hazard.type === "reef" ? "риф" : "обломки"}. Корпус повреждён.`;
-      pushEvent(state, "collision", state.message, {hazard: hazard.id, damage});
-      events.push({type: "collision", severity, pan: hazard.x < boat.x ? -0.7 : 0.7});
+      const armorText = impact.absorbed > 0 ? ` Броня поглотила ${Math.round(impact.absorbed)}.` : "";
+      state.message = `Удар о ${hazard.type === "reef" ? "риф" : "обломки"}. Потеря корпуса: ${Math.round(impact.damage)} процентов.${armorText}`;
+      pushEvent(state, "collision", state.message, {hazard: hazard.id, damage: impact.damage, absorbed: impact.absorbed, impactSpeed});
+      events.push({type: "collision", severity, damage: impact.damage, absorbed: impact.absorbed, armor: impact.armor, impactSpeed, pan: hazard.x < boat.x ? -0.7 : 0.7});
     }
   }
 

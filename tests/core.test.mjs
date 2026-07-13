@@ -35,6 +35,9 @@ test("sonar has cooldown and gives directional target", () => {
 
 test("high load eventually stalls the engine", () => {
   const state = createGame({mode: "coop"}); startGame(state);
+  // Keep this engine-temperature test away from the now intentionally lethal
+  // high-speed collision path through the legacy fixture world.
+  state.boat.x = 500;
   setControl(state, "forward", true, "captain");
   run(state, 150);
   assert.equal(state.boat.engineStalled, true);

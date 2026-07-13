@@ -237,7 +237,16 @@ function statusText() {
   const timeText = current.timed ? `Осталось ${Math.ceil(currentView.remaining)} секунд.` : "Режим без ограничения времени.";
   const repairText = `Пробоина ${current.boat.leak.toFixed(1)}. Ремонтных пластин ${current.boat.repairPatches}.`;
   const assistText = currentView.navigation?.assistEnabled ? "Навигационный помощник включён." : "Навигационный помощник выключен.";
-  return `${currentView.message} Скорость ${currentView.boat.speed.toFixed(1)} узла. Курс ${Math.round((currentView.boat.heading + 360) % 360)} градусов. Корпус ${Math.round(currentView.boat.hull)} процентов. Вода ${Math.round(currentView.boat.water)} процентов. ${repairText} Спасено ${currentView.rescued} из двух. ${assistText} ${timeText}`;
+  const levelText = currentView.progression
+    ? `Уровень ${currentView.progression.level}, ${currentView.progression.operationName}. ${currentView.boat.modelName}.`
+    : "";
+  const armorText = currentView.boat.armorMax > 0
+    ? `Броня ${Math.ceil(currentView.boat.armor)} из ${Math.ceil(currentView.boat.armorMax)}.`
+    : "Брони нет.";
+  const brakeText = currentView.progression?.coastBrakeActive
+    ? `Автотормоз остановит лодку примерно через ${Math.ceil(currentView.progression.coastBrakeRemaining)} секунд.`
+    : "";
+  return `${currentView.message} ${levelText} Скорость ${currentView.boat.speed.toFixed(1)} узла. Курс ${Math.round((currentView.boat.heading + 360) % 360)} градусов. Корпус ${Math.round(currentView.boat.hull)} процентов. ${armorText} Вода ${Math.round(currentView.boat.water)} процентов. ${repairText} Спасено ${currentView.rescued} из двух. ${assistText} ${brakeText} ${timeText}`;
 }
 
 function syncControls() {

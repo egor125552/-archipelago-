@@ -39,6 +39,12 @@ p { line-height: 1.5; }
 .panel { margin: 1rem 0; padding: 1rem; background: rgba(12,37,50,.94); border: 1px solid #315c6d; border-radius: 1.1rem; }
 .mode-picker { display: grid; gap: .7rem; }
 .mode-picker legend { font-weight: 900; padding: 0 .4rem; }
+.progression-panel fieldset { border: 1px solid #315c6d; border-radius: .9rem; margin: 1rem 0; padding: .8rem; }
+.profile-summary { color: var(--good); font-weight: 800; }
+.shop { display: grid; gap: .65rem; padding-top: .3rem; }
+.shop h3, .shop p { margin: .35rem 0; }
+.shop button { text-align: left; }
+.operation-picker button[disabled], .boat-picker button[disabled], .shop button[disabled] { opacity: .55; }
 .hint { color: var(--muted); }
 .grid2 { display: grid; gap: .65rem; }
 .game-header { display: flex; justify-content: space-between; align-items: flex-start; gap: .8rem; }

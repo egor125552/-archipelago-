@@ -3,6 +3,18 @@
 import {createGame, startGame, setControl, command, step, getView, serialize, deserialize} from "./game-core.js";
 import {AudioEngine} from "./audio-engine.js";
 import {LocalRoomTransport, PeerRoomTransport} from "./network.js";
+import {
+  BOATS,
+  OPERATIONS,
+  SHOP_ITEMS,
+  loadProfile,
+  purchaseUpgrade,
+  recordOperation,
+  runLoadout,
+  saveProfile,
+  selectBoat,
+  selectOperation,
+} from "./progression.js?v=14.0";
 
 const $ = id => document.getElementById(id);
 const stateBox = {state: null};
@@ -19,6 +31,8 @@ let roomCode = "";
 let lastMessage = "";
 let speechEnabled = true;
 let selectedVoice = null;
+let profile = loadProfile();
+let recordedResultState = null;
 
 function vibrate(pattern) { try { navigator.vibrate?.(pattern); } catch (_) {} }
 function randomRoom() { return Math.random().toString(36).slice(2, 6).toUpperCase(); }
@@ -98,9 +112,124 @@ function setMode(mode) {
     : "Режим без VoiceOver: рулевые зоны и газ можно удерживать пальцем; игровые сообщения озвучивает Милена со скоростью 1,18.");
 }
 
+function persistProfile(next) {
+  profile = saveProfile(next);
+  renderProgressionMenu();
+  return profile;
+}
+
+function setProgressionStatus(text, announce = false) {
+  setText("progressionStatus", text);
+  if (announce) {
+    announceToReader(text);
+    speak(text);
+  }
+}
+
+function renderProgressionMenu() {
+  setText("profileSummary", `Жетоны: ${profile.credits}. Победы: ${profile.wins} из ${profile.runs}. Лучший счёт: ${profile.bestScore}.`);
+  for (const operation of OPERATIONS) {
+    const button = $(`operation${operation.id}`);
+    if (!button) continue;
+    const unlocked = operation.id <= profile.unlockedLevel;
+    const selected = operation.id === profile.selectedLevel;
+    button.disabled = !unlocked;
+    button.setAttribute("aria-pressed", String(selected));
+    button.textContent = unlocked
+      ? `Уровень ${operation.id} — ${operation.name}${selected ? " — выбран" : ""}`
+      : `Уровень ${operation.id} — закрыт`;
+  }
+  const operation = OPERATIONS.find(item => item.id === profile.selectedLevel) || OPERATIONS[0];
+  setText("operationDescription", operation.description);
+
+  for (const boat of BOATS) {
+    const id = boat.id === "strizh" ? "boatStrizh" : "boatKasatka";
+    const button = $(id);
+    if (!button) continue;
+    const unlocked = boat.unlockLevel <= profile.unlockedLevel;
+    const selected = boat.id === profile.selectedBoat;
+    button.disabled = !unlocked;
+    button.setAttribute("aria-pressed", String(selected));
+    button.textContent = unlocked
+      ? `${boat.name}${selected ? " — выбран" : ""}`
+      : `${boat.name} — откроется на уровне ${boat.unlockLevel}`;
+  }
+  const boat = BOATS.find(item => item.id === profile.selectedBoat) || BOATS[0];
+  setText("boatDescription", boat.description);
+
+  setHidden("shopPanel", profile.unlockedLevel < 2);
+  const itemButtons = {
+    "coast-brake": "buyCoastBrake",
+    "mini-armor": "buyMiniArmor",
+    "high-flow-pump": "buyHighFlowPump",
+  };
+  for (const item of SHOP_ITEMS) {
+    const button = $(itemButtons[item.id]);
+    if (!button) continue;
+    const owned = profile.ownedUpgrades.includes(item.id);
+    const locked = profile.unlockedLevel < item.unlockLevel;
+    button.disabled = owned || locked || profile.credits < item.cost;
+    button.textContent = owned
+      ? `${item.name} — куплено. ${item.description}`
+      : `${item.name} — ${item.cost} жетонов. ${item.description}`;
+  }
+}
+
+function chooseOperation(level) {
+  if (level > profile.unlockedLevel) {
+    setProgressionStatus(`Уровень ${level} пока закрыт. Заверши предыдущую операцию.`, true);
+    return;
+  }
+  persistProfile(selectOperation(profile, level));
+  const operation = OPERATIONS.find(item => item.id === profile.selectedLevel);
+  setProgressionStatus(`Выбран уровень ${operation.id}: ${operation.name}.`, true);
+}
+
+function chooseBoat(boatId) {
+  const boat = BOATS.find(item => item.id === boatId);
+  if (!boat || boat.unlockLevel > profile.unlockedLevel) {
+    setProgressionStatus("Катер «Касатка» откроется после завершения второго уровня.", true);
+    return;
+  }
+  persistProfile(selectBoat(profile, boatId));
+  setProgressionStatus(`Выбран ${boat.name}.`, true);
+}
+
+function buyUpgrade(itemId) {
+  const result = purchaseUpgrade(profile, itemId);
+  if (!result.ok) {
+    const text = result.reason === "credits"
+      ? `Недостаточно жетонов для покупки «${result.item.name}». Нужно ${result.item.cost}, сейчас ${profile.credits}.`
+      : result.reason === "owned"
+        ? `${result.item.name} уже куплен.`
+        : "Это улучшение пока закрыто.";
+    setProgressionStatus(text, true);
+    return;
+  }
+  persistProfile(result.profile);
+  setProgressionStatus(`${result.item.name} куплен. Осталось ${profile.credits} жетонов.`, true);
+  audio.play("repair", {gain: 0.5, rate: 1.08});
+}
+
+function recordFinishedOperation(view) {
+  if (!stateBox.state || recordedResultState === stateBox.state || view.mode !== "solo" || !(view.won || view.lost)) return;
+  recordedResultState = stateBox.state;
+  const reward = view.won ? Number(view.progression?.rewardCredits) || 0 : 0;
+  persistProfile(recordOperation(profile, {
+    level: view.progression?.level || 1,
+    won: view.won,
+    reward,
+    score: view.score,
+  }));
+}
+
 function newSession(mode, selectedRole = "captain") {
   role = selectedRole;
-  stateBox.state = createGame({mode, role});
+  const progression = mode === "solo"
+    ? runLoadout(profile)
+    : {level: 1, boatId: "strizh", upgrades: {}};
+  stateBox.state = createGame({mode, role, progression});
+  recordedResultState = null;
   lastMessage = "";
   renderCache.clear();
   render(true);
@@ -213,6 +342,10 @@ function startLoop() {
 function render(forceAnnouncement = false) {
   if (!stateBox.state) return;
   const view = getView(stateBox.state);
+  recordFinishedOperation(view);
+  setText("operationLevel", `${view.progression?.level || 1}`);
+  setText("boatName", (view.boat.modelName || "Катер «Стриж»").replace("Катер ", ""));
+  setText("armor", view.boat.armorMax > 0 ? `${Math.ceil(view.boat.armor)}/${Math.ceil(view.boat.armorMax)}` : "нет");
   setText("speed", `${view.boat.speed.toFixed(1)} узла`);
   setText("heading", `${Math.round((view.boat.heading + 360) % 360)}°`);
   setText("hull", `${Math.round(view.boat.hull)}%`);
@@ -232,7 +365,12 @@ function render(forceAnnouncement = false) {
   setHidden("engineWarning", !view.boat.engineStalled && view.boat.engineTemp < 88);
   setText("engineWarning", view.boat.engineStalled ? "Двигатель заглох" : "Двигатель перегревается");
   setHidden("resultPanel", !(view.won || view.lost));
-  if (view.won || view.lost) setText("resultText", `${view.message} Счёт: ${view.score}.`);
+  if (view.won || view.lost) {
+    setText("resultText", `${view.message} Счёт: ${view.score}.`);
+    setText("rewardText", view.won
+      ? `Получено ${view.progression?.rewardCredits || 0} жетонов. Всего: ${profile.credits}.`
+      : "За незавершённую операцию жетоны не начисляются.");
+  }
 
   if (view.message !== lastMessage || forceAnnouncement) {
     lastMessage = view.message;
@@ -344,6 +482,7 @@ function resetOperation() {
   $("resultPanel").hidden = true;
   $("engineWarning").hidden = true;
   setNetworkStatus("Локальная комната работает между двумя вкладками. Интернет-комната использует WebRTC.");
+  renderProgressionMenu();
   requestAnimationFrame(() => $("soloButton").focus({preventScroll: true}));
 }
 
@@ -375,6 +514,14 @@ $("soundButton").addEventListener("click", () => {
   setText("soundButton", `Звук: ${audio.enabled ? "включён" : "выключен"}`);
 });
 $("restartButton").addEventListener("click", resetOperation);
+$("operation1").addEventListener("click", () => chooseOperation(1));
+$("operation2").addEventListener("click", () => chooseOperation(2));
+$("operation3").addEventListener("click", () => chooseOperation(3));
+$("boatStrizh").addEventListener("click", () => chooseBoat("strizh"));
+$("boatKasatka").addEventListener("click", () => chooseBoat("kasatka"));
+$("buyCoastBrake").addEventListener("click", () => buyUpgrade("coast-brake"));
+$("buyMiniArmor").addEventListener("click", () => buyUpgrade("mini-armor"));
+$("buyHighFlowPump").addEventListener("click", () => buyUpgrade("high-flow-pump"));
 
 bindHold("leftButton", "left");
 bindHold("rightButton", "right");
@@ -408,6 +555,7 @@ if ("speechSynthesis" in window) {
   window.speechSynthesis.onvoiceschanged = refreshVoice;
 }
 setMode("touch");
+renderProgressionMenu();
 window.__echoArchipelago = {
   getState: () => stateBox.state,
   setState: value => { stateBox.state = value; render(true); },
