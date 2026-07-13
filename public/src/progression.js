@@ -6,6 +6,9 @@ export const OPERATIONS = Object.freeze([
   Object.freeze({id: 1, name: "Тихая бухта", description: "Учебная спасательная операция с открытыми прямыми маршрутами."}),
   Object.freeze({id: 2, name: "Проход среди обломков", description: "Открываются магазин и выбор у сонара: надёжный обычный маршрут или добровольный узкий проход с бонусом."}),
   Object.freeze({id: 3, name: "Северный фарватер", description: "Цепочка рискованных проходов, больше наград и новый устойчивый катер «Касатка»."}),
+  Object.freeze({id: 4, name: "Расколотый пролив", description: "Бухта шире. Лёгкие обломки можно протаранить, но металл может застрять в корпусе."}),
+  Object.freeze({id: 5, name: "Кладбище барж", description: "Дальний рейс среди разрушаемых барж и непробиваемых бетонных остовов."}),
+  Object.freeze({id: 6, name: "Чёрный рейд", description: "Самая большая акватория. Вражеский катер преследует и пытается таранить спасателей."}),
 ]);
 
 export const SHOP_ITEMS = Object.freeze([
@@ -30,11 +33,27 @@ export const SHOP_ITEMS = Object.freeze([
     unlockLevel: 2,
     description: "Откачивает воду примерно на треть быстрее.",
   }),
+  Object.freeze({
+    id: "ram-keel",
+    name: "Таранный киль",
+    cost: 1150,
+    unlockLevel: 4,
+    description: "Быстрее ломает лёгкие обломки и уменьшает урон от них.",
+  }),
+  Object.freeze({
+    id: "debris-tools",
+    name: "Съёмник обломков",
+    cost: 950,
+    unlockLevel: 5,
+    description: "Ускоряет извлечение застрявшего металла из корпуса.",
+  }),
 ]);
 
 export const BOATS = Object.freeze([
   Object.freeze({id: "strizh", name: "Катер «Стриж»", unlockLevel: 1, description: "Быстрый базовый спасательный катер."}),
   Object.freeze({id: "kasatka", name: "Катер «Касатка»", unlockLevel: 3, description: "Более спокойный мотор, устойчивый корпус и меньше перегрева."}),
+  Object.freeze({id: "burevestnik", name: "Катер «Буревестник»", unlockLevel: 4, description: "Очень быстрый и манёвренный, но сильнее страдает от тяжёлых ударов."}),
+  Object.freeze({id: "grom", name: "Катер «Гром»", unlockLevel: 6, description: "Сверхбыстрый бронированный перехватчик с усиленным тараном."}),
 ]);
 
 function integer(value, fallback, min = 0, max = Number.MAX_SAFE_INTEGER) {
@@ -44,7 +63,7 @@ function integer(value, fallback, min = 0, max = Number.MAX_SAFE_INTEGER) {
 
 export function createDefaultProfile() {
   return {
-    version: 1,
+    version: 2,
     credits: 0,
     unlockedLevel: 1,
     selectedLevel: 1,
@@ -53,7 +72,7 @@ export function createDefaultProfile() {
     runs: 0,
     wins: 0,
     bestScore: 0,
-    bestByLevel: {1: 0, 2: 0, 3: 0},
+    bestByLevel: Object.fromEntries(OPERATIONS.map(operation => [operation.id, 0])),
   };
 }
 
@@ -61,7 +80,15 @@ export function normalizeProfile(value) {
   const source = value && typeof value === "object" ? value : {};
   const profile = createDefaultProfile();
   profile.credits = integer(source.credits, 0, 0, 999_999);
-  profile.unlockedLevel = integer(source.unlockedLevel, 1, 1, OPERATIONS.length);
+  let inferredUnlock = integer(source.unlockedLevel, 1, 1, OPERATIONS.length);
+  // Profiles from the three-operation release should immediately receive the
+  // next operation when level 3 already has a completed-run record.
+  for (const operation of OPERATIONS.slice(0, -1)) {
+    if (integer(source.bestByLevel?.[operation.id], 0) > 0) {
+      inferredUnlock = Math.max(inferredUnlock, operation.id + 1);
+    }
+  }
+  profile.unlockedLevel = inferredUnlock;
   profile.selectedLevel = integer(source.selectedLevel, 1, 1, profile.unlockedLevel);
   profile.ownedUpgrades = [...new Set(Array.isArray(source.ownedUpgrades) ? source.ownedUpgrades : [])]
     .filter(id => SHOP_ITEMS.some(item => item.id === id));

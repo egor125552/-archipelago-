@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#061a24">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <title>Эхо-Архипелаг — аудио-спасение</title>
-  <link rel="stylesheet" href="styles.css?v=18.0">
+  <link rel="stylesheet" href="styles.css?v=19.0">
 </head>
 <body data-accessibility="touch" data-role="captain">
   <a class="skip" href="#main">К игре</a>
@@ -14,7 +14,7 @@
     <section id="startScreen" class="start-shell" aria-labelledby="title">
       <p class="eyebrow">кооперативная аудио-игра</p>
       <h1 id="title">Эхо-Архипелаг</h1>
-      <p>Операция проходит в дружелюбной открытой части речной бухты Северный Приют. Течения нет, а обычные линии между Южной гаванью и людьми полностью свободны. На следующих уровнях можно добровольно направить сонар в узкие проходы между обломками ради дополнительной награды. Наушники обязательны для стереонавигации.</p>
+      <p>Шесть спасательных операций в растущей речной бухте. Обычный сонар всегда ведёт прямо к цели. Поздние уровни добавляют разрушаемые обломки, новые лодки и преследователя. Для стереонавигации нужны наушники.</p>
 
       <fieldset class="panel mode-picker">
         <legend>Управление</legend>
@@ -38,12 +38,17 @@
           <button id="operation1" aria-pressed="true">Уровень 1 — Тихая бухта</button>
           <button id="operation2" aria-pressed="false">Уровень 2 — закрыт</button>
           <button id="operation3" aria-pressed="false">Уровень 3 — закрыт</button>
+          <button id="operation4" aria-pressed="false">Уровень 4 — закрыт</button>
+          <button id="operation5" aria-pressed="false">Уровень 5 — закрыт</button>
+          <button id="operation6" aria-pressed="false">Уровень 6 — закрыт</button>
           <p id="operationDescription" class="hint"></p>
         </fieldset>
         <fieldset class="mode-picker boat-picker">
           <legend>Лодка</legend>
           <button id="boatStrizh" aria-pressed="true">Катер «Стриж» — выбран</button>
           <button id="boatKasatka" aria-pressed="false">Катер «Касатка» — откроется на уровне 3</button>
+          <button id="boatBurevestnik" aria-pressed="false">Катер «Буревестник» — откроется на уровне 4</button>
+          <button id="boatGrom" aria-pressed="false">Катер «Гром» — откроется на уровне 6</button>
           <p id="boatDescription" class="hint"></p>
         </fieldset>
         <section id="shopPanel" class="shop" hidden aria-labelledby="shopTitle">
@@ -52,6 +57,8 @@
           <button id="buyCoastBrake"></button>
           <button id="buyMiniArmor"></button>
           <button id="buyHighFlowPump"></button>
+          <button id="buyRamKeel"></button>
+          <button id="buyDebrisTools"></button>
         </section>
         <p id="progressionStatus" class="hint" role="status" aria-live="polite"></p>
       </section>
@@ -96,6 +103,7 @@
       <p id="missionMessage" class="mission"></p>
       <p id="engineWarning" class="warning" hidden aria-live="polite"></p>
       <p id="floodEmergencyStatus" class="warning" hidden></p>
+      <p id="hunterStatus" class="warning" hidden></p>
 
       <section class="status-strip" aria-label="Состояние лодки">
         <div><span>Уровень</span><strong id="operationLevel">1</strong></div><div><span>Лодка</span><strong id="boatName">Стриж</strong></div>
@@ -103,6 +111,7 @@
         <div><span>Курс</span><strong id="heading">0°</strong></div><div><span>Корпус</span><strong id="hull">100%</strong></div>
         <div><span>Броня</span><strong id="armor">нет</strong></div>
         <div><span>Вода</span><strong id="water">0%</strong></div><div><span>Топливо</span><strong id="fuel">100%</strong></div>
+        <div><span>Обломки</span><strong id="debrisCount">0</strong></div>
         <div><span>Мотор</span><strong id="temperature">24°</strong></div><div><span>Спасено</span><strong id="rescued">0/2</strong></div>
         <div><span>Маршрут</span><strong id="riskRouteState">обычный</strong></div>
         <div><span>Время</span><strong id="time">Без лимита</strong></div>
@@ -123,8 +132,10 @@
         <button id="pumpAssistButton" aria-pressed="false" hidden>Автооткачка помощника: выключена</button>
         <button id="rescueButton" aria-pressed="false">Подать спасательный трос</button>
         <button id="repairHullButton" aria-pressed="false">Заделать пробоину — пластин 3</button>
+        <button id="debrisButton" aria-pressed="false" hidden>Извлечь обломок</button>
         <button id="repairButton">Обслужить двигатель</button>
         <button id="anchorButton">Сбросить плавучий тормоз</button>
+        <button id="decoyButton" hidden>Ложный буй — 2</button>
       </section>
 
       <details class="panel help" open>
@@ -149,19 +160,19 @@
       </details>
       <details class="panel help">
         <summary>Уровни, жетоны и сильные столкновения</summary>
-        <p>За завершённую операцию выдаются жетоны спасслужбы. После первого уровня открываются второй уровень, магазин и выбор рискованного маршрута; после второго — третий уровень и катер «Касатка». На большой скорости урон растёт нелинейно: полный ход может сразу привести корпус в аварийное состояние. Обычная центральная линия остаётся свободной, а добровольные узкие проходы дают дополнительную награду.</p>
+        <p>Операции 4–6 расширяют бухту. Большинство металлических обломков ломается от тарана; рифы и бетон — нет. Быстрый удар сильнее мнёт корпус и может оставить в нём металл. Остановись и нажми «Извлечь», затем ставь пластину. На шестом уровне преследователь обходит препятствия и таранит. Ложный буй отвлекает его на восемь секунд.</p>
       </details>
       <section id="resultPanel" class="panel result" hidden><h2>Операция завершена</h2><p id="resultText"></p><p id="rewardText"></p><button id="restartButton" class="primary">Вернуться к карте операций</button></section>
     </section>
   </main>
   <script type="importmap">
-    {"imports":{"/src/game-core.js":"/src/game-core-v15.js?v=18.0","/src/audio-engine.js":"/src/audio-engine-v10.js?v=18.0"}}
+    {"imports":{"/src/game-core.js":"/src/game-core-v16.js?v=19.0","/src/audio-engine.js":"/src/audio-engine-v11.js?v=19.0"}}
   </script>
   <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js" defer></script>
-  <script type="module" src="src/app.js?v=18.0"></script>
-  <script type="module" src="src/room-ui-fix.js?v=18.0"></script>
-  <script type="module" src="src/gameplay-v6.js?v=18.0"></script>
-  <script type="module" src="src/gameplay-v8.js?v=18.0"></script>
-  <script type="module" src="src/gameplay-v9.js?v=18.0"></script>
+  <script type="module" src="src/app.js?v=19.0"></script>
+  <script type="module" src="src/room-ui-fix.js?v=19.0"></script>
+  <script type="module" src="src/gameplay-v6.js?v=19.0"></script>
+  <script type="module" src="src/gameplay-v8.js?v=19.0"></script>
+  <script type="module" src="src/gameplay-v9.js?v=19.0"></script>
 </body>
 </html>

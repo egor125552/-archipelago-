@@ -1,6 +1,6 @@
 "use strict";
 
-import * as base from "./game-core-v11.js?base=5";
+import * as base from "./game-core-v11.js?base=6";
 import {collisionSeverity} from "./collision-model.js";
 
 export const CONFIG = Object.freeze({
@@ -16,6 +16,9 @@ const OPERATIONS = Object.freeze({
   1: Object.freeze({name: "Тихая бухта", rewardBase: 500}),
   2: Object.freeze({name: "Проход среди обломков", rewardBase: 650}),
   3: Object.freeze({name: "Северный фарватер", rewardBase: 800}),
+  4: Object.freeze({name: "Расколотый пролив", rewardBase: 950}),
+  5: Object.freeze({name: "Кладбище барж", rewardBase: 1150}),
+  6: Object.freeze({name: "Чёрный рейд", rewardBase: 1400}),
 });
 
 const BOATS = Object.freeze({
@@ -39,14 +42,35 @@ const BOATS = Object.freeze({
     collisionDamageMultiplier: 0.72,
     collisionLeakMultiplier: 0.7,
   }),
+  burevestnik: Object.freeze({
+    id: "burevestnik",
+    name: "Катер «Буревестник»",
+    maxSpeedMultiplier: 1.32,
+    accelerationMultiplier: 1.18,
+    turnRateMultiplier: 1.12,
+    engineHeatMultiplier: 0.9,
+    collisionDamageMultiplier: 1.12,
+    collisionLeakMultiplier: 1.1,
+  }),
+  grom: Object.freeze({
+    id: "grom",
+    name: "Катер «Гром»",
+    maxSpeedMultiplier: 1.58,
+    accelerationMultiplier: 1.3,
+    turnRateMultiplier: 1.04,
+    engineHeatMultiplier: 0.83,
+    collisionDamageMultiplier: 0.66,
+    collisionLeakMultiplier: 0.64,
+    builtInArmor: 24,
+  }),
 });
 
 function safeLoadout(options = {}) {
   const source = options.progression && typeof options.progression === "object" ? options.progression : {};
-  const level = clamp(Math.trunc(Number(source.level) || 1), 1, 3);
+  const level = clamp(Math.trunc(Number(source.level) || 1), 1, 6);
   // The profile layer owns unlock validation. Once unlocked, Kasatka may also
   // be taken back into earlier operations for replay and record attempts.
-  const requestedBoat = source.boatId === "kasatka" ? "kasatka" : "strizh";
+  const requestedBoat = Object.hasOwn(BOATS, source.boatId) ? source.boatId : "strizh";
   return {
     level,
     boatId: requestedBoat,
@@ -54,6 +78,8 @@ function safeLoadout(options = {}) {
       coastBrake: source.upgrades?.["coast-brake"] === true,
       miniArmor: source.upgrades?.["mini-armor"] === true,
       highFlowPump: source.upgrades?.["high-flow-pump"] === true,
+      ramKeel: source.upgrades?.["ram-keel"] === true,
+      debrisTools: source.upgrades?.["debris-tools"] === true,
     },
   };
 }
@@ -79,6 +105,7 @@ function configureWorld(state) {
 
 function applyBoat(state) {
   const spec = BOATS[state.progression.boatId] || BOATS.strizh;
+  const armor = (Number(spec.builtInArmor) || 0) + (state.progression.upgrades.miniArmor ? CONFIG.miniArmor : 0);
   Object.assign(state.boat, {
     modelId: spec.id,
     modelName: spec.name,
@@ -88,8 +115,8 @@ function applyBoat(state) {
     engineHeatMultiplier: spec.engineHeatMultiplier,
     collisionDamageMultiplier: spec.collisionDamageMultiplier,
     collisionLeakMultiplier: spec.collisionLeakMultiplier,
-    armor: state.progression.upgrades.miniArmor ? CONFIG.miniArmor : 0,
-    armorMax: state.progression.upgrades.miniArmor ? CONFIG.miniArmor : 0,
+    armor,
+    armorMax: armor,
   });
 }
 
@@ -111,7 +138,10 @@ function ensureV12State(state, options = {}) {
     configureWorld(state);
     applyBoat(state);
   }
-  state.progression.upgrades ||= {coastBrake: false, miniArmor: false, highFlowPump: false};
+  state.progression.upgrades ||= {};
+  for (const key of ["coastBrake", "miniArmor", "highFlowPump", "ramKeel", "debrisTools"]) {
+    state.progression.upgrades[key] = state.progression.upgrades[key] === true;
+  }
   if (!Number.isFinite(state.progression.coastBrakeElapsed)) state.progression.coastBrakeElapsed = 0;
   if (!Number.isFinite(state.progression.coastBrakeInitialSpeed)) state.progression.coastBrakeInitialSpeed = 0;
   if (!Number.isFinite(state.progression.collisionCount)) state.progression.collisionCount = 0;
@@ -186,14 +216,18 @@ function finalizeReward(state, events) {
   const reward = Math.max(250, OPERATIONS[level].rewardBase + hullBonus + stormBonus + riskBonus - collisionPenalty);
   state.progression.rewardCredits = reward;
   state.progression.rewardFinalized = true;
-  const unlock = level === 1
-    ? " Открыт уровень 2 и магазин спасслужбы."
-    : level === 2
-      ? " Открыт уровень 3 и катер «Касатка»."
-      : " Все три операции открыты.";
+  const unlocks = {
+    1: " Открыт уровень 2 и магазин.",
+    2: " Открыт уровень 3 и «Касатка».",
+    3: " Открыт уровень 4 и «Буревестник».",
+    4: " Открыт уровень 5.",
+    5: " Открыт уровень 6 и «Гром».",
+    6: " Все операции открыты.",
+  };
+  const unlock = unlocks[level];
   const riskText = riskBonus > 0 ? ` В том числе ${riskBonus} за чистые рискованные проходы.` : "";
   state.message += ` Награда: ${reward} жетонов спасслужбы.${riskText}${unlock}`;
-  events.push({type: "operation-reward", reward, level, riskBonus, unlockedLevel: Math.min(3, level + 1)});
+  events.push({type: "operation-reward", reward, level, riskBonus, unlockedLevel: Math.min(6, level + 1)});
 }
 
 export function createGame(options = {}) {
@@ -208,7 +242,9 @@ export function startGame(state) {
       ? "Прямые маршруты полностью открыты."
       : state.progression.level === 2
         ? "На первом пути есть озвучиваемый проход между обломками; центральная линия свободна."
-        : "На маршруте два озвучиваемых прохода между обломками; центральные линии свободны.";
+        : state.progression.level === 3
+          ? "На маршруте два озвучиваемых прохода между обломками; центральные линии свободны."
+          : "Обычный маршрут прямой. Опасности слышны отдельно.";
     state.message = `Уровень ${state.progression.level}: ${state.progression.operationName}. ${state.boat.modelName}. ${gateText} Нажми сонар и совмести маяк с центром.`;
   }
   return state;

@@ -140,6 +140,12 @@ function situationHint() {
     return "Лодка стабилизируется.";
   }
 
+  if (currentView.debris?.removing) return `Обломок: ${Math.round(currentView.debris.progress)}%. Не двигайся.`;
+  if (currentView.debris?.count) {
+    if (speed > 0.25) return "В корпусе обломок. Остановись.";
+    return "В корпусе обломок. Нажми «Извлечь».";
+  }
+
   if ((leak > 0.2 || hull < 70) && patches > 0) {
     if (speed > 2.2) return "Снизь скорость до 2 узлов. Затем поставь пластину.";
     return "Поставь ремонтную пластину.";
@@ -149,6 +155,10 @@ function situationHint() {
       return `Вода ${Math.round(water)}%. Помощник качает. Ручной насос быстрее.`;
     }
     return `Вода ${Math.round(water)}%. Включи насос.`;
+  }
+  if (currentView.hunter?.active && currentView.hunter.distance < 45) {
+    const side = currentView.hunter.relativeAngle < -12 ? "слева" : currentView.hunter.relativeAngle > 12 ? "справа" : "прямо";
+    return `Преследователь ${side}, ${Math.round(currentView.hunter.distance)} м. Меняй курс или сбрось буй.`;
   }
   if (currentView.riskRoute?.active) {
     const failed = currentView.riskRoute.gateFailed ? " Бонус потерян." : "";
@@ -279,6 +289,8 @@ function statusText() {
   ];
   if (motorStopped) parts.unshift("Мотор остановлен.");
   else parts.splice(1, 0, `Курс ${Math.round((currentView.boat.heading + 360) % 360)}.`, `Течь ${currentView.boat.leak.toFixed(1)}.`);
+  if (currentView.debris?.count) parts.push(`Обломков: ${currentView.debris.count}.`);
+  if (currentView.hunter?.active) parts.push(`Преследователь: ${Math.round(currentView.hunter.distance)} метров.`);
   if (current.timed) parts.push(`Время ${Math.ceil(currentView.remaining)} секунд.`);
   return parts.join(" ");
 }

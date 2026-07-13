@@ -1,6 +1,6 @@
 "use strict";
 
-import * as base from "./game-core-v12.js?base=5";
+import * as base from "./game-core-v12.js?base=6";
 
 export const CONFIG = Object.freeze({
   ...base.CONFIG,
@@ -36,6 +36,51 @@ const NORTH_SOUTHBOUND = Object.freeze([
   Object.freeze({id: "risk-north-return-exit", gateKey: "north-wreck-gap", label: "южный выход из прохода у затонувшего катера", x: 19.5, y: 62, award: true}),
 ]);
 
+const ADVANCED_ROUTES = Object.freeze({
+  4: Object.freeze({
+    "survivor-a": Object.freeze([
+      Object.freeze({id: "risk-4a-entry", gateKey: "split-west", label: "вход у разбитой баржи", x: -30, y: 42, award: false}),
+      Object.freeze({id: "risk-4a-exit", gateKey: "split-west", label: "выход из прохода", x: -27, y: 60, award: true}),
+    ]),
+    "survivor-b": Object.freeze([
+      Object.freeze({id: "risk-4b-entry", gateKey: "trawler-gap", label: "вход у траулера", x: 42, y: 145, award: false}),
+      Object.freeze({id: "risk-4b-exit", gateKey: "trawler-gap", label: "выход у траулера", x: 38, y: 165, award: true}),
+    ]),
+    harbor: Object.freeze([
+      Object.freeze({id: "risk-4h-entry", gateKey: "deck-gap", label: "вход у палубных обломков", x: -53, y: 180, award: false}),
+      Object.freeze({id: "risk-4h-exit", gateKey: "deck-gap", label: "выход к гавани", x: -48, y: 160, award: true}),
+    ]),
+  }),
+  5: Object.freeze({
+    "survivor-a": Object.freeze([
+      Object.freeze({id: "risk-5a-entry", gateKey: "raft-gap", label: "вход у плота", x: 54, y: 55, award: false}),
+      Object.freeze({id: "risk-5a-exit", gateKey: "raft-gap", label: "выход у плота", x: 51, y: 75, award: true}),
+    ]),
+    "survivor-b": Object.freeze([
+      Object.freeze({id: "risk-5b-entry", gateKey: "bow-gap", label: "вход у носа сухогруза", x: 48, y: 215, award: false}),
+      Object.freeze({id: "risk-5b-exit", gateKey: "bow-gap", label: "выход у сухогруза", x: 42, y: 240, award: true}),
+    ]),
+    harbor: Object.freeze([
+      Object.freeze({id: "risk-5h-entry", gateKey: "hold-gap", label: "вход у трюма", x: -66, y: 180, award: false}),
+      Object.freeze({id: "risk-5h-exit", gateKey: "hold-gap", label: "выход к гавани", x: -62, y: 145, award: true}),
+    ]),
+  }),
+  6: Object.freeze({
+    "survivor-a": Object.freeze([
+      Object.freeze({id: "risk-6a-entry", gateKey: "black-raft", label: "вход у плавучих обломков", x: 67, y: 62, award: false}),
+      Object.freeze({id: "risk-6a-exit", gateKey: "black-raft", label: "выход из прохода", x: 66, y: 82, award: true}),
+    ]),
+    "survivor-b": Object.freeze([
+      Object.freeze({id: "risk-6b-entry", gateKey: "black-hold", label: "вход у разорванного трюма", x: -95, y: 225, award: false}),
+      Object.freeze({id: "risk-6b-exit", gateKey: "black-hold", label: "выход у трюма", x: -91, y: 245, award: true}),
+    ]),
+    harbor: Object.freeze([
+      Object.freeze({id: "risk-6h-entry", gateKey: "black-ribs", label: "вход у рёбер корпуса", x: -115, y: 330, award: false}),
+      Object.freeze({id: "risk-6h-exit", gateKey: "black-ribs", label: "выход к гавани", x: -110, y: 305, award: true}),
+    ]),
+  }),
+});
+
 // These are opt-in challenge lines. The normal sonar never uses them and
 // continues to guide the broad, direct corridors introduced in v11.
 const RISK_ROUTES = Object.freeze({
@@ -49,6 +94,7 @@ const RISK_ROUTES = Object.freeze({
     "survivor-b": NORTH_NORTHBOUND,
     harbor: Object.freeze([...NORTH_SOUTHBOUND, ...SOUTH_SOUTHBOUND]),
   }),
+  ...ADVANCED_ROUTES,
 });
 
 function clock(state) {

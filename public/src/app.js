@@ -14,7 +14,7 @@ import {
   saveProfile,
   selectBoat,
   selectOperation,
-} from "./progression.js?v=18.0";
+} from "./progression.js?v=19.0";
 
 const $ = id => document.getElementById(id);
 const stateBox = {state: null};
@@ -152,7 +152,12 @@ function renderProgressionMenu() {
   setText("operationDescription", operation.description);
 
   for (const boat of BOATS) {
-    const id = boat.id === "strizh" ? "boatStrizh" : "boatKasatka";
+    const id = {
+      strizh: "boatStrizh",
+      kasatka: "boatKasatka",
+      burevestnik: "boatBurevestnik",
+      grom: "boatGrom",
+    }[boat.id];
     const button = $(id);
     if (!button) continue;
     const unlocked = boat.unlockLevel <= profile.unlockedLevel;
@@ -171,6 +176,8 @@ function renderProgressionMenu() {
     "coast-brake": "buyCoastBrake",
     "mini-armor": "buyMiniArmor",
     "high-flow-pump": "buyHighFlowPump",
+    "ram-keel": "buyRamKeel",
+    "debris-tools": "buyDebrisTools",
   };
   for (const item of SHOP_ITEMS) {
     const button = $(itemButtons[item.id]);
@@ -197,7 +204,7 @@ function chooseOperation(level) {
 function chooseBoat(boatId) {
   const boat = BOATS.find(item => item.id === boatId);
   if (!boat || boat.unlockLevel > profile.unlockedLevel) {
-    setProgressionStatus("Катер «Касатка» откроется после завершения второго уровня.", true);
+    setProgressionStatus(boat ? `${boat.name} откроется на уровне ${boat.unlockLevel}.` : "Лодка недоступна.", true);
     return;
   }
   persistProfile(selectBoat(profile, boatId));
@@ -382,6 +389,7 @@ function render(forceAnnouncement = false) {
   setText("fuel", `${Math.round(view.boat.fuel)}%`);
   setText("temperature", `${Math.round(view.boat.engineTemp)}°`);
   setText("rescued", `${view.rescued}/2`);
+  setText("debrisCount", `${view.debris?.count || 0}`);
   setText("time", view.timed ? `${Math.ceil(view.remaining)} с` : "Без лимита");
   const risk = view.riskRoute;
   setText("riskRouteState", !risk?.available
@@ -391,10 +399,27 @@ function render(forceAnnouncement = false) {
       : risk.selectionPending
         ? `${risk.selectedRisk ? "риск" : "обычный"} выбран`
         : risk.enabled ? "рискованный" : "обычный");
-  setText("quickAction", view.quickLabel);
-
   const captainLocked = view.mode === "coop" && role === "crew";
   const crewLocked = view.mode === "coop" && role === "captain";
+  setText("quickAction", view.quickLabel);
+  setHidden("debrisButton", !view.debris?.count && !view.debris?.removing);
+  setAriaDisabled("debrisButton", crewLocked || !view.debris?.canRemove);
+  const debrisButton = $("debrisButton");
+  if (debrisButton) {
+    debrisButton.classList.toggle("active", Boolean(view.debris?.removing));
+    debrisButton.setAttribute("aria-pressed", String(Boolean(view.debris?.removing)));
+    setText("debrisButton", view.debris?.removing
+      ? `Извлечение ${Math.round(view.debris.progress)}% — отменить`
+      : `Извлечь обломок — ${view.debris?.count || 0}`);
+  }
+  setHidden("decoyButton", !view.hunter?.enabled);
+  setAriaDisabled("decoyButton", crewLocked || !view.hunter?.decoyCharges);
+  setText("decoyButton", `Ложный буй — ${view.hunter?.decoyCharges || 0}`);
+  setHidden("hunterStatus", !view.hunter?.enabled);
+  setText("hunterStatus", !view.hunter?.active
+    ? `Преследователь появится через ${Math.ceil(view.hunter?.arrivesIn || 0)} с`
+    : `Преследователь: ${Math.round(view.hunter.distance)} м, ${view.hunter.relativeAngle < -12 ? "слева" : view.hunter.relativeAngle > 12 ? "справа" : "прямо"}${view.hunter.decoyActive ? "; идёт на буй" : ""}`);
+
   for (const id of ["leftButton", "rightButton", "throttleButton", "reverseButton", "anchorButton"]) setAriaDisabled(id, captainLocked);
   for (const id of ["sonarButton", "pumpButton", "rescueButton"]) setAriaDisabled(id, crewLocked);
   setAriaDisabled("pumpAssistButton", !view.pumpAssist?.available);
@@ -454,6 +479,8 @@ function fullStatus() {
   ];
   if (motorStopped) parts.unshift("Мотор остановлен.");
   else parts.splice(1, 0, `Курс ${Math.round((view.boat.heading + 360) % 360)}.`);
+  if (view.debris?.count) parts.push(`Обломков в корпусе: ${view.debris.count}.`);
+  if (view.hunter?.active) parts.push(`Преследователь в ${Math.round(view.hunter.distance)} метрах.`);
   if (view.timed) parts.push(`Время ${Math.ceil(view.remaining)} секунд.`);
   return parts.join(" ");
 }
@@ -567,6 +594,8 @@ $("sonarButton").addEventListener("click", () => sendCommand("sonar"));
 $("routeModeButton").addEventListener("click", () => sendCommand("risk-route-toggle"));
 $("quickAction").addEventListener("click", () => sendCommand("quick"));
 $("repairButton").addEventListener("click", () => sendCommand("repair"));
+$("debrisButton").addEventListener("click", () => sendCommand("debris-remove"));
+$("decoyButton").addEventListener("click", () => sendCommand("hunter-decoy"));
 $("pumpAssistButton").addEventListener("click", () => sendCommand("pump-assist-toggle"));
 $("anchorButton").addEventListener("click", () => sendCommand("anchor"));
 $("statusButton").addEventListener("click", () => {
@@ -589,11 +618,18 @@ $("restartButton").addEventListener("click", resetOperation);
 $("operation1").addEventListener("click", () => chooseOperation(1));
 $("operation2").addEventListener("click", () => chooseOperation(2));
 $("operation3").addEventListener("click", () => chooseOperation(3));
+$("operation4").addEventListener("click", () => chooseOperation(4));
+$("operation5").addEventListener("click", () => chooseOperation(5));
+$("operation6").addEventListener("click", () => chooseOperation(6));
 $("boatStrizh").addEventListener("click", () => chooseBoat("strizh"));
 $("boatKasatka").addEventListener("click", () => chooseBoat("kasatka"));
+$("boatBurevestnik").addEventListener("click", () => chooseBoat("burevestnik"));
+$("boatGrom").addEventListener("click", () => chooseBoat("grom"));
 $("buyCoastBrake").addEventListener("click", () => buyUpgrade("coast-brake"));
 $("buyMiniArmor").addEventListener("click", () => buyUpgrade("mini-armor"));
 $("buyHighFlowPump").addEventListener("click", () => buyUpgrade("high-flow-pump"));
+$("buyRamKeel").addEventListener("click", () => buyUpgrade("ram-keel"));
+$("buyDebrisTools").addEventListener("click", () => buyUpgrade("debris-tools"));
 
 bindHold("leftButton", "left");
 bindHold("rightButton", "right");
