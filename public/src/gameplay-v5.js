@@ -146,6 +146,11 @@ function bindReliableControl(button, control) {
     stopEvent(event);
 
     if (toggleControls.has(control)) {
+      const current = state();
+      if (control === "hullRepair" && current?.mode === "coop" && document.body.dataset.role === "captain") {
+        say("Заделкой пробоины занимается системный оператор.");
+        return;
+      }
       const next = !Boolean(toggled.get(control));
       if (!gameApi()?.control?.(control, next)) return;
       toggled.set(control, next);
@@ -205,6 +210,8 @@ function syncControls() {
 
   const repairHullButton = byId("repairHullButton");
   if (repairHullButton) {
+    const captainLocked = current.mode === "coop" && document.body.dataset.role === "captain";
+    repairHullButton.setAttribute("aria-disabled", String(captainLocked));
     const percent = Math.round((current.boat.hullRepairProgress || 0) / 3.1 * 100);
     const patches = current.boat.repairPatches ?? 0;
     repairHullButton.textContent = current.controls.hullRepair
