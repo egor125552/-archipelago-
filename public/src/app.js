@@ -14,7 +14,7 @@ import {
   saveProfile,
   selectBoat,
   selectOperation,
-} from "./progression.js?v=19.0";
+} from "./progression.js?v=20.0";
 
 const $ = id => document.getElementById(id);
 const stateBox = {state: null};
@@ -412,13 +412,15 @@ function render(forceAnnouncement = false) {
       ? `Извлечение ${Math.round(view.debris.progress)}% — отменить`
       : `Извлечь обломок — ${view.debris?.count || 0}`);
   }
-  setHidden("decoyButton", !view.hunter?.enabled);
-  setAriaDisabled("decoyButton", crewLocked || !view.hunter?.decoyCharges);
+  setHidden("decoyButton", !view.hunter?.enabled || view.hunter?.destroyed);
+  setAriaDisabled("decoyButton", crewLocked || !view.hunter?.decoyCharges || view.hunter?.destroyed);
   setText("decoyButton", `Ложный буй — ${view.hunter?.decoyCharges || 0}`);
   setHidden("hunterStatus", !view.hunter?.enabled);
-  setText("hunterStatus", !view.hunter?.active
-    ? `Преследователь появится через ${Math.ceil(view.hunter?.arrivesIn || 0)} с`
-    : `Преследователь: ${Math.round(view.hunter.distance)} м, ${view.hunter.relativeAngle < -12 ? "слева" : view.hunter.relativeAngle > 12 ? "справа" : "прямо"}${view.hunter.decoyActive ? "; идёт на буй" : ""}`);
+  setText("hunterStatus", view.hunter?.destroyed
+    ? "Преследователь выведен из строя"
+    : !view.hunter?.active
+      ? `Преследователь появится через ${Math.ceil(view.hunter?.arrivesIn || 0)} с`
+      : `Преследователь: ${Math.round(view.hunter.distance)} м, ${view.hunter.relativeAngle < -12 ? "слева" : view.hunter.relativeAngle > 12 ? "справа" : "прямо"}; корпус ${Math.round(view.hunter.hull)}%; ${view.hunter.modeLabel}`);
 
   for (const id of ["leftButton", "rightButton", "throttleButton", "reverseButton", "anchorButton"]) setAriaDisabled(id, captainLocked);
   for (const id of ["sonarButton", "pumpButton", "rescueButton"]) setAriaDisabled(id, crewLocked);
@@ -480,7 +482,8 @@ function fullStatus() {
   if (motorStopped) parts.unshift("Мотор остановлен.");
   else parts.splice(1, 0, `Курс ${Math.round((view.boat.heading + 360) % 360)}.`);
   if (view.debris?.count) parts.push(`Обломков в корпусе: ${view.debris.count}.`);
-  if (view.hunter?.active) parts.push(`Преследователь в ${Math.round(view.hunter.distance)} метрах.`);
+  if (view.hunter?.active) parts.push(`Преследователь ${Math.round(view.hunter.distance)} метров. Корпус ${Math.round(view.hunter.hull)}. ${view.hunter.modeLabel}.`);
+  else if (view.hunter?.destroyed) parts.push("Преследователь выведен из строя.");
   if (view.timed) parts.push(`Время ${Math.ceil(view.remaining)} секунд.`);
   return parts.join(" ");
 }

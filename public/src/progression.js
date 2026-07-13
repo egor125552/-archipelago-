@@ -53,7 +53,7 @@ export const BOATS = Object.freeze([
   Object.freeze({id: "strizh", name: "Катер «Стриж»", unlockLevel: 1, description: "Быстрый базовый спасательный катер."}),
   Object.freeze({id: "kasatka", name: "Катер «Касатка»", unlockLevel: 3, description: "Более спокойный мотор, устойчивый корпус и меньше перегрева."}),
   Object.freeze({id: "burevestnik", name: "Катер «Буревестник»", unlockLevel: 4, description: "Очень быстрый и манёвренный, но сильнее страдает от тяжёлых ударов."}),
-  Object.freeze({id: "grom", name: "Катер «Гром»", unlockLevel: 6, description: "Сверхбыстрый бронированный перехватчик с усиленным тараном."}),
+  Object.freeze({id: "grom", name: "Катер «Гром»", unlockLevel: 6, description: "Сверхбыстрый манёвренный перехватчик: усиленный таран и 30 ремонтных пластин."}),
 ]);
 
 function integer(value, fallback, min = 0, max = Number.MAX_SAFE_INTEGER) {

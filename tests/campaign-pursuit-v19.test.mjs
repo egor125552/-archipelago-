@@ -293,8 +293,8 @@ test("release exposes six levels, new controls, cache generation and procedural 
   for (const id of ["operation4", "operation5", "operation6", "boatBurevestnik", "boatGrom", "debrisButton", "decoyButton", "hunterStatus"]) {
     assert.match(html, new RegExp(`id="${id}"`));
   }
-  assert.match(html, /game-core-v16\.js\?v=19\.0/);
-  assert.match(html, /audio-engine-v11\.js\?v=19\.0/);
+  assert.match(html, /game-core-v17\.js\?v=20\.0/);
+  assert.match(html, /audio-engine-v12\.js\?v=20\.0/);
   assert.match(app, /debris-remove/);
   assert.match(app, /hunter-decoy/);
   assert.match(audio, /startHunterEngine/);

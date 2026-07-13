@@ -10,8 +10,9 @@ export const CONFIG = Object.freeze({
   debrisSpeedPenalty: 0.1,
   hunterSpawnDelay: 14,
   hunterRamCooldown: 3.6,
-  hunterMaxSpeed: 20.5,
-  hunterCollisionRadius: 5.2,
+  hunterMaxSpeed: 28.5,
+  hunterCollisionRadius: 9,
+  hunterHull: 100,
 });
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -84,6 +85,26 @@ const ADVANCED_WORLDS = Object.freeze({
 });
 
 const RAM_MULTIPLIER = Object.freeze({strizh: 1, kasatka: 0.92, burevestnik: 1.12, grom: 1.7});
+const HUNTER_MODES = Object.freeze([
+  "pursuit", "pursuit", "circle", "pursuit", "patrol",
+  "pursuit", "stop", "pursuit", "retreat", "pursuit",
+]);
+const HUNTER_MODE_SECONDS = Object.freeze({
+  pursuit: 5.8,
+  circle: 4.2,
+  patrol: 4.8,
+  stop: 2.4,
+  retreat: 3.2,
+});
+const HUNTER_MODE_LABELS = Object.freeze({
+  pursuit: "атакует",
+  circle: "кружит",
+  patrol: "патрулирует",
+  stop: "стоит",
+  retreat: "отходит",
+  decoy: "идёт к бую",
+  disabled: "выведен из строя",
+});
 
 function buildHazard(row) {
   const [id, label, x, y, radius, damage, durability, type = "wreck"] = row;
@@ -149,7 +170,7 @@ function ensureHunter(state) {
   const enabled = (state.progression?.level || 1) === 6;
   if (typeof state.hunter.enabled !== "boolean") state.hunter.enabled = enabled;
   state.hunter.enabled = enabled;
-  if (!Number.isFinite(state.hunter.x)) state.hunter.x = -145;
+  if (!Number.isFinite(state.hunter.x)) state.hunter.x = -105;
   if (!Number.isFinite(state.hunter.y)) state.hunter.y = 28;
   if (!Number.isFinite(state.hunter.heading)) state.hunter.heading = 28;
   if (!Number.isFinite(state.hunter.speed)) state.hunter.speed = 0;
@@ -161,6 +182,15 @@ function ensureHunter(state) {
   if (!Number.isFinite(state.hunter.decoyUntil)) state.hunter.decoyUntil = 0;
   if (!Number.isFinite(state.hunter.decoyX)) state.hunter.decoyX = 0;
   if (!Number.isFinite(state.hunter.decoyY)) state.hunter.decoyY = 0;
+  if (!Number.isFinite(state.hunter.maxHull)) state.hunter.maxHull = CONFIG.hunterHull;
+  if (!Number.isFinite(state.hunter.hull)) state.hunter.hull = state.hunter.maxHull;
+  state.hunter.hull = clamp(state.hunter.hull, 0, state.hunter.maxHull);
+  if (typeof state.hunter.destroyed !== "boolean") state.hunter.destroyed = state.hunter.hull <= 0;
+  if (!HUNTER_MODES.includes(state.hunter.mode)) state.hunter.mode = "pursuit";
+  if (!Number.isInteger(state.hunter.modeIndex)) state.hunter.modeIndex = 0;
+  if (!Number.isFinite(state.hunter.nextDecisionAt)) {
+    state.hunter.nextDecisionAt = CONFIG.hunterSpawnDelay + HUNTER_MODE_SECONDS.pursuit;
+  }
 }
 
 function ensureV16State(state) {
@@ -324,6 +354,43 @@ function hunterDirection(relative) {
 
 function hunterTarget(state, now) {
   if (state.hunter.decoyUntil > now) return {x: state.hunter.decoyX, y: state.hunter.decoyY, decoy: true};
+  const hunter = state.hunter;
+  const mode = hunter.mode;
+  if (mode === "stop") return {x: hunter.x, y: hunter.y, decoy: false};
+  if (mode === "retreat") {
+    const dx = hunter.x - state.boat.x;
+    const dy = hunter.y - state.boat.y;
+    const length = Math.hypot(dx, dy) || 1;
+    return {x: hunter.x + dx / length * 70, y: hunter.y + dy / length * 70, decoy: false};
+  }
+  if (mode === "circle") {
+    const side = hunter.modeIndex % 2 === 0 ? 1 : -1;
+    const angle = rad(state.boat.heading + side * 92);
+    return {
+      x: state.boat.x + Math.sin(angle) * 27,
+      y: state.boat.y + Math.cos(angle) * 27,
+      decoy: false,
+    };
+  }
+  if (mode === "patrol") {
+    const bounds = state.world.bounds;
+    const side = hunter.modeIndex % 2 === 0 ? 1 : -1;
+    return {
+      x: clamp(side * Math.max(45, bounds.maxX * 0.58), bounds.minX + 24, bounds.maxX - 24),
+      y: clamp(state.boat.y + 55, bounds.minY + 24, bounds.maxY - 24),
+      decoy: false,
+    };
+  }
+  const heading = rad(state.boat.heading);
+  const lead = clamp(distance(state.hunter, state.boat) / 18, 0.45, 1.65);
+  return {
+    x: state.boat.x + Math.sin(heading) * state.boat.speed * lead,
+    y: state.boat.y + Math.cos(heading) * state.boat.speed * lead,
+    decoy: false,
+  };
+}
+
+function hunterPursuitTarget(state) {
   const heading = rad(state.boat.heading);
   const lead = clamp(distance(state.hunter, state.boat) / 18, 0.45, 1.65);
   return {
@@ -375,52 +442,115 @@ function keepHunterSolid(state) {
   }
 }
 
+function separateBoats(state, nx, ny, playerDistance = 3.1, hunterDistance = 2.4) {
+  state.boat.x += nx * playerDistance;
+  state.boat.y += ny * playerDistance;
+  state.hunter.x -= nx * hunterDistance;
+  state.hunter.y -= ny * hunterDistance;
+}
+
+function damageHunter(state, amount, events, details = {}) {
+  const hunter = state.hunter;
+  const damage = clamp(Number(amount) || 0, 0, hunter.hull);
+  hunter.hull = clamp(hunter.hull - damage, 0, hunter.maxHull);
+  if (hunter.hull > 0 || hunter.destroyed) return {damage, destroyed: false};
+  hunter.destroyed = true;
+  hunter.speed = 0;
+  hunter.mode = "pursuit";
+  state.score += 700;
+  events.push({type: "hunter-destroyed", damage, hunterHull: 0, bonus: 700, ...details});
+  return {damage, destroyed: true};
+}
+
 function ramPlayer(state, events, now) {
   const hunter = state.hunter;
   const metres = distance(hunter, state.boat);
-  if (metres > CONFIG.hunterCollisionRadius || hunter.ramCooldown > 0 || state.damageControl?.floodEmergency) return;
+  if (hunter.destroyed || metres > CONFIG.hunterCollisionRadius || hunter.ramCooldown > 0 || state.damageControl?.floodEmergency) return;
   const playerHeading = rad(state.boat.heading);
   const hunterHeading = rad(hunter.heading);
+  const playerVx = Math.sin(playerHeading) * state.boat.speed;
+  const playerVy = Math.cos(playerHeading) * state.boat.speed;
+  const hunterVx = Math.sin(hunterHeading) * hunter.speed;
+  const hunterVy = Math.cos(hunterHeading) * hunter.speed;
   const relativeSpeed = Math.hypot(
-    Math.sin(hunterHeading) * hunter.speed - Math.sin(playerHeading) * state.boat.speed,
-    Math.cos(hunterHeading) * hunter.speed - Math.cos(playerHeading) * state.boat.speed,
+    hunterVx - playerVx,
+    hunterVy - playerVy,
   );
   if (relativeSpeed < 4.5) return;
-  const rawDamage = clamp(7 + Math.pow(relativeSpeed, 1.24) * 0.72, 9, 31);
-  const impact = applyCollisionDamage(state.boat, rawDamage);
   let dx = state.boat.x - hunter.x;
   let dy = state.boat.y - hunter.y;
   const length = Math.hypot(dx, dy) || 1;
   dx /= length;
   dy /= length;
-  state.boat.x += dx * 3.1;
-  state.boat.y += dy * 3.1;
-  state.boat.speed *= 0.38;
-  hunter.x -= dx * 2.4;
-  hunter.y -= dy * 2.4;
-  hunter.speed = -2.5;
+  const playerClosing = Math.max(0, -(playerVx * dx + playerVy * dy));
+  const hunterClosing = Math.max(0, hunterVx * dx + hunterVy * dy);
+  const playerLedImpact = Math.abs(state.boat.speed) >= 7.5 && playerClosing > hunterClosing + 0.75;
+  const pan = hunterBearing(state).pan;
+
+  separateBoats(state, dx, dy);
   hunter.ramCooldown = CONFIG.hunterRamCooldown;
   hunter.recoverUntil = now + CONFIG.hunterRamCooldown;
+  hunter.mode = "retreat";
+  hunter.nextDecisionAt = hunter.recoverUntil;
   if (state.progression) state.progression.collisionCount = (state.progression.collisionCount || 0) + 1;
+
+  if (playerLedImpact) {
+    const modelRam = RAM_MULTIPLIER[state.boat.modelId] || 1;
+    const keel = state.progression?.upgrades?.ramKeel ? 1.45 : 1;
+    const hunterDamage = clamp((5 + Math.pow(relativeSpeed, 1.18) * 0.72) * modelRam * keel, 8, 42);
+    const selfImpact = applyCollisionDamage(state.boat, clamp(2.5 + relativeSpeed * 0.3, 4, 13));
+    state.boat.speed *= 0.54;
+    hunter.speed = -Math.max(3.2, Math.abs(hunter.speed) * 0.32);
+    const result = damageHunter(state, hunterDamage, events, {pan, impactSpeed: relativeSpeed});
+    events.push({
+      type: "hunter-hit",
+      damage: result.damage,
+      hunterHull: hunter.hull,
+      destroyed: hunter.destroyed,
+      playerDamage: selfImpact.damage,
+      absorbed: selfImpact.absorbed,
+      impactSpeed: relativeSpeed,
+      pan,
+    });
+    return;
+  }
+
+  const rawDamage = clamp(7 + Math.pow(relativeSpeed, 1.24) * 0.72, 9, 31);
+  const impact = applyCollisionDamage(state.boat, rawDamage);
+  const hunterImpact = damageHunter(state, clamp(2.5 + relativeSpeed * 0.26, 4, 12), events, {pan, impactSpeed: relativeSpeed});
+  state.boat.speed *= 0.38;
+  hunter.speed = -2.5;
   events.push({
     type: "hunter-ram",
     damage: impact.damage,
     absorbed: impact.absorbed,
+    hunterDamage: hunterImpact.damage,
+    hunterHull: hunter.hull,
     impactSpeed: relativeSpeed,
-    pan: hunterBearing(state).pan,
+    pan,
   });
+}
+
+function chooseHunterMode(state, now) {
+  const hunter = state.hunter;
+  if (hunter.decoyUntil > now || now < hunter.recoverUntil || now < hunter.nextDecisionAt) return;
+  hunter.modeIndex = (hunter.modeIndex + 1) % HUNTER_MODES.length;
+  hunter.mode = HUNTER_MODES[hunter.modeIndex];
+  hunter.nextDecisionAt = now + HUNTER_MODE_SECONDS[hunter.mode];
 }
 
 function updateHunter(state, dt, events) {
   const hunter = state.hunter;
-  if (!hunter.enabled || state.phase !== "playing") return;
+  if (!hunter.enabled || hunter.destroyed || state.phase !== "playing") return;
   const now = clock(state);
   hunter.ramCooldown = Math.max(0, hunter.ramCooldown - dt);
   if (now < CONFIG.hunterSpawnDelay) return;
+  chooseHunterMode(state, now);
 
-  let target = hunterTarget(state, now);
   const recovering = now < hunter.recoverUntil;
   const playerDistance = distance(hunter, state.boat);
+  const forcePursuit = playerDistance > 115 && hunter.decoyUntil <= now;
+  let target = forcePursuit ? hunterPursuitTarget(state) : hunterTarget(state, now);
   if (!recovering && now >= hunter.repositionUntil && playerDistance < 13 && hunter.speed < 7.5) {
     hunter.repositionUntil = now + 1.8;
   }
@@ -436,13 +566,21 @@ function updateHunter(state, dt, events) {
 
   const desiredHeading = steerHunterAroundHazards(state, target);
   const headingError = wrapDeg(desiredHeading - hunter.heading);
-  hunter.heading = wrapDeg(hunter.heading + clamp(headingError, -74 * dt, 74 * dt));
+  const turnRate = playerDistance < 38 ? 116 : 84;
+  hunter.heading = wrapDeg(hunter.heading + clamp(headingError, -turnRate * dt, turnRate * dt));
   const targetDistance = distance(hunter, target);
   const turnFactor = clamp(1 - Math.abs(headingError) / 150, 0.35, 1);
-  let desiredSpeed = Math.min(CONFIG.hunterMaxSpeed, 8 + targetDistance * 0.16) * turnFactor;
+  const damageFactor = 0.52 + 0.48 * hunter.hull / hunter.maxHull;
+  const maxSpeed = CONFIG.hunterMaxSpeed * damageFactor;
+  let desiredSpeed = Math.min(maxSpeed, 8 + targetDistance * 0.19) * turnFactor;
+  if (hunter.mode === "circle") desiredSpeed = Math.min(desiredSpeed, maxSpeed * 0.78);
+  if (hunter.mode === "patrol") desiredSpeed = Math.min(desiredSpeed, maxSpeed * 0.62);
+  if (hunter.mode === "stop") desiredSpeed = 0;
+  if (hunter.mode === "retreat") desiredSpeed = Math.min(desiredSpeed, maxSpeed * 0.7);
+  if (forcePursuit && !recovering) desiredSpeed = maxSpeed;
   if (recovering || repositioning) desiredSpeed = 13;
   if (state.damageControl?.floodEmergency) desiredSpeed = Math.min(desiredSpeed, 10);
-  hunter.speed += clamp(desiredSpeed - hunter.speed, -12 * dt, 8.5 * dt);
+  hunter.speed += clamp(desiredSpeed - hunter.speed, -13.5 * dt, 9.5 * damageFactor * dt);
   const heading = rad(hunter.heading);
   hunter.x += Math.sin(heading) * hunter.speed * dt;
   hunter.y += Math.cos(heading) * hunter.speed * dt;
@@ -452,7 +590,7 @@ function updateHunter(state, dt, events) {
   hunter.y = clamp(hunter.y, bounds.minY + 2, bounds.maxY - 2);
   ramPlayer(state, events, now);
 
-  if (now >= hunter.nextCueAt) {
+  if (!hunter.destroyed && now >= hunter.nextCueAt) {
     const bearing = hunterBearing(state);
     hunter.nextCueAt = now + clamp(bearing.distance / 70, 0.72, 1.8);
     events.push({type: "hunter-bearing", ...bearing, speed: hunter.speed, decoy: hunter.decoyUntil > now});
@@ -475,10 +613,14 @@ function deployDecoy(state, actor) {
 function compactAdvancedMessage(state, events) {
   if (events.some(event => ["flood-emergency-start", "flood-emergency-warning", "flood-emergency-failed", "win", "lose"].includes(event.type))) return;
   const ram = events.find(event => event.type === "hunter-ram");
+  const hunterHit = events.find(event => event.type === "hunter-hit");
+  const hunterDestroyed = events.find(event => event.type === "hunter-destroyed");
   const embedded = events.find(event => event.type === "debris-embedded");
   const destroyed = events.find(event => event.type === "wreck-destroyed");
   const crack = events.find(event => event.type === "wreck-crack");
-  if (ram) state.message = `Таран. Корпус минус ${Math.round(ram.damage || 0)}%.`;
+  if (hunterDestroyed) state.message = "Преследователь выведен из строя.";
+  else if (hunterHit) state.message = `Попадание. Его корпус ${Math.round(hunterHit.hunterHull || 0)}%.`;
+  else if (ram) state.message = `Таран. Корпус минус ${Math.round(ram.damage || 0)}%.`;
   else if (embedded) state.message = "Металл застрял в корпусе. Скорость снижена.";
   else if (destroyed) state.message = "Обломки разбиты. Путь открыт.";
   else if (crack) state.message = `Обломки повреждены: ${Math.ceil(crack.durability)}.`;
@@ -510,7 +652,7 @@ export function command(state, action, actor = "captain") {
   if (action === "debris-remove") return beginDebrisRemoval(state, actor);
   if (action === "hunter-decoy") return deployDecoy(state, actor);
   const result = base.command(state, action, actor);
-  if (action === "sonar" && result.ok && state.hunter.enabled && clock(state) >= CONFIG.hunterSpawnDelay) {
+  if (action === "sonar" && result.ok && state.hunter.enabled && !state.hunter.destroyed && clock(state) >= CONFIG.hunterSpawnDelay) {
     const bearing = hunterBearing(state);
     state.message = `${state.message.replace(/\.$/, "")}. Катер ${hunterDirection(bearing.relative)}, ${Math.round(bearing.distance)} м.`;
   }
@@ -532,7 +674,7 @@ export function getView(state) {
   ensureV16State(state);
   const view = base.getView(state);
   const now = clock(state);
-  const hunterReady = state.hunter.enabled && now >= CONFIG.hunterSpawnDelay;
+  const hunterReady = state.hunter.enabled && !state.hunter.destroyed && now >= CONFIG.hunterSpawnDelay;
   const bearing = hunterReady ? hunterBearing(state) : null;
   const duration = state.progression?.upgrades?.debrisTools
     ? CONFIG.debrisToolsDuration
@@ -564,6 +706,13 @@ export function getView(state) {
       relativeAngle: bearing?.relative ?? null,
       pan: bearing?.pan ?? 0,
       speed: state.hunter.speed,
+      maxSpeed: CONFIG.hunterMaxSpeed * (0.52 + 0.48 * state.hunter.hull / state.hunter.maxHull),
+      hull: state.hunter.hull,
+      maxHull: state.hunter.maxHull,
+      damaged: state.hunter.hull < state.hunter.maxHull,
+      destroyed: state.hunter.destroyed,
+      mode: state.hunter.decoyUntil > now ? "decoy" : state.hunter.destroyed ? "disabled" : state.hunter.mode,
+      modeLabel: HUNTER_MODE_LABELS[state.hunter.decoyUntil > now ? "decoy" : state.hunter.destroyed ? "disabled" : state.hunter.mode],
       ramCooldown: state.hunter.ramCooldown,
       decoyCharges: state.hunter.decoyCharges,
       decoyActive: state.hunter.decoyUntil > now,

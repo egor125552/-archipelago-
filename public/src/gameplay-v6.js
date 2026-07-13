@@ -23,6 +23,16 @@ function state() { return gameApi()?.getState?.() || null; }
 function view() { return gameApi()?.getView?.() || null; }
 function readerMode() { return document.body.dataset.accessibility === "reader"; }
 
+function keepReaderFocus(button) {
+  if (!readerMode() || !button?.isConnected) return;
+  const restore = () => {
+    if (!readerMode() || !button.isConnected) return;
+    try { button.focus({preventScroll: true}); } catch (_) { button.focus(); }
+  };
+  restore();
+  requestAnimationFrame(restore);
+}
+
 function say(text) {
   if (!text) return;
   const api = gameApi();
@@ -158,7 +168,10 @@ function situationHint() {
   }
   if (currentView.hunter?.active && currentView.hunter.distance < 45) {
     const side = currentView.hunter.relativeAngle < -12 ? "слева" : currentView.hunter.relativeAngle > 12 ? "справа" : "прямо";
-    return `Преследователь ${side}, ${Math.round(currentView.hunter.distance)} м. Меняй курс или сбрось буй.`;
+    const ram = current.boat.modelId === "grom" && Math.abs(current.boat.speed) >= 8
+      ? " Можно таранить."
+      : "";
+    return `Преследователь ${side}, ${Math.round(currentView.hunter.distance)} м. Корпус ${Math.round(currentView.hunter.hull)}%. ${currentView.hunter.modeLabel}.${ram}`;
   }
   if (currentView.riskRoute?.active) {
     const failed = currentView.riskRoute.gateFailed ? " Бонус потерян." : "";
@@ -199,6 +212,7 @@ function bindReliableControl(button, control) {
     }
     try { if (pointerId != null) button.releasePointerCapture?.(pointerId); } catch (_) {}
     pointerId = null;
+    keepReaderFocus(button);
   };
 
   button.addEventListener("pointerdown", event => {
@@ -242,11 +256,13 @@ function bindReliableControl(button, control) {
 
     if (toggleControls.has(control)) {
       toggleControl(button, control);
+      keepReaderFocus(button);
       return;
     }
 
     if (!pulseControls.has(control) || !gameApi()?.control?.(control, true)) return;
     setHeld(button, true);
+    keepReaderFocus(button);
     if (control === "reverse") {
       if (readerBrakeTimer != null) clearInterval(readerBrakeTimer);
       const startedAt = performance.now();
@@ -260,6 +276,7 @@ function bindReliableControl(button, control) {
         gameApi()?.control?.(control, false);
         setHeld(button, false);
         if (current?.phase === "playing") say("Лодка остановлена обычным тормозом.");
+        keepReaderFocus(button);
       }, 60);
       return;
     }
@@ -268,6 +285,7 @@ function bindReliableControl(button, control) {
       gameApi()?.control?.(control, false);
       setHeld(button, false);
       if (control === "left" || control === "right") say(courseText());
+      keepReaderFocus(button);
     }, duration);
   }, true);
 }
@@ -290,7 +308,8 @@ function statusText() {
   if (motorStopped) parts.unshift("Мотор остановлен.");
   else parts.splice(1, 0, `Курс ${Math.round((currentView.boat.heading + 360) % 360)}.`, `Течь ${currentView.boat.leak.toFixed(1)}.`);
   if (currentView.debris?.count) parts.push(`Обломков: ${currentView.debris.count}.`);
-  if (currentView.hunter?.active) parts.push(`Преследователь: ${Math.round(currentView.hunter.distance)} метров.`);
+  if (currentView.hunter?.active) parts.push(`Преследователь ${Math.round(currentView.hunter.distance)} метров. Корпус ${Math.round(currentView.hunter.hull)}. ${currentView.hunter.modeLabel}.`);
+  else if (currentView.hunter?.destroyed) parts.push("Преследователь выведен из строя.");
   if (current.timed) parts.push(`Время ${Math.ceil(currentView.remaining)} секунд.`);
   return parts.join(" ");
 }
