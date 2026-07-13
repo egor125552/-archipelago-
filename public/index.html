@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#061a24">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <title>Эхо-Архипелаг — аудио-спасение</title>
-  <link rel="stylesheet" href="styles.css?v=5">
+  <link rel="stylesheet" href="styles.css?v=6">
 </head>
 <body data-accessibility="touch" data-role="captain">
   <a class="skip" href="#main">К игре</a>
@@ -57,6 +57,7 @@
         <div><p class="eyebrow"><span id="roleLabel">Капитан</span></p><h1 id="gameTitle" tabindex="-1">Эхо-Архипелаг</h1></div>
         <div class="game-header-actions">
           <button id="actionHintButton" class="small">Что делать сейчас?</button>
+          <button id="assistButton" class="small" aria-pressed="true">Навигационный помощник: включён</button>
           <button id="statusButton" class="small">Озвучить статус</button>
           <button id="speechButton" class="small" aria-pressed="true">Игровая озвучка: включена</button>
           <button id="soundButton" class="small">Звук: включён</button>
@@ -74,34 +75,34 @@
       </section>
 
       <section class="control-deck" aria-label="Постоянная раскладка управления">
-        <button id="sonarButton" class="control sonar" aria-label="Сонар. Сообщает цель и ближайшую опасность по направлению и расстоянию">СОНАР: ГДЕ ЦЕЛЬ</button>
-        <button id="leftButton" class="control left" aria-label="Поворот влево. Удерживай; с VoiceOver нажимай импульсами">◀ ЛЕВО</button>
+        <button id="sonarButton" class="control sonar" aria-label="Сонар. Сообщает цель, направление, расстояние и ближайшую опасность">СОНАР: ГДЕ ЦЕЛЬ</button>
+        <button id="leftButton" class="control left" aria-label="Поворот влево. Для поворота лодка должна хотя бы медленно двигаться">◀ ЛЕВО</button>
         <button id="throttleButton" class="control throttle" aria-label="Газ вперёд. После отпускания лодка продолжит идти по инерции">ГАЗ ▲</button>
-        <button id="rightButton" class="control right" aria-label="Поворот вправо. Удерживай; с VoiceOver нажимай импульсами">ПРАВО ▶</button>
+        <button id="rightButton" class="control right" aria-label="Поворот вправо. Для поворота лодка должна хотя бы медленно двигаться">ПРАВО ▶</button>
         <button id="reverseButton" class="control reverse" aria-label="Сильное торможение и задний ход">ТОРМОЗ ▼</button>
         <button id="quickAction" class="control quick primary" aria-label="Быстрое контекстное действие">БЫСТРОЕ ДЕЙСТВИЕ</button>
       </section>
 
       <section class="systems panel" aria-label="Системы, ремонт и спасение">
-        <button id="pumpButton">Включить насос</button>
-        <button id="rescueButton">Подать спасательный трос</button>
+        <button id="pumpButton" aria-pressed="false">Включить насос</button>
+        <button id="rescueButton" aria-pressed="false">Подать спасательный трос</button>
         <button id="repairHullButton" aria-pressed="false">Заделать пробоину — пластин 3</button>
         <button id="repairButton">Проверить двигатель</button>
         <button id="anchorButton">Сбросить плавучий тормоз</button>
       </section>
       <details class="panel help">
-        <summary>Как спасать и ремонтировать</summary>
-        <p>Сонар сообщает цель и опасность. Для спасения подойди ближе двенадцати метров, сбрось скорость ниже четырёх узлов и удерживай трос. С VoiceOver одно нажатие включает трос, второе выключает. Для ремонта корпуса почти останови лодку и удерживай «Заделать пробоину», затем откачай воду насосом. Поворот даёт стереозвук и после манёвра сообщает новый курс.</p>
+        <summary>Как спасать, поворачивать и ремонтировать</summary>
+        <p>Сонар сообщает цель и опасность. Поворот работает только при небольшом ходе: сначала дай немного газа, затем держи левую или правую кнопку. Для спасения подойди ближе двенадцати метров, сбрось скорость ниже четырёх узлов и один раз нажми «Подать спасательный трос». Повторное нажатие убирает трос. Насос и ремонт корпуса тоже включаются одним нажатием и выключаются повторным. Для ремонта корпуса почти останови лодку, установи пластину, затем откачай воду насосом.</p>
       </details>
       <section id="resultPanel" class="panel result" hidden><h2>Операция завершена</h2><p id="resultText"></p><button id="restartButton" class="primary">Начать новую операцию</button></section>
     </section>
   </main>
   <script type="importmap">
-    {"imports":{"/src/game-core.js":"/src/game-core-v5.js","/src/audio-engine.js":"/src/audio-engine-v5.js"}}
+    {"imports":{"/src/game-core.js":"/src/game-core-v6.js","/src/audio-engine.js":"/src/audio-engine-v6.js"}}
   </script>
   <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js" defer></script>
-  <script type="module" src="src/app.js?v=5"></script>
-  <script type="module" src="src/room-ui-fix.js?v=5"></script>
-  <script type="module" src="src/gameplay-v5.js?v=5"></script>
+  <script type="module" src="src/app.js?v=6"></script>
+  <script type="module" src="src/room-ui-fix.js?v=6"></script>
+  <script type="module" src="src/gameplay-v6.js?v=6"></script>
 </body>
 </html>
