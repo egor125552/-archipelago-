@@ -1,6 +1,6 @@
 "use strict";
 
-import * as base from "./game-core-v4.js?base=3";
+import * as base from "./game-core-v4.js?base=4";
 
 export const CONFIG = Object.freeze({
   ...base.CONFIG,
@@ -28,6 +28,7 @@ function ensureV5State(state) {
   if (!Number.isFinite(state.feedback.rescueGuideAt)) state.feedback.rescueGuideAt = -999;
   if (!Number.isFinite(state.feedback.rescueProgressAt)) state.feedback.rescueProgressAt = -999;
   if (!Number.isFinite(state.feedback.hullRepairAt)) state.feedback.hullRepairAt = -999;
+  state.rescueSystemManaged = true;
   state.navigation ||= {};
   if (!Number.isFinite(state.navigation.hardBrakeUntil)) state.navigation.hardBrakeUntil = -999;
   if (!Number.isFinite(state.navigation.turnCueAt)) state.navigation.turnCueAt = -999;
@@ -130,7 +131,14 @@ function processRescue(state, dt, events, rescueRequested) {
   const boat = state.boat;
   const target = nearest(state);
   boat.rescueActive = Boolean(rescueRequested);
-  if (!rescueRequested) return;
+  if (!rescueRequested) {
+    // Letting go of the rope loses the partial pull instead of banking an
+    // invisible checkpoint that can be completed through repeated taps.
+    for (const survivor of state.world.survivors) {
+      if (!survivor.rescued) survivor.progress = Math.max(0, survivor.progress - dt * 0.8);
+    }
+    return;
+  }
 
   if (!target) {
     state.controls.rescue = false;

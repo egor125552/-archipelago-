@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#061a24">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <title>Эхо-Архипелаг — аудио-спасение</title>
-  <link rel="stylesheet" href="styles.css?v=16.0">
+  <link rel="stylesheet" href="styles.css?v=17.0">
 </head>
 <body data-accessibility="touch" data-role="captain">
   <a class="skip" href="#main">К игре</a>
@@ -58,7 +58,7 @@
 
       <section class="panel">
         <h2>Одиночная игра</h2>
-        <p>Ты — капитан. Помощник подстраховывает насос и двигатель. Учебная страховка мягко сбрасывает газ перед близким препятствием и может быть выключена во время игры.</p>
+        <p>Ты — капитан. Насос и ремонт двигателя находятся под твоим явным управлением. При желании можно отдельно включить более медленную автооткачку помощника. Учебная страховка мягко сбрасывает газ перед близким препятствием и может быть выключена во время игры.</p>
         <button id="soloButton" class="primary">Начать одиночную спасательную операцию</button>
       </section>
 
@@ -120,9 +120,10 @@
 
       <section class="systems panel" aria-label="Системы, ремонт и спасение">
         <button id="pumpButton" aria-pressed="false">Включить насос</button>
+        <button id="pumpAssistButton" aria-pressed="false" hidden>Автооткачка помощника: выключена</button>
         <button id="rescueButton" aria-pressed="false">Подать спасательный трос</button>
         <button id="repairHullButton" aria-pressed="false">Заделать пробоину — пластин 3</button>
-        <button id="repairButton">Проверить двигатель</button>
+        <button id="repairButton">Обслужить двигатель</button>
         <button id="anchorButton">Сбросить плавучий тормоз</button>
       </section>
 
@@ -136,7 +137,7 @@
       </details>
       <details class="panel help">
         <summary>Вода, пробоина и полное затопление</summary>
-        <p>При пробоине вода постепенно набирается сама. Чем выше уровень, тем сильнее низкочастотный фильтр приглушает весь игровой микс, как при погружении корпуса. Для ремонта почти останови лодку, один раз нажми «Заделать пробоину», затем включи насос. При 100 процентах воды или нулевой прочности корпуса игра не заканчивается мгновенно: лодка аварийно останавливается, мотор глохнет и остаётся 45 секунд. Держи насос включённым и ставь пластины, пока течь не станет не выше 4,2. Для стабилизации также нужны вода не выше 72 процентов и корпус не ниже 5 процентов. Текущие значения постоянно показаны в аварийном сообщении. Только после стабилизации нажимай «Проверить двигатель».</p>
+        <p>При пробоине вода постепенно набирается сама и без насоса может дойти до 100 процентов. Насос только откачивает воду — он не заделывает течь; пробоину уменьшают лишь ремонтные пластины. Автооткачка помощника по умолчанию выключена и включается отдельной кнопкой. Чем выше уровень, тем сильнее низкочастотный фильтр приглушает весь игровой микс, как при погружении корпуса; на 80 процентах вода заливает моторный отсек и двигатель глохнет. При полном затоплении или нулевой прочности остаётся 45 секунд: установи хотя бы одну пластину, держи насос и доведи воду до 35 процентов или ниже при корпусе не ниже 5. Оставшаяся течь не блокирует выход из аварии, но снова наполнит лодку, поэтому насос нельзя бросать. Затем полностью остановись и один раз нажми «Обслужить двигатель»: запуск займёт четыре секунды и прервётся, если вода снова поднимется выше 35 процентов.</p>
       </details>
       <details class="panel help">
         <summary>Как устроена бухта и сонар</summary>
@@ -154,13 +155,13 @@
     </section>
   </main>
   <script type="importmap">
-    {"imports":{"/src/game-core.js":"/src/game-core-v13.js?v=16.0","/src/audio-engine.js":"/src/audio-engine-v10.js?v=16.0"}}
+    {"imports":{"/src/game-core.js":"/src/game-core-v14.js?v=17.0","/src/audio-engine.js":"/src/audio-engine-v10.js?v=17.0"}}
   </script>
   <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js" defer></script>
-  <script type="module" src="src/app.js?v=16.0"></script>
-  <script type="module" src="src/room-ui-fix.js?v=16.0"></script>
-  <script type="module" src="src/gameplay-v6.js?v=16.0"></script>
-  <script type="module" src="src/gameplay-v8.js?v=16.0"></script>
-  <script type="module" src="src/gameplay-v9.js?v=16.0"></script>
+  <script type="module" src="src/app.js?v=17.0"></script>
+  <script type="module" src="src/room-ui-fix.js?v=17.0"></script>
+  <script type="module" src="src/gameplay-v6.js?v=17.0"></script>
+  <script type="module" src="src/gameplay-v8.js?v=17.0"></script>
+  <script type="module" src="src/gameplay-v9.js?v=17.0"></script>
 </body>
 </html>

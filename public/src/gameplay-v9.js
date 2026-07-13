@@ -44,7 +44,7 @@ function syncV9() {
     const water = Math.round(view.boat.water || 0);
     const leak = Number(view.boat.leak || 0).toFixed(1);
     const pump = view.boat.pumpActive ? "работает" : "ВЫКЛЮЧЕН";
-    setText("floodEmergencyStatus", `${cause}. Осталось ${seconds} секунд. Насос ${pump}. Вода ${water}, нужно не выше ${view.damageControl.recoveryWaterTarget}. Течь ${leak}, нужно не выше ${view.damageControl.recoveryLeakTarget.toFixed(1)}. Корпус ${Math.round(view.boat.hull || 0)}, нужно не ниже ${view.damageControl.recoveryHullTarget}.`);
+    setText("floodEmergencyStatus", `${cause}. Осталось ${seconds} секунд. Насос ${pump}. Вода ${water}, нужно не выше ${view.damageControl.recoveryWaterTarget}. Корпус ${Math.round(view.boat.hull || 0)}, нужно не ниже ${view.damageControl.recoveryHullTarget}. Течь ${leak} продолжает набирать воду, но не является отдельным условием выхода.`);
   }
 }
 

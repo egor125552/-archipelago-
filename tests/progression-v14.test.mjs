@@ -209,7 +209,7 @@ test("release UI exposes levels, shop, armor and the distinct Kasatka engine", a
   ]);
   assert.match(html, /Магазин спасслужбы/);
   assert.match(html, /id="armor"/);
-  assert.match(html, /game-core-v13\.js\?v=16\.0/);
+  assert.match(html, /game-core-v14\.js\?v=17\.0/);
   assert.match(app, /loadProfile/);
   assert.match(app, /purchaseUpgrade/);
   assert.match(audio, /modelId !== "kasatka"/);

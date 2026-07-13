@@ -1,15 +1,15 @@
 "use strict";
 
-import * as base from "./game-core-v8.js?base=3";
+import * as base from "./game-core-v8.js?base=4";
 
 export const CONFIG = Object.freeze({
   ...base.CONFIG,
   motionStartSpeed: 0.45,
   motionStopSpeed: 0.16,
   floodEmergencySeconds: 45,
-  floodRecoveryWater: 72,
-  // A controllable leak is enough to keep the boat afloat. Requiring an
-  // almost perfect seal made a visibly empty boat fail with 48% hull.
+  floodRecoveryWater: 35,
+  // A remaining breach is advisory after recovery: it refills the bilge but
+  // no longer keeps an otherwise dry, structurally sound boat immobilized.
   floodRecoveryLeak: 4.2,
   floodRecoveryHull: 5,
   regularFloodMultiplier: 0.74,
@@ -119,6 +119,7 @@ function enterOrMaintainFloodEmergency(state, events) {
   state.boat.speed = 0;
   state.controls.forward = false;
   state.controls.reverse = false;
+  state.controls.rescue = false;
   for (let index = events.length - 1; index >= 0; index -= 1) {
     if (events[index]?.type === "lose") events.splice(index, 1);
   }
@@ -140,14 +141,16 @@ function slowRegularFlooding(state, previousWater) {
 function finishFloodEmergency(state, events) {
   if (!state.damageControl.floodEmergency) return;
   const recovered = state.boat.water <= CONFIG.floodRecoveryWater
-    && state.boat.leak <= CONFIG.floodRecoveryLeak
     && state.boat.hull >= CONFIG.floodRecoveryHull;
   if (recovered) {
     state.damageControl.floodEmergency = false;
     state.damageControl.floodEmergencyUntil = -999;
     state.damageControl.emergencyCause = null;
     state.boat.repairProgress = 0;
-    state.message = "Лодка снова держится на плаву. Вода ниже аварийного уровня, течь взята под контроль. Теперь нажимай Проверить двигатель, пока мотор не запустится.";
+    const leakText = state.boat.leak > CONFIG.floodRecoveryLeak
+      ? ` Течь ${state.boat.leak.toFixed(1)} остаётся: не выключай насос и поставь ещё пластину при первой возможности.`
+      : " Течь уже умеренная, но насос пока лучше оставить включённым.";
+    state.message = `Лодка снова держится на плаву: вода ниже ${CONFIG.floodRecoveryWater} процентов, корпус выдержал.${leakText} Теперь запусти обслуживание двигателя.`;
     events.push({type: "flood-emergency-recovered"});
     return;
   }
@@ -163,9 +166,6 @@ function finishFloodEmergency(state, events) {
     const problems = [];
     if (state.boat.water > CONFIG.floodRecoveryWater) {
       problems.push(`вода ${Math.round(state.boat.water)} процентов, нужно не выше ${CONFIG.floodRecoveryWater}`);
-    }
-    if (state.boat.leak > CONFIG.floodRecoveryLeak) {
-      problems.push(`течь ${state.boat.leak.toFixed(1)}, нужно не выше ${CONFIG.floodRecoveryLeak.toFixed(1)}`);
     }
     if (state.boat.hull < CONFIG.floodRecoveryHull) {
       problems.push(`корпус ${Math.round(state.boat.hull)} процентов, нужно не ниже ${CONFIG.floodRecoveryHull}`);
@@ -201,12 +201,10 @@ function explainEmergencyRepair(state, events) {
   if (!events.some(event => event.type === "hull-repair-complete")) return filtered;
   const leak = state.boat.leak;
   const water = state.boat.water;
-  if (leak > CONFIG.floodRecoveryLeak && state.boat.repairPatches > 0) {
-    state.message = `Пластина закреплена. Корпус ${Math.round(state.boat.hull)} процентов. Течь всё ещё ${leak.toFixed(1)}; нужно не выше ${CONFIG.floodRecoveryLeak.toFixed(1)}. Нажми Заделать пробоину ещё раз и не выключай насос.`;
+  if (water > CONFIG.floodRecoveryWater) {
+    state.message = `Пластина закреплена. Корпус ${Math.round(state.boat.hull)} процентов, течь ${leak.toFixed(1)}. Не выключай насос: вода ${Math.round(water)} процентов, для выхода из аварии нужно не выше ${CONFIG.floodRecoveryWater}.`;
   } else if (leak > CONFIG.floodRecoveryLeak) {
-    state.message = `Пластины закончились. Течь ${leak.toFixed(1)}; продолжай откачку, пока она не снизится до ${CONFIG.floodRecoveryLeak.toFixed(1)}.`;
-  } else if (water > CONFIG.floodRecoveryWater) {
-    state.message = `Течь взята под контроль. Не выключай насос: вода ${Math.round(water)} процентов, нужно не выше ${CONFIG.floodRecoveryWater}.`;
+    state.message = `Вода уже откачана до безопасного уровня. Течь ${leak.toFixed(1)} остаётся и снова наполнит лодку без насоса, но больше не блокирует восстановление.`;
   }
   return filtered;
 }
@@ -292,6 +290,10 @@ export function setControl(state, control, active, actor = "captain") {
     state.message = "Лодка полностью затоплена: ход заблокирован. Сначала поставь пластину и включи насос.";
     return false;
   }
+  if (state.damageControl.floodEmergency && active && control === "rescue") {
+    state.message = "Во время полного затопления тросом пользоваться нельзя. Сначала стабилизируй лодку.";
+    return false;
+  }
   return base.setControl(state, control, active, actor);
 }
 
@@ -304,6 +306,10 @@ export function command(state, action, actor = "captain") {
   }
   if (action === "repair" && state.damageControl.floodEmergency) {
     state.message = "Мотор под водой и сейчас не запустится. Сначала поставь ремонтную пластину и откачай воду ниже аварийного уровня.";
+    return {ok: false, reason: "flood-first", events: [{type: "ui-deny"}]};
+  }
+  if (action === "quick" && state.damageControl.floodEmergency) {
+    state.message = "Сейчас быстрое действие не подаёт трос: аварийный приоритет — пластина и насос.";
     return {ok: false, reason: "flood-first", events: [{type: "ui-deny"}]};
   }
   const result = base.command(state, action, actor);
@@ -360,7 +366,8 @@ export function getView(state) {
       emergencyCause: state.damageControl.emergencyCause,
       waterIngressActive: state.boat.leak > 0.05 && !state.boat.pumpActive,
       recoveryWaterTarget: CONFIG.floodRecoveryWater,
-      recoveryLeakTarget: CONFIG.floodRecoveryLeak,
+      recoveryLeakTarget: null,
+      recommendedLeakTarget: CONFIG.floodRecoveryLeak,
       recoveryHullTarget: CONFIG.floodRecoveryHull,
     },
     boat: {

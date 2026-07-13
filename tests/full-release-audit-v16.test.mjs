@@ -13,7 +13,7 @@ import {
   setControl,
   startGame,
   step,
-} from "../public/src/game-core-v13.js";
+} from "../public/src/game-core-v14.js";
 
 const wrap = value => ((value + 180) % 360 + 360) % 360 - 180;
 const bearing = (from, to) => Math.atan2(to.x - from.x, to.y - from.y) * 180 / Math.PI;
@@ -194,6 +194,7 @@ test("manual solo pumping is stronger than helper pumping and the upgrade stacks
   const helper = createStarted({level: 2});
   helper.boat.water = 60;
   helper.boat.leak = 0;
+  command(helper, "pump-assist-toggle");
   run(helper, 1);
 
   const manual = createStarted({level: 2});
@@ -276,6 +277,7 @@ test("late timed flooding receives the full emergency window and restart grace",
   state.boat.water = CONFIG.floodRecoveryWater;
   state.boat.leak = CONFIG.floodRecoveryLeak;
   state.boat.hull = CONFIG.floodRecoveryHull;
+  setControl(state, "pump", true);
   const recovered = step(state, 0.05);
   assert.ok(recovered.some(event => event.type === "flood-emergency-recovered"));
   assert.ok(getView(state).remaining >= CONFIG.emergencyRestartGrace - 0.1);
@@ -410,7 +412,7 @@ test("release UI, network recovery, speech and bundled audio expose the audited 
     readFile(new URL("../public/styles.css", import.meta.url), "utf8"),
   ]);
   assert.match(html, /id="routeModeButton"/);
-  assert.match(html, /game-core-v13\.js\?v=16\.0/);
+  assert.match(html, /game-core-v14\.js\?v=17\.0/);
   assert.match(html, /Чистый проход без столкновения/);
   assert.match(styles, /grid-area: route/);
   assert.match(app, /bestByLevel/);
@@ -418,7 +420,7 @@ test("release UI, network recovery, speech and bundled audio expose the audited 
   assert.match(app, /hullRepair/);
   assert.match(app, /utterance\.onend = resumeGameAudio/);
   assert.doesNotMatch(app, /render\(Boolean\(events\.length\)\)/);
-  assert.match(gameplay, /Помощник откачивает — нажми для усиления/);
+  assert.match(gameplay, /Автооткачка помощника/);
   assert.match(audio, /await this\.localPreloadPromise/);
   assert.match(audio, /risk-gate-cleared/);
 });

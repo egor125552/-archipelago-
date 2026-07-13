@@ -1,6 +1,6 @@
 "use strict";
 
-import * as base from "./game-core-v12.js?base=3";
+import * as base from "./game-core-v12.js?base=4";
 
 export const CONFIG = Object.freeze({
   ...base.CONFIG,
@@ -274,7 +274,7 @@ function correctWinTimeScore(state, events) {
   if (state.releaseFixes.scoreTimeCorrected || !events.some(event => event.type === "win")) return;
   const trueElapsed = clock(state);
   const legacyElapsed = Number(state.elapsed) || 0;
-  const fixedBonus = Math.round(1200 + state.boat.hull * 8 + state.boat.fuel * 4 - trueElapsed * 2);
+  const fixedBonus = Math.max(0, Math.round(1200 + state.boat.hull * 8 + state.boat.fuel * 4 - trueElapsed * 2));
   const legacyBonus = Math.round(1200 + state.boat.hull * 8 + state.boat.fuel * 4 - legacyElapsed * 2);
   state.score += fixedBonus - legacyBonus;
   state.releaseFixes.scoreTimeCorrected = true;

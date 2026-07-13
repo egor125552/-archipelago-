@@ -102,7 +102,7 @@ export function startGame(state) {
   if (state.phase !== "ready") return state;
   state.phase = "playing";
   state.message = state.mode === "solo"
-    ? "Помощник на борту. Ты ведёшь лодку; он подстрахует насос и ремонт."
+    ? "Помощник на борту и следит за авариями. Насосом и ремонтом управляешь ты."
     : "Экипаж на связи. Капитан ведёт лодку, второй игрок отвечает за системы.";
   pushEvent(state, "start", state.message);
   return state;
@@ -274,7 +274,11 @@ export function step(state, dt) {
   boat.y += (Math.cos(headingRad) * boat.speed + state.world.current.y) * dt;
 
   const load = Math.max(0, boat.throttle);
-  boat.fuel = clamp(boat.fuel - dt * (0.035 + load * load * 0.22), 0, 100);
+  // A stalled or submerged engine cannot burn idle fuel. The old unconditional
+  // drain could empty a tank while the player was busy saving a flooded boat.
+  if (!boat.engineStalled) {
+    boat.fuel = clamp(boat.fuel - dt * (0.035 + load * load * 0.22), 0, 100);
+  }
   const targetTemp = 28 + load * 92 * (Number(boat.engineHeatMultiplier) || 1) + Math.max(0, boat.water - 45) * 0.12;
   boat.engineTemp += (targetTemp - boat.engineTemp) * dt * (load > 0 ? 0.12 : 0.08);
   if (boat.fuel <= 0.01) {
@@ -308,17 +312,24 @@ export function step(state, dt) {
 
   boat.water = clamp(boat.water + boat.leak * dt * 0.33, 0, 100);
   const pumpRequested = state.controls.pump;
-  const aiPump = state.mode === "solo" && boat.water > 34 && !state.controls.rescue;
+  const aiPump = state.mode === "solo"
+    && state.crew?.pumpAssistEnabled !== false
+    && boat.water > 34
+    && !state.controls.rescue;
   boat.pumpActive = pumpRequested || aiPump;
   if (boat.pumpActive) {
     // A deliberate player action must always take priority over the slower
     // solo helper. Previously aiPump stayed true while the manual pump was
     // held, so pressing the button produced no extra flow at all.
     boat.water = clamp(boat.water - dt * (pumpRequested ? 7.5 : 4.8), 0, 100);
-    boat.leak = clamp(boat.leak - dt * (pumpRequested ? 0.09 : 0.06), 0, 16);
+    // A pump removes bilge water; only a repair plate can close a breach.
   }
 
-  if (state.mode === "solo" && boat.engineStalled && boat.fuel > 0.01 && Math.abs(boat.speed) < 2.2) {
+  if (state.mode === "solo"
+    && state.engineService?.managed !== true
+    && boat.engineStalled
+    && boat.fuel > 0.01
+    && Math.abs(boat.speed) < 2.2) {
     boat.repairProgress = clamp(boat.repairProgress + dt * 17, 0, 100);
     if (boat.repairProgress >= 100) {
       boat.engineStalled = false;
@@ -357,6 +368,10 @@ export function step(state, dt) {
         pushEvent(state, "rescued", state.message, {id: nearest.survivor.id});
         events.push({type: "rescue-complete"});
       }
+    }
+  } else if (!state.rescueSystemManaged) {
+    for (const survivor of state.world.survivors) {
+      if (!survivor.rescued) survivor.progress = Math.max(0, survivor.progress - dt * 0.8);
     }
   }
 

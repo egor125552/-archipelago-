@@ -14,7 +14,7 @@ import {
   saveProfile,
   selectBoat,
   selectOperation,
-} from "./progression.js?v=16.0";
+} from "./progression.js?v=17.0";
 
 const $ = id => document.getElementById(id);
 const stateBox = {state: null};
@@ -397,6 +397,7 @@ function render(forceAnnouncement = false) {
   const crewLocked = view.mode === "coop" && role === "captain";
   for (const id of ["leftButton", "rightButton", "throttleButton", "reverseButton", "anchorButton"]) setAriaDisabled(id, captainLocked);
   for (const id of ["sonarButton", "pumpButton", "rescueButton"]) setAriaDisabled(id, crewLocked);
+  setAriaDisabled("pumpAssistButton", !view.pumpAssist?.available);
   setAriaDisabled("repairButton", crewLocked || !view.canRepair);
   setAriaDisabled("routeModeButton", !risk?.available || crewLocked);
   const routeButton = $("routeModeButton");
@@ -410,7 +411,11 @@ function render(forceAnnouncement = false) {
   }
   $("pumpButton").classList.toggle("active", view.boat.pumpActive);
   setHidden("engineWarning", !view.boat.engineStalled && view.boat.engineTemp < 88);
-  setText("engineWarning", view.boat.engineStalled ? "Двигатель заглох" : "Двигатель перегревается");
+  setText("engineWarning", view.engineService?.active
+    ? `Обслуживание двигателя: ${Math.round(view.engineService.progress)}%`
+    : view.engineFlooded
+      ? "Двигатель залит водой — откачай до 35%"
+      : view.boat.engineStalled ? "Двигатель заглох" : "Двигатель перегревается");
   setHidden("resultPanel", !(view.won || view.lost));
   if (view.won || view.lost) {
     setText("resultText", `${view.message} Счёт: ${view.score}.`);
@@ -544,6 +549,7 @@ $("sonarButton").addEventListener("click", () => sendCommand("sonar"));
 $("routeModeButton").addEventListener("click", () => sendCommand("risk-route-toggle"));
 $("quickAction").addEventListener("click", () => sendCommand("quick"));
 $("repairButton").addEventListener("click", () => sendCommand("repair"));
+$("pumpAssistButton").addEventListener("click", () => sendCommand("pump-assist-toggle"));
 $("anchorButton").addEventListener("click", () => sendCommand("anchor"));
 $("statusButton").addEventListener("click", () => {
   const text = fullStatus();

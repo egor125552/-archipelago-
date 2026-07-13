@@ -1,6 +1,6 @@
 "use strict";
 
-import {AudioEngine as V5AudioEngine} from "./audio-engine-v5.js?base=3";
+import {AudioEngine as V5AudioEngine} from "./audio-engine-v5.js?base=4";
 
 const SOUNDS = Object.freeze({
   seaReal: "https://raw.githubusercontent.com/yuryAB/Mermaid/a3cf430c92586e5f6934d9e9f77a51357f00af0c/Ester/Audio/Ambience/ambient_clear_water.mp3",
