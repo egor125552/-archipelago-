@@ -5,6 +5,7 @@ import {AudioEngine as V5AudioEngine} from "./audio-engine-v5.js?base=1";
 const SOUNDS = Object.freeze({
   seaReal: "https://raw.githubusercontent.com/yuryAB/Mermaid/a3cf430c92586e5f6934d9e9f77a51357f00af0c/Ester/Audio/Ambience/ambient_clear_water.mp3",
   motorboatReal: "https://raw.githubusercontent.com/yuryAB/Mermaid/a3cf430c92586e5f6934d9e9f77a51357f00af0c/Ester/Audio/World/boat_muffled_pass.mp3",
+  pumpReal: "https://raw.githubusercontent.com/evilbocchi/eternal-empire/4a3865150d1a425da952a535285ab9b92fe4d55e/assets/sounds/HandCrank.mp3",
   warningReal: "https://raw.githubusercontent.com/dsheedes/cd_easytime/174ddc1e823d1aad54361988ea54c302c08b980a/html/sound/tsunami_siren.ogg",
   hullImpactReal: "https://raw.githubusercontent.com/Aurorastation/Aurora.3/b50f42f9d3981ff1b9158c87c08524c38e9a3be9/sound/machines/hatch_close1.ogg",
 });
@@ -51,8 +52,8 @@ export class AudioEngine extends V5AudioEngine {
     if (!this.ctx) return;
 
     for (const name of [
-      "waterCalm", "waterWake", "engine", "seaV4", "hullV4", "wakeV4", "engineV4",
-      "engineNew", "seaPort", "seaStarboard", "bowWash",
+      "waterCalm", "waterWake", "engine", "pump", "seaV4", "hullV4", "wakeV4", "engineV4",
+      "engineNew", "pumpNew", "seaPort", "seaStarboard", "bowWash",
     ]) this.stopLoop(name);
 
     const speed = Math.abs(view.boat.speed);
@@ -75,8 +76,8 @@ export class AudioEngine extends V5AudioEngine {
     } else this.stopLoop("motorboatReal");
 
     if (view.boat.pumpActive) {
-      this.ensureLoop("pumpNew", {gain: 0.16, rate: 0.96, lowpass: 2500, pan: -0.18});
-    } else this.stopLoop("pumpNew");
+      this.ensureLoop("pumpReal", {gain: 0.17, rate: 0.92, lowpass: 3200, pan: -0.16});
+    } else this.stopLoop("pumpReal");
   }
 
   handle(events) {
@@ -85,7 +86,7 @@ export class AudioEngine extends V5AudioEngine {
         "sonar", "hazard-ping", "turn", "turn-complete", "turn-progress", "proximity",
         "rope", "rope-progress", "rope-far", "rope-strain", "rescue-complete", "win",
         "ui-deny", "repair", "repair-complete", "hull-repair-start", "hull-repair-progress",
-        "hull-repair-complete", "repair-blocked", "anchor", "pump-start",
+        "hull-repair-complete", "repair-blocked", "anchor",
       ].includes(event.type)) {
         super.handle([event]);
       } else if (event.type === "navigation-cue") {
@@ -114,6 +115,8 @@ export class AudioEngine extends V5AudioEngine {
         });
       } else if (event.type === "engine-stall" || event.type === "lose") {
         this.playExcerpt("warningReal", {gain: 0.48, rate: 0.94, lowpass: 7600, offset: 0.1, duration: 1.9});
+      } else if (event.type === "pump-start") {
+        this.playExcerpt("pumpReal", {gain: 0.24, rate: 0.94, lowpass: 3400, offset: 0, duration: 0.8});
       }
     }
   }
