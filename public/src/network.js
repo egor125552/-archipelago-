@@ -81,11 +81,11 @@ export class PeerRoomTransport {
 
     if (this.role === "captain") {
       this.peer = new globalThis.Peer(targetId);
-      await waitForEvent(this.peer, "open", "error", 15000);
       this.peer.on("connection", connection => {
         this.bindConnection(connection);
         connection.on("open", () => this.handlers.forEach(handler => handler({type: "peer-connected"})));
       });
+      await waitForEvent(this.peer, "open", "error", 15000);
       return;
     }
 
