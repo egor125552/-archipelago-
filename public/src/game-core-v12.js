@@ -1,6 +1,6 @@
 "use strict";
 
-import * as base from "./game-core-v11.js?base=1";
+import * as base from "./game-core-v11.js?base=2";
 import {collisionSeverity} from "./collision-model.js";
 
 export const CONFIG = Object.freeze({
@@ -162,7 +162,9 @@ function applyCoastBrake(state, dt, events) {
 }
 
 function applyPumpUpgrade(state, dt) {
-  if (!state.progression.upgrades.highFlowPump || !state.boat.pumpActive) return;
+  const requested = Boolean(state.controls.pump)
+    || (state.mode === "solo" && state.boat.water > 34 && !state.controls.rescue);
+  if (!state.progression.upgrades.highFlowPump || !requested) return;
   state.boat.water = clamp(state.boat.water - CONFIG.pumpUpgradeRate * dt, 0, 100);
 }
 
@@ -224,10 +226,12 @@ export function command(state, action, actor = "captain") {
 export function step(state, dt) {
   ensureV12State(state);
   const safeDt = clamp(Number(dt) || 0, 0, 0.25);
+  // Apply the purchased pump's extra flow before the emergency recovery check
+  // in the base core, so the last valid second cannot be reported as a loss.
+  applyPumpUpgrade(state, safeDt);
   const events = base.step(state, safeDt) || [];
   const collisions = events.filter(event => event.type === "collision");
   state.progression.collisionCount += collisions.length;
-  applyPumpUpgrade(state, safeDt);
   applyCoastBrake(state, safeDt, events);
   finalizeReward(state, events);
   return events;

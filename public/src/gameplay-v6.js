@@ -117,6 +117,35 @@ function situationHint() {
   const hull = Number(current.boat.hull) || 0;
   const patches = Number(current.boat.repairPatches) || 0;
 
+  if (currentView.damageControl?.floodEmergency) {
+    const seconds = Math.max(0, Math.ceil(currentView.damageControl.floodEmergencyRemaining || 0));
+    const waterTarget = currentView.damageControl.recoveryWaterTarget;
+    const leakTarget = currentView.damageControl.recoveryLeakTarget;
+    const hullTarget = currentView.damageControl.recoveryHullTarget;
+    const pumpActive = Boolean(currentView.boat.pumpActive);
+    if (!pumpActive) return `Авария, осталось ${seconds} секунд. Сначала включи насос. Мотор пока не трогай.`;
+    if (current.controls.hullRepair) {
+      const percent = Math.round((Number(current.boat.hullRepairProgress) || 0) / 3.1 * 100);
+      return `Насос работает. Пластина устанавливается: ${Math.min(99, percent)} процентов. Осталось ${seconds} секунд.`;
+    }
+    if (hull < hullTarget && patches > 0) {
+      return `Насос работает. Корпус ${Math.round(hull)} процентов, нужно не ниже ${hullTarget}. Нажми Заделать пробоину.`;
+    }
+    if (hull < hullTarget) {
+      return `Корпус ниже аварийного минимума, а пластин больше нет. Продолжай откачку, но без пластины лодку стабилизировать нельзя.`;
+    }
+    if (leak > leakTarget && patches > 0) {
+      return `Насос работает. Течь ${leak.toFixed(1)}, нужно не выше ${leakTarget.toFixed(1)}. Нажми Заделать пробоину; пластин осталось ${patches}.`;
+    }
+    if (leak > leakTarget) {
+      return `Насос работает, пластин больше нет. Продолжай откачку: течь ${leak.toFixed(1)}, нужно не выше ${leakTarget.toFixed(1)}. Осталось ${seconds} секунд.`;
+    }
+    if (water > waterTarget) {
+      return `Течь взята под контроль. Не выключай насос: вода ${Math.round(water)} процентов, нужно не выше ${waterTarget}. Осталось ${seconds} секунд.`;
+    }
+    return "Лодка стабилизирована. Дождись окончания аварийного режима, затем запускай двигатель.";
+  }
+
   if ((leak > 0.2 || hull < 70) && patches > 0) {
     if (speed > 2.2) return `Корпус повреждён. Снизь скорость с ${speed.toFixed(1)} примерно до двух узлов, затем нажми Заделать пробоину.`;
     return "Лодка почти остановлена. Нажми Заделать пробоину. После установки пластины включи насос, чтобы убрать воду.";
@@ -246,7 +275,10 @@ function statusText() {
   const brakeText = currentView.progression?.coastBrakeActive
     ? `Автотормоз остановит лодку примерно через ${Math.ceil(currentView.progression.coastBrakeRemaining)} секунд.`
     : "";
-  return `${currentView.message} ${levelText} Скорость ${currentView.boat.speed.toFixed(1)} узла. Курс ${Math.round((currentView.boat.heading + 360) % 360)} градусов. Корпус ${Math.round(currentView.boat.hull)} процентов. ${armorText} Вода ${Math.round(currentView.boat.water)} процентов. ${repairText} Спасено ${currentView.rescued} из двух. ${assistText} ${brakeText} ${timeText}`;
+  const emergencyText = currentView.damageControl?.floodEmergency
+    ? `Аварийный режим. Осталось ${Math.ceil(currentView.damageControl.floodEmergencyRemaining)} секунд. Для спасения: вода не выше ${currentView.damageControl.recoveryWaterTarget}, течь не выше ${currentView.damageControl.recoveryLeakTarget.toFixed(1)}, корпус не ниже ${currentView.damageControl.recoveryHullTarget}. Насос ${currentView.boat.pumpActive ? "работает" : "выключен"}.`
+    : "";
+  return `${currentView.message} ${emergencyText} ${levelText} Скорость ${currentView.boat.speed.toFixed(1)} узла. Курс ${Math.round((currentView.boat.heading + 360) % 360)} градусов. Корпус ${Math.round(currentView.boat.hull)} процентов. ${armorText} Вода ${Math.round(currentView.boat.water)} процентов. ${repairText} Спасено ${currentView.rescued} из двух. ${assistText} ${brakeText} ${timeText}`;
 }
 
 function syncControls() {

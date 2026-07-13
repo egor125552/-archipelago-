@@ -21,6 +21,7 @@ export class AudioEngine extends V8AudioEngine {
     super();
     this.legacyLoopsCleared = false;
     this.floodFilter = null;
+    this.nextFloodAlarmAt = 0;
   }
 
   async init() {
@@ -61,6 +62,30 @@ export class AudioEngine extends V8AudioEngine {
     this.floodFilter.frequency.setTargetAtTime(cutoff, this.ctx.currentTime, 0.18);
   }
 
+  updateFloodAlarm(view, playing) {
+    if (!this.ctx) return;
+    if (!playing || !view.damageControl?.floodEmergency) {
+      this.nextFloodAlarmAt = 0;
+      return;
+    }
+    if (this.ctx.currentTime < this.nextFloodAlarmAt) return;
+
+    const remaining = Math.max(0, Number(view.damageControl.floodEmergencyRemaining) || 0);
+    const urgent = remaining <= 10;
+    this.playExcerpt("warningReal", {
+      gain: urgent ? 0.54 : 0.45,
+      rate: urgent ? 1.02 : 0.94,
+      lowpass: 7600,
+      offset: 0.1,
+      duration: urgent ? 1.15 : 1.85,
+    });
+    // The synthesized pair remains audible if the recorded siren could not be
+    // downloaded, and makes the repeating alarm distinct from sonar cues.
+    this.playSynthPip({frequency: urgent ? 225 : 310, gain: urgent ? 0.14 : 0.1, duration: 0.18});
+    this.playSynthPip({frequency: urgent ? 185 : 265, gain: urgent ? 0.13 : 0.09, duration: 0.2, delay: 0.28});
+    this.nextFloodAlarmAt = this.ctx.currentTime + (urgent ? 1.35 : 2.65);
+  }
+
   update(view) {
     if (!this.ctx) return;
     this.clearInheritedLoopsOnce();
@@ -75,6 +100,7 @@ export class AudioEngine extends V8AudioEngine {
     const playing = view.phase === "playing";
     const moving = speed >= 0.35;
     this.updateFloodMuffle(water, playing);
+    this.updateFloodAlarm(view, playing);
 
     if (playing) {
       const idleName = this.buffers.has("riverIdle") ? "riverIdle" : "seaReal";
@@ -154,6 +180,7 @@ export class AudioEngine extends V8AudioEngine {
       } else if (event.type === "flood-emergency-start") {
         this.playExcerpt("warningReal", {gain: 0.46, rate: 0.94, lowpass: 7200, offset: 0.1, duration: 1.45});
         this.playSynthPip({frequency: 360, gain: 0.1, duration: 0.16, delay: 0.2});
+        if (this.ctx) this.nextFloodAlarmAt = this.ctx.currentTime + 2.4;
       } else if (event.type === "flood-emergency-warning") {
         this.playSynthPip({frequency: event.critical ? 230 : 310, gain: event.critical ? 0.13 : 0.09, duration: 0.18});
       } else if (event.type === "flood-emergency-recovered") {

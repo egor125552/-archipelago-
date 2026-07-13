@@ -6,9 +6,11 @@ export const CONFIG = Object.freeze({
   ...base.CONFIG,
   motionStartSpeed: 0.45,
   motionStopSpeed: 0.16,
-  floodEmergencySeconds: 32,
+  floodEmergencySeconds: 45,
   floodRecoveryWater: 72,
-  floodRecoveryLeak: 1.2,
+  // A controllable leak is enough to keep the boat afloat. Requiring an
+  // almost perfect seal made a visibly empty boat fail with 48% hull.
+  floodRecoveryLeak: 4.2,
   floodRecoveryHull: 5,
   regularFloodMultiplier: 0.74,
   beginnerBrakeDistance: 18,
@@ -145,7 +147,7 @@ function finishFloodEmergency(state, events) {
     state.damageControl.floodEmergencyUntil = -999;
     state.damageControl.emergencyCause = null;
     state.boat.repairProgress = 0;
-    state.message = "Лодка снова держится на плаву. Вода ниже аварийного уровня, пробоина закрыта. Теперь нажимай Проверить двигатель, пока мотор не запустится.";
+    state.message = "Лодка снова держится на плаву. Вода ниже аварийного уровня, течь взята под контроль. Теперь нажимай Проверить двигатель, пока мотор не запустится.";
     events.push({type: "flood-emergency-recovered"});
     return;
   }
@@ -158,9 +160,17 @@ function finishFloodEmergency(state, events) {
     state.lost = true;
     state.phase = "finished";
     state.ending = cause;
-    state.message = cause === "wrecked"
-      ? "Аварийное время закончилось. Корпус не успели укрепить, лодка потеряна."
-      : "Аварийное время закончилось. Воду не успели откачать, лодка потеряна.";
+    const problems = [];
+    if (state.boat.water > CONFIG.floodRecoveryWater) {
+      problems.push(`вода ${Math.round(state.boat.water)} процентов, нужно не выше ${CONFIG.floodRecoveryWater}`);
+    }
+    if (state.boat.leak > CONFIG.floodRecoveryLeak) {
+      problems.push(`течь ${state.boat.leak.toFixed(1)}, нужно не выше ${CONFIG.floodRecoveryLeak.toFixed(1)}`);
+    }
+    if (state.boat.hull < CONFIG.floodRecoveryHull) {
+      problems.push(`корпус ${Math.round(state.boat.hull)} процентов, нужно не ниже ${CONFIG.floodRecoveryHull}`);
+    }
+    state.message = `Аварийное время закончилось. Не выполнено: ${problems.join("; ") || "лодка не стабилизирована"}. Лодка потеряна.`;
     events.push({type: "flood-emergency-failed", cause}, {type: "lose"});
     return;
   }
@@ -174,6 +184,31 @@ function finishFloodEmergency(state, events) {
     state.message = "Пятнадцать секунд аварийного времени. Заделай пробоину и продолжай откачку.";
     events.push({type: "flood-emergency-warning", seconds: 15, critical: false});
   }
+}
+
+function explainEmergencyRepair(state, events) {
+  if (!state.damageControl.floodEmergency) return events;
+
+  // The legacy solo helper repairs a stalled motor automatically. During a
+  // flood emergency the motor is submerged, so that progress was both false
+  // and capable of overwriting the useful damage-control instructions.
+  const filtered = events.filter(event => !["ai-repair", "repair-complete"].includes(event.type));
+  if (filtered.length !== events.length) {
+    state.boat.engineStalled = true;
+    state.boat.repairProgress = 0;
+  }
+
+  if (!events.some(event => event.type === "hull-repair-complete")) return filtered;
+  const leak = state.boat.leak;
+  const water = state.boat.water;
+  if (leak > CONFIG.floodRecoveryLeak && state.boat.repairPatches > 0) {
+    state.message = `Пластина закреплена. Корпус ${Math.round(state.boat.hull)} процентов. Течь всё ещё ${leak.toFixed(1)}; нужно не выше ${CONFIG.floodRecoveryLeak.toFixed(1)}. Нажми Заделать пробоину ещё раз и не выключай насос.`;
+  } else if (leak > CONFIG.floodRecoveryLeak) {
+    state.message = `Пластины закончились. Течь ${leak.toFixed(1)}; продолжай откачку, пока она не снизится до ${CONFIG.floodRecoveryLeak.toFixed(1)}.`;
+  } else if (water > CONFIG.floodRecoveryWater) {
+    state.message = `Течь взята под контроль. Не выключай насос: вода ${Math.round(water)} процентов, нужно не выше ${CONFIG.floodRecoveryWater}.`;
+  }
+  return filtered;
 }
 
 function applyBeginnerSafety(state, dt, events) {
@@ -293,6 +328,11 @@ export function step(state, dt) {
 
   const converted = enterOrMaintainFloodEmergency(state, events);
   if (!converted) slowRegularFlooding(state, previousWater);
+  events = explainEmergencyRepair(state, events);
+  if (state.damageControl.floodEmergency) {
+    state.boat.engineStalled = true;
+    state.boat.repairProgress = 0;
+  }
   settleAtRest(state);
   updateMotionState(state, events);
   finishFloodEmergency(state, events);
