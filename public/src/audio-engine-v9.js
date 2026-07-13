@@ -41,6 +41,9 @@ export class AudioEngine extends V8AudioEngine {
     if (!this.ctx) return;
     this.clearInheritedLoopsOnce();
 
+    const riverReady = this.buffers.has("riverIdle") && this.buffers.has("riverWake") && this.buffers.has("bilgeWater");
+    if (riverReady) this.stopLoop("seaReal");
+
     const speed = Math.abs(view.boat.speed);
     const load = Math.abs(view.boat.throttle);
     const water = clamp(Number(view.boat.water) || 0, 0, 100);
