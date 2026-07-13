@@ -11,9 +11,14 @@ function run(state, seconds, dt = 0.05) {
 test("boat coasts for a useful time after throttle release", () => {
   const state = createGame({mode: "solo", timed: false});
   startGame(state);
+  // Test hydrodynamic coasting in open water, not the collision response of reef-a.
+  state.boat.x = 500;
+  state.boat.y = 0;
+  state.boat.heading = 0;
   state.boat.speed = 12;
   state.boat.throttle = 0;
-  run(state, 10);
+  const events = run(state, 10);
+  assert.equal(events.some(event => event.type === "collision"), false);
   assert.ok(state.boat.speed > 8.5, `speed was ${state.boat.speed}`);
 });
 
