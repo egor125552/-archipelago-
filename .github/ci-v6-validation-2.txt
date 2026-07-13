@@ -1,0 +1,1 @@
+Run complete v6 validation and upload the full test output artifact.
