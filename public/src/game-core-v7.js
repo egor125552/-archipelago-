@@ -19,7 +19,7 @@ const PASSIVE_EVENTS = new Set(["navigation-cue", "turn", "turn-complete", "turn
 
 function createBayWorld() {
   return {
-    version: 11,
+    version: 12,
     seed: 7,
     name: "Бухта Северный Приют",
     bounds: {minX: -CONFIG.bayHalfWidth, maxX: CONFIG.bayHalfWidth, minY: CONFIG.baySouth, maxY: CONFIG.bayNorth},
@@ -29,13 +29,13 @@ function createBayWorld() {
       {id: "wreck-gate", type: "wreck", label: "обломки баржи", x: -6, y: 32, radius: 9.5, damage: 14},
       {id: "east-reef", type: "reef", label: "восточный риф", x: 46, y: 84, radius: 11, damage: 17},
       {id: "middle-ridge", type: "reef", label: "каменная гряда", x: -5, y: 92, radius: 13, damage: 18},
-      {id: "north-wreck", type: "wreck", label: "затонувший катер", x: -42, y: 126, radius: 8, damage: 14},
+      {id: "north-wreck", type: "wreck", label: "затонувший катер", x: -48, y: 126, radius: 8, damage: 14},
     ],
     survivors: [
       {id: "survivor-a", label: "первый человек", x: 28, y: 50, rescued: false, progress: 0},
       {id: "survivor-b", label: "второй человек", x: -27, y: 132, rescued: false, progress: 0},
     ],
-    harbor: {id: "harbor", label: "южная гавань", x: 0, y: 0, radius: 16},
+    harbor: {id: "harbor", label: "южная гавань", x: 0, y: 0, radius: 20},
     current: {x: 0, y: 0},
     storm: {intensity: 0, target: 0},
   };
@@ -46,7 +46,7 @@ function objectiveLabel(target) {
 }
 
 function ensureBayWorld(state) {
-  if (!state.world || state.world.version !== 11) {
+  if (!state.world || state.world.version !== 12) {
     const previous = state.world;
     const world = createBayWorld();
     for (const survivor of world.survivors) {

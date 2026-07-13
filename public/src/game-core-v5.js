@@ -5,9 +5,9 @@ import * as base from "./game-core-v4.js?base=1";
 export const CONFIG = Object.freeze({
   ...base.CONFIG,
   coastDecay: 0.055,
-  rescueRadius: 12,
-  rescueSpeedLimit: 3.6,
-  rescueDuration: 2.7,
+  rescueRadius: 14,
+  rescueSpeedLimit: 4,
+  rescueDuration: 2.4,
   hullRepairSpeedLimit: 1.8,
   hullRepairDuration: 3.1,
   hullRepairAmount: 22,
@@ -55,7 +55,7 @@ export function startGame(state) {
   ensureV5State(state);
   base.startGame(state);
   if (state.phase === "playing") {
-    state.message += " Для спасения подойди к человеку ближе двенадцати метров, сбрось скорость ниже четырёх узлов и подай трос.";
+    state.message += " Для спасения подойди к человеку ближе четырнадцати метров, сбрось скорость до четырёх узлов и один раз подай трос.";
   }
   return state;
 }
@@ -76,7 +76,18 @@ export function setControl(state, control, active, actor = "captain") {
     }
     return true;
   }
-  return base.setControl(state, control, active, actor);
+  const accepted = base.setControl(state, control, active, actor);
+  if (accepted && control === "rescue" && active) {
+    const target = nearest(state);
+    if (target && target.distance <= CONFIG.rescueRadius && Math.abs(state.boat.speed) <= CONFIG.rescueSpeedLimit) {
+      state.controls.forward = false;
+      state.controls.reverse = false;
+      state.boat.throttle = 0;
+      state.boat.speed = 0;
+      state.message = "Трос зафиксирован. Лодка удерживается на месте; дождись сообщения «Человек на борту».";
+    }
+  }
+  return accepted;
 }
 
 export function command(state, action, actor = "captain") {
@@ -133,7 +144,7 @@ function processRescue(state, dt, events, rescueRequested) {
     target.survivor.progress = Math.max(0, target.survivor.progress - dt * 0.35);
     if (now - state.feedback.rescueGuideAt > 1.2) {
       state.feedback.rescueGuideAt = now;
-      state.message = `Трос не достаёт. До человека ${Math.round(target.distance)} метров; подойди ближе двенадцати.`;
+      state.message = `Трос не достаёт. До человека ${Math.round(target.distance)} метров; подойди ближе четырнадцати.`;
       events.push({type: "rope-far", distance: target.distance});
     }
     return;
@@ -150,6 +161,10 @@ function processRescue(state, dt, events, rescueRequested) {
   }
 
   const previous = target.survivor.progress;
+  state.controls.forward = false;
+  state.controls.reverse = false;
+  boat.throttle = 0;
+  boat.speed = 0;
   const assist = state.mode === "solo" ? 1.22 : 1;
   target.survivor.progress = clamp(previous + dt * assist, 0, CONFIG.rescueDuration);
   const previousQuarter = Math.floor(previous / CONFIG.rescueDuration * 4);

@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#061a24">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <title>Эхо-Архипелаг — аудио-спасение</title>
-  <link rel="stylesheet" href="styles.css?v=11.0">
+  <link rel="stylesheet" href="styles.css?v=12.0">
 </head>
 <body data-accessibility="touch" data-role="captain">
   <a class="skip" href="#main">К игре</a>
@@ -102,7 +102,7 @@
       </details>
       <details class="panel help">
         <summary>Как спасти первого человека</summary>
-        <p>Старт: Южная гавань, нос лодки смотрит на север. Нажми сонар один раз. Он скажет, что первый человек справа примерно в 57 метрах. Коротко дай газ и удерживай правый поворот. Двойной писк теперь обозначает узкий безопасный коридор, полностью свободный от обломков. Примерно за 20 метров отпусти газ и нажми обычный тормоз; в режиме экранного диктора одного нажатия достаточно для полной остановки. Когда человек ближе 12 метров и скорость ниже 4 узлов, один раз нажми «Подать спасательный трос» и не нажимай повторно до 100 процентов.</p>
+        <p>Старт: Южная гавань, нос лодки смотрит на север. Нажми сонар один раз. Маршрут разбит на безопасные контрольные точки. Высокий двойной писк показывает текущий курс, а перед каждым переключением направления игра обязательно произнесёт новую точку. Когда до человека не больше 14 метров и скорость не выше 4 узлов, маяк замолчит. Один раз нажми «Подать спасательный трос»: лодка остановится и будет удерживаться на месте до сообщения «Человек на борту».</p>
       </details>
       <details class="panel help">
         <summary>Вода, пробоина и полное затопление</summary>
@@ -110,19 +110,19 @@
       </details>
       <details class="panel help">
         <summary>Как устроена бухта и сонар</summary>
-        <p>Расстояние, которое говорит сонар, — снимок на момент нажатия. Повторно нажимать сонар для постоянной навигации не нужно: стереомаяк пересчитывается непрерывно. Двойной высокий писк по центру означает правильный курс. Бухта ограничена берегами. Обломки и рифы твёрдые. Кнопка «Где я?» сообщает движение лодки, часть бухты, цель, ближайший берег и препятствие.</p>
+        <p>Расстояние, которое говорит сонар, — снимок на момент нажатия. Повторно нажимать его не нужно: стереомаяк непрерывно ведёт только к текущей контрольной точке. Он не переключится по невидимой координате — сначала прозвучит сообщение «Контрольная точка пройдена». Во время работы троса маяк молчит. На финальном подходе швартовочный помощник ограничит скорость, а прямой створ приведёт в расширенную зону Южной гавани.</p>
       </details>
       <section id="resultPanel" class="panel result" hidden><h2>Операция завершена</h2><p id="resultText"></p><button id="restartButton" class="primary">Начать новую операцию</button></section>
     </section>
   </main>
   <script type="importmap">
-    {"imports":{"/src/game-core.js":"/src/game-core-v9-1.js?v=11.0","/src/audio-engine.js":"/src/audio-engine-v9.js?v=11.0"}}
+    {"imports":{"/src/game-core.js":"/src/game-core-v10.js?v=12.0","/src/audio-engine.js":"/src/audio-engine-v9.js?v=12.0"}}
   </script>
   <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js" defer></script>
-  <script type="module" src="src/app.js?v=11.0"></script>
-  <script type="module" src="src/room-ui-fix.js?v=11.0"></script>
-  <script type="module" src="src/gameplay-v6.js?v=11.0"></script>
-  <script type="module" src="src/gameplay-v8.js?v=11.0"></script>
-  <script type="module" src="src/gameplay-v9.js?v=11.0"></script>
+  <script type="module" src="src/app.js?v=12.0"></script>
+  <script type="module" src="src/room-ui-fix.js?v=12.0"></script>
+  <script type="module" src="src/gameplay-v6.js?v=12.0"></script>
+  <script type="module" src="src/gameplay-v8.js?v=12.0"></script>
+  <script type="module" src="src/gameplay-v9.js?v=12.0"></script>
 </body>
 </html>

@@ -85,7 +85,7 @@ function courseText() {
 
 function toggleText(control, active) {
   if (control === "rescue") return active
-    ? "Трос подан. Держи лодку медленнее четырёх узлов. Нажми ещё раз, чтобы убрать трос."
+    ? "Трос подан. В зоне четырнадцати метров лодка удерживается автоматически; дождись сообщения «Человек на борту»."
     : "Трос убран.";
   if (control === "pump") return active ? "Насос включён. Нажми ещё раз, чтобы выключить." : "Насос выключен.";
   return active ? "Ремонт корпуса начат. Лодка должна быть почти неподвижна." : "Ремонт корпуса остановлен.";
@@ -123,18 +123,19 @@ function situationHint() {
   }
   if (water > 30) return `В лодке ${Math.round(water)} процентов воды. Включи насос повторным нажатием и выключи, когда уровень снизится.`;
   if (current.rescued < 2) {
-    const targetDistance = currentView.navigation?.targetDistance ?? currentView.nearestSurvivorDistance;
+    const targetDistance = currentView.navigation?.guideDistance ?? currentView.navigation?.targetDistance ?? currentView.nearestSurvivorDistance;
     const angle = currentView.navigation?.targetRelativeAngle;
     if (targetDistance == null) return "Нажми сонар, чтобы найти следующую цель.";
     if (targetDistance > currentView.rescueRadius + 1) {
       const direction = angle == null || Math.abs(angle) < 10 ? "прямо" : angle < 0 ? "слева" : "справа";
-      return `Ближайшая цель ${direction}, примерно ${Math.round(targetDistance)} метров. Нажми сонар для точного курса.`;
+      const label = currentView.navigation?.guideIsWaypoint ? "Текущая контрольная точка" : "Ближайшая цель";
+      return `${label} ${direction}, примерно ${Math.round(targetDistance)} метров. Следуй стереомаяку.`;
     }
-    if (speed > currentView.rescueSpeedLimit) return `Человек рядом, но скорость ${speed.toFixed(1)} узла. Снизь её ниже ${currentView.rescueSpeedLimit.toFixed(1)}, затем один раз нажми трос.`;
+    if (speed > currentView.rescueSpeedLimit) return `Человек рядом, но скорость ${speed.toFixed(1)} узла. Снизь её до ${currentView.rescueSpeedLimit.toFixed(1)}, затем один раз нажми трос.`;
     const percent = Math.round((currentView.rescueProgress || 0) * 100);
     return percent > 0
       ? `Трос натянут на ${percent} процентов. Не нажимай повторно и держи лодку почти неподвижно.`
-      : "Человек рядом и скорость подходит. Один раз нажми Подать спасательный трос. Повторное нажатие отменяет спасение.";
+      : "Человек в зоне троса, маяк должен замолчать. Один раз нажми Подать спасательный трос и дождись сообщения о завершении.";
   }
   return "Оба человека на борту. Нажми сонар: он укажет гавань. Входи в неё на скорости не выше пяти узлов.";
 }
@@ -259,7 +260,7 @@ function syncControls() {
     if (rescueButton.textContent !== text) rescueButton.textContent = text;
     rescueButton.setAttribute("aria-label", active
       ? "Спасательный трос активен. Нажми для отмены"
-      : "Подать спасательный трос. Подойди ближе двенадцати метров и снизь скорость ниже четырёх узлов");
+      : "Подать спасательный трос. Подойди ближе четырнадцати метров и снизь скорость до четырёх узлов");
   }
 
   const pumpButton = byId("pumpButton");

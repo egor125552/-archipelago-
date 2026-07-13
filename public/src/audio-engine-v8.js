@@ -11,7 +11,7 @@ export class AudioEngine extends V7AudioEngine {
 
   playGuide(view) {
     const navigation = view.navigation;
-    if (!navigation?.assistEnabled || !navigation.lockedTargetId || navigation.guideDistance == null) return;
+    if (!navigation?.assistEnabled || navigation.beaconSuppressed || navigation.rescueMode || !navigation.lockedTargetId || navigation.guideDistance == null) return;
     if (this.ctx.currentTime < this.nextGuidePipAt) return;
 
     const metres = navigation.guideDistance;
@@ -30,6 +30,7 @@ export class AudioEngine extends V7AudioEngine {
 
   playHazardGuide(view) {
     const navigation = view.navigation;
+    if (navigation?.rescueMode) return;
     const metres = navigation?.nearestHazardDistance;
     const angle = navigation?.nearestHazardRelativeAngle;
     if (metres == null || metres > 27 || Math.abs(angle || 0) > 30) return;
