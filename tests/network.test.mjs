@@ -4,7 +4,7 @@ import {normalizeRoomCode} from "../public/src/network.js";
 
 test("room codes contain only ASCII letters and digits", () => {
   assert.equal(normalizeRoomCode("н"), "H");
-  assert.equal(normalizeRoomCode("волна7"), "BOA7");
+  assert.equal(normalizeRoomCode("волна7"), "BOHA7");
   assert.match(normalizeRoomCode("echo-Н 42"), /^[A-Z0-9]{1,6}$/);
 });
 
