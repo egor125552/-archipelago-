@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#061a24">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <title>Эхо-Архипелаг — аудио-спасение</title>
-  <link rel="stylesheet" href="styles.css?v=2">
+  <link rel="stylesheet" href="styles.css?v=3">
 </head>
 <body data-accessibility="touch" data-role="captain">
   <a class="skip" href="#main">К игре</a>
@@ -32,15 +32,16 @@
       <section class="panel coop-panel">
         <h2>Два игрока</h2>
         <p>Капитан рулит и управляет ходом. Второй игрок ведёт сонар, насос, ремонт и спасательный трос.</p>
-        <label for="roomInput">Код комнаты</label>
-        <input id="roomInput" maxlength="8" autocomplete="off" placeholder="например, VOLNA">
+        <label for="roomInput">Код интернет-комнаты</label>
+        <input id="roomInput" maxlength="6" inputmode="text" autocapitalize="characters" spellcheck="false" autocomplete="off" placeholder="например, VOLNA7">
         <div class="grid2">
-          <button id="hostLocal">Создать локальную комнату</button>
-          <button id="joinLocal">Войти локально</button>
-          <button id="hostPeer">Создать интернет-комнату</button>
-          <button id="joinPeer">Войти через интернет</button>
+          <button id="hostPeer" class="primary">Создать интернет-комнату</button>
+          <button id="joinPeer">Войти в интернет-комнату</button>
+          <button id="hostLocal">Создать тест в двух окнах компьютера</button>
+          <button id="joinLocal">Войти в тест в этом браузере</button>
         </div>
-        <p id="networkStatus" class="hint" role="status">Локальная комната работает между двумя вкладками. Интернет-комната использует WebRTC. Ошибки подключения сопровождаются отдельным звуком.</p>
+        <p id="localRoomNote" class="hint">Локальный режим предназначен только для двух одновременно активных окон на компьютере.</p>
+        <p id="networkStatus" class="hint" role="status" aria-live="polite">Для двух телефонов или разных сетей используй интернет-комнату. Код состоит из 4–6 латинских букв или цифр.</p>
       </section>
     </section>
 
@@ -102,6 +103,7 @@
   </main>
 
   <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js" defer></script>
-  <script type="module" src="src/app.js?v=2"></script>
+  <script type="module" src="src/app.js?v=3"></script>
+  <script type="module" src="src/room-ui-fix.js?v=3"></script>
 </body>
 </html>
