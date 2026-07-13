@@ -176,8 +176,8 @@ test("release UI exposes the explicit helper, engine service and new cache gener
     readFile(new URL("../public/src/gameplay-v6.js", import.meta.url), "utf8"),
   ]);
   assert.match(html, /pumpAssistButton/);
-  assert.match(html, /game-core-v14\.js\?v=17\.0/);
+  assert.match(html, /game-core-v15\.js\?v=18\.0/);
   assert.match(html, /доведи воду до 35 процентов или ниже/);
-  assert.match(gameplay, /Обслуживание двигателя/);
+  assert.match(gameplay, /Запустить мотор/);
   assert.match(gameplay, /pump-assist-toggle/);
 });

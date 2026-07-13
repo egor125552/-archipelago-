@@ -1,6 +1,6 @@
 "use strict";
 
-import * as base from "./game-core-v8.js?base=4";
+import * as base from "./game-core-v8.js?base=5";
 
 export const CONFIG = Object.freeze({
   ...base.CONFIG,
@@ -326,11 +326,23 @@ export function command(state, action, actor = "captain") {
 export function step(state, dt) {
   ensureV9State(state);
   const safeDt = clamp(Number(dt) || 0, 0, 0.25);
+  const scoreBefore = Number(state.score) || 0;
   prepareFloodEmergencyTick(state, safeDt);
   const safetyEvents = [];
   applyBeginnerSafety(state, safeDt, safetyEvents);
   const previousWater = Number(state.boat.water) || 0;
   let events = [...safetyEvents, ...(base.step(state, safeDt) || [])];
+
+  // Reaching the harbor while the boat is still in its emergency window must
+  // not award a win. Stabilization has priority over docking.
+  if (state.damageControl.floodEmergency && state.won) {
+    state.won = false;
+    state.lost = false;
+    state.ending = null;
+    state.phase = "playing";
+    state.score = scoreBefore;
+    events = events.filter(event => event?.type !== "win");
+  }
 
   const converted = enterOrMaintainFloodEmergency(state, events);
   if (!converted) slowRegularFlooding(state, previousWater);

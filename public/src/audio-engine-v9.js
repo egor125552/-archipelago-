@@ -1,6 +1,6 @@
 "use strict";
 
-import {AudioEngine as V8AudioEngine} from "./audio-engine-v8.js?base=4";
+import {AudioEngine as V8AudioEngine} from "./audio-engine-v8.js?base=5";
 
 const RIVER_SOUNDS = Object.freeze({
   riverIdle: "/assets/audio/river-ambience.ogg",

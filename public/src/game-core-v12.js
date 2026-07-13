@@ -1,6 +1,6 @@
 "use strict";
 
-import * as base from "./game-core-v11.js?base=4";
+import * as base from "./game-core-v11.js?base=5";
 import {collisionSeverity} from "./collision-model.js";
 
 export const CONFIG = Object.freeze({
@@ -171,8 +171,7 @@ function applyPumpUpgrade(state, dt) {
   const requested = Boolean(state.controls.pump)
     || (state.mode === "solo"
       && state.crew?.pumpAssistEnabled !== false
-      && state.boat.water > 34
-      && !state.controls.rescue);
+      && state.boat.water > 34);
   if (!state.progression.upgrades.highFlowPump || !requested) return;
   state.boat.water = clamp(state.boat.water - CONFIG.pumpUpgradeRate * dt, 0, 100);
 }

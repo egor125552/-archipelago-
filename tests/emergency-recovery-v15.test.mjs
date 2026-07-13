@@ -96,9 +96,10 @@ test("emergency UI exposes every threshold and audio repeats the alarm", async (
     readFile(new URL("../public/index.html", import.meta.url), "utf8"),
   ]);
   assert.match(gameplay, /recoveryWaterTarget/);
-  assert.match(gameplay, /не является отдельным условием выхода/);
+  assert.match(gameplay, /Течь/);
+  assert.match(gameplay, /Насос/);
   assert.match(gameplay, /recoveryHullTarget/);
   assert.match(audio, /updateFloodAlarm/);
   assert.match(audio, /nextFloodAlarmAt/);
-  assert.match(html, /остаётся 45 секунд/);
+  assert.match(html, /есть 45 секунд/);
 });

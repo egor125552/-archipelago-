@@ -14,7 +14,7 @@ import {
   saveProfile,
   selectBoat,
   selectOperation,
-} from "./progression.js?v=17.0";
+} from "./progression.js?v=18.0";
 
 const $ = id => document.getElementById(id);
 const stateBox = {state: null};
@@ -116,8 +116,8 @@ function setMode(mode) {
   setText("speechButton", `Игровая озвучка: ${speechEnabled ? "включена" : "выключена"}`);
   $("speechButton").setAttribute("aria-pressed", String(speechEnabled));
   setText("modeHint", mode === "reader"
-    ? "Режим VoiceOver: фокус остаётся на выбранной кнопке; команды выполняются одним нажатием, встроенная речь выключена."
-    : "Режим без VoiceOver: рулевые зоны и газ можно удерживать пальцем; игровые сообщения озвучивает Милена со скоростью 1,18.");
+    ? "VoiceOver: команды одним нажатием. Встроенная речь выключена."
+    : "Обычный режим: руль и газ можно удерживать пальцем.");
 }
 
 function persistProfile(next) {
@@ -398,7 +398,7 @@ function render(forceAnnouncement = false) {
   for (const id of ["leftButton", "rightButton", "throttleButton", "reverseButton", "anchorButton"]) setAriaDisabled(id, captainLocked);
   for (const id of ["sonarButton", "pumpButton", "rescueButton"]) setAriaDisabled(id, crewLocked);
   setAriaDisabled("pumpAssistButton", !view.pumpAssist?.available);
-  setAriaDisabled("repairButton", crewLocked || !view.canRepair);
+  setAriaDisabled("repairButton", crewLocked || (!view.canRepair && !view.waterEngine?.canRestart));
   setAriaDisabled("routeModeButton", !risk?.available || crewLocked);
   const routeButton = $("routeModeButton");
   if (routeButton) {
@@ -410,12 +410,17 @@ function render(forceAnnouncement = false) {
         : `МАРШРУТ: ОБЫЧНЫЙ${risk.selectionPending ? " — НАЖМИ СОНАР" : ""}`);
   }
   $("pumpButton").classList.toggle("active", view.boat.pumpActive);
-  setHidden("engineWarning", !view.boat.engineStalled && view.boat.engineTemp < 88);
-  setText("engineWarning", view.engineService?.active
-    ? `Обслуживание двигателя: ${Math.round(view.engineService.progress)}%`
-    : view.engineFlooded
-      ? "Двигатель залит водой — откачай до 35%"
-      : view.boat.engineStalled ? "Двигатель заглох" : "Двигатель перегревается");
+  setHidden("engineWarning", !view.waterEngine?.locked && !view.boat.engineStalled && view.boat.engineTemp < 88);
+  let engineText = "Мотор перегревается";
+  if (view.engineService?.active) engineText = "Мотор обслуживается";
+  else if (view.waterEngine?.locked) {
+    if (view.waterEngine.canRestart) engineText = "Мотор готов к запуску";
+    else if (view.damageControl?.floodEmergency) engineText = "Мотор остановлен — стабилизируй лодку";
+    else if (view.boat.water > view.waterEngine.restartWater) engineText = `Мотор залит — откачай до ${view.waterEngine.restartWater}%`;
+    else if (view.boat.fuel <= 0.01) engineText = "Нет топлива";
+    else engineText = "Мотор перегрет — обслужи его";
+  } else if (view.boat.engineStalled) engineText = "Мотор заглох";
+  setText("engineWarning", engineText);
   setHidden("resultPanel", !(view.won || view.lost));
   if (view.won || view.lost) {
     setText("resultText", `${view.message} Счёт: ${view.score}.`);
@@ -436,8 +441,21 @@ function render(forceAnnouncement = false) {
 function fullStatus() {
   if (!stateBox.state) return "Операция ещё не запущена.";
   const view = getView(stateBox.state);
-  const timeText = view.timed ? `Осталось ${Math.ceil(view.remaining)} секунд.` : "Режим без ограничения времени.";
-  return `${view.message} Скорость ${view.boat.speed.toFixed(1)} узла. Курс ${Math.round((view.boat.heading + 360) % 360)} градусов. Корпус ${Math.round(view.boat.hull)} процентов. Вода ${Math.round(view.boat.water)} процентов. Топливо ${Math.round(view.boat.fuel)} процентов. Спасено ${view.rescued} из двух. ${timeText}`;
+  if (view.damageControl?.floodEmergency) {
+    return `Авария: ${Math.ceil(view.damageControl.floodEmergencyRemaining)} секунд. Вода ${Math.round(view.boat.water)}, нужно ${view.damageControl.recoveryWaterTarget}. Корпус ${Math.round(view.boat.hull)}, нужно ${view.damageControl.recoveryHullTarget}. Насос ${view.boat.pumpActive ? "включён" : "выключен"}.`;
+  }
+  const motorStopped = Boolean(view.waterEngine?.locked || view.boat.engineStalled);
+  const parts = [
+    `Скорость ${view.boat.speed.toFixed(1)}.`,
+    `Корпус ${Math.round(view.boat.hull)}.`,
+    `Вода ${Math.round(view.boat.water)}.`,
+    `Топливо ${Math.round(view.boat.fuel)}.`,
+    `Спасено ${view.rescued} из 2.`,
+  ];
+  if (motorStopped) parts.unshift("Мотор остановлен.");
+  else parts.splice(1, 0, `Курс ${Math.round((view.boat.heading + 360) % 360)}.`);
+  if (view.timed) parts.push(`Время ${Math.ceil(view.remaining)} секунд.`);
+  return parts.join(" ");
 }
 
 function localFeedback(text) {

@@ -1,6 +1,6 @@
 "use strict";
 
-import * as base from "./game-core-v7.js?base=4";
+import * as base from "./game-core-v7.js?base=5";
 
 export const CONFIG = base.CONFIG;
 

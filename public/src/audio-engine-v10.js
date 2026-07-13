@@ -1,6 +1,6 @@
 "use strict";
 
-import {AudioEngine as V9AudioEngine} from "./audio-engine-v9.js?base=4";
+import {AudioEngine as V9AudioEngine} from "./audio-engine-v9.js?base=5";
 
 export class AudioEngine extends V9AudioEngine {
   update(view) {
@@ -36,6 +36,9 @@ export class AudioEngine extends V9AudioEngine {
       } else if (event.type === "engine-flooded") {
         this.playSynthPip({frequency: 330, gain: 0.1, duration: 0.15});
         this.playSynthPip({frequency: 220, gain: 0.105, duration: 0.22, delay: 0.19});
+      } else if (event.type === "engine-water-restart") {
+        this.playSynthPip({frequency: 410, gain: 0.07, duration: 0.08});
+        this.playSynthPip({frequency: 690, gain: 0.075, duration: 0.11, delay: 0.13});
       } else if (event.type === "collision" && event.absorbed > 0) {
         super.handle([event]);
         this.playSynthPip({pan: event.pan || 0, frequency: 1280, gain: 0.08, duration: 0.055, delay: 0.05});

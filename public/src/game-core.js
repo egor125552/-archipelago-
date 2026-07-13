@@ -259,7 +259,9 @@ export function step(state, dt) {
   boat.rudder += (steer - boat.rudder) * Math.min(1, dt * 7);
   boat.throttle += (thrust - boat.throttle) * Math.min(1, dt * 4.5);
 
-  if (boat.engineStalled) boat.throttle = Math.min(0, boat.throttle);
+  // A stalled engine cannot provide reverse thrust either. Reverse remains a
+  // strong brake while the engine runs; with a dead motor the boat only coasts.
+  if (boat.engineStalled) boat.throttle = 0;
   const maxSpeed = CONFIG.maxSpeed * (Number(boat.maxSpeedMultiplier) || 1);
   const acceleration = CONFIG.acceleration * (Number(boat.accelerationMultiplier) || 1);
   const targetSpeed = boat.throttle >= 0 ? boat.throttle * maxSpeed : boat.throttle * Math.abs(CONFIG.reverseSpeed);
@@ -314,8 +316,7 @@ export function step(state, dt) {
   const pumpRequested = state.controls.pump;
   const aiPump = state.mode === "solo"
     && state.crew?.pumpAssistEnabled !== false
-    && boat.water > 34
-    && !state.controls.rescue;
+    && boat.water > 34;
   boat.pumpActive = pumpRequested || aiPump;
   if (boat.pumpActive) {
     // A deliberate player action must always take priority over the slower

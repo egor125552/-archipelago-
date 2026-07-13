@@ -85,10 +85,10 @@ function courseText() {
 
 function toggleText(control, active) {
   if (control === "rescue") return active
-    ? "Трос подан. В зоне четырнадцати метров лодка удерживается автоматически; дождись сообщения «Человек на борту»."
+    ? "Трос подан. Держи лодку спокойно."
     : "Трос убран.";
-  if (control === "pump") return active ? "Насос включён. Нажми ещё раз, чтобы выключить." : "Насос выключен.";
-  return active ? "Ремонт корпуса начат. Лодка должна быть почти неподвижна." : "Ремонт корпуса остановлен.";
+  if (control === "pump") return active ? "Ручной насос включён." : "Ручной насос выключен.";
+  return active ? "Ремонт корпуса начат." : "Ремонт корпуса остановлен.";
 }
 
 function toggleControl(button, control) {
@@ -122,56 +122,54 @@ function situationHint() {
     const waterTarget = currentView.damageControl.recoveryWaterTarget;
     const hullTarget = currentView.damageControl.recoveryHullTarget;
     const pumpActive = Boolean(currentView.boat.pumpActive);
-    if (!pumpActive) return `Авария, осталось ${seconds} секунд. Сначала включи насос. Мотор пока не трогай.`;
-    if (!current.controls.pump) return `Автооткачка помощника работает, но в аварии она слишком медленная. Включи ручной насос; осталось ${seconds} секунд.`;
+    if (water > waterTarget && !pumpActive) return `Авария: ${seconds} секунд. Включи насос.`;
+    if (water > waterTarget && !current.controls.pump) return `Авария: ${seconds} секунд. Ручной насос быстрее.`;
     if (current.controls.hullRepair) {
       const percent = Math.round((Number(current.boat.hullRepairProgress) || 0) / 3.1 * 100);
-      return `Насос работает. Пластина устанавливается: ${Math.min(99, percent)} процентов. Осталось ${seconds} секунд.`;
+      return `Авария: ${seconds} секунд. Пластина ${Math.min(99, percent)}%.`;
     }
     if (hull < hullTarget && patches > 0) {
-      return `Насос работает. Корпус ${Math.round(hull)} процентов, нужно не ниже ${hullTarget}. Нажми Заделать пробоину.`;
+      return `Авария: ${seconds} секунд. Корпус ${Math.round(hull)}. Нужно ${hullTarget}. Поставь пластину.`;
     }
     if (hull < hullTarget) {
-      return `Корпус ниже аварийного минимума, а пластин больше нет. Продолжай откачку, но без пластины лодку стабилизировать нельзя.`;
+      return `Нет пластин. Корпус ниже ${hullTarget}%.`;
     }
     if (water > waterTarget) {
-      return `Не выключай насос: вода ${Math.round(water)} процентов, нужно не выше ${waterTarget}. Течь ${leak.toFixed(1)} продолжает наполнять лодку. Осталось ${seconds} секунд.`;
+      return `Авария: ${seconds} секунд. Вода ${Math.round(water)}. Нужно ${waterTarget}. Не выключай насос.`;
     }
-    return `Вода уже безопасна. Оставшаяся течь ${leak.toFixed(1)} не блокирует восстановление, но насос лучше не выключать.`;
+    return "Лодка стабилизируется.";
   }
 
   if ((leak > 0.2 || hull < 70) && patches > 0) {
-    if (speed > 2.2) return `Корпус повреждён. Снизь скорость с ${speed.toFixed(1)} примерно до двух узлов, затем нажми Заделать пробоину.`;
-    return "Лодка почти остановлена. Нажми Заделать пробоину. После установки пластины включи насос, чтобы убрать воду.";
+    if (speed > 2.2) return "Снизь скорость до 2 узлов. Затем поставь пластину.";
+    return "Поставь ремонтную пластину.";
   }
   if (water > 30) {
     if (currentView.pumpAssist?.enabled && currentView.boat.pumpActive && !current.controls.pump) {
-      return `В лодке ${Math.round(water)} процентов воды. Помощник уже откачивает; ручной насос ускорит работу.`;
+      return `Вода ${Math.round(water)}%. Помощник качает. Ручной насос быстрее.`;
     }
-    return `В лодке ${Math.round(water)} процентов воды. Включи насос повторным нажатием и выключи, когда уровень снизится.`;
+    return `Вода ${Math.round(water)}%. Включи насос.`;
   }
   if (currentView.riskRoute?.active) {
-    const failed = currentView.riskRoute.gateFailed
-      ? " На этом подходе уже было столкновение: проход можно закончить, но бонус не начислится."
-      : ` Чистое прохождение даст 150 очков и 100 жетонов после победы.`;
-    return `Рискованный маршрут: ${currentView.riskRoute.gateLabel}, примерно ${Math.round(currentView.navigation?.guideDistance || 0)} метров. Держи высокий маяк по центру вручную; автоподруливание временно приостановлено.${failed}`;
+    const failed = currentView.riskRoute.gateFailed ? " Бонус потерян." : "";
+    return `Риск: ${currentView.riskRoute.gateLabel}, ${Math.round(currentView.navigation?.guideDistance || 0)} м. Держи маяк по центру.${failed}`;
   }
   if (current.rescued < 2) {
     const targetDistance = currentView.navigation?.guideDistance ?? currentView.navigation?.targetDistance ?? currentView.nearestSurvivorDistance;
     const angle = currentView.navigation?.targetRelativeAngle;
-    if (targetDistance == null) return "Нажми сонар, чтобы найти следующую цель.";
+    if (targetDistance == null) return "Нажми сонар.";
     if (targetDistance > currentView.rescueRadius + 1) {
       const direction = angle == null || Math.abs(angle) < 10 ? "прямо" : angle < 0 ? "слева" : "справа";
-      const label = currentView.navigation?.guideIsWaypoint ? "Текущая контрольная точка" : "Ближайшая цель";
-      return `${label} ${direction}, примерно ${Math.round(targetDistance)} метров. Следуй стереомаяку.`;
+      const label = currentView.navigation?.guideIsWaypoint ? "Проход" : "Цель";
+      return `${label} ${direction}, ${Math.round(targetDistance)} м. Следуй маяку.`;
     }
-    if (speed > currentView.rescueSpeedLimit) return `Человек рядом, но скорость ${speed.toFixed(1)} узла. Снизь её до ${currentView.rescueSpeedLimit.toFixed(1)}, затем один раз нажми трос.`;
+    if (speed > currentView.rescueSpeedLimit) return `Человек рядом. Снизь скорость до ${currentView.rescueSpeedLimit.toFixed(1)}.`;
     const percent = Math.round((currentView.rescueProgress || 0) * 100);
     return percent > 0
-      ? `Трос натянут на ${percent} процентов. Не нажимай повторно и держи лодку почти неподвижно.`
-      : "Человек в зоне троса, маяк должен замолчать. Один раз нажми Подать спасательный трос и дождись сообщения о завершении.";
+      ? `Трос ${percent}%. Держи лодку спокойно.`
+      : "Человек рядом. Подай трос.";
   }
-  return "Оба человека на борту. Нажми сонар: он укажет гавань. Входи в неё на скорости не выше пяти узлов.";
+  return "Люди на борту. Сонар укажет гавань.";
 }
 
 function bindReliableControl(button, control) {
@@ -268,33 +266,21 @@ function statusText() {
   const current = state();
   const currentView = view();
   if (!current || !currentView) return "Операция ещё не запущена.";
-  const timeText = current.timed ? `Осталось ${Math.ceil(currentView.remaining)} секунд.` : "Режим без ограничения времени.";
-  const repairText = `Пробоина ${current.boat.leak.toFixed(1)}. Ремонтных пластин ${current.boat.repairPatches}.`;
-  const assistText = currentView.navigation?.assistEnabled ? "Навигационный помощник включён." : "Навигационный помощник выключен.";
-  const levelText = currentView.progression
-    ? `Уровень ${currentView.progression.level}, ${currentView.progression.operationName}. ${currentView.boat.modelName}.`
-    : "";
-  const armorText = currentView.boat.armorMax > 0
-    ? `Броня ${Math.ceil(currentView.boat.armor)} из ${Math.ceil(currentView.boat.armorMax)}.`
-    : "Брони нет.";
-  const brakeText = currentView.progression?.coastBrakeActive
-    ? `Автотормоз остановит лодку примерно через ${Math.ceil(currentView.progression.coastBrakeRemaining)} секунд.`
-    : "";
-  const pumpAssistText = currentView.pumpAssist?.available
-    ? `Автооткачка помощника ${currentView.pumpAssist.enabled ? "включена" : "выключена"}.`
-    : "";
-  const emergencyText = currentView.damageControl?.floodEmergency
-    ? `Аварийный режим. Осталось ${Math.ceil(currentView.damageControl.floodEmergencyRemaining)} секунд. Для спасения: вода не выше ${currentView.damageControl.recoveryWaterTarget}, корпус не ниже ${currentView.damageControl.recoveryHullTarget}. Течь ${currentView.boat.leak.toFixed(1)} продолжает набирать воду, но не блокирует восстановление. Насос ${currentView.boat.pumpActive ? "работает" : "выключен"}.`
-    : "";
-  const pendingText = currentView.riskRoute?.selectionPending
-    ? ` После следующего сонара включится ${currentView.riskRoute.selectedRisk ? "рискованный" : "обычный"} режим.`
-    : "";
-  const riskText = currentView.riskRoute?.enabled
-    ? currentView.riskRoute.active
-      ? `Рискованный маршрут активен: ${currentView.riskRoute.gateLabel}. Чистых ворот ${currentView.riskRoute.cleanGates}.${pendingText}`
-      : `Текущий режим рискованный. Чистых ворот ${currentView.riskRoute.cleanGates}.${pendingText}`
-    : `Текущий маршрут обычный.${pendingText}`;
-  return `${currentView.message} ${emergencyText} ${levelText} Скорость ${currentView.boat.speed.toFixed(1)} узла. Курс ${Math.round((currentView.boat.heading + 360) % 360)} градусов. Корпус ${Math.round(currentView.boat.hull)} процентов. ${armorText} Вода ${Math.round(currentView.boat.water)} процентов. ${repairText} ${pumpAssistText} Спасено ${currentView.rescued} из двух. ${assistText} ${riskText} ${brakeText} ${timeText}`;
+  if (currentView.damageControl?.floodEmergency) {
+    return `Авария: ${Math.ceil(currentView.damageControl.floodEmergencyRemaining)} секунд. Вода ${Math.round(currentView.boat.water)}, нужно ${currentView.damageControl.recoveryWaterTarget}. Корпус ${Math.round(currentView.boat.hull)}, нужно ${currentView.damageControl.recoveryHullTarget}. Течь ${currentView.boat.leak.toFixed(1)}. Насос ${currentView.boat.pumpActive ? "включён" : "выключен"}.`;
+  }
+  const motorStopped = Boolean(currentView.waterEngine?.locked || currentView.boat.engineStalled);
+  const parts = [
+    `Скорость ${currentView.boat.speed.toFixed(1)}.`,
+    `Корпус ${Math.round(currentView.boat.hull)}.`,
+    `Вода ${Math.round(currentView.boat.water)}.`,
+    `Топливо ${Math.round(currentView.boat.fuel)}.`,
+    `Спасено ${currentView.rescued} из 2.`,
+  ];
+  if (motorStopped) parts.unshift("Мотор остановлен.");
+  else parts.splice(1, 0, `Курс ${Math.round((currentView.boat.heading + 360) % 360)}.`, `Течь ${currentView.boat.leak.toFixed(1)}.`);
+  if (current.timed) parts.push(`Время ${Math.ceil(currentView.remaining)} секунд.`);
+  return parts.join(" ");
 }
 
 function syncControls() {
@@ -313,16 +299,16 @@ function syncControls() {
   const rescueButton = byId("rescueButton");
   if (rescueButton) {
     const active = Boolean(current.controls.rescue);
-    const text = active ? "Трос подан — нажми для отмены" : "Подать спасательный трос";
+    const text = active ? "Трос подан — отменить" : "Подать спасательный трос";
     if (rescueButton.textContent !== text) rescueButton.textContent = text;
     rescueButton.setAttribute("aria-label", active
       ? "Спасательный трос активен. Нажми для отмены"
-      : "Подать спасательный трос. Подойди ближе четырнадцати метров и снизь скорость до четырёх узлов");
+      : "Подать трос в зоне спасения");
   }
 
   const pumpButton = byId("pumpButton");
   if (pumpButton) {
-    const text = current.controls.pump ? "Ручной насос работает — нажми для выключения" : "Включить ручной насос";
+    const text = current.controls.pump ? "Ручной насос: включён" : "Ручной насос: выключен";
     if (pumpButton.textContent !== text) pumpButton.textContent = text;
   }
 
@@ -337,9 +323,21 @@ function syncControls() {
 
   const repairButton = byId("repairButton");
   if (repairButton) {
-    repairButton.textContent = currentView?.engineService?.active
-      ? `Обслуживание двигателя: ${Math.round(currentView.engineService.progress)}%`
-      : "Обслужить двигатель";
+    if (currentView?.waterEngine?.locked) {
+      repairButton.textContent = currentView.waterEngine.canRestart
+        ? "Запустить мотор"
+        : currentView.waterEngine.canService
+          ? "Обслужить мотор"
+          : currentView.boat.water > currentView.waterEngine.restartWater
+            ? `Откачать воду до ${currentView.waterEngine.restartWater}%`
+            : currentView.boat.fuel <= 0.01
+              ? "Нет топлива"
+              : "Стабилизировать лодку";
+    } else {
+      repairButton.textContent = currentView?.engineService?.active
+        ? "Мотор обслуживается"
+        : "Обслужить мотор";
+    }
   }
 
   const repairHullButton = byId("repairHullButton");
@@ -347,7 +345,7 @@ function syncControls() {
     const captainLocked = current.mode === "coop" && document.body.dataset.role === "captain";
     repairHullButton.setAttribute("aria-disabled", String(captainLocked));
     const patches = current.boat.repairPatches ?? 0;
-    const text = current.controls.hullRepair ? "Заделка пробоины выполняется — нажми для отмены" : `Заделать пробоину — пластин ${patches}`;
+    const text = current.controls.hullRepair ? "Пластина ставится — отменить" : `Поставить пластину — ${patches}`;
     if (repairHullButton.textContent !== text) repairHullButton.textContent = text;
   }
 

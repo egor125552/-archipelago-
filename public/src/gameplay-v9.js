@@ -40,11 +40,10 @@ function syncV9() {
   setHidden("floodEmergencyStatus", !emergency);
   if (emergency) {
     const seconds = Math.max(0, Math.ceil(view.damageControl.floodEmergencyRemaining || 0));
-    const cause = view.damageControl.emergencyCause === "wrecked" ? "Критическое повреждение корпуса" : "Полное затопление";
     const water = Math.round(view.boat.water || 0);
     const leak = Number(view.boat.leak || 0).toFixed(1);
-    const pump = view.boat.pumpActive ? "работает" : "ВЫКЛЮЧЕН";
-    setText("floodEmergencyStatus", `${cause}. Осталось ${seconds} секунд. Насос ${pump}. Вода ${water}, нужно не выше ${view.damageControl.recoveryWaterTarget}. Корпус ${Math.round(view.boat.hull || 0)}, нужно не ниже ${view.damageControl.recoveryHullTarget}. Течь ${leak} продолжает набирать воду, но не является отдельным условием выхода.`);
+    const pump = view.boat.pumpActive ? "да" : "нет";
+    setText("floodEmergencyStatus", `Авария: ${seconds} с. Вода ${water}, цель ${view.damageControl.recoveryWaterTarget}. Корпус ${Math.round(view.boat.hull || 0)}, цель ${view.damageControl.recoveryHullTarget}. Течь ${leak}. Насос: ${pump}.`);
   }
 }
 
