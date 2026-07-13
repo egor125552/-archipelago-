@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#061a24">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <title>Эхо-Архипелаг — аудио-спасение</title>
-  <link rel="stylesheet" href="styles.css?v=8.1">
+  <link rel="stylesheet" href="styles.css?v=9">
 </head>
 <body data-accessibility="touch" data-role="captain">
   <a class="skip" href="#main">К игре</a>
@@ -14,7 +14,7 @@
     <section id="startScreen" class="start-shell" aria-labelledby="title">
       <p class="eyebrow">кооперативная аудио-игра</p>
       <h1 id="title">Эхо-Архипелаг</h1>
-      <p>Операция проходит не в бесконечном поле, а в конечной бухте Северный Приют. Старт — в Южной гавани, первый человек — в Восточной бухте, второй — в Северной заводи. Берега и препятствия физические. Наушники обязательны для стереонавигации.</p>
+      <p>Операция проходит в конечной тихой речной бухте Северный Приют. Течения нет: без газа лодка стоит или очень медленно докатывается по инерции. Старт — Южная гавань, первый человек — Восточная бухта, второй — Северная заводь. Наушники обязательны для стереонавигации.</p>
 
       <fieldset class="panel mode-picker">
         <legend>Управление</legend>
@@ -32,7 +32,7 @@
 
       <section class="panel">
         <h2>Одиночная игра</h2>
-        <p>Ты — капитан. Помощник подстраховывает насос и двигатель, но корпус, маршрут и спасение остаются за тобой.</p>
+        <p>Ты — капитан. Помощник подстраховывает насос и двигатель. Учебная страховка мягко сбрасывает газ перед близким препятствием и может быть выключена во время игры.</p>
         <button id="soloButton" class="primary">Начать одиночную спасательную операцию</button>
       </section>
 
@@ -60,6 +60,7 @@
           <button id="locationButton" class="small">Где я?</button>
           <button id="firstRescueButton" class="small">Как спасти первого?</button>
           <button id="assistButton" class="small" aria-pressed="true">Стереомаяк: включён</button>
+          <button id="safetyButton" class="small" aria-pressed="true">Учебная страховка: включена</button>
           <button id="statusButton" class="small">Озвучить статус</button>
           <button id="speechButton" class="small" aria-pressed="true">Игровая озвучка: включена</button>
           <button id="soundButton" class="small">Звук: включён</button>
@@ -68,12 +69,14 @@
       <div id="liveStatus" class="sr-only" aria-live="polite" aria-atomic="true"></div>
       <p id="missionMessage" class="mission"></p>
       <p id="engineWarning" class="warning" hidden aria-live="polite"></p>
+      <p id="floodEmergencyStatus" class="warning" hidden></p>
 
       <section class="status-strip" aria-label="Состояние лодки">
-        <div><span>Скорость</span><strong id="speed">0</strong></div><div><span>Курс</span><strong id="heading">0°</strong></div>
-        <div><span>Корпус</span><strong id="hull">100%</strong></div><div><span>Вода</span><strong id="water">0%</strong></div>
-        <div><span>Топливо</span><strong id="fuel">100%</strong></div><div><span>Мотор</span><strong id="temperature">24°</strong></div>
-        <div><span>Спасено</span><strong id="rescued">0/2</strong></div><div><span>Время</span><strong id="time">Без лимита</strong></div>
+        <div><span>Скорость</span><strong id="speed">0</strong></div><div><span>Ход</span><strong id="movementState">стоит</strong></div>
+        <div><span>Курс</span><strong id="heading">0°</strong></div><div><span>Корпус</span><strong id="hull">100%</strong></div>
+        <div><span>Вода</span><strong id="water">0%</strong></div><div><span>Топливо</span><strong id="fuel">100%</strong></div>
+        <div><span>Мотор</span><strong id="temperature">24°</strong></div><div><span>Спасено</span><strong id="rescued">0/2</strong></div>
+        <div><span>Время</span><strong id="time">Без лимита</strong></div>
       </section>
 
       <section class="control-deck" aria-label="Постоянная раскладка управления">
@@ -94,27 +97,32 @@
       </section>
 
       <details class="panel help" open>
+        <summary>Как понять, стоит лодка или идёт</summary>
+        <p>На стоянке слышны только тихие редкие всплески у борта. После начала движения появляется отдельный непрерывный кильватер: чем выше скорость, тем он яснее и громче. В строке состояния «Ход» написано: стоит, дрейфует или идёт. Кнопка «Где я?» тоже начинает сообщение с состояния движения.</p>
+      </details>
+      <details class="panel help">
         <summary>Как спасти первого человека</summary>
-        <p>Старт: Южная гавань, нос лодки смотрит на север. Нажми сонар один раз. Он скажет, что первый человек справа примерно в 57 метрах. Коротко дай газ и удерживай правый поворот. Высокий писк перемещается вместе с поворотом лодки. Когда он станет двойным и окажется точно по центру, отпусти руль: курс считается правильным с допуском примерно 18 градусов. Двигайся вперёд. Низкий редкий писк означает препятствие по текущему курсу, высокий — цель. Примерно за 20 метров отпусти газ и тормози. Когда человек ближе 12 метров и скорость ниже 4 узлов, один раз нажми «Подать спасательный трос» и не нажимай повторно до 100 процентов.</p>
+        <p>Старт: Южная гавань, нос лодки смотрит на север. Нажми сонар один раз. Он скажет, что первый человек справа примерно в 57 метрах. Коротко дай газ и удерживай правый поворот. Когда высокий писк станет двойным и окажется по центру, отпусти руль. Двигайся вперёд. Примерно за 20 метров отпусти газ и тормози. Когда человек ближе 12 метров и скорость ниже 4 узлов, один раз нажми «Подать спасательный трос» и не нажимай повторно до 100 процентов.</p>
+      </details>
+      <details class="panel help">
+        <summary>Вода, пробоина и полное затопление</summary>
+        <p>При пробоине вода постепенно набирается сама. Пока её мало, внутренний плеск сильно приглушён; по мере заполнения корпуса фильтр открывается и вода звучит яснее. Для ремонта почти останови лодку, один раз нажми «Заделать пробоину», затем включи насос. Даже при 100 процентах воды игра не заканчивается мгновенно: лодка аварийно останавливается, мотор глохнет и остаётся 32 секунды. Чтобы спасти лодку, закрепи пластину и откачай воду ниже 72 процентов.</p>
       </details>
       <details class="panel help">
         <summary>Как устроена бухта и сонар</summary>
-        <p>Расстояние, которое говорит сонар, — снимок на момент нажатия. Если было 58 метров, а после движения стало 48, лодка приблизилась на 10 метров. Повторно нажимать сонар для постоянной навигации не нужно: стереомаяк пересчитывается непрерывно. Двойной высокий писк по центру означает правильный курс. Бухта ограничена берегами. Обломки и рифы твёрдые: после удара лодка остаётся с той же стороны препятствия и не может пройти сквозь него. Кнопка «Где я?» сообщает часть бухты, цель, ближайший берег и препятствие.</p>
-      </details>
-      <details class="panel help">
-        <summary>Ремонт и вода</summary>
-        <p>Насос, трос и ремонт корпуса включаются одним нажатием и выключаются повторным. Для ремонта почти останови лодку и нажми «Заделать пробоину». После установки пластины включи насос: пластина уменьшает течь, но уже попавшая вода сама не исчезает.</p>
+        <p>Расстояние, которое говорит сонар, — снимок на момент нажатия. Повторно нажимать сонар для постоянной навигации не нужно: стереомаяк пересчитывается непрерывно. Двойной высокий писк по центру означает правильный курс. Бухта ограничена берегами. Обломки и рифы твёрдые. Кнопка «Где я?» сообщает движение лодки, часть бухты, цель, ближайший берег и препятствие.</p>
       </details>
       <section id="resultPanel" class="panel result" hidden><h2>Операция завершена</h2><p id="resultText"></p><button id="restartButton" class="primary">Начать новую операцию</button></section>
     </section>
   </main>
   <script type="importmap">
-    {"imports":{"/src/game-core.js":"/src/game-core-v8.js?v=8.1","/src/audio-engine.js":"/src/audio-engine-v8.js?v=8.1"}}
+    {"imports":{"/src/game-core.js":"/src/game-core-v9.js?v=9","/src/audio-engine.js":"/src/audio-engine-v9.js?v=9"}}
   </script>
   <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js" defer></script>
-  <script type="module" src="src/app.js?v=8.1"></script>
-  <script type="module" src="src/room-ui-fix.js?v=8.1"></script>
-  <script type="module" src="src/gameplay-v6.js?v=8.1"></script>
-  <script type="module" src="src/gameplay-v8.js?v=8.1"></script>
+  <script type="module" src="src/app.js?v=9"></script>
+  <script type="module" src="src/room-ui-fix.js?v=9"></script>
+  <script type="module" src="src/gameplay-v6.js?v=9"></script>
+  <script type="module" src="src/gameplay-v8.js?v=9"></script>
+  <script type="module" src="src/gameplay-v9.js?v=9"></script>
 </body>
 </html>
