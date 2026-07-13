@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#061a24">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <title>Эхо-Архипелаг — аудио-спасение</title>
-  <link rel="stylesheet" href="styles.css?v=7">
+  <link rel="stylesheet" href="styles.css?v=7.1">
 </head>
 <body data-accessibility="touch" data-role="captain">
   <a class="skip" href="#main">К игре</a>
@@ -96,17 +96,17 @@
       </details>
       <details class="panel help">
         <summary>Карта, препятствия и ремонт</summary>
-        <p>Бухта конечная: Южная гавань находится у старта, первый человек — в Восточной бухте, второй — в Северной заводи. Берег твёрдый по краям карты. Обломки и рифы больше нельзя пройти насквозь: после удара лодку выталкивает наружу. Низкий редкий писк отмечает ближайшее препятствие; высокий стереописк ведёт к цели или по безопасному проходу. Насос, трос и ремонт включаются одним нажатием и выключаются повторным.</p>
+        <p>Бухта конечная: Южная гавань находится у старта, первый человек — в Восточной бухте, второй — в Северной заводи. Берег твёрдый по краям карты. Обломки и рифы больше нельзя пройти насквозь: после удара лодку выталкивает наружу. Низкий редкий писк отмечает препятствие именно по текущему курсу; высокий стереописк ведёт к цели или по безопасному проходу. Насос, трос и ремонт включаются одним нажатием и выключаются повторным.</p>
       </details>
       <section id="resultPanel" class="panel result" hidden><h2>Операция завершена</h2><p id="resultText"></p><button id="restartButton" class="primary">Начать новую операцию</button></section>
     </section>
   </main>
   <script type="importmap">
-    {"imports":{"/src/game-core.js":"/src/game-core-v7.js?v=7","/src/audio-engine.js":"/src/audio-engine-v7.js?v=7"}}
+    {"imports":{"/src/game-core.js":"/src/game-core-v7-1.js?v=7.1","/src/audio-engine.js":"/src/audio-engine-v7-1.js?v=7.1"}}
   </script>
   <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js" defer></script>
-  <script type="module" src="src/app.js?v=7"></script>
-  <script type="module" src="src/room-ui-fix.js?v=7"></script>
-  <script type="module" src="src/gameplay-v6.js?v=7"></script>
+  <script type="module" src="src/app.js?v=7.1"></script>
+  <script type="module" src="src/room-ui-fix.js?v=7.1"></script>
+  <script type="module" src="src/gameplay-v6.js?v=7.1"></script>
 </body>
 </html>
