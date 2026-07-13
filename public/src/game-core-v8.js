@@ -229,12 +229,35 @@ export function command(state, action, actor = "captain") {
     const target = objectiveFor(state, state.navigation.lockedTargetId);
     const direct = bearingTo(state, target);
     const view = base.getView(state);
-    const route = view.navigation?.guideIsWaypoint
-      ? "Стереомаяк сначала ведёт через безопасный проход, поэтому его направление может отличаться от прямого направления на человека."
-      : "Стереомаяк ведёт прямо к цели.";
+    const navigation = view.navigation || {};
+    const routeAngle = Number.isFinite(navigation.targetRelativeAngle)
+      ? navigation.targetRelativeAngle
+      : direct.relative;
+    const routeDistance = Number.isFinite(navigation.guideDistance)
+      ? navigation.guideDistance
+      : direct.distance;
+    const routePan = Number.isFinite(navigation.guidePan) ? navigation.guidePan : direct.pan;
+    const routeIsWaypoint = Boolean(navigation.guideIsWaypoint);
+    const routeLabel = routeIsWaypoint ? "безопасный проход" : objectiveLabel(target);
+    const destination = routeIsWaypoint
+      ? ` Сама цель находится примерно в ${Math.round(direct.distance)} метрах; после прохода маяк автоматически довернёт к ней.`
+      : "";
     state.navigation.lastSonarTargetId = target.id;
-    state.message = `Сонар: ${objectiveLabel(target)} ${directionText(direct.relative)}, ${Math.round(direct.distance)} метров. ${route} Двойной писк по центру означает правильный курс.`;
-    result.events = (result.events || []).filter(event => event.type !== "hazard-ping");
+    state.sonar.lastResult = {
+      ...(state.sonar.lastResult || {}),
+      id: target.id,
+      objectiveDistance: direct.distance,
+      distance: routeDistance,
+      relativeAngle: routeAngle,
+      pan: routePan,
+      routeIsWaypoint,
+    };
+    state.message = `Сонар. Маршрут: ${routeLabel} ${directionText(routeAngle)}, ${Math.round(routeDistance)} метров.${destination} Высокий стереомаяк показывает то же направление; двойной писк по центру означает правильный курс.`;
+    result.events = (result.events || [])
+      .filter(event => event.type !== "hazard-ping")
+      .map(event => ["sonar", "sonar-lock"].includes(event.type)
+        ? {...event, pan: routePan, distance: routeDistance, relativeAngle: routeAngle, routeIsWaypoint}
+        : event);
   }
   return result;
 }

@@ -220,7 +220,7 @@ function render(forceAnnouncement = false) {
   setText("fuel", `${Math.round(view.boat.fuel)}%`);
   setText("temperature", `${Math.round(view.boat.engineTemp)}°`);
   setText("rescued", `${view.rescued}/2`);
-  setText("time", `${Math.ceil(view.remaining)} с`);
+  setText("time", view.timed ? `${Math.ceil(view.remaining)} с` : "Без лимита");
   setText("quickAction", view.quickLabel);
 
   const captainLocked = view.mode === "coop" && role === "crew";
@@ -246,7 +246,8 @@ function render(forceAnnouncement = false) {
 function fullStatus() {
   if (!stateBox.state) return "Операция ещё не запущена.";
   const view = getView(stateBox.state);
-  return `${view.message} Скорость ${view.boat.speed.toFixed(1)} узла. Курс ${Math.round((view.boat.heading + 360) % 360)} градусов. Корпус ${Math.round(view.boat.hull)} процентов. Вода ${Math.round(view.boat.water)} процентов. Топливо ${Math.round(view.boat.fuel)} процентов. Спасено ${view.rescued} из двух. Осталось ${Math.ceil(view.remaining)} секунд.`;
+  const timeText = view.timed ? `Осталось ${Math.ceil(view.remaining)} секунд.` : "Режим без ограничения времени.";
+  return `${view.message} Скорость ${view.boat.speed.toFixed(1)} узла. Курс ${Math.round((view.boat.heading + 360) % 360)} градусов. Корпус ${Math.round(view.boat.hull)} процентов. Вода ${Math.round(view.boat.water)} процентов. Топливо ${Math.round(view.boat.fuel)} процентов. Спасено ${view.rescued} из двух. ${timeText}`;
 }
 
 function localFeedback(text) {
@@ -416,6 +417,7 @@ window.__echoArchipelago = {
   startSolo: beginSolo,
   resetOperation,
   getView: () => stateBox.state && getView(stateBox.state),
+  announce: text => { announceToReader(text); speak(text); },
   setMode,
   speechRate: SPEECH_RATE,
 };

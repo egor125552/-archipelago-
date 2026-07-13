@@ -9,6 +9,7 @@ export const CONFIG = Object.freeze({
   floodEmergencySeconds: 32,
   floodRecoveryWater: 72,
   floodRecoveryLeak: 1.2,
+  floodRecoveryHull: 5,
   regularFloodMultiplier: 0.74,
   beginnerBrakeDistance: 18,
   beginnerBrakeSpeed: 5.5,
@@ -48,10 +49,29 @@ function relativeBearing(state, target) {
 }
 
 function nearestHazardAhead(state) {
+  const heading = state.boat.heading * Math.PI / 180;
+  const forwardX = Math.sin(heading);
+  const forwardY = Math.cos(heading);
+  const rightX = Math.cos(heading);
+  const rightY = -Math.sin(heading);
   return state.world.hazards
-    .map(hazard => ({hazard, distance: distance(state.boat, hazard), relative: relativeBearing(state, hazard)}))
-    .filter(item => Math.abs(item.relative) <= 28)
-    .sort((a, b) => a.distance - b.distance)[0] || null;
+    .map(hazard => {
+      const dx = hazard.x - state.boat.x;
+      const dy = hazard.y - state.boat.y;
+      const forward = dx * forwardX + dy * forwardY;
+      const lateral = dx * rightX + dy * rightY;
+      const radius = hazard.radius + (CONFIG.collisionMargin || 2.6) + 1.1;
+      if (forward <= 0 || Math.abs(lateral) >= radius) return null;
+      const corridorDepth = Math.sqrt(Math.max(0, radius * radius - lateral * lateral));
+      return {
+        hazard,
+        clearance: Math.max(0, forward - corridorDepth),
+        distance: distance(state.boat, hazard),
+        relative: relativeBearing(state, hazard),
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.clearance - b.clearance)[0] || null;
 }
 
 function prepareFloodEmergencyTick(state, dt) {
@@ -67,6 +87,9 @@ function prepareFloodEmergencyTick(state, dt) {
   // Keep the legacy engine one fraction below its instant-loss threshold.
   // The public view still reports the actual emergency water level.
   if (state.boat.water >= 99.6) state.boat.water = 99.45;
+  // A zero hull and full water used to trigger the legacy instant-loss branch
+  // on the next frame, making the promised repair window impossible to use.
+  if (state.boat.hull <= 0) state.boat.hull = 0.05;
 }
 
 function enterOrMaintainFloodEmergency(state, events) {
@@ -84,6 +107,7 @@ function enterOrMaintainFloodEmergency(state, events) {
   state.ending = null;
   state.phase = "playing";
   state.boat.water = 100;
+  if (state.boat.hull <= 0) state.boat.hull = 0.05;
   state.boat.engineStalled = true;
   state.boat.throttle = 0;
   state.boat.speed = 0;
@@ -107,11 +131,14 @@ function slowRegularFlooding(state, previousWater) {
 
 function finishFloodEmergency(state, events) {
   if (!state.damageControl.floodEmergency) return;
-  const recovered = state.boat.water <= CONFIG.floodRecoveryWater && state.boat.leak <= CONFIG.floodRecoveryLeak;
+  const recovered = state.boat.water <= CONFIG.floodRecoveryWater
+    && state.boat.leak <= CONFIG.floodRecoveryLeak
+    && state.boat.hull >= CONFIG.floodRecoveryHull;
   if (recovered) {
     state.damageControl.floodEmergency = false;
     state.damageControl.floodEmergencyUntil = -999;
-    state.message = "Лодка снова держится на плаву. Вода ниже аварийного уровня, пробоина закрыта. Мотор пока заглох — проверь его перед разгоном.";
+    state.boat.repairProgress = 0;
+    state.message = "Лодка снова держится на плаву. Вода ниже аварийного уровня, пробоина закрыта. Теперь нажимай Проверить двигатель, пока мотор не запустится.";
     events.push({type: "flood-emergency-recovered"});
     return;
   }
@@ -142,16 +169,20 @@ function applyBeginnerSafety(state, dt, events) {
   if (!state.training.safetyEnabled || state.mode !== "solo" || state.phase !== "playing" || state.damageControl.floodEmergency) return;
   const hazard = nearestHazardAhead(state);
   const speed = Math.abs(state.boat.speed);
-  if (!hazard || hazard.distance > CONFIG.beginnerBrakeDistance || speed < CONFIG.beginnerBrakeSpeed) return;
+  const stoppingDistance = Math.max(
+    CONFIG.beginnerBrakeDistance,
+    speed * 1.1 + speed * speed / 15,
+  );
+  if (!hazard || hazard.clearance > stoppingDistance || speed < CONFIG.beginnerBrakeSpeed) return;
 
-  const urgency = clamp((CONFIG.beginnerBrakeDistance - hazard.distance) / CONFIG.beginnerBrakeDistance, 0.15, 1);
+  const urgency = clamp((stoppingDistance - hazard.clearance) / stoppingDistance, 0.15, 1);
   state.boat.throttle = Math.min(state.boat.throttle, 0.18);
   state.boat.speed *= Math.exp(-(0.75 + urgency * 1.35) * dt);
 
   const now = clock(state);
   if (now - state.training.lastBrakeAt > 5.5) {
     state.training.lastBrakeAt = now;
-    state.message = `Учебная страховка сбросила газ: впереди ${hazard.hazard.label || "препятствие"}, ${Math.round(hazard.distance)} метров. Обойди его рулём.`;
+    state.message = `Учебная страховка сбросила газ: до края препятствия ${hazard.hazard.label || "препятствие"} около ${Math.round(hazard.clearance)} метров. Обойди его рулём.`;
     events.push({type: "safety-brake", pan: hazard.relative < 0 ? -0.65 : 0.65});
   }
 }
@@ -197,7 +228,12 @@ export function startGame(state) {
 }
 
 export function setControl(state, control, active, actor = "captain") {
-  return base.setControl(ensureV9State(state), control, active, actor);
+  ensureV9State(state);
+  if (state.damageControl.floodEmergency && active && ["forward", "reverse"].includes(control)) {
+    state.message = "Лодка полностью затоплена: ход заблокирован. Сначала поставь пластину и включи насос.";
+    return false;
+  }
+  return base.setControl(state, control, active, actor);
 }
 
 export function command(state, action, actor = "captain") {
@@ -206,6 +242,10 @@ export function command(state, action, actor = "captain") {
     state.training.safetyEnabled = !state.training.safetyEnabled;
     state.message = `Учебная страховка ${state.training.safetyEnabled ? "включена: перед близким препятствием она мягко сбросит газ" : "выключена"}.`;
     return {ok: true, events: [{type: "safety-toggle", enabled: state.training.safetyEnabled}]};
+  }
+  if (action === "repair" && state.damageControl.floodEmergency) {
+    state.message = "Мотор под водой и сейчас не запустится. Сначала поставь ремонтную пластину и откачай воду ниже аварийного уровня.";
+    return {ok: false, reason: "flood-first", events: [{type: "ui-deny"}]};
   }
   const result = base.command(state, action, actor);
   if (action === "where" && result.ok) {
@@ -255,6 +295,7 @@ export function getView(state) {
       waterIngressActive: state.boat.leak > 0.05 && !state.boat.pumpActive,
       recoveryWaterTarget: CONFIG.floodRecoveryWater,
       recoveryLeakTarget: CONFIG.floodRecoveryLeak,
+      recoveryHullTarget: CONFIG.floodRecoveryHull,
     },
     boat: {
       ...view.boat,

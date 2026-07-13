@@ -24,6 +24,11 @@ function readerMode() { return document.body.dataset.accessibility === "reader";
 
 function say(text) {
   if (!text) return;
+  const api = gameApi();
+  if (typeof api?.announce === "function") {
+    api.announce(text);
+    return;
+  }
   const live = byId("liveStatus");
   if (live) {
     live.textContent = "";

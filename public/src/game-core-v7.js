@@ -95,8 +95,13 @@ function finalObjective(state, id = state.navigation.lockedTargetId) {
 
 function guideTarget(state, objective) {
   if (!objective) return null;
-  if (objective.id === "survivor-b" && state.boat.y < 88) {
-    return {id: "east-channel-north", label: "безопасный проход", kind: "проход", x: 25, y: 100, finalId: objective.id};
+  if (objective.id === "survivor-b") {
+    const northGate = {id: "east-channel-north", label: "безопасный проход", kind: "проход", x: 25, y: 100, finalId: objective.id};
+    const gateReached = distance(state.boat, northGate) <= 14;
+    // Do not switch to the final survivor merely because the bow crossed an
+    // invisible Y threshold. If the boat is still west of the gate, that
+    // direct ray cuts through the middle ridge.
+    if (state.boat.y < 88 || (!gateReached && state.boat.y < 108)) return northGate;
   }
   if (objective.id === "harbor") {
     if (state.boat.y > 105) return {id: "east-channel-return", label: "безопасный проход", kind: "проход", x: 25, y: 100, finalId: objective.id};

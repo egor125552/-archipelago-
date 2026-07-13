@@ -2,30 +2,48 @@
 
 import {AudioEngine as V8AudioEngine} from "./audio-engine-v8.js?base=1";
 
-const VELOREN_ROOT = "https://raw.githubusercontent.com/veloren/veloren/754dc94c4ef05e93e45f5870d6e1de0c2cbc93cc/assets/voxygen/audio/sfx/ambient/river_sounds/";
 const RIVER_SOUNDS = Object.freeze({
-  riverIdle: VELOREN_ROOT + "running_water-004.ogg",
-  riverWake: VELOREN_ROOT + "running_water-019.ogg",
-  bilgeWater: VELOREN_ROOT + "running_water-026.ogg",
+  riverIdle: "/assets/audio/river-ambience.ogg",
+  riverWake: "/assets/audio/boat-wake.ogg",
+  bilgeWater: "/assets/audio/bilge-water.ogg",
 });
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+
+export function floodMuffleCutoff(waterPercent) {
+  const flood = clamp((Number(waterPercent) || 0) / 100, 0, 1);
+  const shaped = Math.pow(flood, 1.45);
+  return 16_000 * Math.pow(560 / 16_000, shaped);
+}
 
 export class AudioEngine extends V8AudioEngine {
   constructor() {
     super();
     this.legacyLoopsCleared = false;
+    this.floodFilter = null;
+  }
+
+  async init() {
+    await super.init();
+    if (!this.ctx || !this.compressor || this.floodFilter) return;
+    this.floodFilter = this.ctx.createBiquadFilter();
+    this.floodFilter.type = "lowpass";
+    this.floodFilter.frequency.value = floodMuffleCutoff(0);
+    this.floodFilter.Q.value = 0.58;
+    try { this.compressor.disconnect(); } catch (_) {}
+    this.compressor.connect(this.floodFilter).connect(this.ctx.destination);
   }
 
   async preload() {
-    await super.preload();
+    const inheritedPreload = super.preload();
     if (!this.ctx) return;
-    await Promise.allSettled(Object.entries(RIVER_SOUNDS).map(async ([name, url]) => {
+    const localPreload = Promise.allSettled(Object.entries(RIVER_SOUNDS).map(async ([name, url]) => {
       const response = await fetch(url, {mode: "cors", cache: "force-cache"});
       if (!response.ok) throw new Error(`${name}: ${response.status}`);
       const buffer = await this.ctx.decodeAudioData(await response.arrayBuffer());
       this.buffers.set(name, buffer);
     }));
+    await Promise.allSettled([inheritedPreload, localPreload]);
   }
 
   clearInheritedLoopsOnce() {
@@ -35,6 +53,12 @@ export class AudioEngine extends V8AudioEngine {
       "waterCalm", "waterWake", "rain", "engine", "pump", "seaV4", "hullV4", "wakeV4", "engineV4",
       "engineNew", "pumpNew", "seaPort", "seaStarboard", "bowWash", "seaReal", "motorboatReal", "pumpReal",
     ]) this.stopLoop(name);
+  }
+
+  updateFloodMuffle(water, playing) {
+    if (!this.floodFilter || !this.ctx) return;
+    const cutoff = floodMuffleCutoff(playing ? water : 0);
+    this.floodFilter.frequency.setTargetAtTime(cutoff, this.ctx.currentTime, 0.18);
   }
 
   update(view) {
@@ -50,6 +74,7 @@ export class AudioEngine extends V8AudioEngine {
     const leak = clamp(Number(view.boat.leak) || 0, 0, 16);
     const playing = view.phase === "playing";
     const moving = speed >= 0.35;
+    this.updateFloodMuffle(water, playing);
 
     if (playing) {
       const idleName = this.buffers.has("riverIdle") ? "riverIdle" : "seaReal";
@@ -83,12 +108,12 @@ export class AudioEngine extends V8AudioEngine {
       } else this.stopLoop("motorboatReal");
 
       if (water > 0.7 || leak > 0.05) {
-        const openness = clamp(water / 72, 0, 1);
+        const flooding = clamp(water / 100, 0, 1);
         const bilgeName = this.buffers.has("bilgeWater") ? "bilgeWater" : "seaReal";
         this.ensureLoop(bilgeName, {
-          gain: 0.012 + openness * 0.245 + Math.min(0.045, leak / 260),
-          rate: 0.78 + openness * 0.16,
-          lowpass: 420 + openness * 7900,
+          gain: 0.018 + flooding * 0.22 + Math.min(0.045, leak / 260),
+          rate: 0.82 + flooding * 0.1,
+          lowpass: 2600 - flooding * 1200,
           pan: -0.12 + Math.sin(this.ctx.currentTime * 0.37) * 0.08,
         });
       } else {

@@ -1,13 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
+import {floodMuffleCutoff} from "../public/src/audio-engine-v9.js";
 
 const source = await readFile(new URL("../public/src/audio-engine-v9.js", import.meta.url), "utf8");
 
 test("v9 uses separate recorded river, wake and bilge sources", () => {
-  assert.match(source, /running_water-004\.ogg/);
-  assert.match(source, /running_water-019\.ogg/);
-  assert.match(source, /running_water-026\.ogg/);
+  assert.match(source, /river-ambience\.ogg/);
+  assert.match(source, /boat-wake\.ogg/);
+  assert.match(source, /bilge-water\.ogg/);
+  assert.doesNotMatch(source, /raw\.githubusercontent\.com/);
   assert.match(source, /riverIdle/);
   assert.match(source, /riverWake/);
   assert.match(source, /bilgeWater/);
@@ -19,10 +21,13 @@ test("wake is enabled only while the boat is actually moving", () => {
   assert.match(source, /else \{\s*this\.stopLoop\("riverWake"\)/);
 });
 
-test("internal water opens its filter as flooding rises", () => {
-  assert.match(source, /const openness = clamp\(water \/ 72, 0, 1\)/);
-  assert.match(source, /lowpass: 420 \+ openness \* 7900/);
-  assert.match(source, /gain: 0\.012 \+ openness \* 0\.245/);
+test("flooding closes the global mix filter instead of merely lowering volume", () => {
+  assert.match(source, /createBiquadFilter/);
+  assert.match(source, /this\.compressor\.connect\(this\.floodFilter\)/);
+  assert.match(source, /setTargetAtTime\(cutoff/);
+  assert.ok(floodMuffleCutoff(0) > floodMuffleCutoff(50));
+  assert.ok(floodMuffleCutoff(50) > floodMuffleCutoff(100));
+  assert.ok(floodMuffleCutoff(100) <= 650);
 });
 
 test("legacy sea fallback is removed after river buffers load", () => {

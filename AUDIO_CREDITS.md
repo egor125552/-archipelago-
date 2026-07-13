@@ -9,3 +9,8 @@ The gameplay/navigation cue set remains unchanged from the existing project. Ver
 - **Hatch Seal.wav** — paul368, Freesound sound 264063, CC0 1.0. Mirrored as `hatch_close1.ogg` in `Aurorastation/Aurora.3` and used as the hull impact layer.
 
 Source metadata and attribution files are preserved in the upstream repositories referenced by `public/src/audio-engine-v6.js`.
+
+Version 10 ships the navigation-critical water layers locally so a temporary CDN or CORS failure cannot silently remove them.
+
+- **[Stream](https://freesound.org/people/mystiscool/sounds/7138/)** — mystiscool, CC BY. The seamless OGG mirror is from [Muges/ambientsounds](https://github.com/Muges/ambientsounds) and is stored as `public/assets/audio/river-ambience.ogg`.
+- **Water loops 01 and 02** — [lavenderdotpet/CC0-Public-Domain-Sounds](https://github.com/lavenderdotpet/CC0-Public-Domain-Sounds), CC0 1.0. Stored as `bilge-water.ogg` and `boat-wake.ogg`.
