@@ -6,9 +6,10 @@ export const CONFIG = Object.freeze({
   ...base.CONFIG,
   motionStartSpeed: 0.45,
   motionStopSpeed: 0.16,
-  repairGraceSeconds: 45,
-  floodGraceMultiplier: 0.32,
-  floodNormalMultiplier: 0.68,
+  floodEmergencySeconds: 32,
+  floodRecoveryWater: 72,
+  floodRecoveryLeak: 1.2,
+  regularFloodMultiplier: 0.74,
   beginnerBrakeDistance: 18,
   beginnerBrakeSpeed: 5.5,
 });
@@ -25,10 +26,10 @@ function clock(state) {
 function ensureV9State(state) {
   if (!state || typeof state !== "object") return state;
   state.damageControl ||= {};
-  if (!Number.isFinite(state.damageControl.graceUntil)) state.damageControl.graceUntil = -999;
-  if (!Number.isFinite(state.damageControl.firstLeakAt)) state.damageControl.firstLeakAt = -999;
-  if (typeof state.damageControl.warnedTwenty !== "boolean") state.damageControl.warnedTwenty = false;
-  if (typeof state.damageControl.warnedEight !== "boolean") state.damageControl.warnedEight = false;
+  if (typeof state.damageControl.floodEmergency !== "boolean") state.damageControl.floodEmergency = false;
+  if (!Number.isFinite(state.damageControl.floodEmergencyUntil)) state.damageControl.floodEmergencyUntil = -999;
+  if (typeof state.damageControl.warnedFifteen !== "boolean") state.damageControl.warnedFifteen = false;
+  if (typeof state.damageControl.warnedFive !== "boolean") state.damageControl.warnedFive = false;
 
   state.motion ||= {};
   if (typeof state.motion.moving !== "boolean") {
@@ -53,37 +54,92 @@ function nearestHazardAhead(state) {
     .sort((a, b) => a.distance - b.distance)[0] || null;
 }
 
-function startRepairWindow(state, events) {
-  const now = clock(state);
-  state.damageControl.firstLeakAt = state.damageControl.firstLeakAt < 0 ? now : state.damageControl.firstLeakAt;
-  state.damageControl.graceUntil = Math.max(state.damageControl.graceUntil, now + CONFIG.repairGraceSeconds);
-  state.damageControl.warnedTwenty = false;
-  state.damageControl.warnedEight = false;
-  state.message += ` Аварийный запас плавучести даёт ${CONFIG.repairGraceSeconds} секунд, чтобы остановиться, поставить пластину и включить насос.`;
-  events.push({type: "repair-window-start", seconds: CONFIG.repairGraceSeconds});
-}
-
-function slowFlooding(state, previousWater) {
-  if (state.boat.water <= previousWater || state.boat.pumpActive) return;
-  const now = clock(state);
-  const scale = now < state.damageControl.graceUntil
-    ? CONFIG.floodGraceMultiplier
-    : CONFIG.floodNormalMultiplier;
-  state.boat.water = previousWater + (state.boat.water - previousWater) * scale;
-}
-
-function restorePrematureFloodLoss(state, events) {
-  if (!state.lost || state.ending !== "flooded" || state.boat.water >= 100) return;
+function prepareFloodEmergencyTick(state, dt) {
+  if (!state.damageControl.floodEmergency) return;
   state.lost = false;
   state.won = false;
   state.ending = null;
   state.phase = "playing";
-  state.message = "Лодка ещё держится. Немедленно заделай пробоину и включи насос.";
-  events.splice(0, events.length, ...events.filter(event => event.type !== "lose"));
+  state.boat.engineStalled = true;
+  state.boat.throttle = 0;
+  state.boat.speed *= Math.exp(-3.2 * dt);
+  if (Math.abs(state.boat.speed) < 0.12) state.boat.speed = 0;
+  // Keep the legacy engine one fraction below its instant-loss threshold.
+  // The public view still reports the actual emergency water level.
+  if (state.boat.water >= 99.6) state.boat.water = 99.45;
+}
+
+function enterOrMaintainFloodEmergency(state, events) {
+  if (!state.lost || state.ending !== "flooded") return false;
+  const firstEntry = !state.damageControl.floodEmergency;
+  state.damageControl.floodEmergency = true;
+  if (firstEntry) {
+    state.damageControl.floodEmergencyUntil = clock(state) + CONFIG.floodEmergencySeconds;
+    state.damageControl.warnedFifteen = false;
+    state.damageControl.warnedFive = false;
+  }
+
+  state.lost = false;
+  state.won = false;
+  state.ending = null;
+  state.phase = "playing";
+  state.boat.water = 100;
+  state.boat.engineStalled = true;
+  state.boat.throttle = 0;
+  state.boat.speed = 0;
+  state.controls.forward = false;
+  state.controls.reverse = false;
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    if (events[index]?.type === "lose") events.splice(index, 1);
+  }
+
+  if (firstEntry) {
+    state.message = `Лодка полностью затоплена, но ещё держится. Есть ${CONFIG.floodEmergencySeconds} секунды: почти остановись, поставь ремонтную пластину и включи насос. Движение и мотор недоступны.`;
+    events.push({type: "flood-emergency-start", seconds: CONFIG.floodEmergencySeconds});
+  }
+  return true;
+}
+
+function slowRegularFlooding(state, previousWater) {
+  if (state.damageControl.floodEmergency || state.boat.pumpActive || state.boat.water <= previousWater) return;
+  state.boat.water = previousWater + (state.boat.water - previousWater) * CONFIG.regularFloodMultiplier;
+}
+
+function finishFloodEmergency(state, events) {
+  if (!state.damageControl.floodEmergency) return;
+  const recovered = state.boat.water <= CONFIG.floodRecoveryWater && state.boat.leak <= CONFIG.floodRecoveryLeak;
+  if (recovered) {
+    state.damageControl.floodEmergency = false;
+    state.damageControl.floodEmergencyUntil = -999;
+    state.message = "Лодка снова держится на плаву. Вода ниже аварийного уровня, пробоина закрыта. Мотор пока заглох — проверь его перед разгоном.";
+    events.push({type: "flood-emergency-recovered"});
+    return;
+  }
+
+  const remaining = state.damageControl.floodEmergencyUntil - clock(state);
+  if (remaining <= 0) {
+    state.damageControl.floodEmergency = false;
+    state.lost = true;
+    state.phase = "finished";
+    state.ending = "flooded";
+    state.message = "Аварийное время закончилось. Воду не успели откачать, лодка потеряна.";
+    events.push({type: "flood-emergency-failed"}, {type: "lose"});
+    return;
+  }
+
+  if (remaining <= 5 && !state.damageControl.warnedFive) {
+    state.damageControl.warnedFive = true;
+    state.message = "Пять секунд до потери лодки. Пластина и насос нужны немедленно.";
+    events.push({type: "flood-emergency-warning", seconds: 5, critical: true});
+  } else if (remaining <= 15 && !state.damageControl.warnedFifteen) {
+    state.damageControl.warnedFifteen = true;
+    state.message = "Пятнадцать секунд аварийного времени. Заделай пробоину и продолжай откачку.";
+    events.push({type: "flood-emergency-warning", seconds: 15, critical: false});
+  }
 }
 
 function applyBeginnerSafety(state, dt, events) {
-  if (!state.training.safetyEnabled || state.mode !== "solo" || state.phase !== "playing") return;
+  if (!state.training.safetyEnabled || state.mode !== "solo" || state.phase !== "playing" || state.damageControl.floodEmergency) return;
   const hazard = nearestHazardAhead(state);
   const speed = Math.abs(state.boat.speed);
   if (!hazard || hazard.distance > CONFIG.beginnerBrakeDistance || speed < CONFIG.beginnerBrakeSpeed) return;
@@ -121,20 +177,6 @@ function updateMotionState(state, events) {
   }
 }
 
-function updateRepairWindowWarnings(state, events) {
-  const remaining = state.damageControl.graceUntil - clock(state);
-  if (remaining <= 0) return;
-  if (remaining <= 8 && !state.damageControl.warnedEight) {
-    state.damageControl.warnedEight = true;
-    state.message = "Аварийный запас почти исчерпан: восемь секунд. Пластина и насос нужны сейчас.";
-    events.push({type: "repair-window-warning", seconds: 8, critical: true});
-  } else if (remaining <= 20 && !state.damageControl.warnedTwenty) {
-    state.damageControl.warnedTwenty = true;
-    state.message = "До окончания аварийного запаса двадцать секунд. Снизь ход, заделай пробоину и включи насос.";
-    events.push({type: "repair-window-warning", seconds: 20, critical: false});
-  }
-}
-
 export function createGame(options = {}) {
   const state = ensureV9State(base.createGame(options));
   state.world.current = {x: 0, y: 0};
@@ -168,7 +210,9 @@ export function command(state, action, actor = "captain") {
   const result = base.command(state, action, actor);
   if (action === "where" && result.ok) {
     const speed = Math.abs(state.boat.speed);
-    const movement = speed <= CONFIG.motionStopSpeed ? "Лодка стоит" : speed < 2 ? "Лодка медленно дрейфует по инерции" : "Лодка идёт";
+    const movement = state.damageControl.floodEmergency
+      ? "Лодка полностью затоплена и аварийно остановлена"
+      : speed <= CONFIG.motionStopSpeed ? "Лодка стоит" : speed < 2 ? "Лодка медленно дрейфует по инерции" : "Лодка идёт";
     state.message = `${movement}. ${state.message}`;
   }
   return result;
@@ -177,19 +221,16 @@ export function command(state, action, actor = "captain") {
 export function step(state, dt) {
   ensureV9State(state);
   const safeDt = clamp(Number(dt) || 0, 0, 0.25);
+  prepareFloodEmergencyTick(state, safeDt);
   const previousWater = Number(state.boat.water) || 0;
-  const previousLeak = Number(state.boat.leak) || 0;
   let events = base.step(state, safeDt) || [];
 
-  const newDamage = events.some(event => event.type === "collision") && state.boat.leak > previousLeak + 0.01;
-  if (newDamage) startRepairWindow(state, events);
-
-  slowFlooding(state, previousWater);
-  restorePrematureFloodLoss(state, events);
+  const converted = enterOrMaintainFloodEmergency(state, events);
+  if (!converted) slowRegularFlooding(state, previousWater);
   applyBeginnerSafety(state, safeDt, events);
   settleAtRest(state);
   updateMotionState(state, events);
-  updateRepairWindowWarnings(state, events);
+  finishFloodEmergency(state, events);
   return events;
 }
 
@@ -197,20 +238,27 @@ export function getView(state) {
   ensureV9State(state);
   const view = base.getView(state);
   const speed = Math.abs(state.boat.speed);
-  const remaining = Math.max(0, state.damageControl.graceUntil - clock(state));
-  const motionState = speed <= CONFIG.motionStopSpeed ? "стоит" : speed < 2 ? "дрейфует" : "идёт";
+  const remaining = state.damageControl.floodEmergency
+    ? Math.max(0, state.damageControl.floodEmergencyUntil - clock(state))
+    : 0;
+  const motionState = state.damageControl.floodEmergency
+    ? "аварийно остановлена"
+    : speed <= CONFIG.motionStopSpeed ? "стоит" : speed < 2 ? "дрейфует" : "идёт";
   return {
     ...view,
     training: {
       safetyEnabled: state.training.safetyEnabled,
     },
     damageControl: {
-      repairWindowRemaining: remaining,
-      repairWindowActive: remaining > 0,
+      floodEmergency: state.damageControl.floodEmergency,
+      floodEmergencyRemaining: remaining,
       waterIngressActive: state.boat.leak > 0.05 && !state.boat.pumpActive,
+      recoveryWaterTarget: CONFIG.floodRecoveryWater,
+      recoveryLeakTarget: CONFIG.floodRecoveryLeak,
     },
     boat: {
       ...view.boat,
+      water: state.damageControl.floodEmergency && state.boat.water > 99 ? 100 : view.boat.water,
       motionState,
       moving: state.motion.moving,
     },
