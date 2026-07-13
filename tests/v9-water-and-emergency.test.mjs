@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {createGame, startGame, setControl, command, step, getView, CONFIG} from "../public/src/game-core-v9.js";
+import {createGame, startGame, setControl, command, step, getView, CONFIG} from "../public/src/game-core-v9-1.js";
 
 function run(state, seconds, dt = 0.05) {
   const events = [];
@@ -88,7 +88,7 @@ test("movement state changes only when the boat actually gets underway", () => {
   assert.equal(getView(state).boat.moving, true);
 
   command(state, "anchor");
-  const stopEvents = run(state, 12);
+  const stopEvents = run(state, 2);
   assert.ok(stopEvents.some(event => event.type === "motion-stop"));
   assert.equal(getView(state).boat.motionState, "стоит");
 });
