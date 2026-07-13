@@ -150,6 +150,16 @@ function situationHint() {
     return "Лодка стабилизируется.";
   }
 
+  if (currentView.refuel?.active) return `Заправка ${Math.round(currentView.refuel.progress)}%. Не двигайся.`;
+  if (current.boat.fuel <= 0.01 && currentView.refuel?.canStart) {
+    return currentView.refuel.atHarbor
+      ? "Топливо кончилось. Заправься в гавани."
+      : "Топливо кончилось. Используй аварийную канистру.";
+  }
+  if (current.boat.fuel <= 18 && currentView.refuel?.canisters > 0) {
+    return `Топливо ${Math.round(current.boat.fuel)}%. Канистра даст ещё 30%.`;
+  }
+
   if (currentView.debris?.removing) return `Обломок: ${Math.round(currentView.debris.progress)}%. Не двигайся.`;
   if (currentView.debris?.count) {
     if (speed > 0.25) return "В корпусе обломок. Остановись.";
@@ -308,6 +318,8 @@ function statusText() {
   if (motorStopped) parts.unshift("Мотор остановлен.");
   else parts.splice(1, 0, `Курс ${Math.round((currentView.boat.heading + 360) % 360)}.`, `Течь ${currentView.boat.leak.toFixed(1)}.`);
   if (currentView.debris?.count) parts.push(`Обломков: ${currentView.debris.count}.`);
+  if (currentView.refuel?.active) parts.push(`Заправка ${Math.round(currentView.refuel.progress)} процентов.`);
+  else if (currentView.refuel) parts.push(`Канистр ${currentView.refuel.canisters}.`);
   if (currentView.hunter?.active) parts.push(`Преследователь ${Math.round(currentView.hunter.distance)} метров. Корпус ${Math.round(currentView.hunter.hull)}. ${currentView.hunter.modeLabel}.`);
   else if (currentView.hunter?.destroyed) parts.push("Преследователь выведен из строя.");
   if (current.timed) parts.push(`Время ${Math.ceil(currentView.remaining)} секунд.`);

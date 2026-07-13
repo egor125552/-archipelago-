@@ -292,6 +292,9 @@ function processDebrisRemoval(state, dt, events) {
 
 function processBreakableCollision(state, event, events) {
   if (event.type !== "collision") return;
+  // Shoreline contacts are emitted without physical impact fields by v7 and
+  // must never be mistaken for a nearby breakable wreck at the water's edge.
+  if (!Number.isFinite(event.impactSpeed) && !Number.isFinite(event.damage)) return;
   const hazard = event.hazardId
     ? state.world.hazards.find(item => item.id === event.hazardId)
     : state.world.hazards

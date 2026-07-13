@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#061a24">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <title>Эхо-Архипелаг — аудио-спасение</title>
-  <link rel="stylesheet" href="styles.css?v=20.0">
+  <link rel="stylesheet" href="styles.css?v=21.0">
 </head>
 <body data-accessibility="touch" data-role="captain">
   <a class="skip" href="#main">К игре</a>
@@ -134,6 +134,7 @@
         <button id="repairHullButton" aria-pressed="false">Заделать пробоину — пластин 3</button>
         <button id="debrisButton" aria-pressed="false" hidden>Извлечь обломок</button>
         <button id="repairButton">Обслужить двигатель</button>
+        <button id="refuelButton">Аварийная канистра — 1</button>
         <button id="anchorButton">Сбросить плавучий тормоз</button>
         <button id="decoyButton" hidden>Ложный буй — 2</button>
       </section>
@@ -162,17 +163,21 @@
         <summary>Уровни, жетоны и сильные столкновения</summary>
         <p>Операции 4–6 расширяют бухту. Металл можно таранить; бетон и рифы — нет. Застрявший металл сначала извлеки, затем ставь пластину. «Гром» несёт 30 пластин. Преследователь чаще атакует, но также кружит, патрулирует и отходит. Он получает урон от столкновений; быстрый таран «Громом» может его остановить.</p>
       </details>
+      <details class="panel help">
+        <summary>Топливо и берег</summary>
+        <p>Берег твёрдый: быстрый удар сильно повреждает корпус и отбрасывает лодку. На операцию выдаётся одна аварийная канистра с 30 процентами топлива. Для заправки полностью остановись. У Южной гавани бак можно бесплатно заполнить до 100 процентов. Если канистра пуста, а лодка заглохла далеко от гавани, операция завершится.</p>
+      </details>
       <section id="resultPanel" class="panel result" hidden><h2>Операция завершена</h2><p id="resultText"></p><p id="rewardText"></p><button id="restartButton" class="primary">Вернуться к карте операций</button></section>
     </section>
   </main>
   <script type="importmap">
-    {"imports":{"/src/game-core.js":"/src/game-core-v17.js?v=20.0","/src/audio-engine.js":"/src/audio-engine-v12.js?v=20.0"}}
+    {"imports":{"/src/game-core.js":"/src/game-core-v18.js?v=21.0","/src/audio-engine.js":"/src/audio-engine-v13.js?v=21.0"}}
   </script>
   <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js" defer></script>
-  <script type="module" src="src/app.js?v=20.0"></script>
-  <script type="module" src="src/room-ui-fix.js?v=20.0"></script>
-  <script type="module" src="src/gameplay-v6.js?v=20.0"></script>
-  <script type="module" src="src/gameplay-v8.js?v=20.0"></script>
-  <script type="module" src="src/gameplay-v9.js?v=20.0"></script>
+  <script type="module" src="src/app.js?v=21.0"></script>
+  <script type="module" src="src/room-ui-fix.js?v=21.0"></script>
+  <script type="module" src="src/gameplay-v6.js?v=21.0"></script>
+  <script type="module" src="src/gameplay-v8.js?v=21.0"></script>
+  <script type="module" src="src/gameplay-v9.js?v=21.0"></script>
 </body>
 </html>

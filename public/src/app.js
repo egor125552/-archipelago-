@@ -14,7 +14,7 @@ import {
   saveProfile,
   selectBoat,
   selectOperation,
-} from "./progression.js?v=20.0";
+} from "./progression.js?v=21.0";
 
 const $ = id => document.getElementById(id);
 const stateBox = {state: null};
@@ -412,6 +412,16 @@ function render(forceAnnouncement = false) {
       ? `Извлечение ${Math.round(view.debris.progress)}% — отменить`
       : `Извлечь обломок — ${view.debris?.count || 0}`);
   }
+  const refuelButton = $("refuelButton");
+  if (refuelButton && view.refuel) {
+    setAriaDisabled("refuelButton", crewLocked || (!view.refuel.canStart && !view.refuel.active));
+    refuelButton.setAttribute("aria-pressed", String(Boolean(view.refuel.active)));
+    setText("refuelButton", view.refuel.active
+      ? `Заправка ${Math.round(view.refuel.progress)}% — отменить`
+      : view.refuel.atHarbor
+        ? "Заправиться в гавани"
+        : `Аварийная канистра — ${view.refuel.canisters}`);
+  }
   setHidden("decoyButton", !view.hunter?.enabled || view.hunter?.destroyed);
   setAriaDisabled("decoyButton", crewLocked || !view.hunter?.decoyCharges || view.hunter?.destroyed);
   setText("decoyButton", `Ложный буй — ${view.hunter?.decoyCharges || 0}`);
@@ -439,7 +449,8 @@ function render(forceAnnouncement = false) {
   $("pumpButton").classList.toggle("active", view.boat.pumpActive);
   setHidden("engineWarning", !view.waterEngine?.locked && !view.boat.engineStalled && view.boat.engineTemp < 88);
   let engineText = "Мотор перегревается";
-  if (view.engineService?.active) engineText = "Мотор обслуживается";
+  if (view.refuel?.active) engineText = "Мотор остановлен — идёт заправка";
+  else if (view.engineService?.active) engineText = "Мотор обслуживается";
   else if (view.waterEngine?.locked) {
     if (view.waterEngine.canRestart) engineText = "Мотор готов к запуску";
     else if (view.damageControl?.floodEmergency) engineText = "Мотор остановлен — стабилизируй лодку";
@@ -482,6 +493,8 @@ function fullStatus() {
   if (motorStopped) parts.unshift("Мотор остановлен.");
   else parts.splice(1, 0, `Курс ${Math.round((view.boat.heading + 360) % 360)}.`);
   if (view.debris?.count) parts.push(`Обломков в корпусе: ${view.debris.count}.`);
+  if (view.refuel?.active) parts.push(`Заправка ${Math.round(view.refuel.progress)} процентов.`);
+  else if (view.refuel) parts.push(`Аварийных канистр: ${view.refuel.canisters}.`);
   if (view.hunter?.active) parts.push(`Преследователь ${Math.round(view.hunter.distance)} метров. Корпус ${Math.round(view.hunter.hull)}. ${view.hunter.modeLabel}.`);
   else if (view.hunter?.destroyed) parts.push("Преследователь выведен из строя.");
   if (view.timed) parts.push(`Время ${Math.ceil(view.remaining)} секунд.`);
@@ -598,6 +611,7 @@ $("routeModeButton").addEventListener("click", () => sendCommand("risk-route-tog
 $("quickAction").addEventListener("click", () => sendCommand("quick"));
 $("repairButton").addEventListener("click", () => sendCommand("repair"));
 $("debrisButton").addEventListener("click", () => sendCommand("debris-remove"));
+$("refuelButton").addEventListener("click", () => sendCommand("refuel"));
 $("decoyButton").addEventListener("click", () => sendCommand("hunter-decoy"));
 $("pumpAssistButton").addEventListener("click", () => sendCommand("pump-assist-toggle"));
 $("anchorButton").addEventListener("click", () => sendCommand("anchor"));
