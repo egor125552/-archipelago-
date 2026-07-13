@@ -117,8 +117,9 @@ test("the beacon does not abandon the safe north gate at an invisible Y threshol
 test("beginner safety brakes by obstacle edge and stopping distance", () => {
   const state = createGame({mode: "solo", timed: false});
   startGame(state);
-  state.boat.x = 0;
-  state.boat.y = 0;
+  const wreck = state.world.hazards.find(item => item.id === "wreck-gate");
+  state.boat.x = wreck.x;
+  state.boat.y = wreck.y - wreck.radius - CONFIG.collisionMargin - 10;
   state.boat.heading = 0;
   state.boat.speed = 12;
   setControl(state, "forward", true);

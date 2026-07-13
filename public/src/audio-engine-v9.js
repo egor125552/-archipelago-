@@ -171,6 +171,12 @@ export class AudioEngine extends V8AudioEngine {
       } else if (event.type === "docking-assist") {
         this.playSynthPip({frequency: 470, gain: 0.075, duration: 0.1});
         this.playSynthPip({frequency: 590, gain: 0.07, duration: 0.09, delay: 0.16});
+      } else if (event.type === "course-hold") {
+        this.playSynthPip({frequency: 840, gain: 0.075, duration: 0.08});
+        this.playSynthPip({frequency: 980, gain: 0.08, duration: 0.07, delay: 0.13});
+      } else if (event.type === "approach-assist") {
+        this.playSynthPip({frequency: 560, gain: 0.07, duration: 0.09});
+        this.playSynthPip({frequency: 690, gain: 0.07, duration: 0.08, delay: 0.14});
       } else {
         super.handle([event]);
       }

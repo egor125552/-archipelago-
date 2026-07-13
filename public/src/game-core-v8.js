@@ -4,7 +4,7 @@ import * as base from "./game-core-v7-1.js?base=1";
 
 export const CONFIG = Object.freeze({
   ...base.CONFIG,
-  navigationCenterTolerance: 7,
+  navigationCenterTolerance: 10,
   collisionMargin: 2.6,
   locationHazardRange: 46,
 });

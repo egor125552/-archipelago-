@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#061a24">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <title>Эхо-Архипелаг — аудио-спасение</title>
-  <link rel="stylesheet" href="styles.css?v=12.0">
+  <link rel="stylesheet" href="styles.css?v=13.0">
 </head>
 <body data-accessibility="touch" data-role="captain">
   <a class="skip" href="#main">К игре</a>
@@ -14,7 +14,7 @@
     <section id="startScreen" class="start-shell" aria-labelledby="title">
       <p class="eyebrow">кооперативная аудио-игра</p>
       <h1 id="title">Эхо-Архипелаг</h1>
-      <p>Операция проходит в конечной тихой речной бухте Северный Приют. Течения нет: без газа лодка стоит или очень медленно докатывается по инерции. Старт — Южная гавань, первый человек — Восточная бухта, второй — Северная заводь. Наушники обязательны для стереонавигации.</p>
+      <p>Операция проходит в дружелюбной открытой части речной бухты Северный Приют. Течения нет, а основные линии между Южной гаванью и людьми полностью свободны. Рифы и обломки оставлены только у дальних берегов. Наушники обязательны для стереонавигации.</p>
 
       <fieldset class="panel mode-picker">
         <legend>Управление</legend>
@@ -102,7 +102,7 @@
       </details>
       <details class="panel help">
         <summary>Как спасти первого человека</summary>
-        <p>Старт: Южная гавань, нос лодки смотрит на север. Нажми сонар один раз. Маршрут разбит на безопасные контрольные точки. Высокий двойной писк показывает текущий курс, а перед каждым переключением направления игра обязательно произнесёт новую точку. Когда до человека не больше 14 метров и скорость не выше 4 узлов, маяк замолчит. Один раз нажми «Подать спасательный трос»: лодка остановится и будет удерживаться на месте до сообщения «Человек на борту».</p>
+        <p>Старт: Южная гавань, нос лодки смотрит на север. Нажми сонар один раз: маяк всегда указывает прямо на самого человека. Повернись до двойного центрального сигнала и дай газ. После сообщения «Прямой курс захвачен» отпусти руль — лодка будет сама устранять микроскопическое отклонение. За 22 метра газ снимется автоматически. В зоне 14 метров маяк замолчит; один раз нажми трос и дождись сообщения «Человек на борту».</p>
       </details>
       <details class="panel help">
         <summary>Вода, пробоина и полное затопление</summary>
@@ -110,19 +110,19 @@
       </details>
       <details class="panel help">
         <summary>Как устроена бухта и сонар</summary>
-        <p>Расстояние, которое говорит сонар, — снимок на момент нажатия. Повторно нажимать его не нужно: стереомаяк непрерывно ведёт только к текущей контрольной точке. Он не переключится по невидимой координате — сначала прозвучит сообщение «Контрольная точка пройдена». Во время работы троса маяк молчит. На финальном подходе швартовочный помощник ограничит скорость, а прямой створ приведёт в расширенную зону Южной гавани.</p>
+        <p>Сонар закрепляет следующего человека, а после двух спасений — центр Южной гавани. Промежуточных точек и скрытых переключений больше нет. Двойной центральный сигнал захватывает прямой курс: при отпущенном руле игра автоматически держит цель точно впереди. Основные прямые коридоры очищены от препятствий. У человека лодка сама замедлится до зоны троса, а у гавани — до безопасной швартовочной скорости.</p>
       </details>
       <section id="resultPanel" class="panel result" hidden><h2>Операция завершена</h2><p id="resultText"></p><button id="restartButton" class="primary">Начать новую операцию</button></section>
     </section>
   </main>
   <script type="importmap">
-    {"imports":{"/src/game-core.js":"/src/game-core-v10.js?v=12.0","/src/audio-engine.js":"/src/audio-engine-v9.js?v=12.0"}}
+    {"imports":{"/src/game-core.js":"/src/game-core-v11.js?v=13.0","/src/audio-engine.js":"/src/audio-engine-v9.js?v=13.0"}}
   </script>
   <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js" defer></script>
-  <script type="module" src="src/app.js?v=12.0"></script>
-  <script type="module" src="src/room-ui-fix.js?v=12.0"></script>
-  <script type="module" src="src/gameplay-v6.js?v=12.0"></script>
-  <script type="module" src="src/gameplay-v8.js?v=12.0"></script>
-  <script type="module" src="src/gameplay-v9.js?v=12.0"></script>
+  <script type="module" src="src/app.js?v=13.0"></script>
+  <script type="module" src="src/room-ui-fix.js?v=13.0"></script>
+  <script type="module" src="src/gameplay-v6.js?v=13.0"></script>
+  <script type="module" src="src/gameplay-v8.js?v=13.0"></script>
+  <script type="module" src="src/gameplay-v9.js?v=13.0"></script>
 </body>
 </html>

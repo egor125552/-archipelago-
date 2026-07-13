@@ -25,8 +25,9 @@ test("safe direct course to the first survivor is not interrupted by a side-obst
 test("an obstacle directly ahead still produces a warning", () => {
   const state = createGame({mode: "solo", timed: false});
   startGame(state);
-  state.boat.x = 0;
-  state.boat.y = 5;
+  const wreck = state.world.hazards.find(item => item.id === "wreck-gate");
+  state.boat.x = wreck.x;
+  state.boat.y = wreck.y - wreck.radius - 10;
   state.boat.heading = 0;
   state.boat.speed = 1;
   const events = step(state, 0.05);
