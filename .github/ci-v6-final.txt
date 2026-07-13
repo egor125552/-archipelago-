@@ -1,0 +1,1 @@
+Run the complete v6 suite after isolating open-water coasting from reef collisions.
