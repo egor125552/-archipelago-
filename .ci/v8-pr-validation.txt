@@ -1,0 +1,1 @@
+validate finite bay, solid obstacles, stereo beacon, and first rescue route
