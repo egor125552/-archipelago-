@@ -13,6 +13,7 @@ export const CONFIG = Object.freeze({
   regularFloodMultiplier: 0.74,
   beginnerBrakeDistance: 18,
   beginnerBrakeSpeed: 5.5,
+  beginnerHardStopDistance: 5,
 });
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -31,6 +32,7 @@ function ensureV9State(state) {
   if (!Number.isFinite(state.damageControl.floodEmergencyUntil)) state.damageControl.floodEmergencyUntil = -999;
   if (typeof state.damageControl.warnedFifteen !== "boolean") state.damageControl.warnedFifteen = false;
   if (typeof state.damageControl.warnedFive !== "boolean") state.damageControl.warnedFive = false;
+  if (!["flooded", "wrecked"].includes(state.damageControl.emergencyCause)) state.damageControl.emergencyCause = null;
 
   state.motion ||= {};
   if (typeof state.motion.moving !== "boolean") {
@@ -93,10 +95,12 @@ function prepareFloodEmergencyTick(state, dt) {
 }
 
 function enterOrMaintainFloodEmergency(state, events) {
-  if (!state.lost || state.ending !== "flooded") return false;
+  if (!state.lost || !["flooded", "wrecked"].includes(state.ending)) return false;
+  const cause = state.ending;
   const firstEntry = !state.damageControl.floodEmergency;
   state.damageControl.floodEmergency = true;
   if (firstEntry) {
+    state.damageControl.emergencyCause = cause;
     state.damageControl.floodEmergencyUntil = clock(state) + CONFIG.floodEmergencySeconds;
     state.damageControl.warnedFifteen = false;
     state.damageControl.warnedFive = false;
@@ -106,7 +110,7 @@ function enterOrMaintainFloodEmergency(state, events) {
   state.won = false;
   state.ending = null;
   state.phase = "playing";
-  state.boat.water = 100;
+  if (cause === "flooded") state.boat.water = 100;
   if (state.boat.hull <= 0) state.boat.hull = 0.05;
   state.boat.engineStalled = true;
   state.boat.throttle = 0;
@@ -118,8 +122,10 @@ function enterOrMaintainFloodEmergency(state, events) {
   }
 
   if (firstEntry) {
-    state.message = `Лодка полностью затоплена, но ещё держится. Есть ${CONFIG.floodEmergencySeconds} секунды: почти остановись, поставь ремонтную пластину и включи насос. Движение и мотор недоступны.`;
-    events.push({type: "flood-emergency-start", seconds: CONFIG.floodEmergencySeconds});
+    state.message = cause === "flooded"
+      ? `Лодка полностью затоплена, но ещё держится. Есть ${CONFIG.floodEmergencySeconds} секунды: поставь ремонтную пластину и включи насос. Движение и мотор недоступны.`
+      : `Корпус получил критические повреждения, но лодка ещё держится. Есть ${CONFIG.floodEmergencySeconds} секунды: поставь ремонтную пластину и включи насос. Движение и мотор недоступны.`;
+    events.push({type: "flood-emergency-start", seconds: CONFIG.floodEmergencySeconds, cause});
   }
   return true;
 }
@@ -137,6 +143,7 @@ function finishFloodEmergency(state, events) {
   if (recovered) {
     state.damageControl.floodEmergency = false;
     state.damageControl.floodEmergencyUntil = -999;
+    state.damageControl.emergencyCause = null;
     state.boat.repairProgress = 0;
     state.message = "Лодка снова держится на плаву. Вода ниже аварийного уровня, пробоина закрыта. Теперь нажимай Проверить двигатель, пока мотор не запустится.";
     events.push({type: "flood-emergency-recovered"});
@@ -145,12 +152,16 @@ function finishFloodEmergency(state, events) {
 
   const remaining = state.damageControl.floodEmergencyUntil - clock(state);
   if (remaining <= 0) {
+    const cause = state.damageControl.emergencyCause || "flooded";
     state.damageControl.floodEmergency = false;
+    state.damageControl.emergencyCause = null;
     state.lost = true;
     state.phase = "finished";
-    state.ending = "flooded";
-    state.message = "Аварийное время закончилось. Воду не успели откачать, лодка потеряна.";
-    events.push({type: "flood-emergency-failed"}, {type: "lose"});
+    state.ending = cause;
+    state.message = cause === "wrecked"
+      ? "Аварийное время закончилось. Корпус не успели укрепить, лодка потеряна."
+      : "Аварийное время закончилось. Воду не успели откачать, лодка потеряна.";
+    events.push({type: "flood-emergency-failed", cause}, {type: "lose"});
     return;
   }
 
@@ -168,18 +179,31 @@ function finishFloodEmergency(state, events) {
 function applyBeginnerSafety(state, dt, events) {
   if (!state.training.safetyEnabled || state.mode !== "solo" || state.phase !== "playing" || state.damageControl.floodEmergency) return;
   const hazard = nearestHazardAhead(state);
-  const speed = Math.abs(state.boat.speed);
+  const speed = Math.max(0, state.boat.speed);
   const stoppingDistance = Math.max(
     CONFIG.beginnerBrakeDistance,
     speed * 1.1 + speed * speed / 15,
   );
-  if (!hazard || hazard.clearance > stoppingDistance || speed < CONFIG.beginnerBrakeSpeed) return;
+  if (!hazard) return;
+
+  const now = clock(state);
+  if (hazard.clearance <= CONFIG.beginnerHardStopDistance && (speed > 0.08 || state.controls.forward || state.boat.throttle > 0.05)) {
+    state.controls.forward = false;
+    state.boat.throttle = 0;
+    state.boat.speed = 0;
+    if (now - state.training.lastBrakeAt > 1.2) {
+      state.training.lastBrakeAt = now;
+      state.message = `Учебная страховка остановила лодку перед препятствием: ${hazard.hazard.label || "опасный объект"}. Отверни в сторону и снова нажми газ.`;
+      events.push({type: "safety-brake", pan: hazard.relative < 0 ? -0.65 : 0.65, stopped: true});
+    }
+    return;
+  }
+  if (hazard.clearance > stoppingDistance || speed < CONFIG.beginnerBrakeSpeed) return;
 
   const urgency = clamp((stoppingDistance - hazard.clearance) / stoppingDistance, 0.15, 1);
   state.boat.throttle = Math.min(state.boat.throttle, 0.18);
   state.boat.speed *= Math.exp(-(0.75 + urgency * 1.35) * dt);
 
-  const now = clock(state);
   if (now - state.training.lastBrakeAt > 5.5) {
     state.training.lastBrakeAt = now;
     state.message = `Учебная страховка сбросила газ: до края препятствия ${hazard.hazard.label || "препятствие"} около ${Math.round(hazard.clearance)} метров. Обойди его рулём.`;
@@ -262,12 +286,13 @@ export function step(state, dt) {
   ensureV9State(state);
   const safeDt = clamp(Number(dt) || 0, 0, 0.25);
   prepareFloodEmergencyTick(state, safeDt);
+  const safetyEvents = [];
+  applyBeginnerSafety(state, safeDt, safetyEvents);
   const previousWater = Number(state.boat.water) || 0;
-  let events = base.step(state, safeDt) || [];
+  let events = [...safetyEvents, ...(base.step(state, safeDt) || [])];
 
   const converted = enterOrMaintainFloodEmergency(state, events);
   if (!converted) slowRegularFlooding(state, previousWater);
-  applyBeginnerSafety(state, safeDt, events);
   settleAtRest(state);
   updateMotionState(state, events);
   finishFloodEmergency(state, events);
@@ -292,6 +317,7 @@ export function getView(state) {
     damageControl: {
       floodEmergency: state.damageControl.floodEmergency,
       floodEmergencyRemaining: remaining,
+      emergencyCause: state.damageControl.emergencyCause,
       waterIngressActive: state.boat.leak > 0.05 && !state.boat.pumpActive,
       recoveryWaterTarget: CONFIG.floodRecoveryWater,
       recoveryLeakTarget: CONFIG.floodRecoveryLeak,

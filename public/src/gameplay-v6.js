@@ -16,6 +16,7 @@ const toggled = new Map();
 let timedMode = false;
 let lastCourseAnnouncement = 0;
 let lastTouchToggleAt = 0;
+let readerBrakeTimer = null;
 
 function gameApi() { return window.__echoArchipelago; }
 function state() { return gameApi()?.getState?.() || null; }
@@ -174,7 +175,19 @@ function bindReliableControl(button, control) {
   }, true);
   button.addEventListener("pointerup", release, true);
   button.addEventListener("pointercancel", release, true);
+  button.addEventListener("pointerleave", release, true);
+  button.addEventListener("lostpointercapture", release, true);
+  window.addEventListener("pointerup", event => {
+    if (pointerId === event.pointerId) release(event);
+  }, true);
+  window.addEventListener("pointercancel", event => {
+    if (pointerId === event.pointerId) release(event);
+  }, true);
   window.addEventListener("blur", () => release(), {passive: true});
+  window.addEventListener("pagehide", () => release(), {passive: true});
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) release();
+  }, {passive: true});
 
   button.addEventListener("click", event => {
     if (!readerMode() && performance.now() - lastTouchToggleAt < 500) {
@@ -191,6 +204,22 @@ function bindReliableControl(button, control) {
 
     if (!pulseControls.has(control) || !gameApi()?.control?.(control, true)) return;
     setHeld(button, true);
+    if (control === "reverse") {
+      if (readerBrakeTimer != null) clearInterval(readerBrakeTimer);
+      const startedAt = performance.now();
+      readerBrakeTimer = setInterval(() => {
+        const current = state();
+        const stopped = !current || current.phase !== "playing" || Number(current.boat?.speed) <= 0.25;
+        const timedOut = performance.now() - startedAt >= 2400;
+        if (!stopped && !timedOut) return;
+        clearInterval(readerBrakeTimer);
+        readerBrakeTimer = null;
+        gameApi()?.control?.(control, false);
+        setHeld(button, false);
+        if (current?.phase === "playing") say("Лодка остановлена обычным тормозом.");
+      }, 60);
+      return;
+    }
     const duration = control === "left" || control === "right" ? 1150 : control === "forward" ? 900 : 720;
     setTimeout(() => {
       gameApi()?.control?.(control, false);

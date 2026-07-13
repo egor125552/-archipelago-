@@ -4,7 +4,7 @@ import * as base from "./game-core-v6.js?base=1";
 
 export const CONFIG = Object.freeze({
   ...base.CONFIG,
-  navigationCenterTolerance: 16,
+  navigationCenterTolerance: 7,
   bayHalfWidth: 62,
   baySouth: -8,
   bayNorth: 155,
@@ -19,12 +19,14 @@ const PASSIVE_EVENTS = new Set(["navigation-cue", "turn", "turn-complete", "turn
 
 function createBayWorld() {
   return {
-    version: 7,
+    version: 11,
     seed: 7,
     name: "Бухта Северный Приют",
     bounds: {minX: -CONFIG.bayHalfWidth, maxX: CONFIG.bayHalfWidth, minY: CONFIG.baySouth, maxY: CONFIG.bayNorth},
     hazards: [
-      {id: "wreck-gate", type: "wreck", label: "обломки баржи", x: 0, y: 32, radius: 9.5, damage: 14},
+      // Keep the wreck as a real hazard, but leave the entire centred beacon
+      // corridor to the first survivor clear instead of only its exact ray.
+      {id: "wreck-gate", type: "wreck", label: "обломки баржи", x: -6, y: 32, radius: 9.5, damage: 14},
       {id: "east-reef", type: "reef", label: "восточный риф", x: 46, y: 84, radius: 11, damage: 17},
       {id: "middle-ridge", type: "reef", label: "каменная гряда", x: -5, y: 92, radius: 13, damage: 18},
       {id: "north-wreck", type: "wreck", label: "затонувший катер", x: -42, y: 126, radius: 8, damage: 14},
@@ -44,7 +46,7 @@ function objectiveLabel(target) {
 }
 
 function ensureBayWorld(state) {
-  if (!state.world || state.world.version !== 7) {
+  if (!state.world || state.world.version !== 11) {
     const previous = state.world;
     const world = createBayWorld();
     for (const survivor of world.survivors) {

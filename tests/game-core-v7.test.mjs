@@ -61,7 +61,7 @@ test("v7 uses a finite named bay with no hidden current", () => {
   assert.equal(state.world.bounds.maxY, 155);
 });
 
-test("sonar speaks once and the guide has a forgiving center deadzone", () => {
+test("sonar speaks once and the guide center stays inside the safe corridor", () => {
   const state = createGame({mode: "solo", timed: false});
   startGame(state);
   const result = command(state, "sonar");
@@ -69,11 +69,11 @@ test("sonar speaks once and the guide has a forgiving center deadzone", () => {
   assert.match(state.message, /первый человек/i);
   assert.match(state.message, /57|58/);
   const target = state.world.survivors[0];
-  state.boat.heading = bearing(state.boat, target) - 12;
+  state.boat.heading = bearing(state.boat, target) - 5;
   let view = getView(state);
   assert.equal(view.navigation.guideCentered, true);
   assert.equal(view.navigation.guidePan, 0);
-  state.boat.heading -= 20;
+  state.boat.heading -= 10;
   view = getView(state);
   assert.equal(view.navigation.guideCentered, false);
   assert.ok(view.navigation.guidePan > 0);

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {stat} from "node:fs/promises";
+import {readFile} from "node:fs/promises";
 
 import {
   CONFIG,
@@ -129,6 +130,62 @@ test("beginner safety brakes by obstacle edge and stopping distance", () => {
   assert.ok(state.boat.speed < 12);
 });
 
+test("every centred first-survivor course clears the relocated wreck", () => {
+  const state = createGame({mode: "solo", timed: false});
+  startGame(state);
+  command(state, "sonar");
+  const target = state.world.survivors[0];
+  state.boat.heading = bearing(state.boat, target) - CONFIG.navigationCenterTolerance + 0.1;
+  assert.equal(getView(state).navigation.beaconCentered, true);
+
+  setControl(state, "forward", true);
+  const events = run(state, 10);
+  setControl(state, "forward", false);
+
+  assert.equal(events.some(event => event.type === "collision"), false);
+  assert.equal(state.phase, "playing");
+});
+
+test("a held throttle cannot push through wreck geometry or repeat impacts", () => {
+  const state = createGame({mode: "solo", timed: false});
+  startGame(state);
+  state.training.safetyEnabled = false;
+  const wreck = state.world.hazards.find(item => item.id === "wreck-gate");
+  const southEdge = wreck.y - wreck.radius - CONFIG.collisionMargin;
+  state.boat.x = wreck.x;
+  state.boat.y = southEdge - 2;
+  state.boat.heading = 0;
+  state.boat.speed = 8;
+  setControl(state, "forward", true);
+
+  const events = run(state, 60);
+
+  assert.equal(events.filter(event => event.type === "collision").length, 1);
+  assert.ok(state.boat.y < wreck.y, `boat crossed wreck: y=${state.boat.y}`);
+  assert.ok(distance(state.boat, wreck) >= wreck.radius + CONFIG.collisionMargin - 0.1);
+  assert.equal(state.controls.forward, false);
+  assert.equal(state.boat.speed, 0);
+  assert.equal(state.phase, "playing");
+});
+
+test("beginner safety hard-stops a slow held throttle before contact", () => {
+  const state = createGame({mode: "solo", timed: false});
+  startGame(state);
+  const wreck = state.world.hazards.find(item => item.id === "wreck-gate");
+  state.boat.x = wreck.x;
+  state.boat.y = wreck.y - wreck.radius - CONFIG.collisionMargin - 4;
+  state.boat.heading = 0;
+  state.boat.speed = 2;
+  setControl(state, "forward", true);
+
+  const events = step(state, 0.05);
+
+  assert.ok(events.some(event => event.type === "safety-brake" && event.stopped));
+  assert.equal(events.some(event => event.type === "collision"), false);
+  assert.equal(state.controls.forward, false);
+  assert.equal(state.boat.speed, 0);
+});
+
 test("complete stable mission works with ordinary controls and no collision", () => {
   const state = createGame({mode: "solo", timed: false});
   startGame(state);
@@ -184,6 +241,33 @@ test("a simultaneously flooded and broken hull keeps the emergency repair window
   assert.ok(state.boat.hull > 0);
   assert.equal(getView(state).damageControl.floodEmergency, false);
   assert.ok(events.some(event => event.type === "flood-emergency-recovered"));
+});
+
+test("zero hull starts the same repair window instead of showing the score", () => {
+  const state = createGame({mode: "solo", timed: false});
+  startGame(state);
+  state.boat.hull = 0;
+  state.boat.water = 36;
+  state.boat.leak = 3;
+
+  const events = step(state, 0.05);
+  const view = getView(state);
+
+  assert.equal(state.phase, "playing");
+  assert.equal(state.lost, false);
+  assert.equal(view.damageControl.floodEmergency, true);
+  assert.equal(view.damageControl.emergencyCause, "wrecked");
+  assert.ok(view.damageControl.floodEmergencyRemaining > CONFIG.floodEmergencySeconds - 1);
+  assert.ok(events.some(event => event.type === "flood-emergency-start"));
+  assert.equal(events.some(event => event.type === "lose"), false);
+});
+
+test("mobile controls release lost pointers and reader brake stops adaptively", async () => {
+  const source = await readFile(new URL("../public/src/gameplay-v6.js", import.meta.url), "utf8");
+  assert.match(source, /lostpointercapture/);
+  assert.match(source, /window\.addEventListener\("pointerup"/);
+  assert.match(source, /Number\(current\.boat\?\.speed\) <= 0\.25/);
+  assert.match(source, /Лодка остановлена обычным тормозом/);
 });
 
 test("engine repair waits until flooding is controlled and then starts the boat", () => {

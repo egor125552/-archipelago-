@@ -40,7 +40,8 @@ function syncV9() {
   setHidden("floodEmergencyStatus", !emergency);
   if (emergency) {
     const seconds = Math.max(0, Math.ceil(view.damageControl.floodEmergencyRemaining || 0));
-    setText("floodEmergencyStatus", `Полное затопление. До потери лодки ${seconds} секунд. Поставь ремонтную пластину и включи насос.`);
+    const cause = view.damageControl.emergencyCause === "wrecked" ? "Критическое повреждение корпуса" : "Полное затопление";
+    setText("floodEmergencyStatus", `${cause}. До потери лодки ${seconds} секунд. Поставь ремонтную пластину и включи насос.`);
   }
 }
 

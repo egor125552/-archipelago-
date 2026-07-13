@@ -4,7 +4,7 @@ import * as base from "./game-core-v7-1.js?base=1";
 
 export const CONFIG = Object.freeze({
   ...base.CONFIG,
-  navigationCenterTolerance: 18,
+  navigationCenterTolerance: 7,
   collisionMargin: 2.6,
   locationHazardRange: 46,
 });
@@ -173,9 +173,14 @@ function keepObstacleSolid(state, previous, previousSpeed, collisionTimes, event
       events.push({type: "collision", severity, pan: bearingTo(state, hazard).pan, hazardId: hazard.id});
     }
 
-    state.boat.speed = -Math.sign(previousSpeed || 1) * Math.max(0.7, Math.abs(previousSpeed) * 0.22);
+    // A held mobile control must not keep feeding the engine into the same
+    // contact until numerical correction eventually appears to cross it.
+    // Stop at the near face and require a fresh steering/throttle gesture.
+    state.controls.forward = false;
+    state.controls.reverse = false;
+    state.boat.speed = 0;
     state.boat.throttle = 0;
-    state.message = `Удар о ${hazard.label || (hazard.type === "reef" ? "риф" : "обломки")}. Препятствие твёрдое: лодка оттолкнулась и осталась с этой стороны.`;
+    state.message = `Удар о ${hazard.label || (hazard.type === "reef" ? "риф" : "обломки")}. Лодка остановлена с этой стороны препятствия. Отверни и снова дай газ.`;
   }
 }
 
