@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#061a24">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <title>Эхо-Архипелаг — аудио-спасение</title>
-  <link rel="stylesheet" href="styles.css?v=7">
+  <link rel="stylesheet" href="styles.css?v=8">
 </head>
 <body data-accessibility="touch" data-role="captain">
   <a class="skip" href="#main">К игре</a>
@@ -14,7 +14,7 @@
     <section id="startScreen" class="start-shell" aria-labelledby="title">
       <p class="eyebrow">кооперативная аудио-игра</p>
       <h1 id="title">Эхо-Архипелаг</h1>
-      <p>Спаси двух людей в конечной бухте Северный Приют и верни лодку в Южную гавань. По умолчанию времени сколько угодно. Наушники обязательны для стереонавигации.</p>
+      <p>Операция проходит не в бесконечном поле, а в конечной бухте Северный Приют. Старт — в Южной гавани, первый человек — в Восточной бухте, второй — в Северной заводи. Берега и препятствия физические. Наушники обязательны для стереонавигации.</p>
 
       <fieldset class="panel mode-picker">
         <legend>Управление</legend>
@@ -57,7 +57,9 @@
         <div><p class="eyebrow"><span id="roleLabel">Капитан</span></p><h1 id="gameTitle" tabindex="-1">Эхо-Архипелаг</h1></div>
         <div class="game-header-actions">
           <button id="actionHintButton" class="small">Что делать сейчас?</button>
-          <button id="assistButton" class="small" aria-pressed="true">Навигационный помощник: включён</button>
+          <button id="locationButton" class="small">Где я?</button>
+          <button id="firstRescueButton" class="small">Как спасти первого?</button>
+          <button id="assistButton" class="small" aria-pressed="true">Стереомаяк: включён</button>
           <button id="statusButton" class="small">Озвучить статус</button>
           <button id="speechButton" class="small" aria-pressed="true">Игровая озвучка: включена</button>
           <button id="soundButton" class="small">Звук: включён</button>
@@ -75,7 +77,7 @@
       </section>
 
       <section class="control-deck" aria-label="Постоянная раскладка управления">
-        <button id="sonarButton" class="control sonar" aria-label="Сонар. Один раз озвучивает и закрепляет следующую цель; после этого безопасный курс показывает стереописк">СОНАР: ЗАКРЕПИТЬ ЦЕЛЬ</button>
+        <button id="sonarButton" class="control sonar" aria-label="Сонар. Один раз озвучивает расстояние и закрепляет следующую цель; дальше направление показывает только высокий стереописк">СОНАР: ЗАКРЕПИТЬ ЦЕЛЬ</button>
         <button id="leftButton" class="control left" aria-label="Поворот влево. Для поворота лодка должна хотя бы медленно двигаться">◀ ЛЕВО</button>
         <button id="throttleButton" class="control throttle" aria-label="Газ вперёд. После отпускания лодка продолжит идти по инерции">ГАЗ ▲</button>
         <button id="rightButton" class="control right" aria-label="Поворот вправо. Для поворота лодка должна хотя бы медленно двигаться">ПРАВО ▶</button>
@@ -92,21 +94,26 @@
       </section>
       <details class="panel help" open>
         <summary>Как спасти первого человека</summary>
-        <p>Нажми сонар один раз. Он скажет: первый человек справа, примерно 57 метров. Коротко дай газ, чтобы лодка получила ход, и удерживай поворот вправо. Один писк звучит со стороны безопасного курса. Когда услышишь двойной писк точно по центру, отпусти руль и двигайся вперёд. Если писк ушёл влево или вправо, коротко доверни в ту же сторону. Примерно за двадцать метров отпусти газ и тормози. Когда человек ближе двенадцати метров, а скорость ниже четырёх узлов, один раз нажми «Подать спасательный трос» и жди сто процентов. Направление носа не обязано быть идеальным: отклонение примерно до пятнадцати градусов считается центром, а трос проверяет расстояние и скорость.</p>
+        <p>Старт: Южная гавань, нос лодки смотрит на север. Нажми сонар один раз. Он скажет, что первый человек справа примерно в 57 метрах. Коротко дай газ и удерживай правый поворот. Высокий писк перемещается вместе с поворотом лодки. Когда он станет двойным и окажется точно по центру, отпусти руль: курс считается правильным с допуском примерно 18 градусов. Двигайся вперёд. Низкий редкий писк означает препятствие, высокий — цель. Примерно за 20 метров отпусти газ и тормози. Когда человек ближе 12 метров и скорость ниже 4 узлов, один раз нажми «Подать спасательный трос» и не нажимай повторно до 100 процентов.</p>
       </details>
       <details class="panel help">
-        <summary>Карта, препятствия и ремонт</summary>
-        <p>Бухта конечная: Южная гавань находится у старта, первый человек — в Восточной бухте, второй — в Северной заводи. Берег твёрдый по краям карты. Обломки и рифы больше нельзя пройти насквозь: после удара лодку выталкивает наружу. Низкий редкий писк отмечает ближайшее препятствие; высокий стереописк ведёт к цели или по безопасному проходу. Насос, трос и ремонт включаются одним нажатием и выключаются повторным.</p>
+        <summary>Как устроена бухта и сонар</summary>
+        <p>Расстояние, которое говорит сонар, — снимок на момент нажатия. Если было 58 метров, а после движения стало 48, это означает, что лодка приблизилась на 10 метров. Повторно нажимать сонар для постоянной навигации не нужно: стереомаяк пересчитывается непрерывно. Двойной высокий писк по центру означает правильный курс. Бухта ограничена берегами. Обломки и рифы твёрдые: после удара лодка остаётся с той же стороны препятствия и не может пройти сквозь него. Кнопка «Где я?» сообщает часть бухты, цель, ближайший берег и препятствие.</p>
+      </details>
+      <details class="panel help">
+        <summary>Ремонт и вода</summary>
+        <p>Насос, трос и ремонт корпуса включаются одним нажатием и выключаются повторным. Для ремонта почти останови лодку и нажми «Заделать пробоину». После установки пластины включи насос: пластина уменьшает течь, но уже попавшая вода сама не исчезает.</p>
       </details>
       <section id="resultPanel" class="panel result" hidden><h2>Операция завершена</h2><p id="resultText"></p><button id="restartButton" class="primary">Начать новую операцию</button></section>
     </section>
   </main>
   <script type="importmap">
-    {"imports":{"/src/game-core.js":"/src/game-core-v7.js?v=7","/src/audio-engine.js":"/src/audio-engine-v7.js?v=7"}}
+    {"imports":{"/src/game-core.js":"/src/game-core-v8.js?v=8","/src/audio-engine.js":"/src/audio-engine-v8.js?v=8"}}
   </script>
   <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js" defer></script>
-  <script type="module" src="src/app.js?v=7"></script>
-  <script type="module" src="src/room-ui-fix.js?v=7"></script>
-  <script type="module" src="src/gameplay-v6.js?v=7"></script>
+  <script type="module" src="src/app.js?v=8"></script>
+  <script type="module" src="src/room-ui-fix.js?v=8"></script>
+  <script type="module" src="src/gameplay-v6.js?v=8"></script>
+  <script type="module" src="src/gameplay-v8.js?v=8"></script>
 </body>
 </html>
