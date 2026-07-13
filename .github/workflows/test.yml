@@ -17,4 +17,17 @@ jobs:
         with:
           node-version: 22
       - run: npm install
-      - run: npm test
+      - name: Run tests
+        run: |
+          set +e
+          npm test > test-output.txt 2>&1
+          code=$?
+          cat test-output.txt
+          exit $code
+      - name: Upload test output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-output
+          path: test-output.txt
+          if-no-files-found: error
