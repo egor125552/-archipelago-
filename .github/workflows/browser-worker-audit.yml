@@ -1,0 +1,217 @@
+name: Browser Worker Audit
+
+on:
+  push:
+    branches:
+      - browser-worker-audit-2026-07-14
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Playwright
+        run: |
+          npm install --no-save playwright@1.52.0
+          npx playwright install --with-deps chromium
+      - name: Test deployed Worker in Chromium
+        run: |
+          node --input-type=module <<'NODE'
+          import { chromium } from 'playwright';
+
+          const WORKER = 'https://archipelago.k69ysrndm7.workers.dev/';
+          const failures = [];
+          const notes = [];
+          const check = (condition, message, details = '') => {
+            if (!condition) failures.push(`${message}${details ? `: ${details}` : ''}`);
+            else console.log(`PASS: ${message}${details ? ` — ${details}` : ''}`);
+          };
+
+          const browser = await chromium.launch({headless: true});
+          const context = await browser.newContext({
+            viewport: {width: 390, height: 844},
+            isMobile: true,
+            hasTouch: true,
+            locale: 'ru-RU',
+          });
+          const page = await context.newPage();
+          const pageErrors = [];
+          const consoleErrors = [];
+          const requestFailures = [];
+          page.on('pageerror', error => pageErrors.push(String(error)));
+          page.on('console', message => {
+            if (message.type() === 'error') consoleErrors.push(message.text());
+          });
+          page.on('requestfailed', request => requestFailures.push(`${request.url()} :: ${request.failure()?.errorText || 'failed'}`));
+
+          async function openAndStart() {
+            await page.goto(WORKER, {waitUntil: 'domcontentloaded', timeout: 60000});
+            await page.waitForSelector('#soloButton', {state: 'visible', timeout: 30000});
+            await page.locator('#modeTouch').click();
+            await page.locator('#soloButton').click();
+            await page.waitForFunction(() => window.__echoArchipelago?.getState?.()?.phase === 'playing', null, {timeout: 30000});
+            await page.waitForSelector('#gameScreen:not([hidden])', {timeout: 30000});
+          }
+
+          await openAndStart();
+          check((await page.title()).includes('Эхо-Архипелаг'), 'Worker opened the game document', await page.title());
+          const loadedVersion = await page.evaluate(() => [...document.scripts].map(script => script.src).filter(Boolean));
+          check(loadedVersion.some(url => url.includes('app.js?v=23.0')), 'Deployed page uses cache generation 23', loadedVersion.join(', '));
+
+          // Real touch-style pointer hold: accelerate while held, stop applying throttle on release.
+          const throttle = page.locator('#throttleButton');
+          await throttle.dispatchEvent('pointerdown', {pointerId: 11, pointerType: 'touch', isPrimary: true, button: 0, buttons: 1});
+          await page.waitForTimeout(1300);
+          const duringHold = await page.evaluate(() => {
+            const state = window.__echoArchipelago.getState();
+            return {forward: state.controls.forward, speed: state.boat.speed, throttle: state.boat.throttle};
+          });
+          check(duringHold.forward === true, 'Gas remains active while the button is held', JSON.stringify(duringHold));
+          check(duringHold.speed > 0.2, 'Boat accelerates during a held gas press', JSON.stringify(duringHold));
+          await throttle.dispatchEvent('pointerup', {pointerId: 11, pointerType: 'touch', isPrimary: true, button: 0, buttons: 0});
+          await page.waitForTimeout(250);
+          const afterRelease = await page.evaluate(() => {
+            const state = window.__echoArchipelago.getState();
+            return {forward: state.controls.forward, speed: state.boat.speed, throttle: state.boat.throttle};
+          });
+          check(afterRelease.forward === false, 'Gas is released after pointerup', JSON.stringify(afterRelease));
+          check(afterRelease.speed > 0, 'Boat keeps physical inertia after gas release', JSON.stringify(afterRelease));
+
+          // Lost focus must not leave a stuck throttle.
+          await throttle.dispatchEvent('pointerdown', {pointerId: 12, pointerType: 'touch', isPrimary: true, button: 0, buttons: 1});
+          await page.waitForTimeout(200);
+          await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+          await page.waitForTimeout(150);
+          const afterBlur = await page.evaluate(() => window.__echoArchipelago.getState().controls.forward);
+          check(afterBlur === false, 'Window blur releases a held gas control', String(afterBlur));
+
+          // Hard shoreline collision through the live browser game API.
+          const hardShore = await page.evaluate(() => {
+            const api = window.__echoArchipelago;
+            const state = api.getState();
+            state.training.safetyEnabled = false;
+            state.shoreImpact.lastAt = -999;
+            state.boat.x = state.world.bounds.maxX - 0.1;
+            state.boat.y = Math.min(80, state.world.bounds.maxY - 20);
+            state.boat.heading = 90;
+            state.boat.speed = 18;
+            state.boat.throttle = 1;
+            state.controls.forward = true;
+            const events = api.step(0.1);
+            const hit = events.find(event => event.type === 'collision' && event.shore);
+            return {hit, hull: state.boat.hull, leak: state.boat.leak, speed: state.boat.speed, forward: state.controls.forward, message: state.message};
+          });
+          check(Boolean(hardShore.hit), 'Hard shoreline contact emits a shore collision', JSON.stringify(hardShore));
+          check((hardShore.hit?.damage || 0) > 20, 'Hard shoreline contact causes substantial damage', JSON.stringify(hardShore));
+          check(hardShore.speed < 0 && hardShore.forward === false, 'Hard shoreline contact rebounds and cancels held gas', JSON.stringify(hardShore));
+
+          // Gentle touch must stop without fake damage or reverse launch.
+          const softShore = await page.evaluate(() => {
+            const api = window.__echoArchipelago;
+            const state = api.getState();
+            state.phase = 'playing';
+            state.ending = null;
+            state.damageControl.floodEmergency = false;
+            state.shoreImpact.lastAt = -999;
+            state.boat.hull = 100;
+            state.boat.leak = 0;
+            state.boat.x = state.world.bounds.maxX + 0.05;
+            state.boat.y = Math.min(80, state.world.bounds.maxY - 20);
+            state.boat.heading = 90;
+            state.boat.speed = 0.5;
+            state.boat.throttle = 0;
+            state.controls.forward = false;
+            const before = state.boat.hull;
+            const events = api.step(0.01);
+            const hit = events.find(event => event.type === 'collision' && event.shore);
+            return {hit, before, hull: state.boat.hull, speed: state.boat.speed, message: state.message};
+          });
+          check(softShore.hit?.scrape === true && softShore.hit?.damage === 0, 'Gentle shoreline touch is classified as harmless', JSON.stringify(softShore));
+          check(softShore.hull === softShore.before && softShore.speed === 0, 'Gentle shoreline touch stops without damage or reverse launch', JSON.stringify(softShore));
+
+          // Floating brake should stop once and enter cooldown.
+          const brake = await page.evaluate(() => {
+            const api = window.__echoArchipelago;
+            const state = api.getState();
+            state.phase = 'playing';
+            state.damageControl.floodEmergency = false;
+            state.boat.x = (state.world.bounds.minX + state.world.bounds.maxX) / 2;
+            state.boat.y = (state.world.bounds.minY + state.world.bounds.maxY) / 2;
+            state.boat.speed = 9;
+            state.floatingBrake.readyAt = 0;
+            api.command('anchor');
+            const first = {speed: state.boat.speed, message: state.message, view: api.getView().floatingBrake};
+            api.command('anchor');
+            const second = {speed: state.boat.speed, message: state.message, view: api.getView().floatingBrake};
+            return {first, second};
+          });
+          check(Math.abs(brake.first.speed) <= 0.12, 'Floating brake nearly stops the boat', JSON.stringify(brake));
+          check(brake.first.view.ready === false && brake.first.view.remaining > 0, 'Floating brake enters cooldown', JSON.stringify(brake));
+          check(/восстанавливается/i.test(brake.second.message), 'Repeated brake press reports cooldown instead of spamming', JSON.stringify(brake));
+
+          // Empty fuel should expose and complete the one emergency canister flow.
+          const fuel = await page.evaluate(() => {
+            const api = window.__echoArchipelago;
+            const state = api.getState();
+            state.phase = 'playing';
+            state.ending = null;
+            state.damageControl.floodEmergency = false;
+            state.boat.x = 40;
+            state.boat.y = 50;
+            state.boat.fuel = 0;
+            state.boat.speed = 0;
+            state.boat.engineStalled = true;
+            state.refuel.canisters = 1;
+            state.refuel.active = false;
+            state.refuel.emptyAnnounced = false;
+            api.step(0.05);
+            const offered = {phase: state.phase, label: api.getView().quickLabel, canisters: api.getView().refuel.canisters, message: state.message};
+            api.command('quick');
+            const active = state.refuel.active;
+            for (let i = 0; i < 20; i += 1) api.step(0.25);
+            const completed = {phase: state.phase, fuel: state.boat.fuel, canisters: state.refuel.canisters, stalled: state.boat.engineStalled, message: state.message};
+            return {offered, active, completed};
+          });
+          check(fuel.offered.phase === 'playing' && /канистр/i.test(fuel.offered.label), 'Empty tank offers the emergency canister without an immediate loss', JSON.stringify(fuel));
+          check(fuel.active === true, 'Quick action begins emergency refueling', JSON.stringify(fuel));
+          check(fuel.completed.fuel >= 29.9 && fuel.completed.canisters === 0 && fuel.completed.stalled === false, 'Emergency canister completes and restarts the motor', JSON.stringify(fuel));
+
+          // Long-range rope feedback must clear when the rope is cancelled.
+          const ropeSetup = await page.evaluate(() => {
+            const api = window.__echoArchipelago;
+            const state = api.getState();
+            state.phase = 'playing';
+            const target = state.world.survivors.find(item => !item.rescued);
+            state.navigation.lockedTargetId = target.id;
+            state.boat.x = Math.max(state.world.bounds.minX + 10, Math.min(state.world.bounds.maxX - 10, target.x - 100));
+            state.boat.y = Math.max(state.world.bounds.minY + 10, Math.min(state.world.bounds.maxY - 10, target.y));
+            state.boat.speed = 0;
+            return {distance: Math.hypot(state.boat.x - target.x, state.boat.y - target.y)};
+          });
+          await page.locator('#rescueButton').click();
+          await page.waitForTimeout(100);
+          const ropeOn = await page.evaluate(() => ({active: window.__echoArchipelago.getState().controls.rescue, message: window.__echoArchipelago.getState().message}));
+          await page.locator('#rescueButton').click();
+          await page.waitForTimeout(100);
+          const ropeOff = await page.evaluate(() => ({active: window.__echoArchipelago.getState().controls.rescue, message: window.__echoArchipelago.getState().message}));
+          check(ropeSetup.distance > 30 && /Трос подготовлен/i.test(ropeOn.message), 'Long-range rope gives the correct approach instruction', JSON.stringify({ropeSetup, ropeOn}));
+          check(ropeOff.active === false && /Трос убран/i.test(ropeOff.message) && !/Трос подготовлен/i.test(ropeOff.message), 'Cancelling the rope clears stale preparation feedback', JSON.stringify(ropeOff));
+
+          notes.push(`pageErrors=${JSON.stringify(pageErrors)}`);
+          notes.push(`consoleErrors=${JSON.stringify(consoleErrors)}`);
+          notes.push(`requestFailures=${JSON.stringify(requestFailures)}`);
+          console.log('BROWSER NOTES:', notes.join('\n'));
+          check(pageErrors.length === 0, 'No uncaught page errors occurred', JSON.stringify(pageErrors));
+
+          await browser.close();
+          if (failures.length) {
+            console.error('\nBROWSER AUDIT FAILURES:\n' + failures.map((item, index) => `${index + 1}. ${item}`).join('\n'));
+            process.exit(1);
+          }
+          console.log('\nALL BROWSER AUDIT CHECKS PASSED');
+          NODE
