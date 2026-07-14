@@ -411,10 +411,16 @@ function steerHunterAroundHazards(state, target, now) {
 
   if (block) {
     const {hazard, ux, uy} = block;
-    const sameLockedHazard = avoidance.hazardId === hazard.id
-      && avoidance.side !== 0
-      && now < avoidance.lockedUntil;
-    if (!sameLockedHazard) {
+    const committedSide = avoidance.side !== 0 && now < avoidance.lockedUntil;
+    const committed = committedSide
+      ? avoidanceCandidateCost(state, hazard, target, avoidance.side, ux, uy)
+      : null;
+    const alternative = committedSide
+      ? avoidanceCandidateCost(state, hazard, target, -avoidance.side, ux, uy)
+      : null;
+    const committedImpossible = committed && alternative && committed.cost > alternative.cost + 180;
+
+    if (!committedSide || committedImpossible) {
       const left = avoidanceCandidateCost(state, hazard, target, -1, ux, uy);
       const right = avoidanceCandidateCost(state, hazard, target, 1, ux, uy);
       const selected = left.cost <= right.cost ? {side: -1, ...left} : {side: 1, ...right};
@@ -424,13 +430,16 @@ function steerHunterAroundHazards(state, target, now) {
       }
       avoidance.hazardId = hazard.id;
       avoidance.side = selected.side;
-      avoidance.lockedUntil = now + 2.8;
+      avoidance.lockedUntil = now + 3.4;
       avoidance.waypointX = selected.waypoint.x;
       avoidance.waypointY = selected.waypoint.y;
     } else {
-      const selected = avoidanceCandidateCost(state, hazard, target, avoidance.side, ux, uy);
-      avoidance.waypointX = selected.waypoint.x;
-      avoidance.waypointY = selected.waypoint.y;
+      // Keep one side for the whole connected wreck cluster. A new blocking
+      // object updates the waypoint, but does not restart left/right roulette.
+      avoidance.hazardId = hazard.id;
+      avoidance.waypointX = committed.waypoint.x;
+      avoidance.waypointY = committed.waypoint.y;
+      avoidance.lockedUntil = Math.max(avoidance.lockedUntil, now + 1.15);
     }
     avoidance.blocked = true;
     navigationTarget = {x: avoidance.waypointX, y: avoidance.waypointY};

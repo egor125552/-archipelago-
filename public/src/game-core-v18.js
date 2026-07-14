@@ -1,6 +1,6 @@
 "use strict";
 
-import * as base from "./game-core-v17.js?base=10";
+import * as base from "./game-core-v17.js?base=11";
 import {applyCollisionDamage, collisionSeverity} from "./collision-model.js";
 
 export const CONFIG = Object.freeze({

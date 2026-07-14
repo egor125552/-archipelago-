@@ -1,6 +1,6 @@
 "use strict";
 
-import {HUNTER_BRAIN_WEIGHTS} from "./hunter-brain-weights.js?v=26.0";
+import {HUNTER_BRAIN_WEIGHTS} from "./hunter-brain-weights.js?v=27.0";
 
 export const HUNTER_FEATURE_COUNT = 18;
 export const HUNTER_HIDDEN_ONE = 12;
