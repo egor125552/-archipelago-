@@ -28,9 +28,23 @@ jobs:
           test -s /tmp/apply-fix.py
           python3 /tmp/apply-fix.py
       - name: Run all Node tests
+        shell: bash
         run: |
           npm ci
-          npm test
+          set +e
+          npm test 2>&1 | tee /tmp/node-test.log
+          status=${PIPESTATUS[0]}
+          echo "$status" > /tmp/node-test-exit.txt
+          exit "$status"
+      - name: Upload Node test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-node-test-log
+          path: |
+            /tmp/node-test.log
+            /tmp/node-test-exit.txt
+          if-no-files-found: error
       - name: Install Chromium
         run: |
           npm install --no-save --package-lock=false playwright@1.52.0
@@ -47,7 +61,16 @@ jobs:
           done
           awk '/^[[:space:]]*node --input-type=module <<'"'"'NODE'"'"'$/{capture=1;next} /^[[:space:]]*NODE$/{capture=0} capture{sub(/^          /,"");print}' .github/workflows/apply-throttle-absurdity-fix.yml > .local-browser-audit.mjs
           test -s .local-browser-audit.mjs
-          node .local-browser-audit.mjs | tee /tmp/local-browser-audit.log
+          node .local-browser-audit.mjs 2>&1 | tee /tmp/local-browser-audit.log
+      - name: Upload local browser audit log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: local-browser-audit-log
+          path: |
+            /tmp/local-browser-audit.log
+            /tmp/archipelago-server.log
+          if-no-files-found: warn
       - name: Commit validated changes to the PR branch
         shell: bash
         run: |
