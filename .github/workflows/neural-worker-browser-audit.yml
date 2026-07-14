@@ -1,0 +1,242 @@
+name: Neural Hunter Worker Browser Audit
+
+on:
+  push:
+    branches:
+      - audit/neural-worker
+
+jobs:
+  browser-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Chromium
+        run: |
+          npm install --no-save --package-lock=false playwright@1.52.0
+          npx playwright install --with-deps chromium
+      - name: Audit deployed neural hunter in mobile Chromium
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE' | tee /tmp/neural-worker-browser-report.log
+          import {chromium} from "playwright";
+          import assert from "node:assert/strict";
+          import {writeFile} from "node:fs/promises";
+
+          const URL = "https://archipelago.k69ysrndm7.workers.dev/";
+          const browser = await chromium.launch({headless: true});
+          const context = await browser.newContext({
+            viewport: {width: 390, height: 844},
+            isMobile: true,
+            hasTouch: true,
+            locale: "ru-RU",
+          });
+          const pageErrors = [];
+          let pointerId = 500;
+
+          const probe = await context.newPage();
+          probe.on("pageerror", error => pageErrors.push(String(error)));
+          let deployed = false;
+          for (let attempt = 1; attempt <= 48; attempt += 1) {
+            await probe.goto(`${URL}?neuralDeploy=${Date.now()}`, {waitUntil: "domcontentloaded", timeout: 60000});
+            const scripts = await probe.evaluate(() => [...document.scripts].map(item => item.src));
+            if (scripts.some(src => src.includes("app.js?v=25.0"))) {
+              deployed = true;
+              break;
+            }
+            console.log(`Worker still serves old generation, attempt ${attempt}`);
+            await probe.waitForTimeout(5000);
+          }
+          assert.equal(deployed, true, "Worker did not deploy cache generation 25");
+          await probe.close();
+
+          const profileFor = boatId => ({
+            version: 2,
+            credits: 999999,
+            unlockedLevel: 6,
+            selectedLevel: 6,
+            selectedBoat: boatId,
+            ownedUpgrades: ["coast-brake", "mini-armor", "high-flow-pump", "ram-keel", "debris-tools"],
+            runs: 10,
+            wins: 10,
+            bestScore: 12000,
+            bestByLevel: {1: 1000, 2: 2000, 3: 3000, 4: 4000, 5: 5000, 6: 6000},
+          });
+
+          async function startScenario(boatId = "strizh") {
+            const page = await context.newPage();
+            page.on("pageerror", error => pageErrors.push(String(error)));
+            await page.addInitScript(profile => {
+              localStorage.clear();
+              localStorage.setItem("echo-archipelago-profile-v1", JSON.stringify(profile));
+            }, profileFor(boatId));
+            await page.goto(`${URL}?neuralScenario=${Date.now()}-${Math.random()}`, {waitUntil: "domcontentloaded", timeout: 60000});
+            await page.locator("#modeTouch").click();
+            await page.locator("#operation6").click();
+            await page.locator(boatId === "grom" ? "#boatGrom" : "#boatStrizh").click();
+            await page.locator("#soloButton").click();
+            await page.waitForFunction(() => window.__echoArchipelago?.getState?.()?.phase === "playing");
+            await page.evaluate(() => {
+              const state = window.__echoArchipelago.getState();
+              state.training.safetyEnabled = false;
+              state.totalElapsed = 15;
+              state.elapsed = Math.max(state.elapsed, 15);
+              state.hunter.x = state.boat.x - 35;
+              state.hunter.y = state.boat.y - 25;
+              state.hunter.heading = 25;
+              state.hunter.speed = 12;
+              state.hunter.ramCooldown = 0;
+              state.hunter.recoverUntil = 0;
+              state.hunter.repositionUntil = 0;
+              state.hunter.brain.nextDecisionAt = 0;
+              state.hunter.brain.tacticHistory = [];
+            });
+            return page;
+          }
+
+          async function hold(page, selector, milliseconds) {
+            const id = pointerId++;
+            const locator = page.locator(selector);
+            await locator.dispatchEvent("pointerdown", {pointerId: id, pointerType: "touch", isPrimary: true, button: 0, buttons: 1});
+            await page.waitForTimeout(milliseconds);
+            await locator.dispatchEvent("pointerup", {pointerId: id, pointerType: "touch", isPrimary: true, button: 0, buttons: 0});
+          }
+
+          const results = {};
+
+          {
+            const page = await startScenario("strizh");
+            await page.waitForTimeout(4200);
+            results.idle = await page.evaluate(() => {
+              const state = window.__echoArchipelago.getState();
+              return {tactic: state.hunter.brain.tactic, history: state.hunter.brain.tacticHistory, stationary: state.hunter.brain.stationaryPersistence};
+            });
+            assert.ok(results.idle.stationary > 0.7);
+            assert.ok([results.idle.tactic, ...results.idle.history.map(item => item.tactic)].some(tactic => ["pressure", "intercept"].includes(tactic)));
+            await page.close();
+          }
+
+          {
+            const page = await startScenario("strizh");
+            await page.evaluate(() => {
+              const state = window.__echoArchipelago.getState();
+              state.boat.x = 0;
+              state.boat.y = 190;
+              state.boat.heading = 180;
+              state.boat.speed = 0;
+              state.boat.throttle = 0;
+              state.hunter.x = 105;
+              state.hunter.y = 275;
+              state.hunter.speed = 0;
+              state.hunter.brain.previousHeading = state.boat.heading;
+              state.hunter.brain.nextDecisionAt = 0;
+            });
+            await hold(page, "#reverseButton", 7200);
+            results.reverse = await page.evaluate(() => {
+              const state = window.__echoArchipelago.getState();
+              return {tactic: state.hunter.brain.tactic, history: state.hunter.brain.tacticHistory, reverse: state.hunter.brain.reversePersistence, speed: state.boat.speed};
+            });
+            assert.ok(results.reverse.reverse > 0.45);
+            assert.ok([results.reverse.tactic, ...results.reverse.history.map(item => item.tactic)].includes("counter-reverse"));
+            await page.close();
+          }
+
+          {
+            const page = await startScenario("strizh");
+            const throttle = page.locator("#throttleButton");
+            const right = page.locator("#rightButton");
+            const throttleId = pointerId++;
+            const rightId = pointerId++;
+            await throttle.dispatchEvent("pointerdown", {pointerId: throttleId, pointerType: "touch", isPrimary: true, button: 0, buttons: 1});
+            await page.waitForTimeout(1800);
+            await right.dispatchEvent("pointerdown", {pointerId: rightId, pointerType: "touch", isPrimary: true, button: 0, buttons: 1});
+            await page.waitForTimeout(10500);
+            await right.dispatchEvent("pointerup", {pointerId: rightId, pointerType: "touch", isPrimary: true, button: 0, buttons: 0});
+            await throttle.dispatchEvent("pointerup", {pointerId: throttleId, pointerType: "touch", isPrimary: true, button: 0, buttons: 0});
+            results.circle = await page.evaluate(() => {
+              const state = window.__echoArchipelago.getState();
+              return {tactic: state.hunter.brain.tactic, history: state.hunter.brain.tacticHistory, turn: state.hunter.brain.turnPersistence, hunterHull: state.hunter.hull, playerHull: state.boat.hull};
+            });
+            assert.ok(results.circle.turn > 0.55);
+            assert.ok([results.circle.tactic, ...results.circle.history.map(item => item.tactic)].includes("counter-circle"));
+            assert.ok(results.circle.hunterHull > 48);
+            await page.close();
+          }
+
+          {
+            const page = await startScenario("grom");
+            await hold(page, "#throttleButton", 6200);
+            results.grom = await page.evaluate(() => {
+              const state = window.__echoArchipelago.getState();
+              return {tactic: state.hunter.brain.tactic, history: state.hunter.brain.tacticHistory, playerSpeed: state.boat.speed, hunterSpeed: state.hunter.speed};
+            });
+            assert.ok(results.grom.playerSpeed > results.grom.hunterSpeed);
+            assert.ok([results.grom.tactic, ...results.grom.history.map(item => item.tactic)].some(tactic => ["block-objective", "intercept"].includes(tactic)));
+            await page.close();
+          }
+
+          {
+            const page = await startScenario("grom");
+            await page.evaluate(() => {
+              const state = window.__echoArchipelago.getState();
+              state.boat.heading = 0;
+              state.boat.speed = 15;
+              state.boat.throttle = 0;
+              state.hunter.x = state.boat.x;
+              state.hunter.y = state.boat.y + 7.2;
+              state.hunter.heading = 180;
+              state.hunter.speed = 4;
+              state.hunter.ramCooldown = 0;
+              state.hunter.brain.nextDecisionAt = 0;
+            });
+            await page.waitForTimeout(2600);
+            results.ramBait = await page.evaluate(() => {
+              const state = window.__echoArchipelago.getState();
+              return {tactic: state.hunter.brain.tactic, history: state.hunter.brain.tacticHistory, hits: state.hunter.brain.playerLedHits, ramBait: state.hunter.brain.ramBait, hunterHull: state.hunter.hull};
+            });
+            assert.ok(results.ramBait.hits > 0.45 || results.ramBait.ramBait > 0.45);
+            assert.ok([results.ramBait.tactic, ...results.ramBait.history.map(item => item.tactic)].includes("bait-ram"));
+            await page.close();
+          }
+
+          {
+            const page = await startScenario("strizh");
+            await page.evaluate(() => {
+              const state = window.__echoArchipelago.getState();
+              state.hunter.x = state.boat.x - 65;
+              state.hunter.y = state.boat.y - 45;
+              state.hunter.speed = 10;
+            });
+            await page.locator("#decoyButton").click();
+            await page.waitForTimeout(8500);
+            await page.locator("#decoyButton").click();
+            await page.waitForTimeout(1800);
+            results.decoy = await page.evaluate(() => {
+              const state = window.__echoArchipelago.getState();
+              return {tactic: state.hunter.brain.tactic, history: state.hunter.brain.tacticHistory, suspicion: state.hunter.brain.decoySuspicion, charges: state.hunter.decoyCharges};
+            });
+            assert.equal(results.decoy.charges, 0);
+            assert.ok(results.decoy.suspicion > 0.7);
+            assert.ok([results.decoy.tactic, ...results.decoy.history.map(item => item.tactic)].includes("ignore-decoy"));
+            await page.close();
+          }
+
+          assert.deepEqual(pageErrors, []);
+          const report = {generation: 25, browserScenarios: results, pageErrors};
+          console.log(JSON.stringify(report, null, 2));
+          await writeFile("/tmp/neural-worker-browser-results.json", JSON.stringify(report, null, 2), "utf8");
+          await context.close();
+          await browser.close();
+          NODE
+      - name: Upload Worker browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: neural-worker-browser-evidence
+          path: |
+            /tmp/neural-worker-browser-report.log
+            /tmp/neural-worker-browser-results.json
+          if-no-files-found: warn
