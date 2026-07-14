@@ -1,0 +1,66 @@
+name: Neural Hunter Browser Runner V2
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  browser-only:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'agent/neural-hunter-brain'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply neural integration
+        run: |
+          python3 tools/apply-neural-hunter.py
+          python3 tools/tune-neural-audit.py
+      - name: Install Chromium
+        run: |
+          npm install --no-save --package-lock=false playwright@1.52.0
+          npx playwright install --with-deps chromium
+      - name: Run browser training and gameplay audit
+        shell: bash
+        run: |
+          python3 -m http.server 4173 --directory public > /tmp/hunter-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill $server_pid || true' EXIT
+          for attempt in {1..60}; do
+            curl -fsS http://127.0.0.1:4173/hunter-lab.html >/dev/null && break
+            sleep 0.25
+          done
+          awk '/^[[:space:]]*node --input-type=module <<'"'"'NODE'"'"' \| tee \/tmp\/hunter-browser-report.log$/{capture=1;next} /^[[:space:]]*NODE$/{capture=0} capture{sub(/^          /,"");print}' .github/workflows/neural-hunter-browser.yml > .neural-hunter-browser.mjs
+          test -s .neural-hunter-browser.mjs
+          node .neural-hunter-browser.mjs 2>&1 | tee /tmp/hunter-browser-report.log
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: neural-hunter-browser-evidence-v2
+          path: |
+            /tmp/hunter-browser-report.log
+            /tmp/hunter-browser-results.json
+            /tmp/hunter-training-report.json
+            /tmp/hunter-server.log
+          if-no-files-found: warn
+      - name: Commit browser-trained neural hunter
+        shell: bash
+        run: |
+          mkdir -p docs
+          cp /tmp/hunter-browser-results.json docs/hunter-neural-browser-report.json
+          git checkout origin/main -- .github/workflows/test.yml
+          rm -f .neural-hunter-browser.mjs tools/apply-neural-hunter.py tools/tune-neural-audit.py .github/workflows/neural-hunter-browser.yml
+          git config user.name "OpenAI Codex"
+          git config user.email "codex@openai.com"
+          git add public package.json package-lock.json docs tools .github/workflows
+          git commit -m "Add browser-trained neural hunter [skip ci]"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
