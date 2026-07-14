@@ -38,6 +38,10 @@ test("a long-range rope tells the player to keep driving until auto-approach ran
   run(state, 2);
   assert.ok(Math.hypot(state.boat.x - before.x, state.boat.y - before.y) < 0.01);
   assert.equal(state.world.survivors[0].rescued, false);
+
+  assert.equal(setControl(state, "rescue", false), true);
+  assert.match(state.message, /Трос убран/);
+  assert.doesNotMatch(state.message, /Трос подготовлен/);
 });
 
 test("auto-approach suppresses the obsolete rope-too-far warning and completes rescue", () => {

@@ -107,14 +107,19 @@ export function startGame(state) {
 
 export function setControl(state, control, active, actor = "captain") {
   ensureV17State(state);
+  const wasActive = Boolean(state.controls?.[control]);
   const result = base.setControl(state, control, active, actor);
-  if (result && control === "rescue" && active) {
-    const target = rescueTarget(state);
-    const metres = target ? distance(state.boat, target) : Infinity;
-    if (target && metres > CONFIG.ropeApproachRange) {
-      state.message = `Трос подготовлен. Следуй маяку; с ${CONFIG.ropeApproachRange} метров лодка сама подойдёт и остановится.`;
-    } else if (target && metres > CONFIG.rescueRadius) {
-      state.message = `Автоподход включён. До человека ${Math.round(metres)} метров; лодка сама подойдёт и остановится.`;
+  if (result && control === "rescue") {
+    if (!active && wasActive) {
+      state.message = "Трос убран. Следуй маяку к цели.";
+    } else if (active) {
+      const target = rescueTarget(state);
+      const metres = target ? distance(state.boat, target) : Infinity;
+      if (target && metres > CONFIG.ropeApproachRange) {
+        state.message = `Трос подготовлен. Следуй маяку; с ${CONFIG.ropeApproachRange} метров лодка сама подойдёт и остановится.`;
+      } else if (target && metres > CONFIG.rescueRadius) {
+        state.message = `Автоподход включён. До человека ${Math.round(metres)} метров; лодка сама подойдёт и остановится.`;
+      }
     }
   }
   return result;
