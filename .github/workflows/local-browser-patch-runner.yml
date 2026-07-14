@@ -27,6 +27,7 @@ jobs:
           awk '/^[[:space:]]*python3 <<'"'"'PY'"'"'$/{capture=1;next} /^[[:space:]]*PY$/{capture=0} capture{sub(/^          /,"");print}' .github/workflows/apply-throttle-absurdity-fix.yml > /tmp/apply-fix.py
           test -s /tmp/apply-fix.py
           python3 /tmp/apply-fix.py
+          python3 .github/absurdity-patch-extra.py
       - name: Run all Node tests
         shell: bash
         run: |
@@ -74,9 +75,9 @@ jobs:
       - name: Commit validated changes to the PR branch
         shell: bash
         run: |
-          rm -f .local-browser-audit.mjs .github/workflows/apply-throttle-absurdity-fix.yml
+          rm -f .local-browser-audit.mjs .github/workflows/apply-throttle-absurdity-fix.yml .github/absurdity-patch-extra.py
           git config user.name "OpenAI Codex"
           git config user.email "codex@openai.com"
-          git add README.md package.json package-lock.json public tests .github/workflows/apply-throttle-absurdity-fix.yml
+          git add README.md package.json package-lock.json public tests .github/workflows/apply-throttle-absurdity-fix.yml .github/absurdity-patch-extra.py
           git commit -m "Fix throttle release and absurd interactions"
           git push origin HEAD:${{ github.event.pull_request.head.ref }}
