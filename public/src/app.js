@@ -14,7 +14,7 @@ import {
   saveProfile,
   selectBoat,
   selectOperation,
-} from "./progression.js?v=25.0";
+} from "./progression.js?v=26.0";
 
 const $ = id => document.getElementById(id);
 const stateBox = {state: null};
