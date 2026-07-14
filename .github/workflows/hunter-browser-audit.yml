@@ -1,0 +1,289 @@
+name: Hunter Browser Audit
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'audit/hunter-browser-2026-07-14'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Chromium
+        run: |
+          npm install --no-save --package-lock=false playwright@1.52.0
+          npx playwright install --with-deps chromium
+      - name: Test hunter in deployed mobile game
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE' | tee /tmp/hunter-browser-audit.log
+          import {chromium} from "playwright";
+
+          const URL = "https://archipelago.k69ysrndm7.workers.dev/";
+          const PROFILE_KEY = "echo-archipelago-profile-v1";
+          const browser = await chromium.launch({headless: true});
+          const results = {};
+
+          const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+          const round = value => Number(Number(value || 0).toFixed(2));
+
+          async function openLevelSix(boatId = "strizh") {
+            const context = await browser.newContext({
+              viewport: {width: 390, height: 844},
+              isMobile: true,
+              hasTouch: true,
+              locale: "ru-RU",
+            });
+            const page = await context.newPage();
+            const pageErrors = [];
+            const consoleErrors = [];
+            page.on("pageerror", error => pageErrors.push(String(error)));
+            page.on("console", message => {
+              if (message.type() === "error") consoleErrors.push(message.text());
+            });
+            await page.goto(`${URL}?hunter-audit=${Date.now()}`, {waitUntil: "domcontentloaded", timeout: 60000});
+            await page.evaluate(({PROFILE_KEY, boatId}) => {
+              localStorage.clear();
+              localStorage.setItem(PROFILE_KEY, JSON.stringify({
+                version: 2,
+                credits: 999999,
+                unlockedLevel: 6,
+                selectedLevel: 6,
+                selectedBoat: boatId,
+                ownedUpgrades: [],
+                runs: 20,
+                wins: 20,
+                bestScore: 10000,
+                bestByLevel: {1: 1000, 2: 2000, 3: 3000, 4: 4000, 5: 5000, 6: 6000},
+              }));
+            }, {PROFILE_KEY, boatId});
+            await page.reload({waitUntil: "domcontentloaded"});
+            await page.locator("#modeTouch").click();
+            await page.locator("#soloButton").click();
+            await page.waitForFunction(() => {
+              const state = window.__echoArchipelago?.getState?.();
+              return state?.phase === "playing" && state?.progression?.level === 6;
+            });
+            return {context, page, pageErrors, consoleErrors};
+          }
+
+          async function configure(page, options = {}) {
+            await page.evaluate(options => {
+              const state = window.__echoArchipelago.getState();
+              const now = 14.1;
+              Object.assign(state.boat, {
+                x: options.boatX ?? 0,
+                y: options.boatY ?? 120,
+                heading: options.boatHeading ?? 0,
+                speed: options.boatSpeed ?? 0,
+                throttle: 0,
+                rudder: 0,
+                hull: 100,
+                water: 0,
+                leak: 0,
+                fuel: 100,
+                engineTemp: 30,
+                engineStalled: false,
+              });
+              Object.assign(state.controls, {
+                forward: false,
+                reverse: false,
+                left: false,
+                right: false,
+                pump: false,
+                rescue: false,
+                hullRepair: false,
+              });
+              state.phase = "playing";
+              state.won = false;
+              state.lost = false;
+              state.ending = null;
+              state.elapsed = now;
+              state.totalElapsed = now;
+              state.training.safetyEnabled = false;
+              state.navigation.assistEnabled = false;
+              state.navigation.courseHold = false;
+              state.navigation.approachAssist = false;
+              state.debris.pieces = [];
+              state.hunter.enabled = true;
+              state.hunter.destroyed = false;
+              state.hunter.hull = 100;
+              state.hunter.maxHull = 100;
+              state.hunter.x = options.hunterX ?? 0;
+              state.hunter.y = options.hunterY ?? 60;
+              state.hunter.heading = options.hunterHeading ?? 0;
+              state.hunter.speed = options.hunterSpeed ?? 0;
+              state.hunter.mode = options.mode ?? "pursuit";
+              state.hunter.modeIndex = options.modeIndex ?? 0;
+              state.hunter.nextDecisionAt = now + (options.nextDecisionIn ?? 5.8);
+              state.hunter.ramCooldown = 0;
+              state.hunter.recoverUntil = 0;
+              state.hunter.repositionUntil = 0;
+              state.hunter.nextCueAt = now;
+              state.hunter.decoyUntil = 0;
+              state.hunter.decoyCharges = 2;
+            }, options);
+            await sleep(100);
+          }
+
+          async function pointer(page, selector, down, pointerId) {
+            await page.locator(selector).dispatchEvent(down ? "pointerdown" : "pointerup", {
+              pointerId,
+              pointerType: "touch",
+              isPrimary: pointerId === 31,
+              button: 0,
+              buttons: down ? 1 : 0,
+            });
+          }
+
+          async function snapshot(page) {
+            return page.evaluate(() => {
+              const state = window.__echoArchipelago.getState();
+              const dx = state.hunter.x - state.boat.x;
+              const dy = state.hunter.y - state.boat.y;
+              return {
+                t: state.totalElapsed,
+                phase: state.phase,
+                hull: state.boat.hull,
+                boatSpeed: state.boat.speed,
+                boatX: state.boat.x,
+                boatY: state.boat.y,
+                hunterHull: state.hunter.hull,
+                hunterSpeed: state.hunter.speed,
+                hunterX: state.hunter.x,
+                hunterY: state.hunter.y,
+                distance: Math.hypot(dx, dy),
+                mode: state.hunter.decoyUntil > state.totalElapsed ? "decoy" : state.hunter.mode,
+                decoyCharges: state.hunter.decoyCharges,
+                decoyUntil: state.hunter.decoyUntil,
+              };
+            });
+          }
+
+          async function observe(page, seconds, controls = [], hooks = []) {
+            for (let index = 0; index < controls.length; index += 1) {
+              await pointer(page, controls[index], true, 31 + index);
+            }
+            const samples = [];
+            const impacts = [];
+            const modes = [];
+            let previous = await snapshot(page);
+            modes.push({at: 0, mode: previous.mode});
+            const started = Date.now();
+            let hookIndex = 0;
+            while ((Date.now() - started) / 1000 < seconds && previous.phase === "playing") {
+              const elapsed = (Date.now() - started) / 1000;
+              while (hookIndex < hooks.length && elapsed >= hooks[hookIndex].at) {
+                await hooks[hookIndex].run();
+                hookIndex += 1;
+              }
+              await sleep(200);
+              const current = await snapshot(page);
+              samples.push(current);
+              if (current.hull < previous.hull - 0.05) {
+                impacts.push({at: round(elapsed), damage: round(previous.hull - current.hull), distance: round(current.distance), mode: current.mode});
+              }
+              if (current.mode !== previous.mode) modes.push({at: round(elapsed), mode: current.mode});
+              previous = current;
+            }
+            for (let index = controls.length - 1; index >= 0; index -= 1) {
+              await pointer(page, controls[index], false, 31 + index);
+            }
+            const distances = samples.map(item => item.distance);
+            const hunterSpeeds = samples.map(item => Math.abs(item.hunterSpeed));
+            let path = 0;
+            for (let index = 1; index < samples.length; index += 1) {
+              path += Math.hypot(samples[index].hunterX - samples[index - 1].hunterX, samples[index].hunterY - samples[index - 1].hunterY);
+            }
+            return {
+              duration: round((Date.now() - started) / 1000),
+              first: samples[0],
+              last: samples.at(-1),
+              minDistance: round(Math.min(...distances)),
+              maxDistance: round(Math.max(...distances)),
+              averageDistance: round(distances.reduce((sum, value) => sum + value, 0) / distances.length),
+              maxHunterSpeed: round(Math.max(...hunterSpeeds)),
+              hunterPath: round(path),
+              lowSpeedShare: round(hunterSpeeds.filter(value => value < 2).length / hunterSpeeds.length),
+              impacts,
+              modes,
+            };
+          }
+
+          // 1. Passive player: how quickly and how often does the hunter punish no action?
+          {
+            const run = await openLevelSix("strizh");
+            await configure(run.page, {boatX: 0, boatY: 180, hunterX: -75, hunterY: 180, hunterHeading: 90});
+            results.passive = await observe(run.page, 28);
+            results.passive.pageErrors = run.pageErrors;
+            results.passive.consoleErrors = run.consoleErrors;
+            await run.context.close();
+          }
+
+          // 2. Straight escape with the base boat.
+          {
+            const run = await openLevelSix("strizh");
+            await configure(run.page, {boatX: 0, boatY: 55, hunterX: 0, hunterY: 15, hunterHeading: 0});
+            results.strizhStraight = await observe(run.page, 12, ["#throttleButton"]);
+            results.strizhStraight.pageErrors = run.pageErrors;
+            await run.context.close();
+          }
+
+          // 3. Straight escape with Grom, whose theoretical top speed exceeds the hunter.
+          {
+            const run = await openLevelSix("grom");
+            await configure(run.page, {boatX: 0, boatY: 55, hunterX: 0, hunterY: 15, hunterHeading: 0});
+            results.gromStraight = await observe(run.page, 12, ["#throttleButton"]);
+            results.gromStraight.pageErrors = run.pageErrors;
+            await run.context.close();
+          }
+
+          // 4. One-input circle exploit: hold gas and one steering direction.
+          {
+            const run = await openLevelSix("strizh");
+            await configure(run.page, {boatX: 0, boatY: 205, hunterX: -55, hunterY: 205, hunterHeading: 90});
+            results.constantCircle = await observe(run.page, 28, ["#throttleButton", "#rightButton"]);
+            results.constantCircle.pageErrors = run.pageErrors;
+            await run.context.close();
+          }
+
+          // 5. Chain both decoys with no tactical placement beyond dropping them behind the player.
+          {
+            const run = await openLevelSix("strizh");
+            await configure(run.page, {boatX: 0, boatY: 90, hunterX: 0, hunterY: 52, hunterHeading: 0});
+            await run.page.locator("#decoyButton").click();
+            results.doubleDecoy = await observe(run.page, 17, ["#throttleButton"], [{
+              at: 7.6,
+              run: () => run.page.locator("#decoyButton").click(),
+            }]);
+            results.doubleDecoy.pageErrors = run.pageErrors;
+            await run.context.close();
+          }
+
+          // 6. Put a large wreck directly between the boats and see whether pathfinding stalls.
+          {
+            const run = await openLevelSix("strizh");
+            await configure(run.page, {boatX: -95, boatY: 225, hunterX: -145, hunterY: 225, hunterHeading: 90});
+            results.obstacle = await observe(run.page, 22);
+            results.obstacle.pageErrors = run.pageErrors;
+            await run.context.close();
+          }
+
+          console.log(JSON.stringify(results, null, 2));
+          await browser.close();
+          NODE
+      - name: Upload hunter audit log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hunter-browser-audit
+          path: /tmp/hunter-browser-audit.log
+          if-no-files-found: error
