@@ -1,6 +1,6 @@
 "use strict";
 
-import * as base from "./game-core-v16.js?base=8";
+import * as base from "./game-core-v16.js?base=9";
 
 export const CONFIG = Object.freeze({
   ...base.CONFIG,

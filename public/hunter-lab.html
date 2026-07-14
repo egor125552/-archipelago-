@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Hunter neural laboratory</title></head>
+<body><main><h1>Hunter neural laboratory</h1><pre id="report">ready</pre></main>
+<script type="module">
+import {trainVirtualHunter} from "./src/hunter-virtual-players.js?v=25.0";
+window.__hunterLab = {
+  train(options) {
+    const result = trainVirtualHunter(options);
+    document.querySelector("#report").textContent = JSON.stringify(result.report, null, 2);
+    return result;
+  },
+};
+</script></body></html>

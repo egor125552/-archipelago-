@@ -286,7 +286,11 @@ export function chooseHunterTactic(state, now, force = false) {
 
   if (brain.stationaryPersistence > 0.42) addBias(logits, "pressure", 1.8);
   if (brain.reversePersistence > 0.32) addBias(logits, "counter-reverse", 2.7);
-  if (brain.turnPersistence > 0.38 && Math.abs(brain.turnDirection) > 0.35) addBias(logits, "counter-circle", 2.8);
+  if (brain.turnPersistence > 0.38 && Math.abs(brain.turnDirection) > 0.35) {
+    addBias(logits, "counter-circle", 6.2);
+    addBias(logits, "pressure", -1.6);
+    addBias(logits, "intercept", -0.8);
+  }
   if (brain.ramBait > 0.36 || brain.playerLedHits > 0.65) addBias(logits, "bait-ram", 2.9);
   if (playerSpeedAdvantage > 0.08) {
     addBias(logits, "block-objective", 2.4);
@@ -396,7 +400,7 @@ export function hunterTacticSpeedScale(tactic) {
 export function noteHunterDecoy(state) {
   const brain = ensureHunterBrain(state);
   brain.decoyUses += 1;
-  brain.decoySuspicion = clamp(brain.decoySuspicion + (brain.decoyUses === 1 ? 0.34 : 0.48), 0, 1);
+  brain.decoySuspicion = clamp(brain.decoySuspicion + (brain.decoyUses === 1 ? 0.34 : 0.62), 0, 1);
   brain.nextDecisionAt = 0;
 }
 
