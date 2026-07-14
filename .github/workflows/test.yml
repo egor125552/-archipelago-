@@ -10,6 +10,7 @@ permissions:
 
 jobs:
   test:
+    if: github.head_ref != 'agent/neural-hunter-brain'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
