@@ -14,7 +14,7 @@ export const OPERATIONS = Object.freeze([
 export const SHOP_ITEMS = Object.freeze([
   Object.freeze({
     id: "coast-brake",
-    name: "Береговой автотормоз",
+    name: "Автотормоз наката",
     cost: 650,
     unlockLevel: 2,
     description: "Через пять секунд после отпускания газа полностью останавливает лодку.",
