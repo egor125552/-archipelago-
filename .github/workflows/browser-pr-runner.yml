@@ -19,7 +19,22 @@ jobs:
           npm install --no-save playwright@1.52.0
           npx playwright install --with-deps chromium
       - name: Extract and run live Worker audit
+        id: browser_audit
+        shell: bash
         run: |
           awk '/node --input-type=module <<'"'"'NODE'"'"'/{capture=1;next} /^[[:space:]]*NODE$/{capture=0} capture{sub(/^          /,"");print}' .github/workflows/browser-worker-audit.yml > /tmp/browser-worker-audit.mjs
           test -s /tmp/browser-worker-audit.mjs
-          node /tmp/browser-worker-audit.mjs
+          set +e
+          node /tmp/browser-worker-audit.mjs 2>&1 | tee /tmp/browser-audit.log
+          status=${PIPESTATUS[0]}
+          echo "$status" > /tmp/browser-exit.txt
+          exit "$status"
+      - name: Upload complete browser audit log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-audit-log
+          path: |
+            /tmp/browser-audit.log
+            /tmp/browser-exit.txt
+          if-no-files-found: error
