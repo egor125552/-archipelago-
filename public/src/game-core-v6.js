@@ -13,6 +13,7 @@ const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const deg = value => value * 180 / Math.PI;
 const wrapDeg = value => ((value + 180) % 360 + 360) % 360 - 180;
 const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+const STEER_NO_FLOW_MESSAGE = "Руль переложен, но лодка почти стоит. Дай немного газа, чтобы корпус начал поворачивать.";
 
 function now(state) {
   return Number.isFinite(state.totalElapsed) ? state.totalElapsed : Number(state.elapsed) || 0;
@@ -25,6 +26,7 @@ function ensureV6State(state) {
   if (!("lockedTargetId" in state.navigation)) state.navigation.lockedTargetId = null;
   if (!Number.isFinite(state.navigation.nextCueAt)) state.navigation.nextCueAt = 0;
   if (!Number.isFinite(state.navigation.steerWarningAt)) state.navigation.steerWarningAt = -999;
+  if (typeof state.navigation.steerWarningActive !== "boolean") state.navigation.steerWarningActive = false;
   return state;
 }
 
@@ -124,8 +126,21 @@ export function step(state, dt) {
   const steering = Number(state.controls.right) - Number(state.controls.left);
   if (steering && Math.abs(state.boat.speed) < 0.35 && now(state) - state.navigation.steerWarningAt > 1.4) {
     state.navigation.steerWarningAt = now(state);
-    state.message = "Руль переложен, но лодка почти стоит. Дай немного газа, чтобы корпус начал поворачивать.";
+    state.navigation.steerWarningActive = true;
+    state.message = STEER_NO_FLOW_MESSAGE;
     events.push({type: "steer-no-flow", pan: steering < 0 ? -0.8 : 0.8});
+  } else if (state.navigation.steerWarningActive && Math.abs(state.boat.speed) >= 0.7) {
+    state.navigation.steerWarningActive = false;
+    if (state.message === STEER_NO_FLOW_MESSAGE) {
+      state.message = `Лодка набрала ход. Курс ${Math.round((state.boat.heading + 360) % 360)} градусов.`;
+      events.push({type: "steer-flow", heading: state.boat.heading});
+    }
+  } else if (state.navigation.steerWarningActive && !steering) {
+    state.navigation.steerWarningActive = false;
+    if (state.message === STEER_NO_FLOW_MESSAGE) {
+      state.message = "Руль отпущен.";
+      events.push({type: "steer-release"});
+    }
   }
 
   if (state.navigation.assistEnabled && state.phase === "playing" && now(state) >= state.navigation.nextCueAt) {

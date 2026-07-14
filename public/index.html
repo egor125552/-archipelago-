@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#061a24">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <title>Эхо-Архипелаг — аудио-спасение</title>
-  <link rel="stylesheet" href="styles.css?v=22.0">
+  <link rel="stylesheet" href="styles.css?v=23.0">
 </head>
 <body data-accessibility="touch" data-role="captain">
   <a class="skip" href="#main">К игре</a>
@@ -113,7 +113,7 @@
         <div><span>Вода</span><strong id="water">0%</strong></div><div><span>Топливо</span><strong id="fuel">100%</strong></div>
         <div><span>Обломки</span><strong id="debrisCount">0</strong></div>
         <div><span>Мотор</span><strong id="temperature">24°</strong></div><div><span>Спасено</span><strong id="rescued">0/2</strong></div>
-        <div><span>Маршрут</span><strong id="riskRouteState">обычный</strong></div>
+        <div><span>Режим маршрута</span><strong id="riskRouteState">обычный; риск закрыт до уровня 2</strong></div>
         <div><span>Время</span><strong id="time">Без лимита</strong></div>
       </section>
 
@@ -123,14 +123,14 @@
         <button id="leftButton" class="control left" aria-label="Поворот влево. Для поворота лодка должна хотя бы медленно двигаться">◀ ЛЕВО</button>
         <button id="throttleButton" class="control throttle" aria-label="Газ вперёд. После отпускания лодка продолжит идти по инерции">ГАЗ ▲</button>
         <button id="rightButton" class="control right" aria-label="Поворот вправо. Для поворота лодка должна хотя бы медленно двигаться">ПРАВО ▶</button>
-        <button id="reverseButton" class="control reverse" aria-label="Сильное торможение и задний ход">ТОРМОЗ ▼</button>
+        <button id="reverseButton" class="control reverse" aria-label="Тормоз и задний ход. Нажатие VoiceOver останавливает лодку; у стоянки включает задний ход. Без VoiceOver удерживай для заднего хода">ТОРМОЗ ▼</button>
         <button id="quickAction" class="control quick primary" aria-label="Быстрое контекстное действие">БЫСТРОЕ ДЕЙСТВИЕ</button>
       </section>
 
       <section class="systems panel" aria-label="Системы, ремонт и спасение">
         <button id="pumpButton" aria-pressed="false">Включить насос</button>
         <button id="pumpAssistButton" aria-pressed="false" hidden>Автооткачка помощника: выключена</button>
-        <button id="rescueButton" aria-pressed="false">Подать спасательный трос</button>
+        <button id="rescueButton" aria-pressed="false" aria-label="Подготовить спасательный трос. С 30 метров включится автоподход">Подать спасательный трос</button>
         <button id="repairHullButton" aria-pressed="false">Заделать пробоину — пластин 3</button>
         <button id="debrisButton" aria-pressed="false" hidden>Извлечь обломок</button>
         <button id="repairButton">Обслужить двигатель</button>
@@ -141,11 +141,11 @@
 
       <details class="panel help" open>
         <summary>Как понять, стоит лодка или идёт</summary>
-        <p>На стоянке слышны только тихие редкие всплески у борта. После начала движения появляется отдельный непрерывный кильватер: чем выше скорость, тем он яснее и громче. В строке состояния «Ход» написано: стоит, дрейфует или идёт. Кнопка «Где я?» тоже начинает сообщение с состояния движения.</p>
+        <p>На стоянке слышны только тихие редкие всплески у борта. После начала движения появляется отдельный непрерывный кильватер: чем выше скорость, тем он яснее и громче. В строке состояния «Ход» отдельно указано движение вперёд или задним ходом. Кнопка «Где я?» тоже начинает сообщение с направления движения.</p>
       </details>
       <details class="panel help">
         <summary>Как спасти первого человека</summary>
-        <p>Нажми сонар, совмести маяк с центром и дай газ. Курс удерживается автоматически. Трос можно подать заранее: маяк не пропадёт, лодка сама подойдёт и остановится в 14 метрах. Дождись сообщения «Человек на борту».</p>
+        <p>Нажми сонар, совмести маяк с центром и дай газ. Курс удерживается автоматически. Трос можно подготовить заранее: маяк не пропадёт. До 30 метров веди лодку сам; затем включится автоподход, лодка подойдёт и остановится в 14 метрах. Дождись сообщения «Человек на борту».</p>
       </details>
       <details class="panel help">
         <summary>Вода, пробоина и полное затопление</summary>
@@ -171,13 +171,13 @@
     </section>
   </main>
   <script type="importmap">
-    {"imports":{"/src/game-core.js":"/src/game-core-v18.js?v=22.0","/src/audio-engine.js":"/src/audio-engine-v13.js?v=22.0"}}
+    {"imports":{"/src/game-core.js":"/src/game-core-v18.js?v=23.0","/src/audio-engine.js":"/src/audio-engine-v13.js?v=23.0"}}
   </script>
   <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js" defer></script>
-  <script type="module" src="src/app.js?v=22.0"></script>
-  <script type="module" src="src/room-ui-fix.js?v=22.0"></script>
-  <script type="module" src="src/gameplay-v6.js?v=22.0"></script>
-  <script type="module" src="src/gameplay-v8.js?v=22.0"></script>
-  <script type="module" src="src/gameplay-v9.js?v=22.0"></script>
+  <script type="module" src="src/app.js?v=23.0"></script>
+  <script type="module" src="src/room-ui-fix.js?v=23.0"></script>
+  <script type="module" src="src/gameplay-v6.js?v=23.0"></script>
+  <script type="module" src="src/gameplay-v8.js?v=23.0"></script>
+  <script type="module" src="src/gameplay-v9.js?v=23.0"></script>
 </body>
 </html>

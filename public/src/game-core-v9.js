@@ -314,10 +314,15 @@ export function command(state, action, actor = "captain") {
   }
   const result = base.command(state, action, actor);
   if (action === "where" && result.ok) {
+    const signedSpeed = Number(state.boat.speed) || 0;
     const speed = Math.abs(state.boat.speed);
     const movement = state.damageControl.floodEmergency
       ? "Лодка полностью затоплена и аварийно остановлена"
-      : speed <= CONFIG.motionStopSpeed ? "Лодка стоит" : speed < 2 ? "Лодка медленно дрейфует по инерции" : "Лодка идёт";
+      : speed <= CONFIG.motionStopSpeed
+        ? "Лодка стоит"
+        : signedSpeed < 0
+          ? speed < 2 ? "Лодка медленно дрейфует назад" : "Лодка идёт задним ходом"
+          : speed < 2 ? "Лодка медленно дрейфует по инерции" : "Лодка идёт вперёд";
     state.message = `${movement}. ${state.message}`;
   }
   return result;
@@ -360,13 +365,18 @@ export function step(state, dt) {
 export function getView(state) {
   ensureV9State(state);
   const view = base.getView(state);
+  const signedSpeed = Number(state.boat.speed) || 0;
   const speed = Math.abs(state.boat.speed);
   const remaining = state.damageControl.floodEmergency
     ? Math.max(0, state.damageControl.floodEmergencyUntil - clock(state))
     : 0;
   const motionState = state.damageControl.floodEmergency
     ? "аварийно остановлена"
-    : speed <= CONFIG.motionStopSpeed ? "стоит" : speed < 2 ? "дрейфует" : "идёт";
+    : speed <= CONFIG.motionStopSpeed
+      ? "стоит"
+      : signedSpeed < 0
+        ? speed < 2 ? "дрейфует назад" : "идёт задним ходом"
+        : speed < 2 ? "дрейфует вперёд" : "идёт вперёд";
   return {
     ...view,
     training: {

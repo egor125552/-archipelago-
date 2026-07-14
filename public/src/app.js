@@ -14,7 +14,7 @@ import {
   saveProfile,
   selectBoat,
   selectOperation,
-} from "./progression.js?v=22.0";
+} from "./progression.js?v=23.0";
 
 const $ = id => document.getElementById(id);
 const stateBox = {state: null};
@@ -33,6 +33,9 @@ let speechEnabled = true;
 let selectedVoice = null;
 let profile = loadProfile();
 let recordedResultState = null;
+let readerAnnouncementVersion = 0;
+let readerAnnouncementClearTimer = 0;
+let soloStarting = false;
 
 function vibrate(pattern) { try { navigator.vibrate?.(pattern); } catch (_) {} }
 function randomRoom() { return Math.random().toString(36).slice(2, 6).toUpperCase(); }
@@ -103,8 +106,16 @@ function speak(text, force = false) {
 function announceToReader(text) {
   const node = $("liveStatus");
   if (!node || !text) return;
+  const version = ++readerAnnouncementVersion;
+  clearTimeout(readerAnnouncementClearTimer);
   node.textContent = "";
-  requestAnimationFrame(() => { node.textContent = text; });
+  requestAnimationFrame(() => {
+    if (version !== readerAnnouncementVersion) return;
+    node.textContent = text;
+    readerAnnouncementClearTimer = setTimeout(() => {
+      if (version === readerAnnouncementVersion && node.textContent === text) node.textContent = "";
+    }, 6000);
+  });
 }
 
 function setMode(mode) {
@@ -252,13 +263,33 @@ function newSession(mode, selectedRole = "captain") {
 }
 
 async function beginSolo() {
-  await audio.init();
-  transport?.close(); transport = null;
-  newSession("solo", "captain");
-  startGame(stateBox.state);
-  showGame();
-  render(true);
-  startLoop();
+  if (soloStarting) return;
+  soloStarting = true;
+  const startButton = $("soloButton");
+  startButton.disabled = true;
+  startButton.setAttribute("aria-busy", "true");
+  setText("soloButton", "Запускаю операцию…");
+  $("startScreen").setAttribute("aria-busy", "true");
+  setProgressionStatus("Запускаю операцию: подготавливаю звук и игровую сцену…", true);
+  try {
+    try {
+      await audio.init();
+    } catch (_) {
+      setProgressionStatus("Звук не подготовился, но операция запускается без задержки.", true);
+    }
+    transport?.close(); transport = null;
+    newSession("solo", "captain");
+    startGame(stateBox.state);
+    showGame();
+    render(true);
+    startLoop();
+  } finally {
+    soloStarting = false;
+    startButton.disabled = false;
+    startButton.removeAttribute("aria-busy");
+    setText("soloButton", "Начать одиночную спасательную операцию");
+    $("startScreen").removeAttribute("aria-busy");
+  }
 }
 
 async function hostCoop(kind) {
@@ -393,7 +424,7 @@ function render(forceAnnouncement = false) {
   setText("time", view.timed ? `${Math.ceil(view.remaining)} с` : "Без лимита");
   const risk = view.riskRoute;
   setText("riskRouteState", !risk?.available
-    ? "закрыт"
+    ? "обычный; риск закрыт до уровня 2"
     : risk.active
       ? risk.selectionPending ? "риск; смена ждёт сонар" : "рискованный"
       : risk.selectionPending

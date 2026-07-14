@@ -267,7 +267,8 @@ test("mobile controls release lost pointers and reader brake stops adaptively", 
   const source = await readFile(new URL("../public/src/gameplay-v6.js", import.meta.url), "utf8");
   assert.match(source, /lostpointercapture/);
   assert.match(source, /window\.addEventListener\("pointerup"/);
-  assert.match(source, /Number\(current\.boat\?\.speed\) <= 0\.25/);
+  assert.match(source, /Math\.abs\(speed\) <= 0\.25/);
+  assert.match(source, /initialSpeed < -0\.25 \? "forward" : control/);
   assert.match(source, /Лодка остановлена обычным тормозом/);
 });
 

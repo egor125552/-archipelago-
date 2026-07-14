@@ -223,7 +223,7 @@ test("used canisters and active refueling survive serialization without being re
   assert.equal(again.refuel.canisters, 0);
 });
 
-test("release UI exposes refueling, heavy shore audio and cache generation 22", async () => {
+test("release UI exposes refueling, heavy shore audio and cache generation 23", async () => {
   const [html, app, gameplay, audio] = await Promise.all([
     readFile(new URL("../public/index.html", import.meta.url), "utf8"),
     readFile(new URL("../public/src/app.js", import.meta.url), "utf8"),
@@ -231,8 +231,8 @@ test("release UI exposes refueling, heavy shore audio and cache generation 22", 
     readFile(new URL("../public/src/audio-engine-v13.js", import.meta.url), "utf8"),
   ]);
   assert.match(html, /id="refuelButton"/);
-  assert.match(html, /game-core-v18\.js\?v=22\.0/);
-  assert.match(html, /audio-engine-v13\.js\?v=22\.0/);
+  assert.match(html, /game-core-v18\.js\?v=23\.0/);
+  assert.match(html, /audio-engine-v13\.js\?v=23\.0/);
   assert.match(app, /sendCommand\("refuel"\)/);
   assert.match(gameplay, /Используй аварийную канистру/);
   assert.match(audio, /event\.shore/);

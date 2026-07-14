@@ -17,6 +17,7 @@ let timedMode = false;
 let lastCourseAnnouncement = 0;
 let lastTouchToggleAt = 0;
 let readerBrakeTimer = null;
+let readerBrakeControl = null;
 
 function gameApi() { return window.__echoArchipelago; }
 function state() { return gameApi()?.getState?.() || null; }
@@ -95,7 +96,7 @@ function courseText() {
 
 function toggleText(control, active) {
   if (control === "rescue") return active
-    ? "Трос подан. Держи лодку спокойно."
+    ? state()?.message || "Трос подан. Следуй навигационной подсказке."
     : "Трос убран.";
   if (control === "pump") return active ? "Ручной насос включён." : "Ручной насос выключен.";
   return active ? "Ремонт корпуса начат." : "Ремонт корпуса остановлен.";
@@ -270,22 +271,52 @@ function bindReliableControl(button, control) {
       return;
     }
 
-    if (!pulseControls.has(control) || !gameApi()?.control?.(control, true)) return;
+    if (!pulseControls.has(control)) return;
+    const initialSpeed = Number(state()?.boat?.speed) || 0;
+    if (control === "reverse" && readerBrakeTimer != null) {
+      clearInterval(readerBrakeTimer);
+      readerBrakeTimer = null;
+      if (readerBrakeControl) gameApi()?.control?.(readerBrakeControl, false);
+      readerBrakeControl = null;
+    }
+    const appliedControl = control === "reverse" && initialSpeed < -0.25 ? "forward" : control;
+    if (!gameApi()?.control?.(appliedControl, true)) return;
     setHeld(button, true);
     keepReaderFocus(button);
     if (control === "reverse") {
-      if (readerBrakeTimer != null) clearInterval(readerBrakeTimer);
+      readerBrakeControl = appliedControl;
+      if (Math.abs(initialSpeed) <= 0.25) {
+        readerBrakeTimer = setTimeout(() => {
+          gameApi()?.control?.(appliedControl, false);
+          readerBrakeTimer = null;
+          readerBrakeControl = null;
+          setHeld(button, false);
+          const speed = Number(state()?.boat?.speed) || 0;
+          if (state()?.phase === "playing") say(`Задний ход: ${Math.abs(speed).toFixed(1)} узла.`);
+          keepReaderFocus(button);
+        }, 720);
+        return;
+      }
       const startedAt = performance.now();
+      const initialDirection = Math.sign(initialSpeed);
       readerBrakeTimer = setInterval(() => {
         const current = state();
-        const stopped = !current || current.phase !== "playing" || Number(current.boat?.speed) <= 0.25;
+        const speed = Number(current?.boat?.speed) || 0;
+        const stopped = !current
+          || current.phase !== "playing"
+          || Math.abs(speed) <= 0.25
+          || Math.sign(speed) !== initialDirection;
         const timedOut = performance.now() - startedAt >= 2400;
         if (!stopped && !timedOut) return;
         clearInterval(readerBrakeTimer);
         readerBrakeTimer = null;
-        gameApi()?.control?.(control, false);
+        gameApi()?.control?.(appliedControl, false);
+        readerBrakeControl = null;
         setHeld(button, false);
-        if (current?.phase === "playing") say("Лодка остановлена обычным тормозом.");
+        if (current?.phase === "playing") {
+          if (stopped) say("Лодка остановлена обычным тормозом.");
+          else say(`Торможение завершено. Скорость ${Math.abs(speed).toFixed(1)} узла.`);
+        }
         keepReaderFocus(button);
       }, 60);
       return;
@@ -346,7 +377,7 @@ function syncControls() {
     if (rescueButton.textContent !== text) rescueButton.textContent = text;
     rescueButton.setAttribute("aria-label", active
       ? "Спасательный трос активен. Нажми для отмены"
-      : "Подать трос в зоне спасения");
+      : "Подготовить спасательный трос. С 30 метров включится автоподход");
   }
 
   const pumpButton = byId("pumpButton");

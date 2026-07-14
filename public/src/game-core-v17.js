@@ -110,8 +110,11 @@ export function setControl(state, control, active, actor = "captain") {
   const result = base.setControl(state, control, active, actor);
   if (result && control === "rescue" && active) {
     const target = rescueTarget(state);
-    if (target && distance(state.boat, target) > CONFIG.rescueRadius) {
-      state.message = "Трос готов. Лодка сама подойдёт и остановится.";
+    const metres = target ? distance(state.boat, target) : Infinity;
+    if (target && metres > CONFIG.ropeApproachRange) {
+      state.message = `Трос подготовлен. Следуй маяку; с ${CONFIG.ropeApproachRange} метров лодка сама подойдёт и остановится.`;
+    } else if (target && metres > CONFIG.rescueRadius) {
+      state.message = `Автоподход включён. До человека ${Math.round(metres)} метров; лодка сама подойдёт и остановится.`;
     }
   }
   return result;
@@ -142,6 +145,12 @@ export function step(state, dt) {
   const parkLongRope = ropeRequested && !approach;
   if (parkLongRope) state.controls.rescue = false;
   const events = base.step(state, safeDt) || [];
+  const ropeFar = approach ? events.find(event => event.type === "rope-far") : null;
+  if (ropeFar) {
+    events.splice(events.indexOf(ropeFar), 1);
+    const moreImportant = events.some(event => ["collision", "rescue-complete", "warning", "lose", "win"].includes(event.type));
+    if (!moreImportant) state.message = `Автоподход: до человека ${Math.round(metres)} метров. Лодка подойдёт и остановится.`;
+  }
   if (autoThrust) {
     state.controls.forward = false;
     state.boat.throttle = 0;
