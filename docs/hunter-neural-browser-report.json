@@ -1,0 +1,577 @@
+{
+  "training": {
+    "architecture": "18-12-8-10",
+    "parameterCount": 422,
+    "episodes": [
+      {
+        "profile": "idle",
+        "samples": 75
+      },
+      {
+        "profile": "idle",
+        "samples": 75
+      },
+      {
+        "profile": "idle",
+        "samples": 75
+      },
+      {
+        "profile": "idle",
+        "samples": 75
+      },
+      {
+        "profile": "idle",
+        "samples": 75
+      },
+      {
+        "profile": "reverse",
+        "samples": 75
+      },
+      {
+        "profile": "reverse",
+        "samples": 75
+      },
+      {
+        "profile": "reverse",
+        "samples": 75
+      },
+      {
+        "profile": "reverse",
+        "samples": 75
+      },
+      {
+        "profile": "reverse",
+        "samples": 75
+      },
+      {
+        "profile": "straight",
+        "samples": 75
+      },
+      {
+        "profile": "straight",
+        "samples": 75
+      },
+      {
+        "profile": "straight",
+        "samples": 75
+      },
+      {
+        "profile": "straight",
+        "samples": 75
+      },
+      {
+        "profile": "straight",
+        "samples": 75
+      },
+      {
+        "profile": "grom-escape",
+        "samples": 75
+      },
+      {
+        "profile": "grom-escape",
+        "samples": 75
+      },
+      {
+        "profile": "grom-escape",
+        "samples": 75
+      },
+      {
+        "profile": "grom-escape",
+        "samples": 75
+      },
+      {
+        "profile": "grom-escape",
+        "samples": 75
+      },
+      {
+        "profile": "ram-bait",
+        "samples": 75
+      },
+      {
+        "profile": "ram-bait",
+        "samples": 75
+      },
+      {
+        "profile": "ram-bait",
+        "samples": 75
+      },
+      {
+        "profile": "ram-bait",
+        "samples": 75
+      },
+      {
+        "profile": "ram-bait",
+        "samples": 75
+      },
+      {
+        "profile": "circle-left",
+        "samples": 75
+      },
+      {
+        "profile": "circle-left",
+        "samples": 75
+      },
+      {
+        "profile": "circle-left",
+        "samples": 75
+      },
+      {
+        "profile": "circle-left",
+        "samples": 75
+      },
+      {
+        "profile": "circle-left",
+        "samples": 75
+      },
+      {
+        "profile": "circle-right",
+        "samples": 75
+      },
+      {
+        "profile": "circle-right",
+        "samples": 75
+      },
+      {
+        "profile": "circle-right",
+        "samples": 75
+      },
+      {
+        "profile": "circle-right",
+        "samples": 75
+      },
+      {
+        "profile": "circle-right",
+        "samples": 75
+      },
+      {
+        "profile": "zigzag-left",
+        "samples": 75
+      },
+      {
+        "profile": "zigzag-left",
+        "samples": 75
+      },
+      {
+        "profile": "zigzag-left",
+        "samples": 75
+      },
+      {
+        "profile": "zigzag-left",
+        "samples": 75
+      },
+      {
+        "profile": "zigzag-left",
+        "samples": 75
+      },
+      {
+        "profile": "zigzag-right",
+        "samples": 75
+      },
+      {
+        "profile": "zigzag-right",
+        "samples": 75
+      },
+      {
+        "profile": "zigzag-right",
+        "samples": 75
+      },
+      {
+        "profile": "zigzag-right",
+        "samples": 75
+      },
+      {
+        "profile": "zigzag-right",
+        "samples": 75
+      },
+      {
+        "profile": "repeat-decoy",
+        "samples": 75
+      },
+      {
+        "profile": "repeat-decoy",
+        "samples": 75
+      },
+      {
+        "profile": "repeat-decoy",
+        "samples": 75
+      },
+      {
+        "profile": "repeat-decoy",
+        "samples": 75
+      },
+      {
+        "profile": "repeat-decoy",
+        "samples": 75
+      },
+      {
+        "profile": "damaged-hunter",
+        "samples": 75
+      },
+      {
+        "profile": "damaged-hunter",
+        "samples": 75
+      },
+      {
+        "profile": "damaged-hunter",
+        "samples": 75
+      },
+      {
+        "profile": "damaged-hunter",
+        "samples": 75
+      },
+      {
+        "profile": "damaged-hunter",
+        "samples": 75
+      }
+    ],
+    "samples": 4125,
+    "losses": [
+      0.80314989559255,
+      0.07460417050412588,
+      0.03159983442288973,
+      0.020085474458821476,
+      0.014769616450446605,
+      0.01177974870836256,
+      0.00982066699091679,
+      0.008436560251784768,
+      0.007415755198329745,
+      0.006640061981891944,
+      0.006028717340835126,
+      0.005523215264337171,
+      0.005111661559044695,
+      0.004770908401334237,
+      0.004481239181063698,
+      0.0042296973569789405,
+      0.004007391420093297,
+      0.0038199242411050736,
+      0.003650676210960535,
+      0.003506710742320812,
+      0.0033756113235727707,
+      0.0032574122453336296,
+      0.0031532955111748416,
+      0.0030582783558512567
+    ],
+    "training": {
+      "accuracy": 1,
+      "correct": 3382,
+      "total": 3382,
+      "byProfile": {
+        "grom-escape": {
+          "correct": 310,
+          "total": 310,
+          "tactics": {
+            "block-objective": 310
+          },
+          "accuracy": 1
+        },
+        "idle": {
+          "correct": 306,
+          "total": 306,
+          "tactics": {
+            "pressure": 306
+          },
+          "accuracy": 1
+        },
+        "circle-right": {
+          "correct": 325,
+          "total": 325,
+          "tactics": {
+            "counter-circle": 325
+          },
+          "accuracy": 1
+        },
+        "zigzag-right": {
+          "correct": 311,
+          "total": 311,
+          "tactics": {
+            "flank-left": 311
+          },
+          "accuracy": 1
+        },
+        "circle-left": {
+          "correct": 308,
+          "total": 308,
+          "tactics": {
+            "counter-circle": 308
+          },
+          "accuracy": 1
+        },
+        "zigzag-left": {
+          "correct": 299,
+          "total": 299,
+          "tactics": {
+            "flank-right": 299
+          },
+          "accuracy": 1
+        },
+        "reverse": {
+          "correct": 301,
+          "total": 301,
+          "tactics": {
+            "counter-reverse": 301
+          },
+          "accuracy": 1
+        },
+        "damaged-hunter": {
+          "correct": 312,
+          "total": 312,
+          "tactics": {
+            "recover": 312
+          },
+          "accuracy": 1
+        },
+        "ram-bait": {
+          "correct": 297,
+          "total": 297,
+          "tactics": {
+            "bait-ram": 297
+          },
+          "accuracy": 1
+        },
+        "repeat-decoy": {
+          "correct": 296,
+          "total": 296,
+          "tactics": {
+            "ignore-decoy": 296
+          },
+          "accuracy": 1
+        },
+        "straight": {
+          "correct": 317,
+          "total": 317,
+          "tactics": {
+            "intercept": 317
+          },
+          "accuracy": 1
+        }
+      }
+    },
+    "validation": {
+      "accuracy": 1,
+      "correct": 743,
+      "total": 743,
+      "byProfile": {
+        "repeat-decoy": {
+          "correct": 79,
+          "total": 79,
+          "tactics": {
+            "ignore-decoy": 79
+          },
+          "accuracy": 1
+        },
+        "circle-right": {
+          "correct": 50,
+          "total": 50,
+          "tactics": {
+            "counter-circle": 50
+          },
+          "accuracy": 1
+        },
+        "damaged-hunter": {
+          "correct": 63,
+          "total": 63,
+          "tactics": {
+            "recover": 63
+          },
+          "accuracy": 1
+        },
+        "grom-escape": {
+          "correct": 65,
+          "total": 65,
+          "tactics": {
+            "block-objective": 65
+          },
+          "accuracy": 1
+        },
+        "ram-bait": {
+          "correct": 78,
+          "total": 78,
+          "tactics": {
+            "bait-ram": 78
+          },
+          "accuracy": 1
+        },
+        "circle-left": {
+          "correct": 67,
+          "total": 67,
+          "tactics": {
+            "counter-circle": 67
+          },
+          "accuracy": 1
+        },
+        "idle": {
+          "correct": 69,
+          "total": 69,
+          "tactics": {
+            "pressure": 69
+          },
+          "accuracy": 1
+        },
+        "zigzag-left": {
+          "correct": 76,
+          "total": 76,
+          "tactics": {
+            "flank-right": 76
+          },
+          "accuracy": 1
+        },
+        "straight": {
+          "correct": 58,
+          "total": 58,
+          "tactics": {
+            "intercept": 58
+          },
+          "accuracy": 1
+        },
+        "zigzag-right": {
+          "correct": 64,
+          "total": 64,
+          "tactics": {
+            "flank-left": 64
+          },
+          "accuracy": 1
+        },
+        "reverse": {
+          "correct": 74,
+          "total": 74,
+          "tactics": {
+            "counter-reverse": 74
+          },
+          "accuracy": 1
+        }
+      }
+    }
+  },
+  "browserScenarios": {
+    "idle": {
+      "tactic": "pressure",
+      "history": [
+        {
+          "time": 15.0167,
+          "tactic": "intercept",
+          "confidence": 0.6284162130439652
+        },
+        {
+          "time": 15.866700000000012,
+          "tactic": "pressure",
+          "confidence": 0.9927591253594769
+        }
+      ],
+      "stationary": 1,
+      "hull": 100
+    },
+    "reverse": {
+      "tactic": "counter-reverse",
+      "history": [
+        {
+          "time": 15.0167,
+          "tactic": "intercept",
+          "confidence": 0.9963363925351606
+        },
+        {
+          "time": 15.68320000000001,
+          "tactic": "counter-reverse",
+          "confidence": 0.5265621479215346
+        }
+      ],
+      "reverse": 1,
+      "speed": -4.975225236014938
+    },
+    "circle": {
+      "tactic": "flank-left",
+      "history": [
+        {
+          "time": 15.0166,
+          "tactic": "intercept",
+          "confidence": 0.6494474743460852
+        },
+        {
+          "time": 17.18330000000003,
+          "tactic": "flank-left",
+          "confidence": 0.6408907297788247
+        },
+        {
+          "time": 19.516500000000065,
+          "tactic": "counter-circle",
+          "confidence": 0.7556987234794155
+        },
+        {
+          "time": 21.683100000000096,
+          "tactic": "flank-left",
+          "confidence": 0.7157015209283001
+        }
+      ],
+      "turn": 1,
+      "hunterHull": 92.32459608324884,
+      "playerHull": 83.88
+    },
+    "grom": {
+      "tactic": "block-objective",
+      "history": [
+        {
+          "time": 15.0167,
+          "tactic": "intercept",
+          "confidence": 0.6577750291754413
+        },
+        {
+          "time": 17.84990000000004,
+          "tactic": "block-objective",
+          "confidence": 0.7780906401425535
+        }
+      ],
+      "playerSpeed": 32.665515023223705,
+      "hunterSpeed": 21.43308607332136
+    },
+    "ramBait": {
+      "tactic": "bait-ram",
+      "history": [
+        {
+          "time": 15.0167,
+          "tactic": "intercept",
+          "confidence": 0.9892492166344681
+        },
+        {
+          "time": 15.0334,
+          "tactic": "bait-ram",
+          "confidence": 0.9461342689436743
+        }
+      ],
+      "hits": 0.9845002000000017,
+      "ramBait": 0.28855934729722466,
+      "hunterHull": 58
+    },
+    "decoy": {
+      "tactic": "ignore-decoy",
+      "history": [
+        {
+          "time": 15.0167,
+          "tactic": "intercept",
+          "confidence": 0.7299589933545022
+        },
+        {
+          "time": 15.0501,
+          "tactic": "ignore-decoy",
+          "confidence": 0.66136826030727
+        },
+        {
+          "time": 15.883300000000013,
+          "tactic": "intercept",
+          "confidence": 0.8202677452208754
+        },
+        {
+          "time": 16.633300000000023,
+          "tactic": "pressure",
+          "confidence": 0.6432939609906433
+        },
+        {
+          "time": 23.583000000000112,
+          "tactic": "ignore-decoy",
+          "confidence": 0.9712093439684008
+        }
+      ],
+      "suspicion": 0.8360040000000029,
+      "charges": 0
+    }
+  },
+  "pageErrors": []
+}
