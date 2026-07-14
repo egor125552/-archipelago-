@@ -11,9 +11,15 @@ new = '''          {
             const page = await startScenario("strizh");
             await page.evaluate(() => {
               const state = window.__echoArchipelago.getState();
-              state.hunter.x = state.boat.x + 105;
-              state.hunter.y = state.boat.y + 85;
+              state.boat.x = 0;
+              state.boat.y = 190;
+              state.boat.heading = 180;
+              state.boat.speed = 0;
+              state.boat.throttle = 0;
+              state.hunter.x = 105;
+              state.hunter.y = 275;
               state.hunter.speed = 0;
+              state.hunter.brain.previousHeading = state.boat.heading;
               state.hunter.brain.nextDecisionAt = 0;
             });
             await hold(page, "#reverseButton", 7200);
