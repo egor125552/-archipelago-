@@ -1,0 +1,78 @@
+{
+  "results": {
+    "stationaryBesideWreck": {
+      "samples": 141,
+      "travelled": 194.24968225020078,
+      "lowSpeedFraction": 0.05,
+      "blockedFraction": 0.20714285714285716,
+      "observedSideFlips": 1,
+      "internalSideChanges": 0,
+      "minHazardEdge": 7.5305286543260355,
+      "minPlayerDistance": 9.470122050337714,
+      "finalPlayerHull": 61.82263233350208,
+      "finalHunterHull": 89.9424053389732,
+      "finalTactic": "pressure",
+      "finalAvoidance": {
+        "version": 1,
+        "hazardId": "w6-barge-west",
+        "side": 1,
+        "lockedUntil": 34.58270000000005,
+        "waypointX": -101.96478388038986,
+        "waypointY": 80.00672664321935,
+        "blocked": false,
+        "sideChanges": 0,
+        "lastSideChangeAt": 0
+      }
+    },
+    "reverseBesideWreck": {
+      "samples": 99,
+      "travelled": 146.98259558173123,
+      "lowSpeedFraction": 0.04081632653061224,
+      "blockedFraction": 0.24489795918367346,
+      "observedSideFlips": 0,
+      "internalSideChanges": 0,
+      "minHazardEdge": 9.147535627785224,
+      "minPlayerDistance": 9.151067315913783,
+      "finalPlayerHull": 87.644955880189,
+      "finalHunterHull": 96,
+      "finalTactic": "counter-reverse",
+      "finalAvoidance": {
+        "version": 1,
+        "hazardId": null,
+        "side": 0,
+        "lockedUntil": 20.83330000000004,
+        "waypointX": -75.78588889621714,
+        "waypointY": 149.72433475532344,
+        "blocked": false,
+        "sideChanges": 0,
+        "lastSideChangeAt": 0
+      }
+    },
+    "movingThroughCluster": {
+      "samples": 148,
+      "travelled": 202.2510133842602,
+      "lowSpeedFraction": 0.05442176870748299,
+      "blockedFraction": 0.2925170068027211,
+      "observedSideFlips": 3,
+      "internalSideChanges": 2,
+      "minHazardEdge": 3.465045001417222,
+      "minPlayerDistance": 4.321693536655345,
+      "finalPlayerHull": 96.01400092226481,
+      "finalHunterHull": 58,
+      "finalTactic": "flank-left",
+      "finalAvoidance": {
+        "version": 1,
+        "hazardId": null,
+        "side": 0,
+        "lockedUntil": 32.549400000000105,
+        "waypointX": -66.17439540685307,
+        "waypointY": 167.3470493034306,
+        "blocked": false,
+        "sideChanges": 2,
+        "lastSideChangeAt": 19.56650000000006
+      }
+    }
+  },
+  "pageErrors": [],
+  "consoleErrors": []
+}
