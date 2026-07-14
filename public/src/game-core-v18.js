@@ -256,7 +256,22 @@ export function setControl(state, control, active, actor = "captain") {
     state.message = "Сначала отмени заправку.";
     return false;
   }
-  return base.setControl(state, control, active, actor);
+  if (active && control === "rescue" && state.world?.survivors?.length
+    && state.world.survivors.every(item => item.rescued)) {
+    state.message = "Все люди уже на борту. Трос больше не нужен; возвращайся в гавань.";
+    return false;
+  }
+  if (active && control === "hullRepair" && state.boat.leak <= 0.05 && state.boat.hull >= 99) {
+    state.message = "Корпус цел. Ремонтная пластина сейчас не нужна.";
+    return false;
+  }
+  const result = base.setControl(state, control, active, actor);
+  // The hull should coast after release, but the engine must stop
+  // producing thrust immediately. Otherwise the boat accelerates for
+  // several frames after the player has already let go of the button.
+  if (result && !active && control === "forward" && state.boat.throttle > 0) state.boat.throttle = 0;
+  if (result && !active && control === "reverse" && state.boat.throttle < 0) state.boat.throttle = 0;
+  return result;
 }
 
 export function command(state, action, actor = "captain") {
@@ -271,6 +286,13 @@ export function command(state, action, actor = "captain") {
     if (remaining > 0) {
       return deny(state, `Плавучий тормоз восстанавливается: ${Math.ceil(remaining)} с.`, "brake-cooldown");
     }
+    const alreadyStopped = Math.abs(state.boat.speed) <= CONFIG.motionStopSpeed
+      && !state.controls.forward
+      && !state.controls.reverse
+      && Math.abs(state.boat.throttle) < 0.05;
+    if (alreadyStopped) {
+      return deny(state, "Лодка уже стоит. Плавучий тормоз не израсходован.", "already-stopped");
+    }
     const result = base.command(state, action, actor);
     if (result.ok) state.floatingBrake.readyAt = clock(state) + CONFIG.floatingBrakeCooldown;
     return result;
@@ -283,6 +305,9 @@ export function step(state, dt) {
   const safeDt = clamp(Number(dt) || 0, 0, 0.25);
   const previousSpeed = state.boat.speed;
   const previousMessage = state.message;
+  const sonarWasUnused = !state.navigation?.lockedTargetId
+    && !(state.sonar?.pings > 0)
+    && !state.sonar?.lastResult;
   const emptyGuard = state.phase === "playing"
     && state.boat.fuel <= 0.01
     && Math.abs(state.boat.speed) <= CONFIG.motionStopSpeed
@@ -292,6 +317,19 @@ export function step(state, dt) {
     state.boat.engineStalled = true;
   }
   const events = base.step(state, safeDt) || [];
+  if (sonarWasUnused && !(state.sonar?.pings > 0)) {
+    state.navigation.lockedTargetId = null;
+    state.navigation.routeTargetId = null;
+    state.navigation.routeStage = 0;
+    state.navigation.courseHold = false;
+    state.navigation.approachAssist = false;
+    for (let index = events.length - 1; index >= 0; index -= 1) {
+      if (events[index]?.type === "navigation-cue") events.splice(index, 1);
+    }
+  }
+  if (events.some(event => event.type === "auto-stop")) {
+    state.message = "Автотормоз наката погасил инерцию. Лодка полностью остановлена.";
+  }
   if (emptyGuard && state.phase === "playing") state.boat.fuel = 0;
   strengthenShoreImpact(state, events, previousSpeed, previousMessage);
   processRefuel(state, safeDt, events);
