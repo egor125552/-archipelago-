@@ -1,0 +1,140 @@
+name: Worker v24 Browser Audit
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  audit:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'audit/worker-v24'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Chromium
+        run: |
+          npm install --no-save --package-lock=false playwright@1.52.0
+          npx playwright install --with-deps chromium
+      - name: Audit deployed Worker in mobile Chromium
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE' | tee /tmp/worker-v24-audit.log
+          import {chromium} from "playwright";
+          import assert from "node:assert/strict";
+
+          const URL = "https://archipelago.k69ysrndm7.workers.dev/";
+          const browser = await chromium.launch({headless: true});
+          const context = await browser.newContext({
+            viewport: {width: 390, height: 844},
+            isMobile: true,
+            hasTouch: true,
+            locale: "ru-RU",
+          });
+          const page = await context.newPage();
+          const pageErrors = [];
+          page.on("pageerror", error => pageErrors.push(String(error)));
+
+          let deployed = false;
+          for (let attempt = 1; attempt <= 36; attempt += 1) {
+            await page.goto(`${URL}?audit=${Date.now()}`, {waitUntil: "domcontentloaded", timeout: 60000});
+            const scripts = await page.evaluate(() => [...document.scripts].map(item => item.src));
+            if (scripts.some(src => src.includes("app.js?v=24.0"))) {
+              deployed = true;
+              break;
+            }
+            console.log(`Worker still serves old cache generation, attempt ${attempt}`);
+            await page.waitForTimeout(5000);
+          }
+          assert.equal(deployed, true, "Worker did not deploy cache generation 24 in time");
+
+          await page.evaluate(() => localStorage.clear());
+          await page.reload({waitUntil: "domcontentloaded"});
+          await page.locator("#modeTouch").click();
+          await page.locator("#soloButton").click();
+          await page.waitForFunction(() => window.__echoArchipelago?.getState?.()?.phase === "playing");
+
+          await page.waitForTimeout(2800);
+          let snapshot = await page.evaluate(() => {
+            const state = window.__echoArchipelago.getState();
+            return {locked: state.navigation.lockedTargetId, pings: state.sonar.pings};
+          });
+          assert.deepEqual(snapshot, {locked: null, pings: 0});
+
+          const throttle = page.locator("#throttleButton");
+          await throttle.dispatchEvent("pointerdown", {pointerId: 41, pointerType: "touch", isPrimary: true, button: 0, buttons: 1});
+          await page.waitForTimeout(1300);
+          const held = await page.evaluate(() => {
+            const state = window.__echoArchipelago.getState();
+            return {speed: state.boat.speed, throttle: state.boat.throttle, forward: state.controls.forward};
+          });
+          await throttle.dispatchEvent("pointerup", {pointerId: 41, pointerType: "touch", isPrimary: true, button: 0, buttons: 0});
+          const released = await page.evaluate(() => {
+            const state = window.__echoArchipelago.getState();
+            return {speed: state.boat.speed, throttle: state.boat.throttle, forward: state.controls.forward};
+          });
+          assert.equal(held.forward, true);
+          assert.ok(held.speed > 1);
+          assert.equal(released.forward, false);
+          assert.equal(released.throttle, 0);
+          await page.waitForTimeout(300);
+          const coast = await page.evaluate(() => window.__echoArchipelago.getState().boat.speed);
+          assert.ok(coast <= released.speed + 0.02, `${released.speed} -> ${coast}`);
+          assert.ok(coast > 0);
+
+          await page.evaluate(() => {
+            const state = window.__echoArchipelago.getState();
+            state.boat.speed = 0;
+            state.boat.throttle = 0;
+            state.controls.forward = false;
+            state.controls.reverse = false;
+            state.floatingBrake.readyAt = 0;
+          });
+          await page.locator("#anchorButton").click();
+          snapshot = await page.evaluate(() => ({
+            message: window.__echoArchipelago.getState().message,
+            readyAt: window.__echoArchipelago.getState().floatingBrake.readyAt,
+          }));
+          assert.match(snapshot.message, /уже стоит/);
+          assert.equal(snapshot.readyAt, 0);
+
+          await page.evaluate(() => {
+            const state = window.__echoArchipelago.getState();
+            for (const survivor of state.world.survivors) survivor.rescued = true;
+            state.rescued = state.world.survivors.length;
+          });
+          await page.locator("#rescueButton").click();
+          snapshot = await page.evaluate(() => ({
+            active: window.__echoArchipelago.getState().controls.rescue,
+            message: window.__echoArchipelago.getState().message,
+          }));
+          assert.equal(snapshot.active, false);
+          assert.match(snapshot.message, /Все люди уже на борту/);
+
+          await page.evaluate(() => {
+            const state = window.__echoArchipelago.getState();
+            state.boat.hull = 100;
+            state.boat.leak = 0;
+          });
+          await page.locator("#repairHullButton").click();
+          snapshot = await page.evaluate(() => ({
+            active: window.__echoArchipelago.getState().controls.hullRepair,
+            message: window.__echoArchipelago.getState().message,
+          }));
+          assert.equal(snapshot.active, false);
+          assert.match(snapshot.message, /Корпус цел/);
+          assert.deepEqual(pageErrors, []);
+
+          console.log(JSON.stringify({held, released, coast, final: snapshot, pageErrors}, null, 2));
+          await browser.close();
+          NODE
+      - name: Upload Worker audit log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: worker-v24-browser-audit
+          path: /tmp/worker-v24-audit.log
+          if-no-files-found: warn
