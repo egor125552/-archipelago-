@@ -1,0 +1,254 @@
+name: Neural Hunter Browser Laboratory
+
+on:
+  push:
+    branches:
+      - agent/neural-hunter-brain
+
+permissions:
+  contents: write
+
+jobs:
+  browser-train-and-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/neural-hunter-brain
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Integrate modular neural brain
+        run: python3 tools/apply-neural-hunter.py
+      - name: Install browser
+        run: |
+          npm install --no-save --package-lock=false playwright@1.52.0
+          npx playwright install --with-deps chromium
+      - name: Train and audit only in Chromium
+        shell: bash
+        run: |
+          python3 -m http.server 4173 --directory public > /tmp/hunter-server.log 2>&1 &
+          server_pid=$!
+          trap 'kill $server_pid || true' EXIT
+          for attempt in {1..60}; do
+            curl -fsS http://127.0.0.1:4173/hunter-lab.html >/dev/null && break
+            sleep 0.25
+          done
+          node --input-type=module <<'NODE' | tee /tmp/hunter-browser-report.log
+          import {chromium} from "playwright";
+          import assert from "node:assert/strict";
+          import {writeFile} from "node:fs/promises";
+
+          const baseUrl = "http://127.0.0.1:4173";
+          const browser = await chromium.launch({headless: true});
+          const trainingContext = await browser.newContext({viewport: {width: 390, height: 844}, isMobile: true, hasTouch: true, locale: "ru-RU"});
+          const lab = await trainingContext.newPage();
+          const labErrors = [];
+          lab.on("pageerror", error => labErrors.push(String(error)));
+          await lab.goto(`${baseUrl}/hunter-lab.html?run=${Date.now()}`, {waitUntil: "domcontentloaded"});
+          await lab.waitForFunction(() => Boolean(window.__hunterLab?.train));
+          const trained = await lab.evaluate(() => window.__hunterLab.train({seed: 20260714, epochs: 24, episodesPerProfile: 5, learningRate: 0.017}));
+          assert.deepEqual(labErrors, []);
+          assert.equal(trained.report.architecture, "18-12-8-10");
+          assert.ok(trained.report.parameterCount < 500, `parameters ${trained.report.parameterCount}`);
+          assert.ok(trained.report.validation.accuracy >= 0.82, `validation ${trained.report.validation.accuracy}`);
+          for (const [profile, bucket] of Object.entries(trained.report.validation.byProfile)) {
+            assert.ok(bucket.accuracy >= 0.58, `${profile} accuracy ${bucket.accuracy}`);
+          }
+          await writeFile("public/src/hunter-brain-weights.js", trained.moduleSource, "utf8");
+          await writeFile("/tmp/hunter-training-report.json", JSON.stringify(trained.report, null, 2), "utf8");
+          await trainingContext.close();
+
+          const context = await browser.newContext({viewport: {width: 390, height: 844}, isMobile: true, hasTouch: true, locale: "ru-RU"});
+          const pageErrors = [];
+          context.on("page", page => page.on("pageerror", error => pageErrors.push(String(error))));
+          let pointerId = 100;
+
+          const profileFor = boatId => ({
+            version: 2,
+            credits: 999999,
+            unlockedLevel: 6,
+            selectedLevel: 6,
+            selectedBoat: boatId,
+            ownedUpgrades: ["coast-brake", "mini-armor", "high-flow-pump", "ram-keel", "debris-tools"],
+            runs: 10,
+            wins: 10,
+            bestScore: 12000,
+            bestByLevel: {1: 1000, 2: 2000, 3: 3000, 4: 4000, 5: 5000, 6: 6000},
+          });
+
+          async function startScenario(boatId = "strizh") {
+            const page = await context.newPage();
+            await page.addInitScript(profile => {
+              localStorage.clear();
+              localStorage.setItem("echo-archipelago-profile-v1", JSON.stringify(profile));
+            }, profileFor(boatId));
+            await page.goto(`${baseUrl}/?brain=${Date.now()}-${Math.random()}`, {waitUntil: "domcontentloaded"});
+            await page.locator("#modeTouch").click();
+            await page.locator("#operation6").click();
+            await page.locator(boatId === "grom" ? "#boatGrom" : "#boatStrizh").click();
+            await page.locator("#soloButton").click();
+            await page.waitForFunction(() => window.__echoArchipelago?.getState?.()?.phase === "playing");
+            await page.evaluate(() => {
+              const state = window.__echoArchipelago.getState();
+              state.training.safetyEnabled = false;
+              state.totalElapsed = 15;
+              state.elapsed = Math.max(state.elapsed, 15);
+              state.hunter.x = state.boat.x - 35;
+              state.hunter.y = state.boat.y - 25;
+              state.hunter.heading = 25;
+              state.hunter.speed = 12;
+              state.hunter.ramCooldown = 0;
+              state.hunter.recoverUntil = 0;
+              state.hunter.repositionUntil = 0;
+              state.hunter.brain.nextDecisionAt = 0;
+              state.hunter.brain.tacticHistory = [];
+            });
+            return page;
+          }
+
+          async function hold(page, selector, milliseconds) {
+            const id = pointerId++;
+            const locator = page.locator(selector);
+            await locator.dispatchEvent("pointerdown", {pointerId: id, pointerType: "touch", isPrimary: true, button: 0, buttons: 1});
+            await page.waitForTimeout(milliseconds);
+            await locator.dispatchEvent("pointerup", {pointerId: id, pointerType: "touch", isPrimary: true, button: 0, buttons: 0});
+          }
+
+          const results = {};
+
+          {
+            const page = await startScenario("strizh");
+            await page.waitForTimeout(4200);
+            results.idle = await page.evaluate(() => {
+              const state = window.__echoArchipelago.getState();
+              return {tactic: state.hunter.brain.tactic, history: state.hunter.brain.tacticHistory, stationary: state.hunter.brain.stationaryPersistence, hull: state.boat.hull};
+            });
+            assert.ok(results.idle.stationary > 0.7);
+            assert.ok([results.idle.tactic, ...results.idle.history.map(item => item.tactic)].some(tactic => ["pressure", "intercept"].includes(tactic)));
+            await page.close();
+          }
+
+          {
+            const page = await startScenario("strizh");
+            await hold(page, "#reverseButton", 4600);
+            results.reverse = await page.evaluate(() => {
+              const state = window.__echoArchipelago.getState();
+              return {tactic: state.hunter.brain.tactic, history: state.hunter.brain.tacticHistory, reverse: state.hunter.brain.reversePersistence, speed: state.boat.speed};
+            });
+            assert.ok(results.reverse.reverse > 0.55);
+            assert.ok([results.reverse.tactic, ...results.reverse.history.map(item => item.tactic)].includes("counter-reverse"));
+            await page.close();
+          }
+
+          {
+            const page = await startScenario("strizh");
+            const throttle = page.locator("#throttleButton");
+            const right = page.locator("#rightButton");
+            const throttleId = pointerId++;
+            const rightId = pointerId++;
+            await throttle.dispatchEvent("pointerdown", {pointerId: throttleId, pointerType: "touch", isPrimary: true, button: 0, buttons: 1});
+            await page.waitForTimeout(1800);
+            await right.dispatchEvent("pointerdown", {pointerId: rightId, pointerType: "touch", isPrimary: true, button: 0, buttons: 1});
+            await page.waitForTimeout(10500);
+            await right.dispatchEvent("pointerup", {pointerId: rightId, pointerType: "touch", isPrimary: true, button: 0, buttons: 0});
+            await throttle.dispatchEvent("pointerup", {pointerId: throttleId, pointerType: "touch", isPrimary: true, button: 0, buttons: 0});
+            results.circle = await page.evaluate(() => {
+              const state = window.__echoArchipelago.getState();
+              return {tactic: state.hunter.brain.tactic, history: state.hunter.brain.tacticHistory, turn: state.hunter.brain.turnPersistence, hunterHull: state.hunter.hull, playerHull: state.boat.hull};
+            });
+            assert.ok(results.circle.turn > 0.55);
+            assert.ok([results.circle.tactic, ...results.circle.history.map(item => item.tactic)].includes("counter-circle"));
+            assert.ok(results.circle.hunterHull > 48, `hunter hull ${results.circle.hunterHull}`);
+            await page.close();
+          }
+
+          {
+            const page = await startScenario("grom");
+            await hold(page, "#throttleButton", 6200);
+            results.grom = await page.evaluate(() => {
+              const state = window.__echoArchipelago.getState();
+              return {tactic: state.hunter.brain.tactic, history: state.hunter.brain.tacticHistory, playerSpeed: state.boat.speed, hunterSpeed: state.hunter.speed};
+            });
+            assert.ok(results.grom.playerSpeed > results.grom.hunterSpeed);
+            assert.ok([results.grom.tactic, ...results.grom.history.map(item => item.tactic)].some(tactic => ["block-objective", "intercept"].includes(tactic)));
+            await page.close();
+          }
+
+          {
+            const page = await startScenario("grom");
+            await page.evaluate(() => {
+              const state = window.__echoArchipelago.getState();
+              state.boat.heading = 0;
+              state.boat.speed = 15;
+              state.boat.throttle = 0;
+              state.hunter.x = state.boat.x;
+              state.hunter.y = state.boat.y + 7.2;
+              state.hunter.heading = 180;
+              state.hunter.speed = 4;
+              state.hunter.ramCooldown = 0;
+              state.hunter.brain.nextDecisionAt = 0;
+            });
+            await page.waitForTimeout(2600);
+            results.ramBait = await page.evaluate(() => {
+              const state = window.__echoArchipelago.getState();
+              return {tactic: state.hunter.brain.tactic, history: state.hunter.brain.tacticHistory, hits: state.hunter.brain.playerLedHits, ramBait: state.hunter.brain.ramBait, hunterHull: state.hunter.hull};
+            });
+            assert.ok(results.ramBait.hits > 0.45 || results.ramBait.ramBait > 0.45);
+            assert.ok([results.ramBait.tactic, ...results.ramBait.history.map(item => item.tactic)].includes("bait-ram"));
+            await page.close();
+          }
+
+          {
+            const page = await startScenario("strizh");
+            await page.evaluate(() => {
+              const state = window.__echoArchipelago.getState();
+              state.hunter.x = state.boat.x - 65;
+              state.hunter.y = state.boat.y - 45;
+              state.hunter.speed = 10;
+            });
+            await page.locator("#decoyButton").click();
+            await page.waitForTimeout(8500);
+            await page.locator("#decoyButton").click();
+            await page.waitForTimeout(1800);
+            results.decoy = await page.evaluate(() => {
+              const state = window.__echoArchipelago.getState();
+              return {tactic: state.hunter.brain.tactic, history: state.hunter.brain.tacticHistory, suspicion: state.hunter.brain.decoySuspicion, charges: state.hunter.decoyCharges};
+            });
+            assert.equal(results.decoy.charges, 0);
+            assert.ok(results.decoy.suspicion > 0.7);
+            assert.ok([results.decoy.tactic, ...results.decoy.history.map(item => item.tactic)].includes("ignore-decoy"));
+            await page.close();
+          }
+
+          assert.deepEqual(pageErrors, []);
+          const report = {training: trained.report, browserScenarios: results, pageErrors};
+          console.log(JSON.stringify(report, null, 2));
+          await writeFile("/tmp/hunter-browser-results.json", JSON.stringify(report, null, 2), "utf8");
+          await context.close();
+          await browser.close();
+          NODE
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: neural-hunter-browser-evidence
+          path: |
+            /tmp/hunter-browser-report.log
+            /tmp/hunter-browser-results.json
+            /tmp/hunter-training-report.json
+            /tmp/hunter-server.log
+          if-no-files-found: warn
+      - name: Commit browser-trained neural hunter
+        shell: bash
+        run: |
+          mkdir -p docs
+          cp /tmp/hunter-browser-results.json docs/hunter-neural-browser-report.json
+          rm -f tools/apply-neural-hunter.py .github/workflows/neural-hunter-browser.yml
+          git config user.name "OpenAI Codex"
+          git config user.email "codex@openai.com"
+          git add public package.json package-lock.json docs tools .github/workflows/neural-hunter-browser.yml
+          git commit -m "Add browser-trained neural hunter [skip ci]"
+          git push origin HEAD:agent/neural-hunter-brain
