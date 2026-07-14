@@ -13,7 +13,12 @@ new_bias = '''  if (brain.turnPersistence > 0.38 && Math.abs(brain.turnDirection
   }'''
 if old_bias not in brain:
     raise SystemExit('circle bias not found')
-brain_path.write_text(brain.replace(old_bias, new_bias, 1))
+brain = brain.replace(old_bias, new_bias, 1)
+old_decoy = '  brain.decoySuspicion = clamp(brain.decoySuspicion + (brain.decoyUses === 1 ? 0.34 : 0.48), 0, 1);'
+new_decoy = '  brain.decoySuspicion = clamp(brain.decoySuspicion + (brain.decoyUses === 1 ? 0.34 : 0.62), 0, 1);'
+if old_decoy not in brain:
+    raise SystemExit('decoy memory increment not found')
+brain_path.write_text(brain.replace(old_decoy, new_decoy, 1))
 
 path = Path('.github/workflows/neural-hunter-browser.yml')
 text = path.read_text()
