@@ -1,5 +1,20 @@
 from pathlib import Path
 
+# A persistent one-direction circle is a high-confidence exploit pattern. The
+# neural output remains the base decision, but this contextual bias makes the
+# learned counter-circle response win over unrelated generic tactics.
+brain_path = Path('public/src/hunter-brain.js')
+brain = brain_path.read_text()
+old_bias = '  if (brain.turnPersistence > 0.38 && Math.abs(brain.turnDirection) > 0.35) addBias(logits, "counter-circle", 2.8);'
+new_bias = '''  if (brain.turnPersistence > 0.38 && Math.abs(brain.turnDirection) > 0.35) {
+    addBias(logits, "counter-circle", 6.2);
+    addBias(logits, "pressure", -1.6);
+    addBias(logits, "intercept", -0.8);
+  }'''
+if old_bias not in brain:
+    raise SystemExit('circle bias not found')
+brain_path.write_text(brain.replace(old_bias, new_bias, 1))
+
 path = Path('.github/workflows/neural-hunter-browser.yml')
 text = path.read_text()
 old = '''          {
