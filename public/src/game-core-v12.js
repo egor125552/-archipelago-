@@ -266,7 +266,15 @@ export function setControl(state, control, active, actor = "captain") {
 
 export function command(state, action, actor = "captain") {
   ensureV12State(state);
-  return base.command(state, action, actor);
+  const result = base.command(state, action, actor);
+  if (action === "anchor" && result.ok) {
+    // A deliberate emergency stop supersedes the stored automatic-brake
+    // curve. Keeping that curve alive could restore several knots next tick.
+    state.progression.coastBrakeActive = false;
+    state.progression.coastBrakeElapsed = 0;
+    state.progression.coastBrakeInitialSpeed = 0;
+  }
+  return result;
 }
 
 export function step(state, dt) {

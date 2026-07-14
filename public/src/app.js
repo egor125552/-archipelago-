@@ -14,7 +14,7 @@ import {
   saveProfile,
   selectBoat,
   selectOperation,
-} from "./progression.js?v=21.0";
+} from "./progression.js?v=22.0";
 
 const $ = id => document.getElementById(id);
 const stateBox = {state: null};
@@ -422,6 +422,13 @@ function render(forceAnnouncement = false) {
         ? "Заправиться в гавани"
         : `Аварийная канистра — ${view.refuel.canisters}`);
   }
+  const anchorButton = $("anchorButton");
+  if (anchorButton && view.floatingBrake) {
+    setAriaDisabled("anchorButton", captainLocked || !view.floatingBrake.ready);
+    setText("anchorButton", view.floatingBrake.ready
+      ? "Сбросить плавучий тормоз"
+      : `Плавучий тормоз — восстановление ${Math.ceil(view.floatingBrake.remaining)} с`);
+  }
   setHidden("decoyButton", !view.hunter?.enabled || view.hunter?.destroyed);
   setAriaDisabled("decoyButton", crewLocked || !view.hunter?.decoyCharges || view.hunter?.destroyed);
   setText("decoyButton", `Ложный буй — ${view.hunter?.decoyCharges || 0}`);
@@ -432,7 +439,7 @@ function render(forceAnnouncement = false) {
       ? `Преследователь появится через ${Math.ceil(view.hunter?.arrivesIn || 0)} с`
       : `Преследователь: ${Math.round(view.hunter.distance)} м, ${view.hunter.relativeAngle < -12 ? "слева" : view.hunter.relativeAngle > 12 ? "справа" : "прямо"}; корпус ${Math.round(view.hunter.hull)}%; ${view.hunter.modeLabel}`);
 
-  for (const id of ["leftButton", "rightButton", "throttleButton", "reverseButton", "anchorButton"]) setAriaDisabled(id, captainLocked);
+  for (const id of ["leftButton", "rightButton", "throttleButton", "reverseButton"]) setAriaDisabled(id, captainLocked);
   for (const id of ["sonarButton", "pumpButton", "rescueButton"]) setAriaDisabled(id, crewLocked);
   setAriaDisabled("pumpAssistButton", !view.pumpAssist?.available);
   setAriaDisabled("repairButton", crewLocked || (!view.canRepair && !view.waterEngine?.canRestart));

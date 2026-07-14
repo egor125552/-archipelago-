@@ -7,8 +7,11 @@ export const CONFIG = Object.freeze({
   ...base.CONFIG,
   shoreInset: 2.4,
   shoreImpactCooldown: 1.35,
+  shoreScrapeSpeed: 1.25,
+  shoreHardImpactSpeed: 5,
   shoreBaseDamage: 6,
   shoreSeverityDamage: 15,
+  floatingBrakeCooldown: 12,
   emergencyFuelAmount: 30,
   emergencyFuelDuration: 4.5,
   harborFuelDuration: 3,
@@ -36,6 +39,8 @@ function ensureV18State(state) {
   if (!state || typeof state !== "object") return state;
   state.shoreImpact ||= {};
   if (!Number.isFinite(state.shoreImpact.lastAt)) state.shoreImpact.lastAt = -999;
+  state.floatingBrake ||= {};
+  if (!Number.isFinite(state.floatingBrake.readyAt)) state.floatingBrake.readyAt = 0;
   state.refuel ||= {};
   if (!Number.isInteger(state.refuel.canisters)) state.refuel.canisters = 1;
   state.refuel.canisters = clamp(state.refuel.canisters, 0, 1);
@@ -92,22 +97,40 @@ function strengthenShoreImpact(state, events, previousSpeed, previousMessage) {
   state.shoreImpact.lastAt = now;
   const impactSpeed = Math.abs(Number(previousSpeed) || 0);
   const severity = collisionSeverity(impactSpeed);
-  const rawDamage = CONFIG.shoreBaseDamage + CONFIG.shoreSeverityDamage * severity;
+  const scrape = impactSpeed <= CONFIG.shoreScrapeSpeed;
+  const hardImpact = impactSpeed >= CONFIG.shoreHardImpactSpeed;
+  const damageRamp = clamp(
+    (impactSpeed - CONFIG.shoreScrapeSpeed) / (CONFIG.shoreHardImpactSpeed - CONFIG.shoreScrapeSpeed),
+    0,
+    1,
+  );
+  const rawDamage = scrape
+    ? 0
+    : (CONFIG.shoreBaseDamage + CONFIG.shoreSeverityDamage * severity) * damageRamp;
   const impact = applyCollisionDamage(state.boat, rawDamage);
-  state.boat.speed = -Math.sign(previousSpeed || 1) * Math.max(1.8, impactSpeed * 0.35);
+  const rebound = Math.min(impactSpeed, Math.max(0.35, impactSpeed * 0.35));
+  state.boat.speed = scrape ? 0 : -Math.sign(previousSpeed || 1) * rebound;
   const event = events[index];
   Object.assign(event, {
     shore: true,
     hazardId: "shore",
-    severity: Math.max(1.1, severity),
+    severity: scrape ? 0.2 : severity,
+    scrape,
+    hardImpact,
     damage: impact.damage,
     absorbed: impact.absorbed,
     armor: impact.armor,
     impactSpeed,
     pan: contact.pan,
   });
-  const armor = impact.absorbed > 0 ? ` Броня приняла ${Math.round(impact.absorbed)}.` : "";
-  state.message = `Сильный удар о берег. Корпус минус ${Math.round(impact.damage)}%.${armor}`;
+  if (scrape) {
+    state.message = "Лодка мягко коснулась берега. Корпус не повреждён.";
+  } else {
+    const armor = impact.absorbed > 0 ? ` Броня приняла ${Math.round(impact.absorbed)}.` : "";
+    const impactText = hardImpact ? "Сильный удар" : "Удар";
+    const damageText = impact.damage < 1 ? impact.damage.toFixed(1) : Math.round(impact.damage);
+    state.message = `${impactText} о берег. Корпус минус ${damageText}%.${armor}`;
+  }
 }
 
 function refuelDuration(state) {
@@ -140,7 +163,7 @@ function beginRefuel(state, actor) {
     return deny(state, "Сначала останови лодку.", "too-fast");
   }
   if (state.damageControl?.floodEmergency) return deny(state, "Сначала стабилизируй лодку.", "emergency");
-  if (state.controls.rescue || state.controls.hullRepair || state.engineService?.active || state.debris?.removing) {
+  if (state.controls.pump || state.controls.rescue || state.controls.hullRepair || state.engineService?.active || state.debris?.removing) {
     return deny(state, "Сначала закончи текущее действие.", "busy");
   }
   const harbor = atHarbor(state);
@@ -229,7 +252,7 @@ export function startGame(state) {
 
 export function setControl(state, control, active, actor = "captain") {
   ensureV18State(state);
-  if (active && state.refuel.active && ["forward", "reverse", "rescue", "hullRepair"].includes(control)) {
+  if (active && state.refuel.active && ["forward", "reverse", "pump", "rescue", "hullRepair"].includes(control)) {
     state.message = "Сначала отмени заправку.";
     return false;
   }
@@ -238,8 +261,20 @@ export function setControl(state, control, active, actor = "captain") {
 
 export function command(state, action, actor = "captain") {
   ensureV18State(state);
+  if (state.refuel.active && ["quick", "repair", "debris-remove"].includes(action)) {
+    return deny(state, "Сначала закончи или отмени заправку.", "refuel-busy");
+  }
   if (action === "refuel") return beginRefuel(state, actor);
   if (action === "quick" && state.boat.fuel <= 0.01 && canRefuelHere(state)) return beginRefuel(state, actor);
+  if (action === "anchor" && state.phase === "playing" && (state.mode !== "coop" || actor === "captain")) {
+    const remaining = state.floatingBrake.readyAt - clock(state);
+    if (remaining > 0) {
+      return deny(state, `Плавучий тормоз восстанавливается: ${Math.ceil(remaining)} с.`, "brake-cooldown");
+    }
+    const result = base.command(state, action, actor);
+    if (result.ok) state.floatingBrake.readyAt = clock(state) + CONFIG.floatingBrakeCooldown;
+    return result;
+  }
   return base.command(state, action, actor);
 }
 
@@ -287,6 +322,11 @@ export function getView(state) {
   const duration = state.refuel.source === "harbor" ? CONFIG.harborFuelDuration : CONFIG.emergencyFuelDuration;
   return {
     ...view,
+    floatingBrake: {
+      ready: state.phase === "playing" && state.floatingBrake.readyAt <= clock(state),
+      cooldown: CONFIG.floatingBrakeCooldown,
+      remaining: Math.max(0, state.floatingBrake.readyAt - clock(state)),
+    },
     refuel: {
       active: state.refuel.active,
       progress: state.refuel.progress,
@@ -299,6 +339,7 @@ export function getView(state) {
         && state.boat.fuel < 99.5
         && Math.abs(state.boat.speed) <= 0.25
         && !state.damageControl?.floodEmergency
+        && !state.controls.pump
         && !state.controls.rescue
         && !state.controls.hullRepair
         && !state.engineService?.active

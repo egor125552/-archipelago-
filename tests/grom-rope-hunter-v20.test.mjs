@@ -207,7 +207,7 @@ test("a fast Grom can ram and eventually disable the pursuer", () => {
   assert.ok(state.boat.hull > 0);
 });
 
-test("VoiceOver turn pulses restore the same control focus and release assets use cache v21", async () => {
+test("VoiceOver turn pulses restore the same control focus and release assets use cache v22", async () => {
   const [gameplay, html, audio] = await Promise.all([
     readFile(new URL("../public/src/gameplay-v6.js", import.meta.url), "utf8"),
     readFile(new URL("../public/index.html", import.meta.url), "utf8"),
@@ -216,7 +216,7 @@ test("VoiceOver turn pulses restore the same control focus and release assets us
   assert.match(gameplay, /function keepReaderFocus\(button\)/);
   assert.match(gameplay, /requestAnimationFrame\(restore\)/);
   assert.ok((gameplay.match(/keepReaderFocus\(button\)/g) || []).length >= 6);
-  assert.match(html, /game-core-v18\.js\?v=21\.0/);
-  assert.match(html, /audio-engine-v13\.js\?v=21\.0/);
+  assert.match(html, /game-core-v18\.js\?v=22\.0/);
+  assert.match(html, /audio-engine-v13\.js\?v=22\.0/);
   assert.match(audio, /hunter-destroyed/);
 });

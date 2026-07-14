@@ -56,6 +56,23 @@ test("a fast shoreline impact causes severe speed-scaled damage, a leak and a ha
   assert.match(fast.message, /Сильный удар о берег/);
 });
 
+test("a gentle shoreline touch stops the boat without invented damage or a reverse launch", () => {
+  const state = started();
+  state.boat.x = state.world.bounds.maxX + 0.05;
+  state.boat.y = Math.min(80, state.world.bounds.maxY - 20);
+  state.boat.heading = 90;
+  state.boat.speed = 0.5;
+  const hull = state.boat.hull;
+  const events = step(state, 0.01);
+  const touch = events.find(event => event.type === "collision" && event.shore);
+  assert.ok(touch);
+  assert.equal(touch.scrape, true);
+  assert.equal(touch.damage, 0);
+  assert.equal(state.boat.hull, hull);
+  assert.equal(state.boat.speed, 0);
+  assert.match(state.message, /мягко коснулась берега/);
+});
+
 test("Grom armor softens but does not erase a violent shore crash", () => {
   const state = started({
     level: 6,
@@ -149,6 +166,46 @@ test("refueling requires a stopped boat and belongs to the systems operator in c
   assert.equal(command(coop, "refuel", "crew").ok, true);
 });
 
+test("refueling cannot overlap the manual pump, service or debris extraction", () => {
+  const state = started({level: 5});
+  state.boat.fuel = 40;
+  assert.equal(setControl(state, "pump", true), true);
+  assert.equal(command(state, "refuel").reason, "busy");
+  assert.equal(setControl(state, "pump", false), true);
+
+  assert.equal(command(state, "refuel").ok, true);
+  assert.equal(setControl(state, "pump", true), false);
+  assert.equal(command(state, "repair").reason, "refuel-busy");
+  assert.equal(command(state, "debris-remove").reason, "refuel-busy");
+  assert.equal(state.engineService.active, false);
+  assert.equal(state.debris.removing, false);
+  assert.equal(command(state, "refuel").ok, true, "the same control still cancels refueling");
+  assert.equal(state.refuel.active, false);
+});
+
+test("the floating brake overrides coast braking and cannot be spammed", () => {
+  const state = started({upgrades: {"coast-brake": true}});
+  state.boat.speed = 9;
+  state.controls.forward = true;
+  assert.equal(setControl(state, "forward", false), true);
+  assert.equal(state.progression.coastBrakeActive, true);
+
+  const stop = command(state, "anchor");
+  assert.equal(stop.ok, true);
+  assert.ok(Math.abs(state.boat.speed) <= 0.12);
+  assert.equal(state.progression.coastBrakeActive, false);
+  const stoppedSpeed = Math.abs(state.boat.speed);
+  step(state, 0.05);
+  assert.ok(Math.abs(state.boat.speed) <= stoppedSpeed, `${stoppedSpeed} -> ${state.boat.speed}`);
+
+  const restored = deserialize(serialize(state));
+  assert.equal(command(restored, "anchor").reason, "brake-cooldown");
+  assert.equal(getView(restored).floatingBrake.ready, false);
+  run(restored, CONFIG.floatingBrakeCooldown + 0.1);
+  assert.equal(getView(restored).floatingBrake.ready, true);
+  assert.equal(command(restored, "anchor").ok, true);
+});
+
 test("used canisters and active refueling survive serialization without being refilled", () => {
   const state = started();
   state.boat.x = 40;
@@ -166,7 +223,7 @@ test("used canisters and active refueling survive serialization without being re
   assert.equal(again.refuel.canisters, 0);
 });
 
-test("release UI exposes refueling, heavy shore audio and cache generation 21", async () => {
+test("release UI exposes refueling, heavy shore audio and cache generation 22", async () => {
   const [html, app, gameplay, audio] = await Promise.all([
     readFile(new URL("../public/index.html", import.meta.url), "utf8"),
     readFile(new URL("../public/src/app.js", import.meta.url), "utf8"),
@@ -174,10 +231,12 @@ test("release UI exposes refueling, heavy shore audio and cache generation 21", 
     readFile(new URL("../public/src/audio-engine-v13.js", import.meta.url), "utf8"),
   ]);
   assert.match(html, /id="refuelButton"/);
-  assert.match(html, /game-core-v18\.js\?v=21\.0/);
-  assert.match(html, /audio-engine-v13\.js\?v=21\.0/);
+  assert.match(html, /game-core-v18\.js\?v=22\.0/);
+  assert.match(html, /audio-engine-v13\.js\?v=22\.0/);
   assert.match(app, /sendCommand\("refuel"\)/);
   assert.match(gameplay, /Используй аварийную канистру/);
   assert.match(audio, /event\.shore/);
+  assert.match(audio, /event\.scrape/);
+  assert.match(audio, /event\.hardImpact/);
   assert.match(audio, /fuel-refuel-complete/);
 });
