@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#07090d">
+  <title>Нулевая смена — загрузка</title>
+</head>
+<body>
+  <main id="loader" style="font:18px system-ui,sans-serif;max-width:720px;margin:40px auto;padding:20px;line-height:1.5">
+    <h1>Нулевая смена</h1>
+    <p role="status" aria-live="polite">Загрузка станции…</p>
+  </main>
+  <script>
+  (async () => {
+    const base = 'https://cdn.jsdelivr.net/gh/egor125552/atomic-heart-edition@1bf855b68a35fb1a227e49e9b58993fb7710d2e9/';
+    const paths = [
+      'index.html', 'styles.css', 'src/data.js', 'src/audio.js',
+      'src/runtime-parts/game-1.js.txt', 'src/runtime-parts/game-2.js.txt',
+      'src/runtime-parts/game-3.js.txt', 'src/runtime-parts/game-4.js.txt'
+    ];
+    try {
+      const files = await Promise.all(paths.map(async path => {
+        const response = await fetch(base + path, { cache: 'no-store' });
+        if (!response.ok) throw new Error(path + ': HTTP ' + response.status);
+        return response.text();
+      }));
+
+      const [pageHtml, css, dataModule, audioModule, ...parts] = files;
+      const parsed = new DOMParser().parseFromString(pageHtml, 'text/html');
+      parsed.querySelectorAll('script, link[rel="stylesheet"]').forEach(node => node.remove());
+      document.title = parsed.title || 'Нулевая смена — аудио-хоррор';
+      document.body.innerHTML = parsed.body.innerHTML;
+
+      const style = document.createElement('style');
+      style.textContent = css;
+      document.head.appendChild(style);
+
+      const source = [
+        dataModule.replaceAll('export const ', 'const '),
+        audioModule.replaceAll('export function ', 'function '),
+        ...parts
+      ].join('\n');
+      new Function(source)();
+    } catch (error) {
+      console.error(error);
+      document.body.innerHTML = '<main style="font:18px system-ui,sans-serif;max-width:720px;margin:40px auto;padding:20px;line-height:1.5"><h1>Нулевая смена</h1><p role="alert">Игра не загрузилась. Обнови страницу. Ошибка: ' + String(error.message || error).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])) + '</p></main>';
+    }
+  })();
+  </script>
+</body>
+</html>
