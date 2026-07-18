@@ -22,8 +22,6 @@ jobs:
         run: npm ci
 
       - name: Run Node mechanics tests
-        id: node_tests
-        continue-on-error: true
         run: npm test
 
       - name: Install Playwright browsers
@@ -62,7 +60,3 @@ jobs:
             worker-dev.log
           if-no-files-found: ignore
           retention-days: 7
-
-      - name: Fail for legacy Node regressions
-        if: always() && steps.node_tests.outcome == 'failure'
-        run: exit 1
