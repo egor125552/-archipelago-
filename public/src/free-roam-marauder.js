@@ -16,13 +16,14 @@ export function createMarauder() {
     y: 268,
     heading: 315,
     speed: 0,
-    hull: 90,
-    active: true,
+    hull: 72,
+    active: false,
     destroyed: false,
     respawnAt: 0,
     targetBoat: 0,
     ramCooldown: 0,
     stealCooldown: 0,
+    recoveryRemaining: 0,
     cargo: [],
   };
 }
@@ -31,10 +32,11 @@ export function ensureMarauder(world) {
   world.freeActivities.marauder ||= createMarauder();
   const marauder = world.freeActivities.marauder;
   marauder.cargo ||= [];
-  if (!Number.isFinite(marauder.hull)) marauder.hull = 90;
+  if (!Number.isFinite(marauder.hull)) marauder.hull = 72;
   if (!Number.isFinite(marauder.speed)) marauder.speed = 0;
   if (!Number.isFinite(marauder.ramCooldown)) marauder.ramCooldown = 0;
   if (!Number.isFinite(marauder.stealCooldown)) marauder.stealCooldown = 0;
+  if (!Number.isFinite(marauder.recoveryRemaining)) marauder.recoveryRemaining = 0;
   return marauder;
 }
 
@@ -78,6 +80,39 @@ function steerToward(marauder, target, dt) {
   marauder.y = clamp(marauder.y, 78, 313);
 }
 
+function steerAway(marauder, target, dt) {
+  const dx = marauder.x - target.x;
+  const dy = marauder.y - target.y;
+  const desired = Math.atan2(dx, -dy) * 180 / Math.PI;
+  const change = clamp(wrapDeg(desired - marauder.heading), -105 * dt, 105 * dt);
+  marauder.heading = wrapDeg(marauder.heading + change);
+  marauder.speed += clamp(13 - marauder.speed, -12 * dt, 10 * dt);
+  const heading = marauder.heading * Math.PI / 180;
+  marauder.x += Math.sin(heading) * marauder.speed * dt;
+  marauder.y -= Math.cos(heading) * marauder.speed * dt;
+  marauder.x = clamp(marauder.x, 7, 413);
+  marauder.y = clamp(marauder.y, 78, 313);
+}
+
+function separateBoats(boat, marauder, minimum = 16) {
+  let dx = marauder.x - boat.x;
+  let dy = marauder.y - boat.y;
+  let metres = Math.hypot(dx, dy);
+  if (metres < 0.001) {
+    const heading = marauder.heading * Math.PI / 180;
+    dx = Math.sin(heading);
+    dy = -Math.cos(heading);
+    metres = 1;
+  }
+  const push = Math.max(0, minimum - metres);
+  const nx = dx / metres;
+  const ny = dy / metres;
+  boat.x = clamp(boat.x - nx * push * 0.28, 7, 413);
+  boat.y = clamp(boat.y - ny * push * 0.28, 78, 313);
+  marauder.x = clamp(marauder.x + nx * push * 0.72, 7, 413);
+  marauder.y = clamp(marauder.y + ny * push * 0.72, 78, 313);
+}
+
 function stealCargo(world, marauder, boat) {
   if (marauder.stealCooldown > 0 || !(boat.cargo || []).length || distance(marauder, boat) > 10) return false;
   const id = boat.cargo.shift();
@@ -101,20 +136,23 @@ function stealCargo(world, marauder, boat) {
 }
 
 function ramBoat(world, marauder, boat) {
-  if (marauder.ramCooldown > 0 || distance(marauder, boat) > 11.5) return;
+  if (marauder.ramCooldown > 0 || marauder.recoveryRemaining > 0 || Math.abs(marauder.speed) < 7 || distance(marauder, boat) > 11.5) return false;
   const impact = Math.max(6, Math.abs(marauder.speed - boat.speed) * 0.72);
   boat.hull = clamp(boat.hull - impact, 0.05, 100);
   boat.leak = clamp(boat.leak + impact * 0.055, 0, 16);
   boat.speed *= -0.24;
   marauder.speed *= -0.42;
-  marauder.ramCooldown = 2.8;
-  emit(world, "marauder-ram", `Мародёр ударил лодку. Корпус ${Math.round(boat.hull)}.`, [boat.driver ?? boat.owner], {
+  separateBoats(boat, marauder);
+  marauder.ramCooldown = 3.4;
+  marauder.recoveryRemaining = 3.2;
+  emit(world, "pursuer-ram", `Катер-преследователь ударил лодку и отходит. Корпус ${Math.round(boat.hull)}.`, [boat.driver ?? boat.owner], {
     targetBoat: boat.id,
     strength: impact,
     damage: impact,
     x: boat.x,
     y: boat.y,
   });
+  return true;
 }
 
 export function releaseStolenCargo(world, marauder) {
@@ -137,25 +175,30 @@ function destroyFromRam(world, marauder, playerIndex, helpers) {
   marauder.destroyed = true;
   marauder.active = false;
   marauder.speed = 0;
-  marauder.respawnAt = world.time + 36;
-  emit(world, "marauder-destroyed", "Катер-мародёр уничтожен тараном. Остался редкий ящик.", [0, 1], {
+  marauder.respawnAt = 0;
+  emit(world, "pursuer-destroyed", "Катер-преследователь уничтожен тараном. Остался редкий ящик.", [0, 1], {
     sourcePlayer: playerIndex,
     x: marauder.x,
     y: marauder.y,
   });
-  helpers?.spawnRareCrate?.(world, marauder.x, marauder.y, "automatic", "marauder");
+  helpers?.spawnRareCrate?.(world, marauder.x, marauder.y, "automatic", "pursuer");
 }
 
 function resolvePlayerRams(world, marauder, helpers) {
   for (const boat of world.boats || []) {
-    if (boat.sunk || distance(boat, marauder) > 11.5 || Math.abs(boat.speed) < 5.5 || marauder.ramCooldown > 0) continue;
-    const impact = Math.abs(boat.speed) * 1.35;
-    marauder.hull = clamp(marauder.hull - impact, 0, 90);
+    if (boat.sunk || distance(boat, marauder) > 11.5 || Math.abs(boat.speed) < 4.5 || marauder.ramCooldown > 0) continue;
+    const effectiveHeading = wrapDeg(boat.heading + (boat.speed < 0 ? 180 : 0));
+    const targetBearing = Math.atan2(marauder.x - boat.x, -(marauder.y - boat.y)) * 180 / Math.PI;
+    if (Math.abs(wrapDeg(targetBearing - effectiveHeading)) > 70) continue;
+    const impact = Math.max(10, Math.abs(boat.speed) * 1.8);
+    marauder.hull = clamp(marauder.hull - impact, 0, 72);
     boat.hull = clamp(boat.hull - impact * 0.32, 0.05, 100);
     boat.speed *= -0.18;
     marauder.speed *= -0.55;
-    marauder.ramCooldown = 1.6;
-    emit(world, "marauder-hit", `Таран по мародёру. Его корпус ${Math.round(marauder.hull)}.`, [boat.driver ?? boat.owner], {
+    separateBoats(boat, marauder);
+    marauder.ramCooldown = 2.1;
+    marauder.recoveryRemaining = 2.6;
+    emit(world, "pursuer-hit", `Таран попал. Корпус преследователя ${Math.round(marauder.hull)}. Он отходит для нового захода.`, [boat.driver ?? boat.owner], {
       sourcePlayer: boat.driver ?? boat.owner,
       damage: impact,
       hull: marauder.hull,
@@ -163,8 +206,9 @@ function resolvePlayerRams(world, marauder, helpers) {
       y: marauder.y,
     });
     if (marauder.hull <= 0) destroyFromRam(world, marauder, boat.driver ?? boat.owner, helpers);
-    break;
+    return true;
   }
+  return false;
 }
 
 function respawnMarauder(world, marauder) {
@@ -172,14 +216,15 @@ function respawnMarauder(world, marauder) {
   marauder.y = 268;
   marauder.heading = 315;
   marauder.speed = 0;
-  marauder.hull = 90;
+  marauder.hull = 72;
   marauder.active = true;
   marauder.destroyed = false;
   marauder.respawnAt = 0;
   marauder.ramCooldown = 3;
   marauder.stealCooldown = 3;
+  marauder.recoveryRemaining = 0;
   marauder.cargo = [];
-  emit(world, "marauder-return", "В бухту вернулся катер-мародёр.", [0, 1], {
+  emit(world, "pursuer-return", "В бухту вернулся катер-преследователь.", [0, 1], {
     x: marauder.x,
     y: marauder.y,
   });
@@ -193,11 +238,16 @@ export function updateMarauder(world, dt, helpers = {}) {
   }
   marauder.ramCooldown = Math.max(0, marauder.ramCooldown - dt);
   marauder.stealCooldown = Math.max(0, marauder.stealCooldown - dt);
+  marauder.recoveryRemaining = Math.max(0, marauder.recoveryRemaining - dt);
   const target = chooseTargetBoat(world);
   if (!target) return;
   marauder.targetBoat = target.id;
+  if (marauder.recoveryRemaining > 0) {
+    steerAway(marauder, target, dt);
+    return;
+  }
   steerToward(marauder, target, dt);
+  if (resolvePlayerRams(world, marauder, helpers)) return;
   stealCargo(world, marauder, target);
   ramBoat(world, marauder, target);
-  resolvePlayerRams(world, marauder, helpers);
 }

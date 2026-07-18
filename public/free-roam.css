@@ -51,6 +51,7 @@ body.gesture-mode .gesture-hint { color: var(--accent); }
 [hidden] { display: none !important; }
 @media (max-width: 44rem) {
   .status { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .status strong { overflow: visible; white-space: normal; line-height: 1.15; }
   .play-surface { min-height: 65vh; }
   .controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .controls button { min-height: 3.7rem; }

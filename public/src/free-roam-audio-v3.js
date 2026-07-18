@@ -12,7 +12,7 @@ export function relativeMovementPan(listener, source) {
   if (Math.hypot(dx, dy) < 0.001) return 0;
   const absolute = Math.atan2(dx, -dy) * 180 / Math.PI;
   const relative = wrapDeg(absolute - (Number(listener?.heading) || 0));
-  return clamp(relative / 78, -1, 1);
+  return clamp(Math.sin(relative * Math.PI / 180), -1, 1);
 }
 
 export class FreeRoamAudio extends BaseFreeRoamAudio {

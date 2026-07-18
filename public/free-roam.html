@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
   <meta name="theme-color" content="#071217">
   <title>Свободная бухта — Эхо-Архипелаг</title>
-  <link rel="stylesheet" href="free-roam.css?v=3">
+  <link rel="stylesheet" href="free-roam.css?v=4">
 </head>
 <body>
   <a class="skip" href="#main">К игре</a>
@@ -13,7 +13,7 @@
     <section id="lobby" class="shell" aria-labelledby="title">
       <p class="eyebrow">Эхо-Архипелаг</p>
       <h1 id="title">Свободная бухта</h1>
-      <p class="lead">Ищи звучащие ящики, перевози припасы, защищай груз от катера-мародёра и других игроков. Можно сотрудничать двумя лодками, делить добычу, тараниться, буксировать, драться на берегу и захватывать оставленные катера.</p>
+      <p class="lead">Сначала доставь припасы и найди автомат, затем отбейся от катера-преследователя. Сонар всегда ведёт только к одной текущей цели. Вдвоём можно делить груз, идти двумя лодками, буксировать, тараниться и драться на берегу.</p>
       <div class="lobby-actions">
         <button id="hostButton" class="primary">Создать свободный мир</button>
         <button id="joinButton">Войти в ближайший мир</button>
@@ -26,8 +26,8 @@
       </section>
       <details>
         <summary>Коротко об управлении</summary>
-        <p>На компьютере: стрелки удерживают газ и руль. На берегу Shift вместе со стрелкой включает бег. F выполняет действие по ситуации, пробел в лодке сбрасывает плавучий тормоз, C включает насос, V ставит пластину. X бьёт или стреляет, Z меняет оружие.</p>
-        <p>На iPhone жесты включены по умолчанию почти на всём экране: свайп с удержанием управляет движением, касание выполняет действие, двойное касание включает прыжок, а удержание даёт сильный удар. Два и три пальца управляют насосом, пластиной, оружием и быстрым ударом. Кнопкой «Управление» можно скрыть все игровые жесты и вернуть обычные кнопки.</p>
+        <p>На компьютере: стрелки удерживают газ и руль. На берегу Shift вместе со стрелкой включает бег. F выполняет действие по ситуации, пробел в лодке сбрасывает плавучий тормоз, Q включает сонар, C — насос, V — пластину. X бьёт или стреляет, Z меняет оружие.</p>
+        <p>На iPhone жесты включены по умолчанию почти на всём экране: свайп с удержанием управляет движением, касание выполняет действие, двойное касание включает прыжок, а удержание даёт сильный удар. Касание двумя пальцами включает сонар; взмах двумя вверх — насос; удержание двумя — пластина; взмах двумя вбок — оружие; двойное касание двумя — состояние; взмах вниз возвращает кнопки. Три пальца — быстрый удар.</p>
       </details>
       <a class="back-link" href="/">Вернуться к операциям</a>
     </section>
@@ -59,12 +59,13 @@
         <div><span>Оружие</span><strong id="weaponValue">кулаки</strong></div>
         <div><span>Груз</span><strong id="cargoValue">нет</strong></div>
         <div><span>Доставка</span><strong id="scoreValue">0</strong></div>
-        <div><span>Мародёр</span><strong id="marauderValue">100%</strong></div>
+        <div><span>Сценарий</span><strong id="scenarioValue">доставка</strong></div>
+        <div><span>Преследователь</span><strong id="marauderValue">ещё не появился</strong></div>
       </section>
 
       <section id="playSurface" class="play-surface" aria-label="Игровая поверхность. Свайп с удержанием управляет лодкой или движением игрока">
         <canvas id="map" width="840" height="640" aria-hidden="true"></canvas>
-        <p id="gestureGuide" class="gesture-hint">Жесты: свайп с удержанием — движение; касание — действие; двойное касание — прыжок; удержание — сильный удар; два пальца — насос; удержание двумя — пластина; свайп двумя вбок — оружие; вверх — состояние; вниз — вернуть кнопки; три пальца — быстрый удар.</p>
+        <p id="gestureGuide" class="gesture-hint">Жесты: свайп с удержанием — движение; касание — действие; двойное касание — прыжок; удержание — сильный удар; касание двумя — сонар; двойное касание двумя — состояние; удержание двумя — пластина; взмах двумя вбок — оружие; вверх — насос; вниз — вернуть кнопки; три пальца — быстрый удар.</p>
 
         <section id="controls" class="controls" aria-label="Управление">
           <button id="leftButton" data-key="←" aria-keyshortcuts="ArrowLeft">Влево</button>
@@ -75,6 +76,7 @@
           <button id="jumpButton" data-key="Пробел" aria-keyshortcuts="Space">Плавучий тормоз</button>
           <button id="attackButton" class="danger" data-key="X" aria-keyshortcuts="X">Удар</button>
           <button id="weaponButton" data-key="Z" aria-keyshortcuts="Z">Оружие: кулаки</button>
+          <button id="sonarButton" class="primary" data-key="Q" aria-keyshortcuts="Q">Сонар: текущая цель</button>
           <button id="pumpButton" aria-pressed="false" data-key="C" aria-keyshortcuts="C">Насос: выключен</button>
           <button id="repairButton" aria-pressed="false" data-key="V" aria-keyshortcuts="V">Пластина: готова</button>
         </section>
@@ -87,12 +89,13 @@
       </details>
       <details class="help">
         <summary>Груз и бой</summary>
+        <p>Сценарий идёт по этапам: доставь два обычных ящика, затем найди и доставь автомат. Только после предупреждения появится катер-преследователь. Кулаки и нож его не пробивают: стреляй из автомата или разгоняй лодку и тарань. После столкновения катер отходит для нового захода.</p>
         <p>Обычные ящики дают пластины, топливо или усиление насоса. В редких ящиках встречаются нож, автомат и патроны. Подойди к причалу на малой скорости, чтобы автоматически разгрузить лодку.</p>
         <p>Короткое нажатие X — быстрый удар. Удержание X — сильный удар, который расходует больше сил и сбивает соперника с ног. Автомат стреляет очередью, пока X удерживается. После смерти груз выпадает, а игрок возвращается к причалу через восемь секунд.</p>
       </details>
     </section>
   </main>
-  <script type="module" src="src/free-roam-v4.js?v=7"></script>
+  <script type="module" src="src/free-roam-v4.js?v=8"></script>
   <script type="module" src="src/free-roam-accessibility.js?v=1"></script>
   <script type="module" src="src/free-roam-speech-fix.js?v=1"></script>
 </body>

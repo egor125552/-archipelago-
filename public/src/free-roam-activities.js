@@ -103,6 +103,7 @@ export function storeActivityInput(world, playerIndex, input) {
     attack: Boolean(input?.attack),
     weapon: Boolean(input?.weapon),
     action: Boolean(input?.action),
+    sonar: Boolean(input?.sonar),
   };
 }
 

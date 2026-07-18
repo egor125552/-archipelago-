@@ -195,6 +195,7 @@ function performMelee(world, attackerIndex, heavyRequested, helpers) {
   combat.attackCooldown = heavy ? 0.72 : weapon === "knife" ? 0.36 : 0.3;
   const range = weapon === "knife" ? 6.4 : 5.2;
   const target = nearestTarget(world, attackerIndex, range, 105, false);
+  const armouredTarget = target ? null : nearestTarget(world, attackerIndex, range, 105, true);
   emit(world, "combat-swing", "", [attackerIndex], {
     sourcePlayer: attackerIndex,
     weapon,
@@ -202,6 +203,15 @@ function performMelee(world, attackerIndex, heavyRequested, helpers) {
     x: attacker.x,
     y: attacker.y,
   });
+  if (!target && armouredTarget?.kind === "marauder") {
+    emit(world, "armoured-target", "Кулаки и нож не пробьют катер. Используй автомат или таран лодкой.", [attackerIndex], {
+      sourcePlayer: attackerIndex,
+      weapon,
+      x: armouredTarget.point.x,
+      y: armouredTarget.point.y,
+    });
+    return;
+  }
   if (!target) {
     emit(world, "combat-miss", "Удар прошёл мимо.", [attackerIndex], {
       sourcePlayer: attackerIndex,
@@ -228,13 +238,13 @@ function destroyMarauder(world, attackerIndex, helpers) {
   marauder.destroyed = true;
   marauder.active = false;
   marauder.speed = 0;
-  marauder.respawnAt = world.time + 36;
-  emit(world, "marauder-destroyed", "Катер-мародёр уничтожен. На воде остался редкий ящик.", [0, 1], {
+  marauder.respawnAt = 0;
+  emit(world, "pursuer-destroyed", "Катер-преследователь уничтожен. На воде остался редкий ящик.", [0, 1], {
     sourcePlayer: attackerIndex,
     x: marauder.x,
     y: marauder.y,
   });
-  helpers?.spawnRareCrate?.(world, marauder.x, marauder.y, "automatic", "marauder");
+  helpers?.spawnRareCrate?.(world, marauder.x, marauder.y, "automatic", "pursuer");
 }
 
 function fireAutomatic(world, attackerIndex, helpers) {
@@ -272,8 +282,8 @@ function fireAutomatic(world, attackerIndex, helpers) {
     return;
   }
   const marauder = target.point;
-  marauder.hull = clamp(marauder.hull - 12, 0, 100);
-  emit(world, "marauder-hit", `Корпус мародёра ${Math.round(marauder.hull)}.`, [attackerIndex], {
+  marauder.hull = clamp(marauder.hull - 12, 0, 72);
+  emit(world, "pursuer-hit", `Попадание. Корпус преследователя ${Math.round(marauder.hull)}.`, [attackerIndex], {
     sourcePlayer: attackerIndex,
     damage: 12,
     hull: marauder.hull,

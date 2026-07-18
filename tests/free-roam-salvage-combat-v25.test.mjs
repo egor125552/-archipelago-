@@ -111,7 +111,7 @@ test("short and held X attacks are different, and a heavy hit knocks the opponen
   assert.ok(events.some(event => event.type === "combat-heavy-hit"));
 });
 
-test("a rare automatic fires while held and can destroy the marauder", () => {
+test("a rare automatic fires while held and can destroy the pursuer", () => {
   const world = createFreeWorld();
   const player = world.players[0];
   const marauder = activity(world).marauder;
@@ -128,11 +128,11 @@ test("a rare automatic fires while held and can destroy the marauder", () => {
   setPlayerInput(world, 0, {attack: false});
   run(world, 0.1);
   assert.ok(events.some(event => event.type === "gun-shot"));
-  assert.ok(events.some(event => event.type === "marauder-destroyed"));
+  assert.ok(events.some(event => event.type === "pursuer-destroyed"));
   assert.equal(marauder.destroyed, true);
   assert.equal(marauder.cargo.length, 0);
   assert.equal(stolenCrate.state, "world");
-  assert.ok(activity(world).crates.some(crate => crate.source === "marauder" && crate.rarity === "rare"));
+  assert.ok(activity(world).crates.some(crate => crate.source === "pursuer" && crate.rarity === "rare"));
 });
 
 test("death drops carried cargo, leaves the boat and respawns the player at the dock after eight seconds", () => {
@@ -198,6 +198,8 @@ test("the release UI exposes accessible combat controls and local MP3 assets", a
   assert.match(html, /aria-keyshortcuts="X"/);
   assert.match(html, /id="weaponButton"/);
   assert.match(html, /aria-keyshortcuts="Z"/);
+  assert.match(html, /id="sonarButton"/);
+  assert.match(html, /aria-keyshortcuts="Q"/);
   assert.match(client, /free-roam-core-v6\.js/);
   assert.match(client, /bindHold\(\$\("attackButton"\), "attack", 90\)/);
   assert.match(audio, /heartbeat-fast\.mp3/);

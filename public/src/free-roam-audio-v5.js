@@ -137,28 +137,20 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
 
   updateCargoBeacons(world, playerIndex) {
     if (!this.ctx || !this.listenerPoint) return;
-    const crates = world?.freeActivities?.crates || [];
+    const scenario = world?.freeScenario;
+    const target = scenario?.targets?.[playerIndex];
+    if (!target || (Number(scenario?.beaconUntil?.[playerIndex]) || 0) <= (Number(world?.time) || 0)) return;
     const now = this.ctx.currentTime;
-    for (const crate of crates) {
-      if (crate.state !== "world") continue;
-      const metres = distance(this.listenerPoint, crate);
-      if (metres > 130) continue;
-      const previous = this.cargoBeaconAt.get(crate.id) || 0;
-      const interval = clamp(1.3 + metres / 65, 1.3, 3.2);
-      if (now < previous) continue;
-      this.cargoBeaconAt.set(crate.id, now + interval);
-      const pan = relativeMovementPan(this.listenerPoint, crate);
-      const proximity = clamp(1 - metres / 130, 0, 1);
-      this.playSynthPip({
-        pan,
-        frequency: crate.rarity === "rare" ? 920 : 610,
-        gain: 0.025 + proximity * (crate.rarity === "rare" ? 0.11 : 0.075),
-        duration: crate.rarity === "rare" ? 0.13 : 0.085,
-      });
-      if (crate.rarity === "rare") {
-        this.playSynthPip({pan, frequency: 1180, gain: 0.02 + proximity * 0.07, duration: 0.08, delay: 0.13});
-      }
-    }
+    const metres = distance(this.listenerPoint, target);
+    if (metres > 190) return;
+    const previous = this.cargoBeaconAt.get(target.id) || 0;
+    const interval = clamp(1.45 + metres / 80, 1.45, 3.4);
+    if (now < previous) return;
+    this.cargoBeaconAt.set(target.id, now + interval);
+    const pan = relativeMovementPan(this.listenerPoint, target);
+    const proximity = clamp(1 - metres / 190, 0, 1);
+    const frequency = target.kind === "pursuer" ? 330 : target.kind === "automatic" ? 880 : 620;
+    this.playSynthPip({pan, frequency, gain: 0.035 + proximity * 0.09, duration: 0.11});
   }
 
   startMarauderEngine() {
@@ -247,11 +239,20 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
       case "gun-shot":
         this.play("automaticShot", {pan: spatial.pan, gain: 0.48 * spatial.gain, rate: 0.98 + Math.random() * 0.04, lowpass: 11000});
         return;
-      case "marauder-hit":
+      case "pursuer-hit":
         this.play("gunHit", {pan: spatial.pan, gain: 0.46 * spatial.gain, lowpass: 6200});
         return;
-      case "marauder-ram":
+      case "pursuer-ram":
         this.handle([{type: "collision", severity: 1.7, impactSpeed: event.strength || 8, hardImpact: true, damage: event.damage || 8, pan: spatial.pan}]);
+        return;
+      case "scenario-sonar":
+        this.playSynthPip({pan: spatial.pan, frequency: 760, gain: 0.13, duration: 0.12});
+        return;
+      case "pursuer-warning":
+        this.playSynthPip({frequency: 270, gain: 0.11, duration: 0.18});
+        return;
+      case "pursuer-arrival":
+        this.playSynthPip({pan: spatial.pan, frequency: 190, gain: 0.16, duration: 0.28});
         return;
       case "player-knockdown":
         if (this.buffers.has("punchBodySet")) {

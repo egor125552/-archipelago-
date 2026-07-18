@@ -13,7 +13,7 @@ export function classifyActionGesture({pointers, duration, dx, dy, movement, tap
   if (moved) {
     if (count !== 2) return null;
     if (horizontal > vertical * 1.15) return "weapon";
-    if ((Number(dy) || 0) < 0) return "status";
+    if ((Number(dy) || 0) < 0) return "pump";
     return "buttons";
   }
 
@@ -21,7 +21,10 @@ export function classifyActionGesture({pointers, duration, dx, dy, movement, tap
     if (held) return "attack-heavy";
     return taps >= 2 ? "jump" : "action";
   }
-  if (count === 2) return held ? "repair" : "pump";
+  if (count === 2) {
+    if (held) return "repair";
+    return taps >= 2 ? "status" : "sonar";
+  }
   return held ? "attack-heavy" : "attack-light";
 }
 

@@ -14,3 +14,10 @@ test("turning the listener rotates the audible side", () => {
   const listener = {x: 100, y: 100, heading: 180};
   assert.ok(relativeMovementPan(listener, {x: 120, y: 100}) < -0.9);
 });
+
+test("a tiny turn cannot throw a sound behind the listener from far left to far right", () => {
+  const sourceBehind = {x: 100, y: 120};
+  const before = relativeMovementPan({x: 100, y: 100, heading: -1}, sourceBehind);
+  const after = relativeMovementPan({x: 100, y: 100, heading: 1}, sourceBehind);
+  assert.ok(Math.abs(before - after) < 0.1);
+});

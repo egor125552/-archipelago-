@@ -14,6 +14,7 @@ import {
 } from "./free-roam-activities.js";
 import {combatStatus, ensureCombat, updateCombat} from "./free-roam-combat.js";
 import {ensureMarauder, releaseStolenCargo, updateMarauder} from "./free-roam-marauder.js";
+import {ensureFreeScenario, scenarioStatus, updateFreeScenario} from "./free-roam-scenario.js";
 
 export const WORLD = Object.freeze({...base.WORLD});
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -24,6 +25,7 @@ function ensureState(world) {
   ensureActivities(world);
   ensureCombat(world);
   ensureMarauder(world);
+  ensureFreeScenario(world);
   return world;
 }
 
@@ -64,6 +66,7 @@ export function stepFreeWorld(world, dt) {
   updateCombat(world, safeDt, {dropCarriedCrate, releaseStolenCargo, spawnRareCrate});
   updateMarauder(world, safeDt, {spawnRareCrate});
   updateActivities(world, safeDt);
+  updateFreeScenario(world, safeDt);
   finishActivityFrame(world);
   return world;
 }
@@ -72,6 +75,7 @@ export function playerStatus(world, playerIndex) {
   ensureState(world);
   return [
     base.playerStatus(world, playerIndex),
+    scenarioStatus(world, playerIndex),
     combatStatus(world, playerIndex),
     activityStatus(world, playerIndex),
   ].filter(Boolean).join(" ");

@@ -29,6 +29,7 @@ const localInput = {
   jump: false,
   attack: false,
   weapon: false,
+  sonar: false,
 };
 const activeTouches = new Map();
 const holdTimers = new Map();
@@ -36,8 +37,8 @@ const audio = new FreeRoamAudio();
 let touchGroup = null;
 let gestureDirection = null;
 let gestureMode = globalThis.matchMedia?.("(pointer: coarse)")?.matches ?? false;
-let singleTapTimer = 0;
-let lastSingleTapAt = 0;
+const tapTimers = new Map();
+const lastTapAt = new Map();
 let roomRefreshTimer = 0;
 let heartbeatTimer = 0;
 let preferredRoomId = "";
@@ -289,7 +290,7 @@ function toggleControl(name) {
   setControl(name, !localInput[name]);
 }
 
-function actionPulse(name, duration = 90) {
+function actionPulse(name, duration = 140) {
   setControl(name, true);
   clearTimeout(holdTimers.get(name));
   holdTimers.set(name, setTimeout(() => setControl(name, false), duration));
@@ -299,11 +300,17 @@ function releaseAllMovement() {
   for (const name of movementNames) localInput[name] = false;
   localInput.run = false;
   localInput.attack = false;
+  localInput.action = false;
+  localInput.jump = false;
+  localInput.weapon = false;
+  localInput.sonar = false;
+  for (const timer of holdTimers.values()) clearTimeout(timer);
+  holdTimers.clear();
   activeTouches.clear();
   touchGroup = null;
-  clearTimeout(singleTapTimer);
-  singleTapTimer = 0;
-  lastSingleTapAt = 0;
+  for (const timer of tapTimers.values()) clearTimeout(timer);
+  tapTimers.clear();
+  lastTapAt.clear();
   gestureDirection = null;
   sendInput(true);
 }
@@ -363,7 +370,18 @@ function render() {
   $("weaponValue").textContent = combat.equipped === "automatic" ? `автомат, ${combat.ammo || 0}` : weaponLabels[combat.equipped] || "кулаки";
   $("cargoValue").textContent = combat.carriedCrate ? "в руках" : myBoat?.cargo?.length ? `${myBoat.cargo.length}, вес ${Math.round(myBoat.cargoWeight || 0)}` : "нет";
   $("scoreValue").textContent = String(activities.score?.[playerIndex] || 0);
-  $("marauderValue").textContent = marauder.destroyed ? "уничтожен" : `${Math.round(marauder.hull ?? 100)}%`;
+  $("scenarioValue").textContent = {
+    salvage: "доставка",
+    arm: "поиск автомата",
+    warning: "предупреждение",
+    pursuit: "погоня",
+    victory: "пройден",
+  }[world.freeScenario?.phase] || "доставка";
+  $("marauderValue").textContent = marauder.destroyed
+    ? "уничтожен"
+    : marauder.active
+      ? `${Math.round(marauder.hull ?? 72)}%`
+      : "ещё не появился";
   $("actionButton").textContent = combat.carriedCrate ? "Положить / передать / погрузить" : me.mode === "boat" ? "Груз / выйти / буксир" : me.mode === "roof" ? "Груз / сесть за руль" : "Взять груз / сесть в лодку";
   $("jumpButton").textContent = me.mode === "boat" ? "Плавучий тормоз" : me.mode === "roof" ? "Спрыгнуть" : "Прыжок / крыша";
   $("attackButton").textContent = combat.equipped === "automatic" ? "Огонь" : combat.equipped === "knife" ? "Удар ножом" : "Удар";
@@ -531,6 +549,7 @@ function runGestureCommand(command) {
   else if (command === "attack-light") actionPulse("attack", 140);
   else if (command === "attack-heavy") actionPulse("attack", 680);
   else if (command === "weapon") actionPulse("weapon");
+  else if (command === "sonar") actionPulse("sonar");
   else if (command === "pump") {
     toggleControl("pump");
     announce(`Насос ${localInput.pump ? "включён" : "выключен"}.`);
@@ -544,22 +563,24 @@ function runGestureCommand(command) {
   }
 }
 
-function runOneFingerTap(metrics) {
+function runTapGesture(metrics) {
+  const pointers = Math.max(1, Number(metrics.pointers) || 1);
   const now = performance.now();
-  if (lastSingleTapAt && now - lastSingleTapAt <= 310) {
-    clearTimeout(singleTapTimer);
-    singleTapTimer = 0;
-    lastSingleTapAt = 0;
+  const previous = lastTapAt.get(pointers) || 0;
+  if (previous && now - previous <= 310) {
+    clearTimeout(tapTimers.get(pointers));
+    tapTimers.delete(pointers);
+    lastTapAt.delete(pointers);
     runGestureCommand(classifyActionGesture({...metrics, taps: 2}));
     return;
   }
-  lastSingleTapAt = now;
-  clearTimeout(singleTapTimer);
-  singleTapTimer = setTimeout(() => {
-    lastSingleTapAt = 0;
-    singleTapTimer = 0;
+  lastTapAt.set(pointers, now);
+  clearTimeout(tapTimers.get(pointers));
+  tapTimers.set(pointers, setTimeout(() => {
+    lastTapAt.delete(pointers);
+    tapTimers.delete(pointers);
     runGestureCommand(classifyActionGesture({...metrics, taps: 1}));
-  }, 315);
+  }, 315));
 }
 
 function finishTouch(event, cancelled = false) {
@@ -577,7 +598,7 @@ function finishTouch(event, cancelled = false) {
   if (localInput.run) setControl("run", false);
   if (cancelled || !group) return;
   const metrics = gestureMetrics(group);
-  if (metrics.pointers === 1 && metrics.movement <= 24 && metrics.duration < 520) runOneFingerTap(metrics);
+  if (metrics.pointers <= 2 && metrics.movement <= 24 && metrics.duration < 520) runTapGesture(metrics);
   else runGestureCommand(classifyActionGesture(metrics));
 }
 
@@ -619,6 +640,9 @@ function bindKeyboard() {
     } else if (!event.repeat && event.code === "KeyV") {
       event.preventDefault();
       toggleControl("repair");
+    } else if (!event.repeat && event.code === "KeyQ") {
+      event.preventDefault();
+      actionPulse("sonar");
     } else return;
     audio.init().catch(() => {});
   }, true);
@@ -698,6 +722,7 @@ $("attackButton").addEventListener("click", event => {
   if (event.detail === 0) actionPulse("attack");
 });
 $("weaponButton").addEventListener("click", () => actionPulse("weapon"));
+$("sonarButton").addEventListener("click", () => actionPulse("sonar"));
 $("pumpButton").addEventListener("click", () => toggleControl("pump"));
 $("repairButton").addEventListener("click", () => toggleControl("repair"));
 bindGestures();
