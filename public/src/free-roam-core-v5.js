@@ -309,19 +309,28 @@ export function stepFreeWorld(world, dt) {
   const safeDt = clamp(Number(dt) || 0, 0, 0.1);
   const beforePlayers = world.players.map(player => ({x: player.x, y: player.y, mode: player.mode}));
   const eventStart = world.events?.length || 0;
+  let preservedTow = null;
 
   if (world.tow) {
     ensureTow(world.tow, world);
-    // The legacy approximation remains underneath for compatibility, but its
-    // accumulated strain is neutralized. The constraint below owns breakage.
-    world.tow.tension *= 0.18;
-    world.tow.strainTime = Math.min(world.tow.strainTime, 0.12);
+    preservedTow = {
+      tension: world.tow.tension,
+      strainTime: world.tow.strainTime,
+      restLength: world.tow.restLength,
+      nextSoundAt: world.tow.nextSoundAt,
+      lastDistance: world.tow.lastDistance,
+    };
+    // Let the legacy position correction run, but keep its tension accumulator
+    // isolated from the upgraded spring/damper model below.
+    world.tow.tension = 0;
+    world.tow.strainTime = 0;
   }
 
   const restoreJumps = suppressRepeatedAirJumps(world);
   base.stepFreeWorld(world, safeDt);
   restoreJumps();
 
+  if (world.tow && preservedTow) Object.assign(world.tow, preservedTow);
   processRun(world, beforePlayers, safeDt);
   processJumpArc(world, eventStart, safeDt);
   processBoundaries(world);
