@@ -2,6 +2,7 @@
 
 import {FreeRoamAudio as BaseFreeRoamAudio, spatialGainForDistance} from "./free-roam-audio-v4.js";
 import {relativeMovementPan} from "./free-roam-audio-v3.js";
+import {injuryLowpassFrequency} from "./free-roam-combat-recovery.js";
 
 const ROOT = "/assets/audio/free-roam-v25/";
 const COMBAT_SOUNDS = Object.freeze({
@@ -39,6 +40,7 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
     this.injuryDry = null;
     this.injuryWet = null;
     this.injuryReverb = null;
+    this.injuryFilter = null;
     this.injuryMix = 0;
     this.combatSoundIndex = 0;
     this.deathSource = null;
@@ -73,6 +75,10 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
     this.injuryDry = this.ctx.createGain();
     this.injuryWet = this.ctx.createGain();
     this.injuryReverb = this.ctx.createConvolver();
+    this.injuryFilter = this.ctx.createBiquadFilter();
+    this.injuryFilter.type = "lowpass";
+    this.injuryFilter.frequency.value = injuryLowpassFrequency(0);
+    this.injuryFilter.Q.value = 0.7;
     this.injuryDry.gain.value = 1;
     this.injuryWet.gain.value = 0;
 
@@ -87,8 +93,9 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
     }
     this.injuryReverb.buffer = impulse;
     try { this.master.disconnect(); } catch (_) {}
-    this.master.connect(this.injuryDry).connect(this.compressor);
-    this.master.connect(this.injuryWet).connect(this.injuryReverb).connect(this.compressor);
+    this.master.connect(this.injuryFilter);
+    this.injuryFilter.connect(this.injuryDry).connect(this.compressor);
+    this.injuryFilter.connect(this.injuryWet).connect(this.injuryReverb).connect(this.compressor);
   }
 
   smoothInjuryMix(nextMix) {
@@ -96,6 +103,7 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
     this.injuryMix += (mix - this.injuryMix) * 0.16;
     if (!this.ctx || !this.injuryDry || !this.injuryWet) return;
     const now = this.ctx.currentTime;
+    this.injuryFilter?.frequency.setTargetAtTime(injuryLowpassFrequency(this.injuryMix), now, 0.36);
     this.injuryDry.gain.setTargetAtTime(1 - this.injuryMix * 0.16, now, 0.28);
     this.injuryWet.gain.setTargetAtTime(this.injuryMix * 0.5, now, 0.34);
     if (this.injuryMix > 0.015 && this.buffers.has("heartbeatFast")) {

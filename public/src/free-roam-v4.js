@@ -360,13 +360,17 @@ function render() {
   const combat = me.combat || {};
   const marauder = activities.marauder || {};
   const weaponLabels = {fists: "кулаки", knife: "нож", automatic: "автомат"};
-  $("modeValue").textContent = labels[me.mode] || me.mode;
-  $("speedValue").textContent = myBoat ? Math.abs(myBoat.speed).toFixed(1) : me.mode === "swim" ? "плывёт" : me.running ? "бежит" : "идёт";
+  $("modeValue").textContent = combat.knockedDown ? "сбит с ног" : labels[me.mode] || me.mode;
+  $("speedValue").textContent = combat.knockedDown ? "оглушён" : myBoat ? Math.abs(myBoat.speed).toFixed(1) : me.mode === "swim" ? "плывёт" : me.running ? "бежит" : "идёт";
   $("hullValue").textContent = myBoat ? `${Math.round(myBoat.hull)}%` : "—";
   $("waterValue").textContent = myBoat ? `${Math.round(myBoat.water)}%` : "—";
   $("towValue").textContent = !world.tow ? "нет" : world.tow.towerBoat === me.activeBoat ? "тащишь" : world.tow.towedBoat === me.activeBoat ? "тебя тащат" : "рядом";
   $("otherValue").textContent = activities.presence?.[1 - playerIndex] ? `${Math.round(distance(me, other))} м` : "ждём";
-  $("healthValue").textContent = combat.alive === false ? `возрождение ${Math.ceil(combat.respawnRemaining || 0)} с` : `${Math.round(combat.health ?? 100)}%`;
+  $("healthValue").textContent = combat.alive === false
+    ? `возрождение ${Math.ceil(combat.respawnRemaining || 0)} с`
+    : combat.knockedDown
+      ? `${Math.round(combat.health ?? 100)}%, оглушён`
+      : `${Math.round(combat.health ?? 100)}%`;
   $("weaponValue").textContent = combat.equipped === "automatic" ? `автомат, ${combat.ammo || 0}` : weaponLabels[combat.equipped] || "кулаки";
   $("cargoValue").textContent = combat.carriedCrate ? "в руках" : myBoat?.cargo?.length ? `${myBoat.cargo.length}, вес ${Math.round(myBoat.cargoWeight || 0)}` : "нет";
   $("scoreValue").textContent = String(activities.score?.[playerIndex] || 0);
@@ -382,7 +386,15 @@ function render() {
     : marauder.active
       ? `${Math.round(marauder.hull ?? 72)}%`
       : "ещё не появился";
-  $("actionButton").textContent = combat.carriedCrate ? "Положить / передать / погрузить" : me.mode === "boat" ? "Груз / выйти / буксир" : me.mode === "roof" ? "Груз / сесть за руль" : "Взять груз / сесть в лодку";
+  $("actionButton").textContent = combat.knockedDown
+    ? "Сбит с ног — жди"
+    : combat.carriedCrate
+      ? "Положить / передать / погрузить"
+      : me.mode === "boat"
+        ? "Груз / выйти / буксир"
+        : me.mode === "roof"
+          ? "Груз / сесть за руль"
+          : "Взять груз / сесть в лодку";
   $("jumpButton").textContent = me.mode === "boat" ? "Плавучий тормоз" : me.mode === "roof" ? "Спрыгнуть" : "Прыжок / крыша";
   $("attackButton").textContent = combat.equipped === "automatic" ? "Огонь" : combat.equipped === "knife" ? "Удар ножом" : "Удар";
   $("weaponButton").textContent = `Оружие: ${weaponLabels[combat.equipped] || "кулаки"}`;

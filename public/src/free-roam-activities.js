@@ -1,6 +1,7 @@
 "use strict";
 
 import {placeJoiningPlayer} from "./free-roam-player-spawn.js";
+import {deliverCarriedCargoAtDock, updateCargoActionPrompts} from "./free-roam-cargo-actions.js";
 
 const WORLD_CRATES = Object.freeze([
   {id: "crate-plates", kind: "plates", rarity: "common", weight: 2, x: 136, y: 34},
@@ -229,10 +230,19 @@ export function handleActivityAction(world, playerIndex) {
   const state = ensureActivities(world);
   const player = world.players[playerIndex];
   if (!player?.combat?.alive) return true;
+  if (player.combat.knockedDown) {
+    emit(world, "action-denied", "Ты оглушён и не можешь действовать, пока не поднимешься.", [playerIndex], {
+      sourcePlayer: playerIndex,
+      x: player.x,
+      y: player.y,
+    });
+    return true;
+  }
 
   const carriedId = player.combat.carriedCrate;
   if (carriedId) {
     const crate = state.crates.find(candidate => candidate.id === carriedId);
+    if (deliverCarriedCargoAtDock(world, playerIndex, crate, rewardPlayer, emit)) return true;
     const otherIndex = 1 - playerIndex;
     const other = world.players[otherIndex];
     if (crate && state.presence[otherIndex] && other?.combat?.alive && !other.combat.carriedCrate && distance(player, other) <= 4.5) {
@@ -400,6 +410,7 @@ export function updateActivities(world, dt) {
   ensureActivities(world);
   updateCrates(world);
   for (const boat of world.boats || []) updateBoatLoad(world, boat, dt);
+  updateCargoActionPrompts(world, emit);
 }
 
 export function finishActivityFrame(world) {

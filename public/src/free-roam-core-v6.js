@@ -15,6 +15,7 @@ import {
 import {combatStatus, ensureCombat, updateCombat} from "./free-roam-combat.js";
 import {ensureMarauder, releaseStolenCargo, updateMarauder} from "./free-roam-marauder.js";
 import {ensureFreeScenario, scenarioStatus, updateFreeScenario} from "./free-roam-scenario.js";
+import {suppressIncapacitatedMovement, updatePhysicalActors} from "./free-roam-physical-actors.js";
 
 export const WORLD = Object.freeze({...base.WORLD});
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -62,9 +63,12 @@ export function stepFreeWorld(world, dt) {
   ensureState(world);
   const safeDt = clamp(Number(dt) || 0, 0, 0.1);
   consumeActivityActions(world);
+  const restoreMovement = suppressIncapacitatedMovement(world);
   base.stepFreeWorld(world, safeDt);
+  restoreMovement();
   updateCombat(world, safeDt, {dropCarriedCrate, releaseStolenCargo, spawnRareCrate});
   updateMarauder(world, safeDt, {spawnRareCrate});
+  updatePhysicalActors(world);
   updateActivities(world, safeDt);
   updateFreeScenario(world, safeDt);
   finishActivityFrame(world);

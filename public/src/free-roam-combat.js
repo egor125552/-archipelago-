@@ -1,5 +1,12 @@
 "use strict";
 
+import {
+  ensureRecoveryState,
+  injuryMixTarget,
+  registerCombatDamage,
+  updateCombatRecovery,
+} from "./free-roam-combat-recovery.js";
+
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));
 const wrapDeg = value => ((value + 180) % 360 + 360) % 360 - 180;
@@ -33,6 +40,8 @@ function createCombatState() {
     attackCharge: 0,
     attackCooldown: 0,
     injuryMix: 0,
+    lastDamageAt: -999,
+    recoveryStarted: false,
   };
 }
 
@@ -54,6 +63,7 @@ export function ensureCombat(world) {
     if (!Number.isFinite(combat.attackCharge)) combat.attackCharge = 0;
     if (!Number.isFinite(combat.attackCooldown)) combat.attackCooldown = 0;
     if (!Number.isFinite(combat.injuryMix)) combat.injuryMix = 0;
+    ensureRecoveryState(combat);
   }
 }
 
@@ -157,7 +167,8 @@ function damagePlayer(world, targetIndex, amount, attackerIndex, details, helper
   const combat = target?.combat;
   if (!combat?.alive || amount <= 0) return false;
   combat.health = clamp(combat.health - amount, 0, 100);
-  const stunFactor = details.heavy ? 1.5 : details.weapon === "fists" ? 1.35 : 0.82;
+  registerCombatDamage(combat, world.time);
+  const stunFactor = details.heavy ? 1.8 : details.weapon === "fists" ? 1.8 : 0.92;
   combat.stun = clamp(combat.stun + amount * stunFactor, 0, 100);
   emit(world, details.eventType || "combat-hit", `Здоровье ${Math.round(combat.health)}.`, attackerIndex >= 0 ? [targetIndex, attackerIndex] : [targetIndex], {
     sourcePlayer: attackerIndex,
@@ -174,7 +185,7 @@ function damagePlayer(world, targetIndex, amount, attackerIndex, details, helper
     return true;
   }
   if (details.heavy) knockDown(world, targetIndex, attackerIndex, 7.5, details.weapon);
-  else if (details.weapon === "fists" && combat.stun >= 30) {
+  else if (details.weapon === "fists" && combat.stun >= 40) {
     knockDown(world, targetIndex, attackerIndex, 3.5, details.weapon);
   }
   return true;
@@ -194,9 +205,9 @@ function performMelee(world, attackerIndex, heavyRequested, helpers) {
   }
   combat.stamina -= actualCost;
   combat.attackCooldown = heavy ? 0.62 : weapon === "knife" ? 0.24 : 0.18;
-  const range = weapon === "knife" ? 8.2 : 7.5;
-  const target = nearestTarget(world, attackerIndex, range, 145, false);
-  const armouredTarget = target ? null : nearestTarget(world, attackerIndex, range, 145, true);
+  const range = weapon === "knife" ? 11 : 10;
+  const target = nearestTarget(world, attackerIndex, range, 170, false);
+  const armouredTarget = target ? null : nearestTarget(world, attackerIndex, range, 170, true);
   emit(world, "combat-swing", "", [attackerIndex], {
     sourcePlayer: attackerIndex,
     weapon,
@@ -319,6 +330,8 @@ function respawnPlayer(world, playerIndex) {
   combat.stamina = 100;
   combat.injuryMix = 0;
   combat.pendingDamage = 0;
+  combat.lastDamageAt = -999;
+  combat.recoveryStarted = false;
   player.mode = "foot";
   player.activeBoat = null;
   player.x = 210 + (playerIndex ? 8 : -8);
@@ -358,7 +371,7 @@ export function updateCombat(world, dt, helpers = {}) {
     }
 
     combat.stamina = clamp(combat.stamina + dt * (combat.knockedDown ? 5 : 18), 0, 100);
-    combat.stun = clamp(combat.stun - dt * 8, 0, 100);
+    combat.stun = clamp(combat.stun - dt * 4, 0, 100);
     if (combat.knockedDown) {
       combat.knockdownRemaining = Math.max(0, combat.knockdownRemaining - dt);
       if (combat.knockdownRemaining <= 0) {
@@ -367,7 +380,21 @@ export function updateCombat(world, dt, helpers = {}) {
       }
     }
 
-    const injuryTarget = clamp((45 - combat.health) / 35, 0, 1);
+    const recovery = updateCombatRecovery(combat, world.time, dt);
+    if (recovery === "started") {
+      emit(world, "health-recovery-start", "Сердцебиение ослабевает. Здоровье восстанавливается.", [index], {
+        sourcePlayer: index,
+        x: player.x,
+        y: player.y,
+      });
+    } else if (recovery === "complete") {
+      emit(world, "health-recovery-complete", "Здоровье полностью восстановлено.", [index], {
+        sourcePlayer: index,
+        x: player.x,
+        y: player.y,
+      });
+    }
+    const injuryTarget = injuryMixTarget(combat);
     combat.injuryMix += (injuryTarget - combat.injuryMix) * Math.min(1, dt * 1.8);
 
     if (input.weapon && !previous.weapon) cycleWeapon(world, index);
