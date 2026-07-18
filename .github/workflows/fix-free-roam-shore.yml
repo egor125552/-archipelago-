@@ -1,4 +1,4 @@
-name: Fix free-roam shore transition
+name: Fix free-roam shore and tow
 
 on:
   push:
@@ -27,13 +27,13 @@ jobs:
 
           core = Path('public/src/free-roam-core-v5.js')
           text = core.read_text()
-          old = '  landMaxY: 68,'
-          if old not in text:
-            raise SystemExit('landMaxY pattern missing')
-          text = text.replace(old, '  landMaxY: 76,', 1)
-          old = '''    if (player.mode === "foot") {
-      const oldX = player.x;'''
-          new = '''    if (player.mode === "foot" && player.y > WORLD.shoreY + 3) {
+
+          replacements = [
+            ('  landMaxY: 68,', '  landMaxY: 76,'),
+            (
+              '''    if (player.mode === "foot") {
+      const oldX = player.x;''',
+              '''    if (player.mode === "foot" && player.y > WORLD.shoreY + 3) {
       player.mode = "swim";
       player.running = false;
       emit(world, "splash", "Ты вошёл в воду.", [index], {
@@ -44,23 +44,46 @@ jobs:
     }
     if (player.mode === "foot") {
       const oldX = player.x;'''
-          if old not in text:
-            raise SystemExit('boundary pattern missing')
-          text = text.replace(old, new, 1)
+            ),
+            (
+              'const opposing = (Boolean(input.up) && headingError >= 105) || Boolean(input.down);',
+              'const opposing = (Boolean(input.up) && headingError >= 82) || Boolean(input.down);'
+            ),
+            (
+              'const force = Math.max(0, springForce + (opposing ? 5.2 : 0) - (helping ? 1.8 : 0));',
+              'const force = Math.max(0, springForce + (opposing ? 7 : 0) - (helping ? 1.8 : 0));'
+            ),
+            (
+              'if (!input.left && !input.right && Math.abs(towed.speed) > 0.25) {',
+              'if (!opposing && !input.left && !input.right && Math.abs(towed.speed) > 0.25) {'
+            ),
+            (
+              'const targetTension = clamp(force / 8.4 + (opposing ? 0.45 : 0), 0, 1.45);',
+              'const targetTension = clamp(force / 8.4 + (opposing ? 0.55 : 0), 0, 1.45);'
+            ),
+          ]
+          for old, new in replacements:
+            if old not in text:
+              raise SystemExit(f'missing core pattern: {old[:90]!r}')
+            text = text.replace(old, new, 1)
           core.write_text(text)
 
           client = Path('public/src/free-roam-v3.js')
           js = client.read_text()
-          old = '"Свободных миров нет. Кнопка входа создаст ожидание первого игрока."'
-          new = '"Свободных миров нет. Кнопка входа создаст новый мир и сделает тебя его ведущим."'
-          if old not in js:
-            raise SystemExit('room summary pattern missing')
-          js = js.replace(old, new, 1)
-          old = 'ctx.arc(player.x * sx, player.y * sy, player.mode === "roof" ? 7 : 5, 0, Math.PI * 2);'
-          new = 'ctx.arc(player.x * sx, player.y * sy, (player.mode === "roof" ? 7 : 5) + Math.min(4, Number(player.jumpHeight) || 0), 0, Math.PI * 2);'
-          if old not in js:
-            raise SystemExit('jump drawing pattern missing')
-          js = js.replace(old, new, 1)
+          client_replacements = [
+            (
+              '"Свободных миров нет. Кнопка входа создаст ожидание первого игрока."',
+              '"Свободных миров нет. Кнопка входа создаст новый мир и сделает тебя его ведущим."'
+            ),
+            (
+              'ctx.arc(player.x * sx, player.y * sy, player.mode === "roof" ? 7 : 5, 0, Math.PI * 2);',
+              'ctx.arc(player.x * sx, player.y * sy, (player.mode === "roof" ? 7 : 5) + Math.min(4, Number(player.jumpHeight) || 0), 0, Math.PI * 2);'
+            ),
+          ]
+          for old, new in client_replacements:
+            if old not in js:
+              raise SystemExit(f'missing client pattern: {old[:90]!r}')
+            js = js.replace(old, new, 1)
           client.write_text(js)
           PY
 
@@ -68,7 +91,7 @@ jobs:
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add public/src/free-roam-core-v5.js public/src/free-roam-v3.js
           git rm .github/workflows/fix-free-roam-shore.yml
-          git commit -m "Keep the finite shore open to swimming"
+          git commit -m "Fix shore transition and opposing tow strain"
           git push origin HEAD:main
 
       - name: Verify Node tests after commit
