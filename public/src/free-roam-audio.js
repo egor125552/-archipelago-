@@ -15,7 +15,17 @@ export function operationEventForFreeEvent(event) {
   switch (event?.type) {
     case "collision":
     case "ram":
-      return {type: "collision", severity: Math.max(0.55, event.strength || 1), impactSpeed: event.strength || 0, hardImpact: (event.strength || 0) >= 5};
+      return {
+        type: "collision",
+        severity: Math.max(0.55, event.strength || 1),
+        impactSpeed: event.strength || 0,
+        hardImpact: (event.strength || 0) >= 5,
+        shore: Boolean(event.shore),
+        scrape: Boolean(event.scrape),
+        damage: Number(event.damage) || 0,
+        absorbed: Number(event.absorbed) || 0,
+        pan: Number(event.pan) || 0,
+      };
     case "tow-attach": return {type: "rope"};
     case "tow-strain": return {type: "rope-strain", speed: event.tension || 1};
     case "tow-detach": return {type: "rope-far"};
