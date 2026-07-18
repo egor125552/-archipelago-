@@ -21,6 +21,10 @@ function parseMessage(data) {
   catch (_) { return null; }
 }
 
+function roomMode(url) {
+  return url.searchParams.get("mode") === "free" ? "free" : "ops";
+}
+
 export class Lobby {
   constructor(state) {
     this.state = state;
@@ -30,8 +34,9 @@ export class Lobby {
 
   async fetch(request) {
     const url = new URL(request.url);
+    const mode = roomMode(url);
     if (url.pathname === "/api/rooms") {
-      return json({rooms: publicRoomList(this.rooms), online: this.clients.size});
+      return json({rooms: publicRoomList(this.rooms, Date.now(), mode), online: this.clients.size, mode});
     }
 
     if (url.pathname !== "/api/connect") return new Response("Not found", {status: 404});
@@ -44,12 +49,14 @@ export class Lobby {
     const [client, server] = Object.values(pair);
     server.accept();
 
-    let room = chooseWaitingRoom(this.rooms, role);
+    let room = chooseWaitingRoom(this.rooms, role, mode);
     if (!room) {
       let id;
-      do { id = createRoomCode(); } while (this.rooms.has(id));
+      const prefix = mode === "free" ? "FREE" : "SEA";
+      do { id = createRoomCode(null, prefix); } while (this.rooms.has(id));
       room = {
         id,
+        mode,
         captain: null,
         crew: null,
         createdAt: Date.now(),
@@ -59,7 +66,7 @@ export class Lobby {
     }
 
     room[role] = server;
-    this.clients.set(server, {roomId: room.id, role});
+    this.clients.set(server, {roomId: room.id, role, mode});
 
     server.addEventListener("message", event => this.onMessage(server, event.data));
     server.addEventListener("close", () => this.onClose(server));
@@ -70,6 +77,7 @@ export class Lobby {
       type: "lobby-ready",
       room: room.id,
       role,
+      mode,
       matched,
       waitingFor: matched ? null : oppositeRole(role),
     });
@@ -80,8 +88,8 @@ export class Lobby {
   }
 
   finishMatch(room) {
-    safeSend(room.captain, {type: "peer-connected", room: room.id});
-    safeSend(room.crew, {type: "peer-connected", room: room.id});
+    safeSend(room.captain, {type: "peer-connected", room: room.id, mode: room.mode || "ops"});
+    safeSend(room.crew, {type: "peer-connected", room: room.id, mode: room.mode || "ops"});
 
     for (const message of room.pending.captain.splice(0)) safeSend(room.crew, message);
     for (const message of room.pending.crew.splice(0)) safeSend(room.captain, message);
@@ -103,8 +111,8 @@ export class Lobby {
     }
 
     const queue = room.pending[client.role];
-    if (message.type === "snapshot") {
-      const previous = queue.findIndex(item => item?.type === "snapshot");
+    if (message.type === "snapshot" || message.type === "free-snapshot") {
+      const previous = queue.findIndex(item => item?.type === message.type);
       if (previous >= 0) queue.splice(previous, 1);
     }
     queue.push(message);
@@ -124,7 +132,7 @@ export class Lobby {
     const otherRole = oppositeRole(client.role);
     const other = room[otherRole];
     if (other) {
-      safeSend(other, {type: "network-closed"});
+      safeSend(other, {type: "network-closed", mode: room.mode || "ops"});
     } else {
       this.rooms.delete(room.id);
     }
