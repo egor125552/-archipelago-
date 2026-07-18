@@ -244,7 +244,7 @@ export function updateFreeScenario(world, dt) {
   const scenario = ensureFreeScenario(world);
   if (!scenario.announced) {
     scenario.announced = true;
-    emit(world, "scenario-objective", "Задача: доставь два обычных ящика. Нажми Q или коснись двумя пальцами, чтобы сонар назвал одну цель.", [0, 1]);
+    emit(world, "scenario-objective", "Задача: доставь два обычных ящика. Сонар Q называет одну цель. Подойди к ящику ближе 12 метров и нажми F. После погрузки снова нажми Q, доедь до причала и остановись — разгрузка автоматическая.", [0, 1]);
   }
   updatePhase(world);
   updateTargets(world);

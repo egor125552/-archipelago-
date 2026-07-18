@@ -94,6 +94,18 @@ test("one sonar press keeps guidance active long enough to reach a distant crate
   assert.ok(world.freeScenario.beaconUntil[0] > world.time);
 });
 
+test("loading a nearby crate does not also announce that action F failed", () => {
+  const world = createFreeWorld();
+  const boat = world.boats[0];
+  const crate = world.freeActivities.crates.find(candidate => candidate.state === "world");
+  Object.assign(crate, {x: boat.x + 5, y: boat.y});
+
+  const events = pulse(world, "action");
+
+  assert.ok(events.some(event => event.type === "cargo-stowed"));
+  assert.equal(events.some(event => event.type === "action-denied"), false);
+});
+
 test("on foot the spoken side of a locked target stays world-stable after a sideways step", () => {
   const world = createFreeWorld();
   const player = world.players[0];
