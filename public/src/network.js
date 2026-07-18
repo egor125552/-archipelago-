@@ -6,12 +6,12 @@ const LOOKALIKE_MAP = Object.freeze({
   "І": "I", "Ї": "I", "Ј": "J", "З": "3", "Б": "6"
 });
 
-export function normalizeRoomCode(value, maxLength = 12) {
+export function normalizeRoomCode(value, maxLength = 6) {
   const upper = String(value || "").trim().toUpperCase().replace(/Ё/g, "Е");
   let result = "";
   for (const char of upper) {
     const mapped = LOOKALIKE_MAP[char] || char;
-    if (/^[A-Z0-9-]$/.test(mapped)) result += mapped;
+    if (/^[A-Z0-9]$/.test(mapped)) result += mapped;
     if (result.length >= maxLength) break;
   }
   return result;
@@ -23,6 +23,10 @@ export function workerSocketUrl(locationLike, role) {
   const protocol = source.protocol === "https:" ? "wss:" : "ws:";
   const safeRole = role === "captain" ? "captain" : "crew";
   return `${protocol}//${source.host}/api/connect?role=${safeRole}`;
+}
+
+function cleanServerRoomId(value) {
+  return String(value || "").toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 16);
 }
 
 function dispatchRoomEvent(name, detail) {
@@ -85,7 +89,7 @@ export class PeerRoomTransport {
         catch (_) { return; }
 
         if (message?.type === "lobby-ready") {
-          this.room = normalizeRoomCode(message.room) || String(message.room || "");
+          this.room = cleanServerRoomId(message.room);
           clearTimeout(timeout);
           if (!settled) {
             settled = true;
