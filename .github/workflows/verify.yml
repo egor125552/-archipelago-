@@ -8,7 +8,7 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -17,5 +17,15 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      - name: Run free-roam scenarios in Chrome
+        shell: bash
+        run: |
+          python3 -m http.server 4173 --directory public >browser-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID || true' EXIT
+          sleep 1
+          timeout 30 google-chrome --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --virtual-time-budget=5000 --dump-dom http://127.0.0.1:4173/tests/free-roam-browser.html >browser-output.html
+          cat browser-output.html
+          grep -q 'data-result="pass"' browser-output.html
       - name: Validate Cloudflare Worker bundle
         run: npx wrangler deploy --dry-run --outdir=.worker-dry-run
