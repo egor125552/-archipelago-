@@ -1,0 +1,71 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Free roam browser tests</title>
+<pre id="result">RUNNING</pre>
+<script type="module">
+import {createFreeWorld, setPlayerInput, stepFreeWorld, WORLD} from "../src/free-roam-core.js";
+const lines = [];
+function check(value, label) {
+  if (!value) throw new Error(label);
+  lines.push(`PASS ${label}`);
+}
+function stepMany(world, seconds, dt=.05) {
+  for (let elapsed=0; elapsed<seconds; elapsed+=dt) stepFreeWorld(world, dt);
+}
+try {
+  {
+    const w = createFreeWorld();
+    w.boats[0].x = 180; w.boats[0].y = 150;
+    w.boats[1].x = 198; w.boats[1].y = 150;
+    setPlayerInput(w, 0, {action:true}); stepFreeWorld(w,.05);
+    setPlayerInput(w, 0, {}); stepFreeWorld(w,.05);
+    check(Boolean(w.tow), "F attaches a physical tow rope");
+    const before = w.boats[1].x;
+    setPlayerInput(w,0,{up:true}); stepMany(w,3);
+    check(w.boats[1].x !== before, "tower physically drags the second boat");
+    w.boats[1].hull = 45; w.boats[1].leak = 1;
+    const hull = w.boats[1].hull;
+    setPlayerInput(w,1,{repair:true}); stepMany(w,2);
+    check(w.boats[1].hull > hull, "towed player repairs while moving");
+  }
+  {
+    const w = createFreeWorld();
+    w.boats[0].x = 180; w.boats[0].y = 150;
+    w.boats[1].x = 198; w.boats[1].y = 150;
+    setPlayerInput(w,0,{action:true}); stepFreeWorld(w,.05);
+    setPlayerInput(w,0,{up:true});
+    w.boats[1].heading = 90;
+    setPlayerInput(w,1,{up:true});
+    stepMany(w,5);
+    check(!w.tow, "opposing the tow eventually snaps the rope");
+  }
+  {
+    const w = createFreeWorld();
+    w.boats[0].x = 200; w.boats[0].y = 160; w.boats[0].speed = 12; w.boats[0].heading = 90;
+    w.boats[1].x = 210; w.boats[1].y = 160; w.boats[1].speed = 10; w.boats[1].heading = 270;
+    const hull = w.boats[0].hull;
+    stepFreeWorld(w,.05);
+    check(w.boats[0].hull < hull && w.boats[1].hull < 100, "boats damage each other by ramming");
+  }
+  {
+    const w = createFreeWorld();
+    w.boats[0].x = (WORLD.dockMinX + WORLD.dockMaxX)/2;
+    w.boats[0].y = WORLD.shoreY + 10;
+    setPlayerInput(w,0,{action:true}); stepFreeWorld(w,.05);
+    check(w.players[0].mode === "foot", "F exits onto the dock");
+    w.players[0].x = w.boats[1].x; w.players[0].y = w.boats[1].y;
+    w.boats[1].driver = null;
+    setPlayerInput(w,0,{action:false}); stepFreeWorld(w,.05);
+    setPlayerInput(w,0,{jump:true}); stepFreeWorld(w,.05);
+    check(w.players[0].mode === "roof", "Space climbs onto a boat roof");
+    setPlayerInput(w,0,{jump:false}); stepFreeWorld(w,.05);
+    setPlayerInput(w,0,{action:true}); stepFreeWorld(w,.05);
+    check(w.players[0].mode === "boat" && w.players[0].activeBoat === 1, "F steals an abandoned boat");
+  }
+  document.querySelector('#result').textContent = `PASS\n${lines.join('\n')}`;
+  document.body.dataset.result = 'pass';
+} catch (error) {
+  document.querySelector('#result').textContent = `FAIL\n${error.stack || error}`;
+  document.body.dataset.result = 'fail';
+}
+</script>
