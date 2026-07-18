@@ -12,6 +12,20 @@ export function chooseWaitingRoom(rooms, role, mode = "ops") {
     .sort((a, b) => a.createdAt - b.createdAt)[0] || null;
 }
 
+export function chooseAnyWaitingRoom(rooms, mode = "ops") {
+  return [...rooms.values()]
+    .filter(room => (room.mode || "ops") === mode)
+    .filter(room => Boolean(room.captain) !== Boolean(room.crew))
+    .sort((a, b) => a.createdAt - b.createdAt)[0] || null;
+}
+
+export function missingRole(room) {
+  if (!room) return null;
+  if (!room.captain && room.crew) return "captain";
+  if (room.captain && !room.crew) return "crew";
+  return null;
+}
+
 export function createRoomCode(randomValues = null, prefix = "SEA") {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   const values = randomValues || crypto.getRandomValues(new Uint32Array(5));
