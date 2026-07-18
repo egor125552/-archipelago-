@@ -4,28 +4,59 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
-      - run: npm test
-      - name: Run free-roam scenarios in Chrome
+
+      - name: Install project dependencies
+        run: npm ci
+
+      - name: Run Node mechanics tests
+        run: npm test
+
+      - name: Install Playwright browsers
+        run: |
+          npm install --no-save --package-lock=false @playwright/test
+          npx playwright install --with-deps chromium webkit
+
+      - name: Run two-client browser scenarios
         shell: bash
         run: |
-          python3 -m http.server 4173 --directory public >browser-server.log 2>&1 &
-          SERVER_PID=$!
-          trap 'kill $SERVER_PID || true' EXIT
-          sleep 1
-          timeout 30 google-chrome --headless --no-sandbox --disable-gpu --disable-dev-shm-usage --virtual-time-budget=5000 --dump-dom http://127.0.0.1:4173/tests/free-roam-browser.html >browser-output.html
-          cat browser-output.html
-          grep -q 'data-result="pass"' browser-output.html
+          npx wrangler dev --local --port 8787 --log-level error >worker-dev.log 2>&1 &
+          WORKER_PID=$!
+          trap 'kill $WORKER_PID || true' EXIT
+
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent --show-error 'http://127.0.0.1:8787/api/rooms?mode=free' >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          curl --fail --silent --show-error 'http://127.0.0.1:8787/api/rooms?mode=free' >/dev/null
+
+          CI=1 npx playwright test
+
       - name: Validate Cloudflare Worker bundle
         run: npx wrangler deploy --dry-run --outdir=.worker-dry-run
+
+      - name: Upload browser diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: free-roam-browser-diagnostics
+          path: |
+            playwright-report
+            test-results
+            worker-dev.log
+          if-no-files-found: ignore
+          retention-days: 7
