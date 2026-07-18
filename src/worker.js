@@ -1,5 +1,11 @@
 import {chooseWaitingRoom, createRoomCode, oppositeRole, publicRoomList} from "./lobby-core.js";
 
+const SOUND_PROXY = Object.freeze({
+  "/api/sound/footstep-1.ogg": "https://opengameart.org/sites/default/files/01-footstep_0.ogg",
+  "/api/sound/footstep-2.ogg": "https://opengameart.org/sites/default/files/02-footstep.ogg",
+  "/api/sound/footstep-3.ogg": "https://opengameart.org/sites/default/files/03-footstep.ogg",
+});
+
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -8,6 +14,25 @@ function json(data, status = 200) {
       "cache-control": "no-store",
     },
   });
+}
+
+async function proxySound(request, source) {
+  const cache = caches.default;
+  const cacheKey = new Request(request.url, {method: "GET"});
+  const cached = await cache.match(cacheKey);
+  if (cached) return cached;
+  const upstream = await fetch(source, {headers: {"user-agent": "Echo-Archipelago/1.0"}});
+  if (!upstream.ok || !upstream.body) return new Response("Sound unavailable", {status: 502});
+  const response = new Response(upstream.body, {
+    status: 200,
+    headers: {
+      "content-type": "audio/ogg",
+      "cache-control": "public, max-age=604800, immutable",
+      "x-content-type-options": "nosniff",
+    },
+  });
+  await cache.put(cacheKey, response.clone());
+  return response;
 }
 
 function safeSend(socket, payload) {
@@ -142,6 +167,8 @@ export class Lobby {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    const soundSource = SOUND_PROXY[url.pathname];
+    if (soundSource) return proxySound(request, soundSource);
     if (url.pathname.startsWith("/api/")) {
       const id = env.LOBBY.idFromName("global");
       return env.LOBBY.get(id).fetch(request);
