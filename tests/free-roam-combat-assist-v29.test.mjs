@@ -181,14 +181,22 @@ test("automatic shots and impacts use their long-range high-gain audio tuning", 
   assert.match(source, /gain: COMBAT_TUNING\.automaticShotGain \* shotSpatial\.gain/);
 });
 
-test("new production modules use explicit cache generations instead of stale fallback pages", async () => {
-  const [core, combat, audio] = await Promise.all([
+test("the production combat module chain uses explicit cache generations", async () => {
+  const [html, entry, core, combat, audio] = await Promise.all([
+    readFile(new URL("../public/free-roam.html", import.meta.url), "utf8"),
+    readFile(new URL("../public/src/free-roam-v4.js", import.meta.url), "utf8"),
     readFile(new URL("../public/src/free-roam-core-v6.js", import.meta.url), "utf8"),
     readFile(new URL("../public/src/free-roam-combat.js", import.meta.url), "utf8"),
     readFile(new URL("../public/src/free-roam-audio-v5.js", import.meta.url), "utf8"),
   ]);
 
+  assert.match(html, /free-roam-v4\.js\?v=12/);
+  assert.match(entry, /free-roam-core-v6\.js\?v=29/);
+  assert.match(entry, /free-roam-audio-v5\.js\?v=29/);
   assert.match(core, /free-roam-boarding-assist\.js\?v=29/);
+  assert.match(core, /free-roam-combat\.js\?v=29/);
+  assert.match(combat, /free-roam-combat-recovery\.js\?v=29/);
   assert.match(combat, /free-roam-combat-tuning\.js\?v=29/);
+  assert.match(audio, /free-roam-combat-recovery\.js\?v=29/);
   assert.match(audio, /free-roam-combat-tuning\.js\?v=29/);
 });

@@ -9,8 +9,8 @@ import {
   setPlayerPresence,
   snapshotWorld,
   stepFreeWorld,
-} from "./free-roam-core-v6.js";
-import {FreeRoamAudio} from "./free-roam-audio-v5.js";
+} from "./free-roam-core-v6.js?v=29";
+import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=29";
 import {directionFromDelta} from "./free-roam-gesture-model.js";
 import {classifyActionGesture, gestureMetrics} from "./free-roam-action-gestures.js";
 

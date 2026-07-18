@@ -12,7 +12,7 @@ import {
   storeActivityInput,
   updateActivities,
 } from "./free-roam-activities.js";
-import {combatStatus, ensureCombat, updateCombat} from "./free-roam-combat.js";
+import {combatStatus, ensureCombat, updateCombat} from "./free-roam-combat.js?v=29";
 import {ensureMarauder, releaseStolenCargo, updateMarauder} from "./free-roam-marauder.js";
 import {ensureFreeScenario, scenarioStatus, updateFreeScenario} from "./free-roam-scenario.js";
 import {suppressIncapacitatedMovement, updatePhysicalActors} from "./free-roam-physical-actors.js";

@@ -5,7 +5,7 @@ import {
   injuryMixTarget,
   registerCombatDamage,
   updateCombatRecovery,
-} from "./free-roam-combat-recovery.js";
+} from "./free-roam-combat-recovery.js?v=29";
 import {COMBAT_TUNING} from "./free-roam-combat-tuning.js?v=29";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
