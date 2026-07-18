@@ -6,6 +6,9 @@ const SOUND_PROXY = Object.freeze({
   "/api/sound/footstep-3.ogg": "https://opengameart.org/sites/default/files/03-footstep.ogg",
 });
 
+const ROOM_HEARTBEAT_TIMEOUT_MS = 18_000;
+const ROOM_ROLES = Object.freeze(["captain", "crew"]);
+
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -50,6 +53,10 @@ function roomMode(url) {
   return url.searchParams.get("mode") === "free" ? "free" : "ops";
 }
 
+function socketLooksOpen(socket) {
+  return Boolean(socket && (socket.readyState == null || socket.readyState === 1));
+}
+
 export class Lobby {
   constructor(state) {
     this.state = state;
@@ -57,9 +64,45 @@ export class Lobby {
     this.clients = new Map();
   }
 
+  touch(room, role, now = Date.now()) {
+    room.lastSeen ||= {captain: 0, crew: 0};
+    room.lastSeen[role] = now;
+  }
+
+  removeRole(room, role, notify = true) {
+    const socket = room?.[role];
+    if (!socket) return;
+    this.clients.delete(socket);
+    room[role] = null;
+    room.pending[role] = [];
+    room.lastSeen ||= {captain: 0, crew: 0};
+    room.lastSeen[role] = 0;
+    const otherRole = oppositeRole(role);
+    const other = room[otherRole];
+    if (notify && other) {
+      safeSend(other, {type: "network-closed", mode: room.mode || "ops", waitingFor: role});
+    }
+  }
+
+  pruneRooms(now = Date.now()) {
+    for (const room of this.rooms.values()) {
+      room.lastSeen ||= {captain: room.createdAt || now, crew: room.createdAt || now};
+      for (const role of ROOM_ROLES) {
+        const socket = room[role];
+        if (!socket) continue;
+        const lastSeen = Number(room.lastSeen[role]) || Number(room.createdAt) || now;
+        const expired = now - lastSeen > ROOM_HEARTBEAT_TIMEOUT_MS;
+        if (!socketLooksOpen(socket) || expired) this.removeRole(room, role, true);
+      }
+      if (!room.captain && !room.crew) this.rooms.delete(room.id);
+    }
+  }
+
   async fetch(request) {
     const url = new URL(request.url);
     const mode = roomMode(url);
+    this.pruneRooms();
+
     if (url.pathname === "/api/rooms") {
       return json({rooms: publicRoomList(this.rooms, Date.now(), mode), online: this.clients.size, mode});
     }
@@ -70,19 +113,29 @@ export class Lobby {
     }
 
     const requestedRole = url.searchParams.get("role");
+    const requestedRoom = String(url.searchParams.get("room") || "").trim().slice(0, 32);
     let role = requestedRole === "captain" ? "captain" : requestedRole === "auto" ? "auto" : "crew";
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
     server.accept();
 
     let room = null;
+    let preferredRoomFound = false;
     if (role === "auto") {
-      room = chooseAnyWaitingRoom(this.rooms, mode);
+      if (requestedRoom) {
+        const preferred = this.rooms.get(requestedRoom);
+        if (preferred && (preferred.mode || "ops") === mode && missingRole(preferred)) {
+          room = preferred;
+          preferredRoomFound = true;
+        }
+      }
+      if (!room) room = chooseAnyWaitingRoom(this.rooms, mode);
       role = missingRole(room) || "captain";
     } else {
       room = chooseWaitingRoom(this.rooms, role, mode);
     }
 
+    const created = !room;
     if (!room) {
       let id;
       const prefix = mode === "free" ? "FREE" : "SEA";
@@ -94,11 +147,13 @@ export class Lobby {
         crew: null,
         createdAt: Date.now(),
         pending: {captain: [], crew: []},
+        lastSeen: {captain: 0, crew: 0},
       };
       this.rooms.set(id, room);
     }
 
     room[role] = server;
+    this.touch(room, role);
     this.clients.set(server, {roomId: room.id, role, mode});
 
     server.addEventListener("message", event => this.onMessage(server, event.data));
@@ -111,6 +166,10 @@ export class Lobby {
       room: room.id,
       role,
       requestedRole: requestedRole || "crew",
+      requestedRoom: requestedRoom || null,
+      preferredRoomFound,
+      replacedStale: Boolean(requestedRoom && !preferredRoomFound && created),
+      created,
       mode,
       matched,
       waitingFor: matched ? null : oppositeRole(role),
@@ -134,8 +193,10 @@ export class Lobby {
     if (!client) return;
     const room = this.rooms.get(client.roomId);
     if (!room) return;
+    this.touch(room, client.role);
     const message = parseMessage(rawData);
     if (!message || typeof message !== "object") return;
+    if (message.type === "heartbeat") return;
 
     const otherRole = oppositeRole(client.role);
     const other = room[otherRole];
@@ -156,20 +217,14 @@ export class Lobby {
   onClose(socket) {
     const client = this.clients.get(socket);
     if (!client) return;
-    this.clients.delete(socket);
-
     const room = this.rooms.get(client.roomId);
-    if (!room) return;
-    if (room[client.role] === socket) room[client.role] = null;
-    room.pending[client.role] = [];
-
-    const otherRole = oppositeRole(client.role);
-    const other = room[otherRole];
-    if (other) {
-      safeSend(other, {type: "network-closed", mode: room.mode || "ops", waitingFor: client.role});
-    } else {
-      this.rooms.delete(room.id);
+    if (!room) {
+      this.clients.delete(socket);
+      return;
     }
+    if (room[client.role] === socket) this.removeRole(room, client.role, true);
+    else this.clients.delete(socket);
+    if (!room.captain && !room.crew) this.rooms.delete(room.id);
   }
 }
 
