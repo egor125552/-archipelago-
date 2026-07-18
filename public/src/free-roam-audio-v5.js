@@ -3,7 +3,7 @@
 import {FreeRoamAudio as BaseFreeRoamAudio, spatialGainForDistance} from "./free-roam-audio-v4.js";
 import {relativeMovementPan} from "./free-roam-audio-v3.js";
 import {injuryLowpassFrequency} from "./free-roam-combat-recovery.js";
-import {COMBAT_TUNING} from "./free-roam-combat-tuning.js";
+import {COMBAT_TUNING} from "./free-roam-combat-tuning.js?v=29";
 
 const ROOT = "/assets/audio/free-roam-v25/";
 const COMBAT_SOUNDS = Object.freeze({

@@ -6,7 +6,7 @@ import {
   registerCombatDamage,
   updateCombatRecovery,
 } from "./free-roam-combat-recovery.js";
-import {COMBAT_TUNING} from "./free-roam-combat-tuning.js";
+import {COMBAT_TUNING} from "./free-roam-combat-tuning.js?v=29";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));

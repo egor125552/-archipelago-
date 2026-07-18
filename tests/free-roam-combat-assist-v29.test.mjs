@@ -180,3 +180,15 @@ test("automatic shots and impacts use their long-range high-gain audio tuning", 
   assert.match(source, /eventPanAndGain\(event, COMBAT_TUNING\.automaticImpactRange\)/);
   assert.match(source, /gain: COMBAT_TUNING\.automaticShotGain \* shotSpatial\.gain/);
 });
+
+test("new production modules use explicit cache generations instead of stale fallback pages", async () => {
+  const [core, combat, audio] = await Promise.all([
+    readFile(new URL("../public/src/free-roam-core-v6.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/src/free-roam-combat.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/src/free-roam-audio-v5.js", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(core, /free-roam-boarding-assist\.js\?v=29/);
+  assert.match(combat, /free-roam-combat-tuning\.js\?v=29/);
+  assert.match(audio, /free-roam-combat-tuning\.js\?v=29/);
+});
