@@ -38,19 +38,25 @@ export class FreeRoamAudio extends AudioEngine {
   constructor() {
     super();
     this.footstepIndex = 0;
+    this.footstepPreloadPromise = null;
     this.remote = null;
     this.remoteWake = null;
+  }
+
+  async init() {
+    await super.init();
+    if (this.footstepPreloadPromise) await this.footstepPreloadPromise;
   }
 
   async preload() {
     const inherited = super.preload();
     if (!this.ctx) return inherited;
-    const recorded = Promise.allSettled(Object.entries(FOOTSTEPS).map(async ([name, url]) => {
+    this.footstepPreloadPromise = Promise.allSettled(Object.entries(FOOTSTEPS).map(async ([name, url]) => {
       const response = await fetch(url, {cache: "force-cache"});
       if (!response.ok) throw new Error(`${name}: ${response.status}`);
       this.buffers.set(name, await this.ctx.decodeAudioData(await response.arrayBuffer()));
     }));
-    await Promise.allSettled([inherited, recorded]);
+    await Promise.allSettled([inherited, this.footstepPreloadPromise]);
   }
 
   nextFootstep() {
