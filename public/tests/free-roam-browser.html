@@ -3,11 +3,14 @@
 <title>Free roam browser tests</title>
 <pre id="result">RUNNING</pre>
 <script type="module">
-import {createFreeWorld, setPlayerInput, stepFreeWorld, WORLD} from "../src/free-roam-core.js";
+import {createFreeWorld, drainEvents, setPlayerInput, stepFreeWorld, WORLD} from "../src/free-roam-core-v2.js";
 const lines = [];
 function check(value, label) {
   if (!value) throw new Error(label);
   lines.push(`PASS ${label}`);
+}
+function near(actual, expected, tolerance, label) {
+  check(Math.abs(actual - expected) <= tolerance, `${label}: ${actual.toFixed(3)} ≈ ${expected.toFixed(3)}`);
 }
 function stepMany(world, seconds, dt=.05) {
   for (let elapsed=0; elapsed<seconds; elapsed+=dt) stepFreeWorld(world, dt);
@@ -20,13 +23,16 @@ try {
     setPlayerInput(w, 0, {action:true}); stepFreeWorld(w,.05);
     setPlayerInput(w, 0, {}); stepFreeWorld(w,.05);
     check(Boolean(w.tow), "F attaches a physical tow rope");
-    const before = w.boats[1].x;
+    const beforeX = w.boats[1].x;
+    const beforeY = w.boats[1].y;
     setPlayerInput(w,0,{up:true}); stepMany(w,3);
-    check(w.boats[1].x !== before, "tower physically drags the second boat");
-    w.boats[1].hull = 45; w.boats[1].leak = 1;
+    check(Math.hypot(w.boats[1].x-beforeX, w.boats[1].y-beforeY) > .2, "tower physically drags the second boat");
+    w.boats[1].hull = 45; w.boats[1].leak = 4;
     const hull = w.boats[1].hull;
-    setPlayerInput(w,1,{repair:true}); stepMany(w,2);
-    check(w.boats[1].hull > hull, "towed player repairs while moving");
+    const patches = w.boats[1].repairPatches;
+    setPlayerInput(w,1,{repair:true}); stepMany(w,3.35);
+    near(w.boats[1].hull, hull + 22, .05, "towed plate restores the operation hull amount");
+    check(w.boats[1].repairPatches === patches - 1, "towed repair consumes one familiar plate");
   }
   {
     const w = createFreeWorld();
@@ -46,6 +52,27 @@ try {
     const hull = w.boats[0].hull;
     stepFreeWorld(w,.05);
     check(w.boats[0].hull < hull && w.boats[1].hull < 100, "boats damage each other by ramming");
+  }
+  {
+    const w = createFreeWorld();
+    const boat = w.boats[0];
+    boat.water = 20;
+    boat.leak = 3;
+    setPlayerInput(w,0,{pump:true});
+    stepMany(w,1);
+    near(boat.water, 20 + 3*.33 - 7.5, .08, "manual pump keeps the operation flow rate");
+  }
+  {
+    const w = createFreeWorld();
+    const boat = w.boats[0];
+    boat.water = 100;
+    boat.hull = .05;
+    stepFreeWorld(w,.05);
+    check(boat.emergencyActive && boat.emergencyRemaining > 44, "full flooding opens the familiar 45 second recovery window");
+    setPlayerInput(w,0,{pump:true,repair:true});
+    stepMany(w,10);
+    check(!boat.emergencyActive && !boat.sunk, "pump and plate recover the boat before the emergency expires");
+    check(drainEvents(w).some(event => event.type === "flood-emergency-recovered"), "recovery emits the existing emergency sound event");
   }
   {
     const w = createFreeWorld();
