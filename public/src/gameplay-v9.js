@@ -1,4 +1,4 @@
-import "./keyboard-controls-v1.js?v=1";
+import "./keyboard-controls-v1.js?v=2";
 
 "use strict";
 
