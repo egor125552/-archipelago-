@@ -1,24 +1,8 @@
 "use strict";
 
-import {normalizeRoomCode} from "./network.js";
-
 const $ = id => document.getElementById(id);
-const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-let activeRoomCode = "";
-
-function randomRoom(length = 6) {
-  const bytes = new Uint32Array(length);
-  crypto.getRandomValues(bytes);
-  return [...bytes].map(value => ALPHABET[value % ALPHABET.length]).join("");
-}
-
-function sanitizeInput() {
-  const input = $("roomInput");
-  if (!input) return "";
-  const clean = normalizeRoomCode(input.value);
-  if (input.value !== clean) input.value = clean;
-  return clean;
-}
+let activeRoom = "";
+let refreshTimer = 0;
 
 function setStatus(text) {
   const status = $("networkStatus");
@@ -35,72 +19,139 @@ function ensureRoomBadge() {
   badge.id = "roomBadge";
   badge.className = "panel compact";
   badge.hidden = true;
-  badge.innerHTML = '<strong id="roomBadgeText"></strong> <button id="copyRoomCode" class="small" type="button">Копировать код</button>';
+  badge.innerHTML = '<strong id="roomBadgeText"></strong>';
   gameScreen.insertBefore(badge, mission);
-  $("copyRoomCode")?.addEventListener("click", async () => {
-    if (!activeRoomCode) return;
-    try {
-      await navigator.clipboard.writeText(activeRoomCode);
-      $("copyRoomCode").textContent = "Код скопирован";
-    } catch (_) {
-      $("copyRoomCode").textContent = `Код: ${activeRoomCode}`;
-    }
-  });
   return badge;
 }
 
-function showRoomBadge(code, roleText) {
-  activeRoomCode = code;
+function showRoomBadge(room, role, matched) {
+  activeRoom = room || activeRoom;
   const badge = ensureRoomBadge();
   const text = $("roomBadgeText");
-  if (text) text.textContent = `${roleText}. Комната: ${code}.`;
+  const roleText = role === "captain" ? "Ты капитан" : "Ты системный оператор";
+  if (text) text.textContent = `${roleText}. Интернет-комната ${activeRoom}. ${matched ? "Напарник подключён." : "Ждём напарника."}`;
   if (badge) badge.hidden = false;
 }
 
-function prepareHost() {
-  const code = sanitizeInput() || randomRoom();
-  $("roomInput").value = code;
-  showRoomBadge(code, "Ты капитан");
-  setStatus(`Интернет-комната ${code} создаётся. Передай этот код второму игроку.`);
+function ensureLobbyPanel() {
+  let panel = $("internetLobby");
+  if (panel) return panel;
+  const coop = document.querySelector(".coop-panel");
+  const status = $("networkStatus");
+  if (!coop || !status) return null;
+
+  panel = document.createElement("section");
+  panel.id = "internetLobby";
+  panel.className = "internet-lobby";
+  panel.setAttribute("aria-labelledby", "internetLobbyTitle");
+  panel.innerHTML = `
+    <h3 id="internetLobbyTitle">Свободные интернет-комнаты</h3>
+    <p id="onlineRoomSummary" class="hint" role="status" aria-live="polite">Проверяю сервер комнат…</p>
+    <ul id="onlineRoomList"></ul>
+    <button id="refreshRooms" type="button" class="small">Обновить список комнат</button>
+  `;
+  coop.insertBefore(panel, status);
+  $("refreshRooms")?.addEventListener("click", refreshRooms);
+  return panel;
 }
 
-function prepareJoin(event) {
-  const code = sanitizeInput();
-  if (code.length < 4) {
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    setStatus("Введи код из 4–6 латинских букв или цифр. Русские похожие буквы преобразуются автоматически.");
-    return;
+function roomDescription(room, index) {
+  const waiting = room.waitingFor === "captain" ? "ждёт капитана" : "ждёт системного оператора";
+  const age = room.ageSeconds < 10 ? "создана только что" : `ждёт ${room.ageSeconds} секунд`;
+  return `Комната ${index + 1}: ${waiting}, ${age}.`;
+}
+
+async function refreshRooms() {
+  ensureLobbyPanel();
+  const summary = $("onlineRoomSummary");
+  const list = $("onlineRoomList");
+  try {
+    const response = await fetch("/api/rooms", {cache: "no-store"});
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    const rooms = Array.isArray(data.rooms) ? data.rooms : [];
+    if (list) {
+      list.replaceChildren(...rooms.map((room, index) => {
+        const item = document.createElement("li");
+        item.textContent = roomDescription(room, index);
+        return item;
+      }));
+    }
+    if (summary) summary.textContent = rooms.length
+      ? `Свободных комнат: ${rooms.length}. Кнопка входа выберет первую подходящую.`
+      : "Свободных комнат нет. Кнопка входа создаст новую и будет ждать капитана.";
+  } catch (error) {
+    if (list) list.replaceChildren();
+    if (summary) summary.textContent = `Сервер комнат пока не отвечает: ${error.message}.`;
   }
-  showRoomBadge(code, "Ты системный оператор");
-  setStatus(`Подключаемся к интернет-комнате ${code}…`);
 }
 
-function configureLocalMode() {
+function configureInterface() {
+  const input = $("roomInput");
+  const label = input?.labels?.[0];
+  if (input) {
+    input.value = "AUTO";
+    input.hidden = true;
+    input.setAttribute("aria-hidden", "true");
+    input.tabIndex = -1;
+  }
+  if (label) label.hidden = true;
+
+  const host = $("hostPeer");
+  const join = $("joinPeer");
+  if (host) host.textContent = "Создать интернет-комнату — я капитан";
+  if (join) join.textContent = "Войти в ближайшую интернет-комнату";
+
   const coarse = matchMedia("(pointer: coarse)").matches || innerWidth < 700;
   const hostLocal = $("hostLocal");
   const joinLocal = $("joinLocal");
   const note = $("localRoomNote");
-  if (!hostLocal || !joinLocal) return;
-
   if (coarse) {
-    hostLocal.hidden = true;
-    joinLocal.hidden = true;
-    if (note) note.textContent = "На телефоне локальный режим отключён: Safari останавливает вкладку в фоне. Для двух устройств используй интернет-комнату.";
+    if (hostLocal) hostLocal.hidden = true;
+    if (joinLocal) joinLocal.hidden = true;
+    if (note) note.textContent = "На телефоне показаны только настоящие интернет-комнаты.";
   } else {
-    hostLocal.hidden = false;
-    joinLocal.hidden = false;
-    hostLocal.textContent = "Создать тест в двух окнах компьютера";
-    joinLocal.textContent = "Войти в тест в этом браузере";
-    if (note) note.textContent = "Локальный режим предназначен только для двух одновременно активных окон на компьютере. Для телефонов используй интернет-комнату.";
+    if (hostLocal) hostLocal.hidden = false;
+    if (joinLocal) joinLocal.hidden = false;
+    if (note) note.textContent = "Локальный тест открывается в двух вкладках одного компьютера; интернет-режим работает между разными устройствами.";
   }
 }
 
-const input = $("roomInput");
-input?.addEventListener("input", sanitizeInput);
-input?.addEventListener("blur", sanitizeInput);
-$("hostPeer")?.addEventListener("click", prepareHost, true);
-$("joinPeer")?.addEventListener("click", prepareJoin, true);
+function prepareInternet(role) {
+  const input = $("roomInput");
+  if (input) input.value = role === "captain" ? "HOST" : "AUTO";
+  setStatus(role === "captain"
+    ? "Создаю интернет-комнату. Код вводить не нужно…"
+    : "Ищу свободную интернет-комнату. Если её нет, создам ожидание капитана…");
+}
+
+$("hostPeer")?.addEventListener("click", () => prepareInternet("captain"), true);
+$("joinPeer")?.addEventListener("click", () => prepareInternet("crew"), true);
+$("hostLocal")?.addEventListener("click", () => { if ($("roomInput")) $("roomInput").value = "LOCAL"; }, true);
+$("joinLocal")?.addEventListener("click", () => { if ($("roomInput")) $("roomInput").value = "LOCAL"; }, true);
+
+window.addEventListener("echo-room-ready", event => {
+  const detail = event.detail || {};
+  showRoomBadge(detail.room, detail.role, detail.matched);
+  setStatus(detail.matched
+    ? `Интернет-комната ${detail.room}: оба игрока подключены.`
+    : `Интернет-комната ${detail.room}: ждём ${detail.waitingFor === "captain" ? "капитана" : "системного оператора"}.`);
+  refreshRooms();
+});
+
+window.addEventListener("echo-room-peer-connected", event => {
+  const detail = event.detail || {};
+  showRoomBadge(detail.room || activeRoom, detail.role, true);
+  setStatus(`Интернет-комната ${detail.room || activeRoom}: соединение между устройствами подтверждено.`);
+  refreshRooms();
+});
+
 ensureRoomBadge();
-configureLocalMode();
-window.addEventListener("resize", configureLocalMode, {passive: true});
+ensureLobbyPanel();
+configureInterface();
+refreshRooms();
+clearInterval(refreshTimer);
+refreshTimer = setInterval(() => {
+  if (!$("startScreen")?.hidden) refreshRooms();
+}, 5000);
+window.addEventListener("resize", configureInterface, {passive: true});
