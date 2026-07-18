@@ -6,39 +6,28 @@ const LOOKALIKE_MAP = Object.freeze({
   "І": "I", "Ї": "I", "Ј": "J", "З": "3", "Б": "6"
 });
 
-export function normalizeRoomCode(value, maxLength = 6) {
+export function normalizeRoomCode(value, maxLength = 12) {
   const upper = String(value || "").trim().toUpperCase().replace(/Ё/g, "Е");
   let result = "";
   for (const char of upper) {
     const mapped = LOOKALIKE_MAP[char] || char;
-    if (/^[A-Z0-9]$/.test(mapped)) result += mapped;
+    if (/^[A-Z0-9-]$/.test(mapped)) result += mapped;
     if (result.length >= maxLength) break;
   }
   return result;
 }
 
-function peerIdFor(room) {
-  const code = normalizeRoomCode(room);
-  if (code.length < 4) throw new Error("Код комнаты должен содержать от 4 до 6 латинских букв или цифр");
-  return `echo-archipelago-${code.toLowerCase()}`;
+export function workerSocketUrl(locationLike, role) {
+  const source = locationLike || globalThis.location;
+  if (!source?.host) throw new Error("Адрес сервера комнат не определён");
+  const protocol = source.protocol === "https:" ? "wss:" : "ws:";
+  const safeRole = role === "captain" ? "captain" : "crew";
+  return `${protocol}//${source.host}/api/connect?role=${safeRole}`;
 }
 
-function waitForEvent(target, eventName, errorName = "error", timeoutMs = 15000) {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      cleanup();
-      reject(new Error("Время подключения истекло"));
-    }, timeoutMs);
-    const onSuccess = value => { cleanup(); resolve(value); };
-    const onError = error => { cleanup(); reject(error instanceof Error ? error : new Error(String(error?.message || error || "Ошибка подключения"))); };
-    const cleanup = () => {
-      clearTimeout(timeout);
-      target.off?.(eventName, onSuccess);
-      target.off?.(errorName, onError);
-    };
-    target.on(eventName, onSuccess);
-    target.on(errorName, onError);
-  });
+function dispatchRoomEvent(name, detail) {
+  if (typeof globalThis.dispatchEvent !== "function" || typeof globalThis.CustomEvent !== "function") return;
+  globalThis.dispatchEvent(new CustomEvent(name, {detail}));
 }
 
 export class LocalRoomTransport {
@@ -60,43 +49,93 @@ export class LocalRoomTransport {
 }
 
 export class PeerRoomTransport {
-  constructor(room, role) {
-    this.room = normalizeRoomCode(room);
-    this.role = role;
-    this.peer = null;
-    this.connection = null;
+  constructor(_room, role) {
+    this.room = "";
+    this.role = role === "captain" ? "captain" : "crew";
+    this.socket = null;
     this.handlers = new Set();
+    this.closedByUser = false;
   }
 
-  bindConnection(connection) {
-    this.connection = connection;
-    connection.on("data", data => this.handlers.forEach(handler => handler(data)));
-    connection.on("error", error => this.handlers.forEach(handler => handler({type: "network-error", message: error?.message || "Ошибка соединения"})));
-    connection.on("close", () => this.handlers.forEach(handler => handler({type: "network-closed"})));
-  }
-
-  async connect() {
-    if (!globalThis.Peer) throw new Error("Интернет-модуль не загрузился. Проверь соединение и обнови страницу");
-    const targetId = peerIdFor(this.room);
-
-    if (this.role === "captain") {
-      this.peer = new globalThis.Peer(targetId);
-      this.peer.on("connection", connection => {
-        this.bindConnection(connection);
-        connection.on("open", () => this.handlers.forEach(handler => handler({type: "peer-connected"})));
-      });
-      await waitForEvent(this.peer, "open", "error", 15000);
-      return;
+  emit(message) {
+    this.handlers.forEach(handler => handler(message));
+    if (message?.type === "peer-connected") {
+      setTimeout(() => dispatchRoomEvent("echo-room-peer-connected", {room: this.room, role: this.role}), 0);
     }
+  }
 
-    this.peer = new globalThis.Peer();
-    await waitForEvent(this.peer, "open", "error", 15000);
-    const connection = this.peer.connect(targetId, {reliable: true});
-    this.bindConnection(connection);
-    await waitForEvent(connection, "open", "error", 15000);
+  connect() {
+    if (!("WebSocket" in globalThis)) throw new Error("Этот браузер не поддерживает интернет-комнаты");
+    this.closedByUser = false;
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const timeout = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        this.close();
+        reject(new Error("Сервер комнат не ответил за 12 секунд"));
+      }, 12000);
+
+      const socket = new WebSocket(workerSocketUrl(globalThis.location, this.role));
+      this.socket = socket;
+
+      socket.addEventListener("message", event => {
+        let message;
+        try { message = JSON.parse(String(event.data)); }
+        catch (_) { return; }
+
+        if (message?.type === "lobby-ready") {
+          this.room = normalizeRoomCode(message.room) || String(message.room || "");
+          clearTimeout(timeout);
+          if (!settled) {
+            settled = true;
+            resolve();
+          }
+          setTimeout(() => dispatchRoomEvent("echo-room-ready", {
+            room: this.room,
+            role: this.role,
+            matched: Boolean(message.matched),
+            waitingFor: message.waitingFor || null,
+          }), 0);
+          return;
+        }
+
+        this.emit(message);
+      });
+
+      socket.addEventListener("error", () => {
+        const error = new Error("Cloudflare Worker не открыл соединение с комнатой");
+        clearTimeout(timeout);
+        if (!settled) {
+          settled = true;
+          reject(error);
+        } else {
+          this.emit({type: "network-error", message: error.message});
+        }
+      });
+
+      socket.addEventListener("close", () => {
+        clearTimeout(timeout);
+        if (!settled) {
+          settled = true;
+          reject(new Error("Сервер комнат закрыл соединение до входа"));
+        } else if (!this.closedByUser) {
+          this.emit({type: "network-closed"});
+        }
+      });
+    });
   }
 
   onMessage(handler) { this.handlers.add(handler); return () => this.handlers.delete(handler); }
-  send(payload) { if (this.connection?.open) this.connection.send({...payload, senderRole: this.role, sentAt: Date.now()}); }
-  close() { this.connection?.close(); this.peer?.destroy(); this.connection = null; this.peer = null; }
+
+  send(payload) {
+    if (this.socket?.readyState !== WebSocket.OPEN) return;
+    this.socket.send(JSON.stringify({...payload, senderRole: this.role, sentAt: Date.now()}));
+  }
+
+  close() {
+    this.closedByUser = true;
+    try { this.socket?.close(1000, "client close"); } catch (_) {}
+    this.socket = null;
+  }
 }
