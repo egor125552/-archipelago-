@@ -66,7 +66,7 @@ async function refreshRooms() {
   const summary = $("onlineRoomSummary");
   const list = $("onlineRoomList");
   try {
-    const response = await fetch("/api/rooms", {cache: "no-store"});
+    const response = await fetch("/api/rooms?mode=ops", {cache: "no-store"});
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const rooms = Array.isArray(data.rooms) ? data.rooms : [];
