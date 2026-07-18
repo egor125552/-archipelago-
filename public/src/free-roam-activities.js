@@ -135,6 +135,51 @@ function nearestUsableBoat(world, point, maximum = Infinity) {
   return {boat: found, distance: best};
 }
 
+function stealStowedCargo(world, playerIndex) {
+  const state = world.freeActivities;
+  const player = world.players[playerIndex];
+  if (!["foot", "swim"].includes(player?.mode) || player.combat?.carriedCrate) return false;
+  let targetBoat = null;
+  let best = 8.5;
+  for (const boat of world.boats || []) {
+    if (boat.sunk || boat.owner === playerIndex || boat.driver === playerIndex || !(boat.cargo || []).length) continue;
+    const metres = distance(player, boat);
+    if (metres >= best) continue;
+    best = metres;
+    targetBoat = boat;
+  }
+  if (!targetBoat) return false;
+  const id = targetBoat.cargo.shift();
+  const crate = state.crates.find(candidate => candidate.id === id);
+  if (!crate) return false;
+  crate.state = "carried";
+  crate.carriedBy = playerIndex;
+  crate.stowedBoat = null;
+  crate.x = player.x;
+  crate.y = player.y;
+  player.combat.carriedCrate = crate.id;
+  const victim = targetBoat.driver ?? targetBoat.owner;
+  emit(world, "cargo-stolen", `Ты украл с чужой лодки: ${LABELS[crate.kind] || "груз"}.`, [playerIndex], {
+    sourcePlayer: playerIndex,
+    victimPlayer: victim,
+    crateId: crate.id,
+    kind: crate.kind,
+    x: player.x,
+    y: player.y,
+  });
+  if (victim !== playerIndex) {
+    emit(world, "cargo-stolen", "С твоей лодки украли груз.", [victim], {
+      sourcePlayer: playerIndex,
+      victimPlayer: victim,
+      crateId: crate.id,
+      kind: crate.kind,
+      x: player.x,
+      y: player.y,
+    });
+  }
+  return true;
+}
+
 function stow(world, crate, boat, playerIndex) {
   if (!crate || !boat || boat.cargo.length >= 5) return false;
   crate.state = "stowed";
@@ -204,6 +249,8 @@ export function handleActivityAction(world, playerIndex) {
     dropCarriedCrate(world, playerIndex, "Ты положил груз рядом.");
     return true;
   }
+
+  if (stealStowedCargo(world, playerIndex)) return true;
 
   const nearest = nearestAvailableCrate(state, player, player.mode === "boat" ? 12 : 7);
   if (!nearest.crate) return false;

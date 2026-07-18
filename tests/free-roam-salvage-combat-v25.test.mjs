@@ -23,9 +23,10 @@ function run(world, seconds, dt = 0.05) {
 
 function pulse(world, playerIndex, control, hold = 0.08) {
   setPlayerInput(world, playerIndex, {[control]: true});
-  run(world, hold);
+  const events = run(world, hold);
   setPlayerInput(world, playerIndex, {[control]: false});
-  return run(world, 0.08);
+  events.push(...run(world, 0.08));
+  return events;
 }
 
 function activity(world) {
@@ -109,6 +110,44 @@ test("short and held X attacks are different, and a heavy hit knocks the opponen
   const events = run(world, 0.08);
   assert.equal(b.combat.knockedDown, true);
   assert.ok(events.some(event => event.type === "combat-heavy-hit"));
+});
+
+test("three quick light punches reliably stun and push the opponent", () => {
+  const world = createFreeWorld();
+  setPlayerPresence(world, 1, true);
+  const attacker = world.players[0];
+  const target = world.players[1];
+  Object.assign(attacker, {mode: "foot", activeBoat: null, x: 190, y: 50, heading: 90});
+  Object.assign(target, {mode: "foot", activeBoat: null, x: 195.5, y: 50, heading: 270});
+  const startX = target.x;
+
+  pulse(world, 0, "attack", 0.12);
+  pulse(world, 0, "attack", 0.12);
+  const events = pulse(world, 0, "attack", 0.12);
+
+  assert.equal(target.combat.knockedDown, true);
+  assert.ok(target.x > startX + 1);
+  assert.ok(events.some(event => event.type === "player-knockdown"));
+});
+
+test("the second player can steal a stowed crate from the other player's boat", () => {
+  const world = createFreeWorld();
+  setPlayerPresence(world, 1, true);
+  const boat = world.boats[0];
+  const thief = world.players[1];
+  const crate = activity(world).crates.find(candidate => candidate.kind === "valuable");
+  crate.state = "stowed";
+  crate.stowedBoat = boat.id;
+  crate.carriedBy = null;
+  boat.cargo.push(crate.id);
+  Object.assign(thief, {mode: "foot", activeBoat: null, x: boat.x + 3, y: boat.y});
+
+  const events = pulse(world, 1, "action");
+  assert.equal(crate.state, "carried");
+  assert.equal(crate.carriedBy, 1);
+  assert.equal(thief.combat.carriedCrate, crate.id);
+  assert.equal(boat.cargo.includes(crate.id), false);
+  assert.ok(events.some(event => event.type === "cargo-stolen"));
 });
 
 test("a rare automatic fires while held and can destroy the pursuer", () => {

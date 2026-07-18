@@ -38,8 +38,9 @@ test("Shift running is faster than walking and the shore has finite side bounds"
   stepMany(world, 0.8);
   const runningDistance = world.players[0].x - 180;
 
-  assert.ok(walkingDistance > 10, walkingDistance);
+  assert.ok(walkingDistance >= 4 && walkingDistance <= 8, String(walkingDistance));
   assert.ok(runningDistance > walkingDistance * 1.5, `${runningDistance}/${walkingDistance}`);
+  assert.ok(runningDistance <= 13, String(runningDistance));
   assert.equal(world.players[0].running, true);
 
   world.players[0].x = WORLD.landMaxX - 0.2;

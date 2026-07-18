@@ -157,7 +157,8 @@ function damagePlayer(world, targetIndex, amount, attackerIndex, details, helper
   const combat = target?.combat;
   if (!combat?.alive || amount <= 0) return false;
   combat.health = clamp(combat.health - amount, 0, 100);
-  combat.stun = clamp(combat.stun + amount * (details.heavy ? 1.5 : 0.82), 0, 100);
+  const stunFactor = details.heavy ? 1.5 : details.weapon === "fists" ? 1.35 : 0.82;
+  combat.stun = clamp(combat.stun + amount * stunFactor, 0, 100);
   emit(world, details.eventType || "combat-hit", `Здоровье ${Math.round(combat.health)}.`, attackerIndex >= 0 ? [targetIndex, attackerIndex] : [targetIndex], {
     sourcePlayer: attackerIndex,
     targetPlayer: targetIndex,
@@ -173,7 +174,7 @@ function damagePlayer(world, targetIndex, amount, attackerIndex, details, helper
     return true;
   }
   if (details.heavy) knockDown(world, targetIndex, attackerIndex, 7.5, details.weapon);
-  else if (combat.stun >= 34 && Math.floor(world.time * 10 + targetIndex * 7) % 3 === 0) {
+  else if (details.weapon === "fists" && combat.stun >= 30) {
     knockDown(world, targetIndex, attackerIndex, 3.5, details.weapon);
   }
   return true;
@@ -192,10 +193,10 @@ function performMelee(world, attackerIndex, heavyRequested, helpers) {
     return;
   }
   combat.stamina -= actualCost;
-  combat.attackCooldown = heavy ? 0.72 : weapon === "knife" ? 0.36 : 0.3;
-  const range = weapon === "knife" ? 6.4 : 5.2;
-  const target = nearestTarget(world, attackerIndex, range, 105, false);
-  const armouredTarget = target ? null : nearestTarget(world, attackerIndex, range, 105, true);
+  combat.attackCooldown = heavy ? 0.62 : weapon === "knife" ? 0.24 : 0.18;
+  const range = weapon === "knife" ? 8.2 : 7.5;
+  const target = nearestTarget(world, attackerIndex, range, 145, false);
+  const armouredTarget = target ? null : nearestTarget(world, attackerIndex, range, 145, true);
   emit(world, "combat-swing", "", [attackerIndex], {
     sourcePlayer: attackerIndex,
     weapon,

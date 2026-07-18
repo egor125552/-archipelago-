@@ -27,6 +27,7 @@ export function createFreeScenario(playerCount = 2) {
     warningUntil: 0,
     announced: false,
     targets: Array.from({length: playerCount}, () => null),
+    lockedTargetIds: Array.from({length: playerCount}, () => null),
     beaconUntil: Array.from({length: playerCount}, () => 0),
     sonarCooldown: Array.from({length: playerCount}, () => 0),
   };
@@ -38,9 +39,11 @@ export function ensureFreeScenario(world) {
   const scenario = world.freeScenario;
   scenario.phase ||= "salvage";
   scenario.targets ||= [null, null];
+  scenario.lockedTargetIds ||= [null, null];
   scenario.beaconUntil ||= [0, 0];
   scenario.sonarCooldown ||= [0, 0];
   while (scenario.targets.length < world.players.length) scenario.targets.push(null);
+  while (scenario.lockedTargetIds.length < world.players.length) scenario.lockedTargetIds.push(null);
   while (scenario.beaconUntil.length < world.players.length) scenario.beaconUntil.push(0);
   while (scenario.sonarCooldown.length < world.players.length) scenario.sonarCooldown.push(0);
   if (created && scenario.phase === "salvage" && world.freeActivities?.marauder) {
@@ -82,6 +85,12 @@ function nearestWorldCrate(world, playerIndex, predicate) {
   return result;
 }
 
+function lockedWorldCrate(world, playerIndex, predicate) {
+  const id = world.freeScenario.lockedTargetIds[playerIndex];
+  const crate = world.freeActivities.crates.find(candidate => candidate.id === id);
+  return crate?.state === "world" && predicate(crate) ? crate : null;
+}
+
 function dockTarget() {
   return {id: "dock", kind: "dock", label: "причал для разгрузки", x: 210, y: 76};
 }
@@ -99,7 +108,8 @@ export function scenarioTarget(world, playerIndex) {
   }
   if (scenario.phase === "arm") {
     if (cargoNeedsDock(world, playerIndex, "automatic")) return dockTarget();
-    const automatic = nearestWorldCrate(world, playerIndex, crate => crate.kind === "automatic");
+    const automatic = lockedWorldCrate(world, playerIndex, crate => crate.kind === "automatic")
+      || nearestWorldCrate(world, playerIndex, crate => crate.kind === "automatic");
     if (automatic) return {
       id: automatic.id,
       kind: automatic.kind,
@@ -110,7 +120,8 @@ export function scenarioTarget(world, playerIndex) {
   }
   if (scenario.phase === "salvage") {
     if (cargoNeedsDock(world, playerIndex)) return dockTarget();
-    const crate = nearestWorldCrate(world, playerIndex, candidate => SALVAGE_KINDS.has(candidate.kind))
+    const crate = lockedWorldCrate(world, playerIndex, candidate => SALVAGE_KINDS.has(candidate.kind))
+      || nearestWorldCrate(world, playerIndex, candidate => SALVAGE_KINDS.has(candidate.kind))
       || nearestWorldCrate(world, playerIndex, () => true);
     if (crate) return {
       id: crate.id,
@@ -134,7 +145,16 @@ export function scenarioTarget(world, playerIndex) {
 }
 
 function directionText(player, target) {
-  const absolute = Math.atan2(target.x - player.x, -(target.y - player.y)) * 180 / Math.PI;
+  const dx = target.x - player.x;
+  const dy = target.y - player.y;
+  if (["foot", "swim"].includes(player?.mode)) {
+    const horizontal = dx < 0 ? "слева" : "справа";
+    const vertical = dy < 0 ? "вглубь берега" : "в сторону воды";
+    if (Math.abs(dx) < 3) return vertical;
+    if (Math.abs(dy) < 3) return horizontal;
+    return `${horizontal} и ${vertical}`;
+  }
+  const absolute = Math.atan2(dx, -dy) * 180 / Math.PI;
   const relative = wrapDeg(absolute - (Number(player.heading) || 0));
   const side = relative < 0 ? "слева" : "справа";
   const amount = Math.abs(relative);
@@ -147,7 +167,9 @@ function directionText(player, target) {
 function updateTargets(world) {
   const scenario = world.freeScenario;
   for (let index = 0; index < world.players.length; index += 1) {
-    scenario.targets[index] = scenarioTarget(world, index);
+    const target = scenarioTarget(world, index);
+    scenario.targets[index] = target;
+    if (target?.id?.startsWith("crate-")) scenario.lockedTargetIds[index] = target.id;
   }
 }
 
@@ -162,7 +184,7 @@ function handleSonar(world, dt) {
     if (!target) continue;
     const metres = distance(world.players[index], target);
     scenario.sonarCooldown[index] = 1.1;
-    scenario.beaconUntil[index] = world.time + 9;
+    scenario.beaconUntil[index] = world.time + 45;
     emit(
       world,
       "scenario-sonar",

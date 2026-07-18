@@ -21,3 +21,11 @@ test("a tiny turn cannot throw a sound behind the listener from far left to far 
   const after = relativeMovementPan({x: 100, y: 100, heading: 1}, sourceBehind);
   assert.ok(Math.abs(before - after) < 0.1);
 });
+
+test("walking sideways does not reinterpret the same fixed target as the opposite side", () => {
+  const source = {x: 140, y: 100};
+  const before = relativeMovementPan({mode: "foot", x: 100, y: 100, heading: 0}, source);
+  const after = relativeMovementPan({mode: "foot", x: 101, y: 100, heading: 90}, source);
+  assert.ok(before > 0.9);
+  assert.ok(after > 0.9);
+});

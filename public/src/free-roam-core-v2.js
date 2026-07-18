@@ -267,7 +267,7 @@ function updatePlayerOnFoot(world, playerIndex, dt) {
   dx /= length;
   dy /= length;
   const moving = Math.abs(dx) + Math.abs(dy) > 0;
-  const movementSpeed = p.mode === "swim" ? 15 : 24;
+  const movementSpeed = p.mode === "swim" ? 6 : 8;
   p.x = clamp(p.x + dx * movementSpeed * dt, 5, WORLD.width - 5);
   p.y = clamp(p.y + dy * movementSpeed * dt, 5, WORLD.height - 5);
   if (moving) p.heading = Math.atan2(dx, -dy) * 180 / Math.PI;

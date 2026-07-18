@@ -74,6 +74,41 @@ test("sonar reports exactly one current objective and opens one temporary beacon
   assert.ok(world.freeScenario.beaconUntil[0] > world.time);
 });
 
+test("sonar keeps the same crate locked while the player moves across nearest-crate boundaries", () => {
+  const world = createFreeWorld();
+  run(world, 0.1);
+  const locked = world.freeScenario.targets[0];
+  assert.ok(locked?.id?.startsWith("crate-"));
+
+  const other = world.freeActivities.crates.find(crate => crate.state === "world" && crate.id !== locked.id);
+  Object.assign(world.players[0], {mode: "foot", activeBoat: null, x: other.x, y: other.y});
+  run(world, 0.1);
+
+  assert.equal(world.freeScenario.targets[0].id, locked.id);
+});
+
+test("one sonar press keeps guidance active long enough to reach a distant crate", () => {
+  const world = createFreeWorld();
+  pulse(world, "sonar");
+  run(world, 15);
+  assert.ok(world.freeScenario.beaconUntil[0] > world.time);
+});
+
+test("on foot the spoken side of a locked target stays world-stable after a sideways step", () => {
+  const world = createFreeWorld();
+  const player = world.players[0];
+  Object.assign(player, {mode: "foot", activeBoat: null, x: 100, y: 50, heading: 0});
+  world.freeScenario.lockedTargetIds[0] = "crate-plates";
+  run(world, 0.1);
+  const first = pulse(world, "sonar").find(event => event.type === "scenario-sonar");
+  assert.match(first.text, /справа/i);
+
+  run(world, 1.2);
+  Object.assign(player, {x: 101, heading: 90});
+  const second = pulse(world, "sonar").find(event => event.type === "scenario-sonar");
+  assert.match(second.text, /справа/i);
+});
+
 test("a player ram hits first and separates the boats instead of gluing them together", () => {
   const world = createFreeWorld();
   const boat = world.boats[0];

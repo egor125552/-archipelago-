@@ -279,6 +279,10 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
       case "cargo-transfer":
         this.play("repair", {pan: spatial.pan, gain: 0.25 * spatial.gain, rate: event.type === "cargo-stowed" ? 0.86 : 1.08, lowpass: 5200});
         return;
+      case "cargo-stolen":
+        this.play("repair", {pan: spatial.pan, gain: 0.31 * spatial.gain, rate: 0.72, lowpass: 3800});
+        this.playSynthPip({pan: spatial.pan, frequency: 210, gain: 0.1, duration: 0.16, delay: 0.08});
+        return;
       case "cargo-delivered":
         this.playSynthPip({frequency: 680, gain: 0.08, duration: 0.08});
         this.playSynthPip({frequency: 920, gain: 0.085, duration: 0.1, delay: 0.13});
