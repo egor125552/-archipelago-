@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#071217">
+  <title>Свободная бухта — Эхо-Архипелаг</title>
+  <link rel="stylesheet" href="free-roam.css?v=1">
+</head>
+<body>
+  <a class="skip" href="#main">К игре</a>
+  <main id="main">
+    <section id="lobby" class="shell" aria-labelledby="title">
+      <p class="eyebrow">Эхо-Архипелаг</p>
+      <h1 id="title">Свободная бухта</h1>
+      <p class="lead">Две равноправные лодки, маленький берег и никаких заданий. Можно ездить рядом, тараниться, буксировать повреждённую лодку, выходить на сушу, плавать и пересаживаться в оставленный катер.</p>
+      <div class="lobby-actions">
+        <button id="hostButton" class="primary">Создать свободный мир</button>
+        <button id="joinButton">Войти в ближайший мир</button>
+      </div>
+      <section class="rooms" aria-labelledby="roomsTitle">
+        <h2 id="roomsTitle">Свободные миры</h2>
+        <p id="roomsSummary" role="status" aria-live="polite">Проверяю сервер…</p>
+        <ul id="roomsList"></ul>
+        <button id="refreshButton" class="small">Обновить</button>
+      </section>
+      <details>
+        <summary>Коротко об управлении</summary>
+        <p>На компьютере: стрелки — движение, F — контекстное действие, пробел — прыжок или крыша лодки, C — насос, V — ремонт.</p>
+        <p>На iPhone: проведи одним пальцем по всему экрану. Двойное касание двумя пальцами переключает насос. После жеста кнопки исчезают и возвращаются через несколько секунд бездействия. VoiceOver забирает свои жесты себе, поэтому для него кнопки остаются на экране.</p>
+      </details>
+      <a class="back-link" href="/">Вернуться к операциям</a>
+    </section>
+
+    <section id="game" hidden aria-labelledby="gameTitle">
+      <header class="game-header">
+        <div>
+          <p id="roomLabel" class="eyebrow">Свободный мир</p>
+          <h1 id="gameTitle" tabindex="-1">Свободная бухта</h1>
+        </div>
+        <div class="header-actions">
+          <button id="statusButton" class="small">Где я?</button>
+          <button id="leaveButton" class="small">Выйти</button>
+        </div>
+      </header>
+
+      <div id="live" class="sr-only" aria-live="assertive" aria-atomic="true"></div>
+      <p id="message" class="message" role="status">Подключение…</p>
+
+      <section class="status" aria-label="Состояние игрока">
+        <div><span>Режим</span><strong id="modeValue">лодка</strong></div>
+        <div><span>Скорость</span><strong id="speedValue">0</strong></div>
+        <div><span>Корпус</span><strong id="hullValue">100%</strong></div>
+        <div><span>Вода</span><strong id="waterValue">0%</strong></div>
+        <div><span>Трос</span><strong id="towValue">нет</strong></div>
+        <div><span>Напарник</span><strong id="otherValue">—</strong></div>
+      </section>
+
+      <section id="playSurface" class="play-surface" aria-label="Игровая поверхность. На сенсорном экране доступны жесты во всех направлениях">
+        <canvas id="map" width="840" height="640" aria-hidden="true"></canvas>
+        <p id="gestureHint" class="gesture-hint">Жесты по всему экрану активны</p>
+
+        <section id="controls" class="controls" aria-label="Управление">
+          <button id="leftButton" data-key="←" aria-keyshortcuts="ArrowLeft">Влево</button>
+          <button id="upButton" data-key="↑" aria-keyshortcuts="ArrowUp">Вперёд</button>
+          <button id="rightButton" data-key="→" aria-keyshortcuts="ArrowRight">Вправо</button>
+          <button id="downButton" data-key="↓" aria-keyshortcuts="ArrowDown">Назад / тормоз</button>
+          <button id="actionButton" class="primary" data-key="F" aria-keyshortcuts="F">Действие</button>
+          <button id="jumpButton" data-key="Пробел" aria-keyshortcuts="Space">Прыжок / крыша</button>
+          <button id="pumpButton" aria-pressed="false" data-key="C" aria-keyshortcuts="C">Насос: выключен</button>
+          <button id="repairButton" aria-pressed="false" data-key="V" aria-keyshortcuts="V">Ремонт: выключен</button>
+        </section>
+      </section>
+
+      <details class="help">
+        <summary>Что умеет действие F</summary>
+        <p>У берега и на малой скорости — выйти из лодки. Рядом с другой лодкой — закрепить или снять буксир. В воде или на берегу — сесть в свободную лодку, в том числе чужую. На крыше — занять свободное место водителя.</p>
+        <p>Если тебя буксируют, насос и ремонт работают. Газ в сторону буксира помогает. Если тянуть вбок или назад дольше двух секунд, натяжение растёт и трос рвётся.</p>
+      </details>
+    </section>
+  </main>
+  <script type="module" src="src/free-roam.js?v=1"></script>
+</body>
+</html>
