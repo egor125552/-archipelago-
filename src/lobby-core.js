@@ -26,7 +26,6 @@ export function publicRoomList(rooms, now = Date.now(), mode = null) {
     .sort((a, b) => a.createdAt - b.createdAt)
     .map(room => ({
       id: room.id,
-      mode: room.mode || "ops",
       waitingFor: room.captain ? "crew" : "captain",
       ageSeconds: Math.max(0, Math.floor((now - room.createdAt) / 1000)),
     }));
