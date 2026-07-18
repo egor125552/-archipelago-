@@ -8,14 +8,14 @@ import {
   setPlayerInput,
   snapshotWorld,
   stepFreeWorld,
-} from "./free-roam-core-v4.js";
-import {FreeRoamAudio} from "./free-roam-audio-v3.js";
+} from "./free-roam-core-v5.js";
+import {FreeRoamAudio} from "./free-roam-audio-v4.js";
 import {directionFromDelta, isTwoFingerTap} from "./free-roam-gesture-model.js";
 
 const $ = id => document.getElementById(id);
 const SPEECH_RATE = 1.18;
 const movementNames = ["up", "down", "left", "right"];
-const localInput = {up: false, down: false, left: false, right: false, pump: false, repair: false, action: false, jump: false};
+const localInput = {up: false, down: false, left: false, right: false, run: false, pump: false, repair: false, action: false, jump: false};
 const activeTouches = new Map();
 const holdTimers = new Map();
 const audio = new FreeRoamAudio();
@@ -115,11 +115,12 @@ function openGame(text) {
 
 function connect(role) {
   audio.init().catch(() => {});
-  isHost = role === "captain";
+  const requestedRole = role;
+  isHost = requestedRole === "captain";
   playerIndex = isHost ? 0 : 1;
   $("hostButton").disabled = true;
   $("joinButton").disabled = true;
-  announce(isHost ? "Создаю свободный мир…" : "Ищу свободный мир…");
+  announce(requestedRole === "captain" ? "Создаю свободный мир…" : "Ищу свободный мир…");
 
   socket = new WebSocket(socketUrl(role));
   socket.addEventListener("message", event => {
@@ -129,10 +130,18 @@ function connect(role) {
 
     if (message.type === "lobby-ready") {
       roomId = message.room || "";
+      const actualRole = message.role || requestedRole;
+      isHost = actualRole === "captain";
+      playerIndex = isHost ? 0 : 1;
       $("roomLabel").textContent = `Свободный мир ${roomId}`;
       if (isHost) {
         world = createFreeWorld();
-        openGame(message.matched ? "Второй игрок уже подключён." : "Мир создан. Можно ездить одному; ждём второго игрока.");
+        const openedText = message.matched
+          ? "Свободный мир найден. Ты принял управление миром; второй игрок уже рядом."
+          : requestedRole === "auto"
+            ? "Свободных миров не было. Создан новый мир; ждём второго игрока."
+            : "Мир создан. Можно ездить одному; ждём второго игрока.";
+        openGame(openedText);
         sendSnapshot(true);
       } else if (!message.matched) {
         announce("Свободных миров не было. Создано место ожидания первого игрока.");
@@ -178,7 +187,8 @@ function connect(role) {
     }
 
     if (message.type === "network-closed") {
-      announce("Второй игрок отключился. Твоя лодка и мир остаются доступны.", true);
+      const waiting = message.waitingFor === "captain" ? "создателя мира" : "второго игрока";
+      announce(`Игрок отключился. Комната сохранена и ждёт ${waiting}.`, true);
     }
   });
 
@@ -208,7 +218,7 @@ function sendSnapshot(force = false) {
 
 function sendInput(force = false) {
   if (isHost) {
-    if (world) setPlayerInput(world, 0, localInput);
+    if (world) setPlayerInput(world, playerIndex, localInput);
     return;
   }
   const serialized = JSON.stringify(localInput);
@@ -244,6 +254,7 @@ function actionPulse(name, duration = 90) {
 
 function releaseAllMovement() {
   for (const name of movementNames) localInput[name] = false;
+  localInput.run = false;
   gestureDirection = null;
   sendInput(true);
 }
@@ -272,7 +283,7 @@ function frame(now) {
   const dt = Math.min(0.1, Math.max(0, (now - previousFrame) / 1000));
   previousFrame = now;
   if (isHost && world) {
-    setPlayerInput(world, 0, localInput);
+    setPlayerInput(world, playerIndex, localInput);
     stepFreeWorld(world, dt);
     const events = drainEvents(world);
     for (const event of events) handleGameEvent(event);
@@ -290,7 +301,7 @@ function render() {
   const myBoat = ["boat", "roof"].includes(me.mode) ? world.boats[me.activeBoat] : null;
   const labels = {boat: "в лодке", foot: "на берегу", swim: "в воде", roof: "на крыше"};
   $("modeValue").textContent = labels[me.mode] || me.mode;
-  $("speedValue").textContent = myBoat ? Math.abs(myBoat.speed).toFixed(1) : me.mode === "swim" ? "плывёт" : "пешком";
+  $("speedValue").textContent = myBoat ? Math.abs(myBoat.speed).toFixed(1) : me.mode === "swim" ? "плывёт" : me.running ? "бежит" : "идёт";
   $("hullValue").textContent = myBoat ? `${Math.round(myBoat.hull)}%` : "—";
   $("waterValue").textContent = myBoat ? `${Math.round(myBoat.water)}%` : "—";
   $("towValue").textContent = !world.tow ? "нет" : world.tow.towerBoat === me.activeBoat ? "тащишь" : world.tow.towedBoat === me.activeBoat ? "тебя тащат" : "рядом";
@@ -310,7 +321,11 @@ function drawMap(currentWorld) {
   ctx.fillStyle = "#0b4051";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.fillStyle = "#435b3a";
-  ctx.fillRect(0, 0, canvas.width, WORLD.shoreY * sy);
+  const landMinX = (WORLD.landMinX ?? 0) * sx;
+  const landWidth = ((WORLD.landMaxX ?? WORLD.width) - (WORLD.landMinX ?? 0)) * sx;
+  const landMinY = (WORLD.landMinY ?? 0) * sy;
+  const landHeight = ((WORLD.landMaxY ?? WORLD.shoreY) - (WORLD.landMinY ?? 0)) * sy;
+  ctx.fillRect(landMinX, landMinY, landWidth, landHeight);
   ctx.fillStyle = "#77836a";
   ctx.fillRect(WORLD.dockMinX * sx, (WORLD.shoreY - 8) * sy, (WORLD.dockMaxX - WORLD.dockMinX) * sx, 18 * sy);
 
@@ -407,8 +422,14 @@ function moveTouch(event) {
   point.lastX = event.clientX;
   point.lastY = event.clientY;
   if (!touchGroup || touchGroup.maxPointers !== 1 || activeTouches.size !== 1) return;
-  const direction = directionFromDelta(point.lastX - point.x, point.lastY - point.y, 26);
+  const deltaX = point.lastX - point.x;
+  const deltaY = point.lastY - point.y;
+  const direction = directionFromDelta(deltaX, deltaY, 26);
   if (direction) applyGestureDirection(direction);
+  const longSwipe = Math.hypot(deltaX, deltaY) >= 125;
+  const onFoot = world?.players?.[playerIndex]?.mode === "foot";
+  const shouldRun = Boolean(longSwipe && onFoot);
+  if (localInput.run !== shouldRun) setControl("run", shouldRun);
 }
 
 function finishTouch(event, cancelled = false) {
@@ -426,6 +447,7 @@ function finishTouch(event, cancelled = false) {
   const movements = group ? [...group.points.values()].map(item => Math.hypot(item.lastX - item.x, item.lastY - item.y)) : [];
   const pumpTap = !cancelled && group && isTwoFingerTap({maxPointers: group.maxPointers, duration, movements});
   releaseGestureDirection();
+  if (localInput.run) setControl("run", false);
   if (pumpTap) {
     toggleControl("pump");
     announce(`Насос ${localInput.pump ? "включён" : "выключен"}.`);
@@ -448,7 +470,10 @@ function bindKeyboard() {
   window.addEventListener("keydown", event => {
     if ($("game").hidden || event.altKey || event.ctrlKey || event.metaKey || event.isComposing || event.target.matches("input, textarea, select, [contenteditable='true']")) return;
     const movement = map[event.code] || map[event.key];
-    if (movement) {
+    if (event.code === "ShiftLeft" || event.code === "ShiftRight") {
+      event.preventDefault();
+      setControl("run", true);
+    } else if (movement) {
       event.preventDefault();
       setControl(movement, true);
     } else if (!event.repeat && event.code === "KeyF") {
@@ -469,6 +494,11 @@ function bindKeyboard() {
   }, true);
 
   window.addEventListener("keyup", event => {
+    if (event.code === "ShiftLeft" || event.code === "ShiftRight") {
+      event.preventDefault();
+      setControl("run", false);
+      return;
+    }
     const movement = map[event.code] || map[event.key];
     if (!movement) return;
     event.preventDefault();
@@ -508,7 +538,7 @@ if ("speechSynthesis" in window) {
 }
 
 $("hostButton").addEventListener("click", () => connect("captain"));
-$("joinButton").addEventListener("click", () => connect("crew"));
+$("joinButton").addEventListener("click", () => connect("auto"));
 $("refreshButton").addEventListener("click", refreshRooms);
 $("leaveButton").addEventListener("click", leaveGame);
 $("statusButton").addEventListener("click", () => {
@@ -539,4 +569,7 @@ window.__freeRoam = {
   step: seconds => { if (world) { stepFreeWorld(world, seconds); render(); } },
   status: () => world && playerStatus(world, playerIndex),
   gestureDirection: () => gestureDirection,
+  isHost: () => isHost,
+  playerIndex: () => playerIndex,
+  audioDiagnostics: () => globalThis.__freeRoamAudioDiagnostics || null,
 };
