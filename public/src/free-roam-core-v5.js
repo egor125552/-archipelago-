@@ -34,10 +34,13 @@ function ensureState(world) {
   world.freeMeta ||= {
     boundaryAt: Array.from({length: world.players?.length || 2}, () => -999),
     waterBoundaryAt: Array.from({length: world.players?.length || 2}, () => -999),
+    boatBoundaryAt: Array.from({length: world.boats?.length || 2}, () => -999),
   };
+  world.freeMeta.boatBoundaryAt ||= Array.from({length: world.boats?.length || 2}, () => -999);
   while (world.freeRun.length < world.players.length) world.freeRun.push(false);
   while (world.freeMeta.boundaryAt.length < world.players.length) world.freeMeta.boundaryAt.push(-999);
   while (world.freeMeta.waterBoundaryAt.length < world.players.length) world.freeMeta.waterBoundaryAt.push(-999);
+  while (world.freeMeta.boatBoundaryAt.length < world.boats.length) world.freeMeta.boatBoundaryAt.push(-999);
   for (const player of world.players || []) {
     if (typeof player.running !== "boolean") player.running = false;
     if (typeof player.airborne !== "boolean") player.airborne = false;
@@ -292,6 +295,46 @@ function processTowPhysics(world, dt) {
   tow.lastDistance = metres;
 }
 
+function processBoatBoundaries(world) {
+  const minX = WORLD.boatRadius + 0.05;
+  const maxX = WORLD.width - WORLD.boatRadius - 0.05;
+  const maxY = WORLD.height - WORLD.boatRadius - 0.05;
+  for (let index = 0; index < world.boats.length; index += 1) {
+    const boat = world.boats[index];
+    if (!boat || boat.sunk) continue;
+    const velocity = boatVelocity(boat);
+    let side = null;
+    let inwardHeading = boat.heading;
+    if (boat.x <= minX && velocity.x < -0.08) {
+      side = "left";
+      inwardHeading = 90;
+    } else if (boat.x >= maxX && velocity.x > 0.08) {
+      side = "right";
+      inwardHeading = -90;
+    } else if (boat.y >= maxY && velocity.y > 0.08) {
+      side = "open-water";
+      inwardHeading = 0;
+    }
+    if (!side) continue;
+
+    boat.x = clamp(boat.x, minX + 1.4, maxX - 1.4);
+    boat.y = clamp(boat.y, WORLD.shoreY + 4, maxY - 1.4);
+    boat.speed *= -0.18;
+    boat.throttle = 0;
+    boat.heading = approachAngle(boat.heading, inwardHeading, 58);
+    if (world.time - world.freeMeta.boatBoundaryAt[index] < 1.1) continue;
+    world.freeMeta.boatBoundaryAt[index] = world.time;
+    const target = boat.driver ?? boat.owner;
+    emit(world, "water-boundary", "Граница бухты. Дальше открытая вода недоступна; разворачивайся.", [target], {
+      sourcePlayer: target,
+      x: boat.x,
+      y: boat.y,
+      side,
+      pan: side === "left" ? -0.9 : side === "right" ? 0.9 : 0,
+    });
+  }
+}
+
 function enrichMovementEvents(world, eventStart) {
   const fresh = world.events.slice(eventStart);
   for (const event of fresh) {
@@ -334,6 +377,7 @@ export function stepFreeWorld(world, dt) {
   processRun(world, beforePlayers, safeDt);
   processJumpArc(world, eventStart, safeDt);
   processBoundaries(world);
+  processBoatBoundaries(world);
   processTowPhysics(world, safeDt);
   enrichMovementEvents(world, eventStart);
   return world;

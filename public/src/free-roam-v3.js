@@ -23,6 +23,8 @@ let touchGroup = null;
 let gestureDirection = null;
 let gestureReturnTimer = 0;
 let roomRefreshTimer = 0;
+let heartbeatTimer = 0;
+let preferredRoomId = "";
 let socket = null;
 let world = null;
 let playerIndex = 0;
@@ -92,11 +94,26 @@ function announce(text, assertive = false, spoken = true) {
 
 function socketUrl(role) {
   const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-  return `${protocol}//${location.host}/api/connect?role=${role}&mode=free`;
+  const url = new URL(`${protocol}//${location.host}/api/connect`);
+  url.searchParams.set("role", role);
+  url.searchParams.set("mode", "free");
+  if (role === "auto" && preferredRoomId) url.searchParams.set("room", preferredRoomId);
+  return url.toString();
 }
 
 function send(payload) {
   if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(payload));
+}
+
+function stopHeartbeat() {
+  clearInterval(heartbeatTimer);
+  heartbeatTimer = 0;
+}
+
+function startHeartbeat() {
+  stopHeartbeat();
+  send({type: "heartbeat", at: Date.now()});
+  heartbeatTimer = setInterval(() => send({type: "heartbeat", at: Date.now()}), 4_000);
 }
 
 function resetButtons() {
@@ -123,6 +140,7 @@ function connect(role) {
   announce(requestedRole === "captain" ? "Создаю свободный мир…" : "Ищу свободный мир…");
 
   socket = new WebSocket(socketUrl(role));
+  socket.addEventListener("open", startHeartbeat);
   socket.addEventListener("message", event => {
     let message;
     try { message = JSON.parse(String(event.data)); }
@@ -139,7 +157,9 @@ function connect(role) {
         const openedText = message.matched
           ? "Свободный мир найден. Ты принял управление миром; второй игрок уже рядом."
           : requestedRole === "auto"
-            ? "Свободных миров не было. Создан новый мир; ждём второго игрока."
+            ? message.replacedStale
+              ? "Ожидавший мир уже закрылся до подключения. Создан новый мир; ждём второго игрока."
+              : "Свободных миров не было. Создан новый мир; ждём второго игрока."
             : "Мир создан. Можно ездить одному; ждём второго игрока.";
         openGame(openedText);
         sendSnapshot(true);
@@ -197,12 +217,14 @@ function connect(role) {
     resetButtons();
   });
   socket.addEventListener("close", () => {
+    stopHeartbeat();
     if ($("game").hidden) resetButtons();
   });
 }
 
 function leaveGame() {
   releaseAllMovement();
+  stopHeartbeat();
   audio.stopAll();
   socket?.close(1000, "leave");
   location.href = "/free-roam.html";
@@ -517,7 +539,14 @@ async function refreshRooms() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     const rooms = Array.isArray(data.rooms) ? data.rooms : [];
-    $("roomsSummary").textContent = rooms.length ? `Свободных миров: ${rooms.length}.` : "Свободных миров нет. Кнопка входа создаст ожидание первого игрока.";
+    preferredRoomId = rooms[0]?.id || "";
+    if (!rooms.length) {
+      $("roomsSummary").textContent = "Сейчас нет ожидающих миров. Кнопка входа создаст новый мир.";
+    } else if (rooms[0].waitingFor === "captain") {
+      $("roomsSummary").textContent = `Миров: ${rooms.length}. Ближайший ждёт создателя; кнопка входа займёт его место.`;
+    } else {
+      $("roomsSummary").textContent = `Миров: ${rooms.length}. Ближайший ждёт второго игрока.`;
+    }
     $("roomsList").replaceChildren(...rooms.map((room, index) => {
       const item = document.createElement("li");
       item.textContent = `Мир ${index + 1}: ждёт ${room.waitingFor === "captain" ? "создателя мира" : "второго игрока"}, ${room.ageSeconds} с.`;
@@ -572,4 +601,7 @@ window.__freeRoam = {
   isHost: () => isHost,
   playerIndex: () => playerIndex,
   audioDiagnostics: () => globalThis.__freeRoamAudioDiagnostics || null,
+  roomId: () => roomId,
+  preferredRoom: () => preferredRoomId,
+  handleEvent: event => handleGameEvent(event),
 };

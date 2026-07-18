@@ -362,15 +362,24 @@ test("joining fills a room that is waiting for its creator", async ({browser}, t
     await expect(crew.locator("#game")).toBeVisible();
 
     await hostContext.close();
+    const waitingRoom = await expect.poll(() => crew.evaluate(async () => {
+      const response = await fetch("/api/rooms?mode=free", {cache: "no-store"});
+      const data = await response.json();
+      return data.rooms?.[0] || null;
+    })).not.toBeNull();
     await expect.poll(() => crew.evaluate(async () => {
       const response = await fetch("/api/rooms?mode=free", {cache: "no-store"});
       const data = await response.json();
       return data.rooms?.[0]?.waitingFor || null;
     })).toBe("captain");
+    await newcomer.getByRole("button", {name: "Обновить"}).click();
+    await expect.poll(() => newcomer.evaluate(() => window.__freeRoam.preferredRoom())).not.toBe("");
+    const expectedRoom = await newcomer.evaluate(() => window.__freeRoam.preferredRoom());
 
     await newcomer.getByRole("button", {name: "Войти в ближайший мир"}).click();
     await expect(newcomer.locator("#game")).toBeVisible();
     await expect.poll(() => newcomer.evaluate(() => window.__freeRoam?.isHost?.())).toBe(true);
+    expect(await newcomer.evaluate(() => window.__freeRoam.roomId())).toBe(expectedRoom);
     await expect.poll(() => crew.evaluate(() => window.__freeRoam?.getWorld()?.players?.length || 0)).toBe(2);
     await expect.poll(() => newcomer.evaluate(async () => {
       const response = await fetch("/api/rooms?mode=free", {cache: "no-store"});
@@ -380,5 +389,80 @@ test("joining fills a room that is waiting for its creator", async ({browser}, t
   } finally {
     await crewContext.close();
     await newcomerContext.close();
+  }
+});
+
+test("a stale listed room is explained instead of contradicting the lobby", async ({browser}, testInfo) => {
+  const mobile = testInfo.project.name.includes("webkit");
+  const options = mobile
+    ? {viewport: {width: 390, height: 844}, hasTouch: true, isMobile: true}
+    : {viewport: {width: 1280, height: 900}};
+  const hostContext = await browser.newContext(options);
+  const crewContext = await browser.newContext(options);
+  const newcomerContext = await browser.newContext(options);
+  await prepareContext(hostContext);
+  await prepareContext(crewContext);
+  await prepareContext(newcomerContext);
+  const host = await hostContext.newPage();
+  const crew = await crewContext.newPage();
+  const newcomer = await newcomerContext.newPage();
+  try {
+    await Promise.all([
+      host.goto("/free-roam.html", {waitUntil: "domcontentloaded"}),
+      crew.goto("/free-roam.html", {waitUntil: "domcontentloaded"}),
+      newcomer.goto("/free-roam.html", {waitUntil: "domcontentloaded"}),
+    ]);
+    await host.getByRole("button", {name: "Создать свободный мир"}).click();
+    await crew.getByRole("button", {name: "Войти в ближайший мир"}).click();
+    await expect(crew.locator("#game")).toBeVisible();
+    await hostContext.close();
+    await newcomer.getByRole("button", {name: "Обновить"}).click();
+    await expect.poll(() => newcomer.evaluate(() => window.__freeRoam.preferredRoom())).not.toBe("");
+    const staleRoom = await newcomer.evaluate(() => window.__freeRoam.preferredRoom());
+    await crewContext.close();
+    await expect.poll(() => newcomer.evaluate(async () => {
+      const response = await fetch("/api/rooms?mode=free", {cache: "no-store"});
+      return (await response.json()).rooms?.length ?? -1;
+    })).toBe(0);
+
+    await newcomer.locator("#joinButton").click();
+    await expect(newcomer.locator("#game")).toBeVisible();
+    await expect(newcomer.locator("#message")).toContainText("закрылся до подключения");
+    await expect.poll(() => newcomer.evaluate(() => window.__freeRoam.isHost())).toBe(true);
+    expect(await newcomer.evaluate(() => window.__freeRoam.roomId())).not.toBe(staleRoom);
+  } finally {
+    await newcomerContext.close();
+  }
+});
+
+test("tow and landing sounds fade with listener distance", async ({browser}, testInfo) => {
+  const mobile = testInfo.project.name.includes("webkit");
+  const context = await browser.newContext(mobile
+    ? {viewport: {width: 390, height: 844}, hasTouch: true, isMobile: true}
+    : {viewport: {width: 1280, height: 900}});
+  await prepareContext(context);
+  const page = await context.newPage();
+  try {
+    await page.goto("/free-roam.html", {waitUntil: "domcontentloaded"});
+    await page.getByRole("button", {name: "Создать свободный мир"}).click();
+    await expect(page.locator("#game")).toBeVisible();
+    await page.evaluate(() => {
+      const world = window.__freeRoam.getWorld();
+      Object.assign(world.players[0], {x: 210, y: 158, heading: 0});
+      window.__freeRoam.setWorld(world);
+      window.__freeRoam.handleEvent({type: "tow-creak", targets: [0, 1], tension: 0.9, x: 210, y: 158});
+    });
+    const near = await page.evaluate(() => window.__freeRoam.audioDiagnostics().towGain);
+    await page.evaluate(() => {
+      const world = window.__freeRoam.getWorld();
+      Object.assign(world.players[0], {mode: "foot", activeBoat: null, x: 120, y: 10, heading: 0});
+      window.__freeRoam.setWorld(world);
+      window.__freeRoam.handleEvent({type: "tow-creak", targets: [0, 1], tension: 0.9, x: 300, y: 300});
+    });
+    const far = await page.evaluate(() => window.__freeRoam.audioDiagnostics().towGain);
+    expect(near).toBeGreaterThan(far);
+    expect(far).toBeLessThan(near * 0.25);
+  } finally {
+    await context.close();
   }
 });

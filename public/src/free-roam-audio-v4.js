@@ -5,6 +5,11 @@ import {FreeRoamAudio as BaseFreeRoamAudio, relativeMovementPan} from "./free-ro
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));
 
+export function spatialGainForDistance(metres, maximum = 120) {
+  const proximity = clamp(1 - (Number(metres) || 0) / maximum, 0, 1);
+  return Math.pow(proximity, 1.45);
+}
+
 export class FreeRoamAudio extends BaseFreeRoamAudio {
   constructor() {
     super();
@@ -114,8 +119,12 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
     if (event.type === "landing") {
       const pan = this.eventPan(event);
       const local = event.sourcePlayer === playerIndex;
-      this.playFootstep({gain: local ? 0.34 : 0.18, rate: 0.82, pan});
-      if (this.buffers.has("hullCreak")) this.play("hullCreak", {gain: local ? 0.11 : 0.06, rate: 1.1, pan, lowpass: 3800});
+      const metres = local || !this.listenerPoint ? 0 : distance(this.listenerPoint, event);
+      const falloff = local ? 1 : spatialGainForDistance(metres, 82);
+      const gain = (local ? 0.34 : 0.18) * falloff;
+      if (gain <= 0.004) return;
+      this.playFootstep({gain, rate: 0.82, pan});
+      if (this.buffers.has("hullCreak")) this.play("hullCreak", {gain: (local ? 0.11 : 0.06) * falloff, rate: 1.1, pan, lowpass: 1800 + falloff * 2000});
       return;
     }
 
@@ -132,13 +141,16 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
     if (event.type === "tow-creak" || event.type === "tow-strain") {
       const pan = this.eventPan(event);
       const tension = clamp(Number(event.tension) || 0, 0, 1.45);
-      const gain = 0.08 + tension * 0.18;
+      const metres = this.listenerPoint ? distance(this.listenerPoint, event) : 0;
+      const falloff = spatialGainForDistance(metres, 135);
+      const gain = (0.08 + tension * 0.18) * falloff;
       this.spatialDiagnostics.towPan = pan;
       this.spatialDiagnostics.towGain = gain;
+      if (gain <= 0.004) return;
       if (event.type === "tow-strain") {
-        this.handle([{type: "rope-strain", speed: tension, pan}]);
+        this.handle([{type: "rope-strain", speed: tension, pan, gain}]);
       } else if (this.buffers.has("hullCreak")) {
-        this.play("hullCreak", {gain, rate: 0.74 + tension * 0.16, pan, lowpass: 3000 + tension * 2200});
+        this.play("hullCreak", {gain, rate: 0.74 + tension * 0.16, pan, lowpass: 1600 + falloff * (1400 + tension * 2200)});
       }
       return;
     }

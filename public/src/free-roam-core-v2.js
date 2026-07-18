@@ -508,6 +508,7 @@ function resolveBoatCollision(world) {
 }
 
 function updateTow(world, dt) {
+  if ((Number(world.version) || 0) >= 5) return;
   const tow = world.tow;
   if (!tow) return;
   const tower = world.boats[tow.towerBoat];

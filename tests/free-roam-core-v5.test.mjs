@@ -106,3 +106,38 @@ test("a towed player can break the rope only by sustained opposing thrust", () =
   assert.equal(world.tow, null);
   assert.ok(drainEvents(world).some(event => event.type === "tow-detach"));
 });
+
+test("boats hit an audible finite outer boundary", () => {
+  const world = createFreeWorld();
+  const boat = world.boats[0];
+  boat.x = WORLD.width - WORLD.boatRadius - 0.01;
+  boat.y = 190;
+  boat.heading = 90;
+  boat.speed = 12;
+  boat.throttle = 1;
+  drainEvents(world);
+
+  stepMany(world, 0.25);
+  assert.ok(boat.x < WORLD.width - WORLD.boatRadius, boat.x);
+  assert.ok(Math.abs(boat.speed) < 4, boat.speed);
+  assert.equal(boat.throttle, 0);
+  assert.ok(drainEvents(world).some(event => event.type === "water-boundary"));
+});
+
+test("the v5 rope is solved once and survives turns in both directions", () => {
+  const world = createFreeWorld();
+  setPlayerInput(world, 0, {action: true});
+  stepFreeWorld(world, 0.05);
+  setPlayerInput(world, 0, {action: false, up: true, right: true});
+  stepMany(world, 2.4);
+  assert.ok(world.tow);
+  const rightHeading = world.boats[1].heading;
+
+  setPlayerInput(world, 0, {up: true, left: true});
+  stepMany(world, 3.4);
+  assert.ok(world.tow, "ordinary S-turn must not snap the rope");
+  const metres = Math.hypot(world.boats[0].x - world.boats[1].x, world.boats[0].y - world.boats[1].y);
+  assert.ok(metres <= WORLD.towMaximumLength, metres);
+  assert.notEqual(world.boats[1].heading, rightHeading);
+  assert.ok(world.tow.tension <= 1.45);
+});
