@@ -5,7 +5,9 @@ export const HEALTH_RECOVERY_DELAY = 6;
 export const HEALTH_RECOVERY_RATE = 2.5;
 
 export function injuryLowpassFrequency(mix) {
-  return 12000 - clamp(Number(mix) || 0, 0, 1) * 9300;
+  const injury = clamp(Number(mix) || 0, 0, 1);
+  const openSound = Math.pow(1 - injury, 3.5);
+  return 75 + openSound * 11925;
 }
 
 export function ensureRecoveryState(combat) {
@@ -21,7 +23,12 @@ export function registerCombatDamage(combat, worldTime) {
 
 export function updateCombatRecovery(combat, worldTime, dt) {
   ensureRecoveryState(combat);
-  if (!combat.alive || combat.health >= 100 || worldTime - combat.lastDamageAt < HEALTH_RECOVERY_DELAY) {
+  if (
+    !combat.alive
+    || combat.knockedDown
+    || combat.health >= 100
+    || worldTime - combat.lastDamageAt < HEALTH_RECOVERY_DELAY
+  ) {
     return null;
   }
   const started = !combat.recoveryStarted;
@@ -39,6 +46,6 @@ export function injuryMixTarget(combat) {
   if (!combat?.alive) return 1;
   const healthInjury = clamp((80 - combat.health) / 55, 0, 1);
   const stunInjury = clamp(combat.stun / 55, 0, 1);
-  const knockdownInjury = combat.knockedDown ? 0.82 : 0;
+  const knockdownInjury = combat.knockedDown ? 1 : 0;
   return Math.max(healthInjury, stunInjury, knockdownInjury);
 }

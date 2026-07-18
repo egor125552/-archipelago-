@@ -1,0 +1,25 @@
+"use strict";
+
+export const COMBAT_TUNING = Object.freeze({
+  fistRange: 13,
+  knifeRange: 14,
+  meleeCone: 175,
+  lightCooldown: 0.1,
+  knifeCooldown: 0.14,
+  heavyCooldown: 0.38,
+  heavyChargeSeconds: 0.35,
+  lightKnockdownSeconds: 8,
+  heavyKnockdownSeconds: 12,
+  lightKnockdownStun: 30,
+  stunDecayPerSecond: 2,
+  automaticCloseRange: 14,
+  automaticCloseCone: 175,
+  automaticRange: 420,
+  automaticCone: 60,
+  automaticDamage: 11,
+  automaticShotInterval: 0.13,
+  automaticAudibleRange: 720,
+  automaticImpactRange: 320,
+  automaticShotGain: 0.9,
+  automaticImpactGain: 1.05,
+});

@@ -6,6 +6,7 @@ import {
   registerCombatDamage,
   updateCombatRecovery,
 } from "./free-roam-combat-recovery.js";
+import {COMBAT_TUNING} from "./free-roam-combat-tuning.js";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));
@@ -105,18 +106,18 @@ function nearestTarget(world, attackerIndex, range, cone, includeMarauder = true
   return result;
 }
 
-function knockDown(world, targetIndex, attackerIndex, force, weapon) {
+function knockDown(world, targetIndex, attackerIndex, pushDistance, duration, weapon) {
   const target = world.players[targetIndex];
   const attacker = world.players[attackerIndex];
   if (!target?.combat?.alive) return;
   target.combat.knockedDown = true;
-  target.combat.knockdownRemaining = Math.max(target.combat.knockdownRemaining, force >= 6 ? 2.1 : 1.35);
+  target.combat.knockdownRemaining = Math.max(target.combat.knockdownRemaining, duration);
   const dx = target.x - attacker.x;
   const dy = target.y - attacker.y;
   const length = Math.hypot(dx, dy) || 1;
-  target.x += dx / length * force;
-  target.y += dy / length * force;
-  if (target.mode === "roof" && force >= 6) {
+  target.x += dx / length * pushDistance;
+  target.y += dy / length * pushDistance;
+  if (target.mode === "roof" && pushDistance >= 6) {
     const boat = world.boats[target.activeBoat];
     target.mode = "swim";
     target.activeBoat = null;
@@ -153,13 +154,20 @@ function killPlayer(world, targetIndex, attackerIndex, helpers) {
   }
   target.mode = "dead";
   target.activeBoat = null;
-  const targets = attackerIndex >= 0 ? [targetIndex, attackerIndex] : [targetIndex];
-  emit(world, "player-death", "Ты погиб. Возрождение у причала через восемь секунд.", targets, {
+  emit(world, "player-death", "Ты погиб. Возрождение у причала через восемь секунд.", [targetIndex], {
     sourcePlayer: attackerIndex,
     targetPlayer: targetIndex,
     x: target.x,
     y: target.y,
   });
+  if (attackerIndex >= 0) {
+    emit(world, "player-defeated", "Игрок повержен.", [attackerIndex], {
+      sourcePlayer: attackerIndex,
+      targetPlayer: targetIndex,
+      x: target.x,
+      y: target.y,
+    });
+  }
 }
 
 function damagePlayer(world, targetIndex, amount, attackerIndex, details, helpers) {
@@ -184,9 +192,10 @@ function damagePlayer(world, targetIndex, amount, attackerIndex, details, helper
     killPlayer(world, targetIndex, attackerIndex, helpers);
     return true;
   }
-  if (details.heavy) knockDown(world, targetIndex, attackerIndex, 7.5, details.weapon);
-  else if (details.weapon === "fists" && combat.stun >= 40) {
-    knockDown(world, targetIndex, attackerIndex, 3.5, details.weapon);
+  if (details.heavy) {
+    knockDown(world, targetIndex, attackerIndex, 7.5, COMBAT_TUNING.heavyKnockdownSeconds, details.weapon);
+  } else if (details.weapon === "fists" && combat.stun >= COMBAT_TUNING.lightKnockdownStun) {
+    knockDown(world, targetIndex, attackerIndex, 3.5, COMBAT_TUNING.lightKnockdownSeconds, details.weapon);
   }
   return true;
 }
@@ -204,10 +213,16 @@ function performMelee(world, attackerIndex, heavyRequested, helpers) {
     return;
   }
   combat.stamina -= actualCost;
-  combat.attackCooldown = heavy ? 0.62 : weapon === "knife" ? 0.24 : 0.18;
-  const range = weapon === "knife" ? 11 : 10;
-  const target = nearestTarget(world, attackerIndex, range, 170, false);
-  const armouredTarget = target ? null : nearestTarget(world, attackerIndex, range, 170, true);
+  combat.attackCooldown = heavy
+    ? COMBAT_TUNING.heavyCooldown
+    : weapon === "knife"
+      ? COMBAT_TUNING.knifeCooldown
+      : COMBAT_TUNING.lightCooldown;
+  const range = weapon === "knife" ? COMBAT_TUNING.knifeRange : COMBAT_TUNING.fistRange;
+  const target = nearestTarget(world, attackerIndex, range, COMBAT_TUNING.meleeCone, false);
+  const armouredTarget = target
+    ? null
+    : nearestTarget(world, attackerIndex, range, COMBAT_TUNING.meleeCone, true);
   emit(world, "combat-swing", "", [attackerIndex], {
     sourcePlayer: attackerIndex,
     weapon,
@@ -268,8 +283,21 @@ function fireAutomatic(world, attackerIndex, helpers) {
     return;
   }
   combat.ammo -= 1;
-  combat.attackCooldown = 0.13;
-  const target = nearestTarget(world, attackerIndex, 96, 38, true);
+  combat.attackCooldown = COMBAT_TUNING.automaticShotInterval;
+  const closeTarget = nearestTarget(
+    world,
+    attackerIndex,
+    COMBAT_TUNING.automaticCloseRange,
+    COMBAT_TUNING.automaticCloseCone,
+    true,
+  );
+  const target = closeTarget || nearestTarget(
+    world,
+    attackerIndex,
+    COMBAT_TUNING.automaticRange,
+    COMBAT_TUNING.automaticCone,
+    true,
+  );
   emit(world, "gun-shot", "", [0, 1], {
     sourcePlayer: attackerIndex,
     ammo: combat.ammo,
@@ -286,7 +314,7 @@ function fireAutomatic(world, attackerIndex, helpers) {
     return;
   }
   if (target.kind === "player") {
-    damagePlayer(world, target.index, 11, attackerIndex, {
+    damagePlayer(world, target.index, COMBAT_TUNING.automaticDamage, attackerIndex, {
       weapon: "automatic",
       heavy: false,
       eventType: "gun-hit",
@@ -371,7 +399,7 @@ export function updateCombat(world, dt, helpers = {}) {
     }
 
     combat.stamina = clamp(combat.stamina + dt * (combat.knockedDown ? 5 : 18), 0, 100);
-    combat.stun = clamp(combat.stun - dt * 4, 0, 100);
+    combat.stun = clamp(combat.stun - dt * COMBAT_TUNING.stunDecayPerSecond, 0, 100);
     if (combat.knockedDown) {
       combat.knockdownRemaining = Math.max(0, combat.knockdownRemaining - dt);
       if (combat.knockdownRemaining <= 0) {
@@ -413,7 +441,7 @@ export function updateCombat(world, dt, helpers = {}) {
     if (!input.attack && previous.attack && combat.attackCooldown <= 0) {
       const held = combat.attackCharge;
       combat.attackCharge = 0;
-      performMelee(world, index, held >= 0.5, helpers);
+      performMelee(world, index, held >= COMBAT_TUNING.heavyChargeSeconds, helpers);
     }
   }
 }

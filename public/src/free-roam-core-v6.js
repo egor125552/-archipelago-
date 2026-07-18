@@ -16,6 +16,7 @@ import {combatStatus, ensureCombat, updateCombat} from "./free-roam-combat.js";
 import {ensureMarauder, releaseStolenCargo, updateMarauder} from "./free-roam-marauder.js";
 import {ensureFreeScenario, scenarioStatus, updateFreeScenario} from "./free-roam-scenario.js";
 import {suppressIncapacitatedMovement, updatePhysicalActors} from "./free-roam-physical-actors.js";
+import {handleAssistedBoarding} from "./free-roam-boarding-assist.js";
 
 export const WORLD = Object.freeze({...base.WORLD});
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -53,7 +54,8 @@ function consumeActivityActions(world) {
     const input = state.inputs[index] || {};
     const previous = state.previousInputs[index] || {};
     if (!input.action || previous.action) continue;
-    if (handleActivityAction(world, index) && world.inputs?.[index]) {
+    const handled = handleActivityAction(world, index) || handleAssistedBoarding(world, index);
+    if (handled && world.inputs?.[index]) {
       world.inputs[index].action = false;
     }
   }

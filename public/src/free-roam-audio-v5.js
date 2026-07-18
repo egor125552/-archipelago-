@@ -3,6 +3,7 @@
 import {FreeRoamAudio as BaseFreeRoamAudio, spatialGainForDistance} from "./free-roam-audio-v4.js";
 import {relativeMovementPan} from "./free-roam-audio-v3.js";
 import {injuryLowpassFrequency} from "./free-roam-combat-recovery.js";
+import {COMBAT_TUNING} from "./free-roam-combat-tuning.js";
 
 const ROOT = "/assets/audio/free-roam-v25/";
 const COMBAT_SOUNDS = Object.freeze({
@@ -209,19 +210,30 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
   }
 
   playCombatImpact(event, playerIndex) {
-    const spatial = this.eventPanAndGain(event, 105);
+    const spatial = event.weapon === "automatic"
+      ? this.eventPanAndGain(event, COMBAT_TUNING.automaticImpactRange)
+      : this.eventPanAndGain(event, 105);
     const localTarget = event.targetPlayer === playerIndex;
     const gain = (localTarget ? 0.68 : 0.44) * spatial.gain;
     if (event.weapon === "knife") {
       const name = this.nextSound("knife", 3);
       if (name) this.play(name, {pan: spatial.pan, gain, rate: event.heavy ? 0.9 : 1.02, lowpass: 9000});
     } else if (event.weapon === "automatic") {
-      this.play("gunHit", {pan: spatial.pan, gain: gain * 0.9, lowpass: 8200});
+      const impactGain = (localTarget ? 0.92 : 0.68)
+        * spatial.gain
+        * COMBAT_TUNING.automaticImpactGain;
+      this.play("gunHit", {pan: spatial.pan, gain: impactGain, lowpass: 10500});
     } else {
       const name = event.heavy ? "punchHeavy" : this.nextSound("punch", 3);
       if (name) this.play(name, {pan: spatial.pan, gain, rate: event.heavy ? 0.92 : 0.98 + Math.random() * 0.08, lowpass: 7600});
     }
-    if (localTarget) this.play("hitPlayer", {gain: 0.28, pan: 0, lowpass: 5200});
+    if (localTarget) {
+      this.play("hitPlayer", {
+        gain: event.weapon === "automatic" ? 0.44 : 0.28,
+        pan: 0,
+        lowpass: event.weapon === "automatic" ? 7600 : 5200,
+      });
+    }
   }
 
   handleFreeEvent(event, playerIndex) {
@@ -244,11 +256,22 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
         if (event.weapon === "knife") this.play("knifeDraw", {gain: 0.5});
         else this.playSynthPip({frequency: event.weapon === "automatic" ? 760 : 420, gain: 0.08, duration: 0.08});
         return;
-      case "gun-shot":
-        this.play("automaticShot", {pan: spatial.pan, gain: 0.48 * spatial.gain, rate: 0.98 + Math.random() * 0.04, lowpass: 11000});
+      case "gun-shot": {
+        const shotSpatial = this.eventPanAndGain(event, COMBAT_TUNING.automaticAudibleRange);
+        this.play("automaticShot", {
+          pan: shotSpatial.pan,
+          gain: COMBAT_TUNING.automaticShotGain * shotSpatial.gain,
+          rate: 0.98 + Math.random() * 0.04,
+          lowpass: 12000,
+        });
         return;
+      }
       case "pursuer-hit":
-        this.play("gunHit", {pan: spatial.pan, gain: 0.46 * spatial.gain, lowpass: 6200});
+        this.play("gunHit", {
+          pan: spatial.pan,
+          gain: 0.72 * spatial.gain,
+          lowpass: 8400,
+        });
         return;
       case "pursuer-ram":
         this.handle([{type: "collision", severity: 1.7, impactSpeed: event.strength || 8, hardImpact: true, damage: event.damage || 8, pan: spatial.pan}]);
@@ -277,6 +300,10 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
           try { this.deathSource?.stop(); } catch (_) {}
           this.deathSource = this.play("deathFull", {gain: 0.72, lowpass: 10000});
         }
+        return;
+      case "player-defeated":
+        this.playSynthPip({frequency: 360, gain: 0.12, duration: 0.1});
+        this.playSynthPip({frequency: 180, gain: 0.14, duration: 0.22, delay: 0.12});
         return;
       case "player-respawn":
         if (event.sourcePlayer === playerIndex) {
