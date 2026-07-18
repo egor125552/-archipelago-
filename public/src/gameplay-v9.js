@@ -1,3 +1,5 @@
+import "./keyboard-controls-v1.js?v=1";
+
 "use strict";
 
 const byId = id => document.getElementById(id);
