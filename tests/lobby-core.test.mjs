@@ -2,8 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  chooseAnyWaitingRoom,
   chooseWaitingRoom,
   createRoomCode,
+  missingRole,
   oppositeRole,
   publicRoomList,
 } from "../src/lobby-core.js";
@@ -21,6 +23,21 @@ test("captain and crew are matched into the oldest compatible room", () => {
   assert.equal(chooseWaitingRoom(rooms, "crew"), null);
   assert.equal(oppositeRole("captain"), "crew");
   assert.equal(oppositeRole("crew"), "captain");
+});
+
+test("automatic entry fills whichever role is actually missing", () => {
+  const socket = {};
+  const rooms = new Map([
+    ["FREE-OLD", {id: "FREE-OLD", mode: "free", captain: null, crew: socket, createdAt: 1000}],
+    ["FREE-NEW", {id: "FREE-NEW", mode: "free", captain: socket, crew: null, createdAt: 2000}],
+    ["SEA-OPS", {id: "SEA-OPS", mode: "ops", captain: socket, crew: null, createdAt: 500}],
+  ]);
+
+  const selected = chooseAnyWaitingRoom(rooms, "free");
+  assert.equal(selected.id, "FREE-OLD");
+  assert.equal(missingRole(selected), "captain");
+  assert.equal(missingRole(rooms.get("FREE-NEW")), "crew");
+  assert.equal(chooseAnyWaitingRoom(new Map(), "free"), null);
 });
 
 test("room list contains only rooms waiting for the opposite player", () => {
