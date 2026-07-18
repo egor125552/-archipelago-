@@ -1,4 +1,4 @@
-import {chooseWaitingRoom, createRoomCode, oppositeRole, publicRoomList} from "./lobby-core.js";
+import {chooseAnyWaitingRoom, chooseWaitingRoom, createRoomCode, missingRole, oppositeRole, publicRoomList} from "./lobby-core.js";
 
 const SOUND_PROXY = Object.freeze({
   "/api/sound/footstep-1.ogg": "https://opengameart.org/sites/default/files/01-footstep_0.ogg",
@@ -69,12 +69,20 @@ export class Lobby {
       return json({error: "WebSocket required"}, 426);
     }
 
-    const role = url.searchParams.get("role") === "captain" ? "captain" : "crew";
+    const requestedRole = url.searchParams.get("role");
+    let role = requestedRole === "captain" ? "captain" : requestedRole === "auto" ? "auto" : "crew";
     const pair = new WebSocketPair();
     const [client, server] = Object.values(pair);
     server.accept();
 
-    let room = chooseWaitingRoom(this.rooms, role, mode);
+    let room = null;
+    if (role === "auto") {
+      room = chooseAnyWaitingRoom(this.rooms, mode);
+      role = missingRole(room) || "captain";
+    } else {
+      room = chooseWaitingRoom(this.rooms, role, mode);
+    }
+
     if (!room) {
       let id;
       const prefix = mode === "free" ? "FREE" : "SEA";
@@ -102,6 +110,7 @@ export class Lobby {
       type: "lobby-ready",
       room: room.id,
       role,
+      requestedRole: requestedRole || "crew",
       mode,
       matched,
       waitingFor: matched ? null : oppositeRole(role),
@@ -157,7 +166,7 @@ export class Lobby {
     const otherRole = oppositeRole(client.role);
     const other = room[otherRole];
     if (other) {
-      safeSend(other, {type: "network-closed", mode: room.mode || "ops"});
+      safeSend(other, {type: "network-closed", mode: room.mode || "ops", waitingFor: client.role});
     } else {
       this.rooms.delete(room.id);
     }
