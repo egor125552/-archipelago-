@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
   <meta name="theme-color" content="#071217">
   <title>Свободная бухта — Эхо-Архипелаг</title>
-  <link rel="stylesheet" href="free-roam.css?v=2">
+  <link rel="stylesheet" href="free-roam.css?v=3">
 </head>
 <body>
   <a class="skip" href="#main">К игре</a>
@@ -13,7 +13,7 @@
     <section id="lobby" class="shell" aria-labelledby="title">
       <p class="eyebrow">Эхо-Архипелаг</p>
       <h1 id="title">Свободная бухта</h1>
-      <p class="lead">Две равноправные лодки появляются рядом на параллельном курсе. Можно сразу услышать напарника, ехать вместе, тараниться, буксировать повреждённую лодку, выходить на сушу, плавать и пересаживаться в оставленный катер.</p>
+      <p class="lead">Ищи звучащие ящики, перевози припасы, защищай груз от катера-мародёра и других игроков. Можно сотрудничать двумя лодками, делить добычу, тараниться, буксировать, драться на берегу и захватывать оставленные катера.</p>
       <div class="lobby-actions">
         <button id="hostButton" class="primary">Создать свободный мир</button>
         <button id="joinButton">Войти в ближайший мир</button>
@@ -26,8 +26,8 @@
       </section>
       <details>
         <summary>Коротко об управлении</summary>
-        <p>На компьютере: стрелки удерживают газ и руль. На берегу Shift вместе со стрелкой включает бег. F выполняет действие по ситуации, пробел в лодке сбрасывает плавучий тормоз, C включает насос, V ставит пластину.</p>
-        <p>На iPhone: проведи пальцем и удерживай его в выбранной стороне — лодка продолжит газовать или рулить до отпускания. На берегу длинный свайп с удержанием включает бег, короткий — обычный шаг. Короткое касание двумя пальцами переключает насос. После жеста кнопки временно скрываются; при управлении через VoiceOver они остаются доступны.</p>
+        <p>На компьютере: стрелки удерживают газ и руль. На берегу Shift вместе со стрелкой включает бег. F выполняет действие по ситуации, пробел в лодке сбрасывает плавучий тормоз, C включает насос, V ставит пластину. X бьёт или стреляет, Z меняет оружие.</p>
+        <p>На iPhone жесты включены по умолчанию почти на всём экране: свайп с удержанием управляет движением, касание выполняет действие, двойное касание включает прыжок, а удержание даёт сильный удар. Два и три пальца управляют насосом, пластиной, оружием и быстрым ударом. Кнопкой «Управление» можно скрыть все игровые жесты и вернуть обычные кнопки.</p>
       </details>
       <a class="back-link" href="/">Вернуться к операциям</a>
     </section>
@@ -39,6 +39,7 @@
           <h1 id="gameTitle" tabindex="-1">Свободная бухта</h1>
         </div>
         <div class="header-actions">
+          <button id="controlModeButton" class="small" aria-pressed="false">Управление: кнопки</button>
           <button id="statusButton" class="small">Где я?</button>
           <button id="leaveButton" class="small">Выйти</button>
         </div>
@@ -54,11 +55,16 @@
         <div><span>Вода</span><strong id="waterValue">0%</strong></div>
         <div><span>Трос</span><strong id="towValue">нет</strong></div>
         <div><span>Напарник</span><strong id="otherValue">—</strong></div>
+        <div><span>Здоровье</span><strong id="healthValue">100%</strong></div>
+        <div><span>Оружие</span><strong id="weaponValue">кулаки</strong></div>
+        <div><span>Груз</span><strong id="cargoValue">нет</strong></div>
+        <div><span>Доставка</span><strong id="scoreValue">0</strong></div>
+        <div><span>Мародёр</span><strong id="marauderValue">100%</strong></div>
       </section>
 
       <section id="playSurface" class="play-surface" aria-label="Игровая поверхность. Свайп с удержанием управляет лодкой или движением игрока">
         <canvas id="map" width="840" height="640" aria-hidden="true"></canvas>
-        <p id="gestureHint" class="gesture-hint">Свайп и удержание по всему экрану</p>
+        <p id="gestureGuide" class="gesture-hint">Жесты: свайп с удержанием — движение; касание — действие; двойное касание — прыжок; удержание — сильный удар; два пальца — насос; удержание двумя — пластина; свайп двумя вбок — оружие; вверх — состояние; вниз — вернуть кнопки; три пальца — быстрый удар.</p>
 
         <section id="controls" class="controls" aria-label="Управление">
           <button id="leftButton" data-key="←" aria-keyshortcuts="ArrowLeft">Влево</button>
@@ -67,6 +73,8 @@
           <button id="downButton" data-key="↓" aria-keyshortcuts="ArrowDown">Назад / тормоз</button>
           <button id="actionButton" class="primary" data-key="F" aria-keyshortcuts="F">Действие</button>
           <button id="jumpButton" data-key="Пробел" aria-keyshortcuts="Space">Плавучий тормоз</button>
+          <button id="attackButton" class="danger" data-key="X" aria-keyshortcuts="X">Удар</button>
+          <button id="weaponButton" data-key="Z" aria-keyshortcuts="Z">Оружие: кулаки</button>
           <button id="pumpButton" aria-pressed="false" data-key="C" aria-keyshortcuts="C">Насос: выключен</button>
           <button id="repairButton" aria-pressed="false" data-key="V" aria-keyshortcuts="V">Пластина: готова</button>
         </section>
@@ -74,12 +82,17 @@
 
       <details class="help">
         <summary>Что умеет действие F</summary>
-        <p>У берега и на малой скорости — выйти из лодки. Рядом с другой лодкой — закрепить или снять буксир. В воде или на берегу — сесть в свободную лодку, в том числе чужую. На крыше — занять свободное место водителя.</p>
+        <p>Рядом с ящиком — поднять его или закрепить на лодке. У берега и на малой скорости — выйти из лодки. Рядом с другой лодкой — закрепить или снять буксир. В воде или на берегу — сесть в свободную лодку, в том числе чужую. На крыше — занять свободное место водителя.</p>
         <p>При пустом баке F запускает аварийную заправку, а после перегрева — обслуживание мотора. Если тебя буксируют, насос и пластина работают на ходу. Газ по направлению буксира помогает; тяга в сторону повышает натяжение и может порвать трос.</p>
+      </details>
+      <details class="help">
+        <summary>Груз и бой</summary>
+        <p>Обычные ящики дают пластины, топливо или усиление насоса. В редких ящиках встречаются нож, автомат и патроны. Подойди к причалу на малой скорости, чтобы автоматически разгрузить лодку.</p>
+        <p>Короткое нажатие X — быстрый удар. Удержание X — сильный удар, который расходует больше сил и сбивает соперника с ног. Автомат стреляет очередью, пока X удерживается. После смерти груз выпадает, а игрок возвращается к причалу через восемь секунд.</p>
       </details>
     </section>
   </main>
-  <script type="module" src="src/free-roam-v3.js?v=6"></script>
+  <script type="module" src="src/free-roam-v4.js?v=7"></script>
   <script type="module" src="src/free-roam-accessibility.js?v=1"></script>
   <script type="module" src="src/free-roam-speech-fix.js?v=1"></script>
 </body>

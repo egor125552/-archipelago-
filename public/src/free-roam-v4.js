@@ -6,22 +6,38 @@ import {
   drainEvents,
   playerStatus,
   setPlayerInput,
+  setPlayerPresence,
   snapshotWorld,
   stepFreeWorld,
-} from "./free-roam-core-v5.js";
-import {FreeRoamAudio} from "./free-roam-audio-v4.js";
-import {directionFromDelta, isTwoFingerTap} from "./free-roam-gesture-model.js";
+} from "./free-roam-core-v6.js";
+import {FreeRoamAudio} from "./free-roam-audio-v5.js";
+import {directionFromDelta} from "./free-roam-gesture-model.js";
+import {classifyActionGesture, gestureMetrics} from "./free-roam-action-gestures.js";
 
 const $ = id => document.getElementById(id);
 const SPEECH_RATE = 1.18;
 const movementNames = ["up", "down", "left", "right"];
-const localInput = {up: false, down: false, left: false, right: false, run: false, pump: false, repair: false, action: false, jump: false};
+const localInput = {
+  up: false,
+  down: false,
+  left: false,
+  right: false,
+  run: false,
+  pump: false,
+  repair: false,
+  action: false,
+  jump: false,
+  attack: false,
+  weapon: false,
+};
 const activeTouches = new Map();
 const holdTimers = new Map();
 const audio = new FreeRoamAudio();
 let touchGroup = null;
 let gestureDirection = null;
-let gestureReturnTimer = 0;
+let gestureMode = globalThis.matchMedia?.("(pointer: coarse)")?.matches ?? false;
+let singleTapTimer = 0;
+let lastSingleTapAt = 0;
 let roomRefreshTimer = 0;
 let heartbeatTimer = 0;
 let preferredRoomId = "";
@@ -154,6 +170,8 @@ function connect(role) {
       $("roomLabel").textContent = `Свободный мир ${roomId}`;
       if (isHost) {
         world = createFreeWorld();
+        setPlayerPresence(world, 0, true);
+        setPlayerPresence(world, 1, Boolean(message.matched));
         const openedText = message.matched
           ? "Свободный мир найден. Ты принял управление миром; второй игрок уже рядом."
           : requestedRole === "auto"
@@ -175,6 +193,7 @@ function connect(role) {
 
     if (message.type === "peer-connected") {
       if (isHost) {
+        if (world) setPlayerPresence(world, 1, true);
         announce("Второй игрок подключён к свободной бухте.", true);
         sendSnapshot(true);
       } else {
@@ -190,6 +209,7 @@ function connect(role) {
     }
 
     if (message.type === "free-input" && isHost && world) {
+      setPlayerPresence(world, 1, true);
       setPlayerInput(world, 1, message.input || {});
       return;
     }
@@ -207,6 +227,7 @@ function connect(role) {
     }
 
     if (message.type === "network-closed") {
+      if (isHost && world) setPlayerPresence(world, 1, false);
       const waiting = message.waitingFor === "captain" ? "создателя мира" : "второго игрока";
       announce(`Игрок отключился. Комната сохранена и ждёт ${waiting}.`, true);
     }
@@ -277,6 +298,12 @@ function actionPulse(name, duration = 90) {
 function releaseAllMovement() {
   for (const name of movementNames) localInput[name] = false;
   localInput.run = false;
+  localInput.attack = false;
+  activeTouches.clear();
+  touchGroup = null;
+  clearTimeout(singleTapTimer);
+  singleTapTimer = 0;
+  lastSingleTapAt = 0;
   gestureDirection = null;
   sendInput(true);
 }
@@ -321,15 +348,26 @@ function render() {
   const me = world.players[playerIndex];
   const other = world.players[1 - playerIndex];
   const myBoat = ["boat", "roof"].includes(me.mode) ? world.boats[me.activeBoat] : null;
-  const labels = {boat: "в лодке", foot: "на берегу", swim: "в воде", roof: "на крыше"};
+  const labels = {boat: "в лодке", foot: "на берегу", swim: "в воде", roof: "на крыше", dead: "погиб"};
+  const activities = world.freeActivities || {};
+  const combat = me.combat || {};
+  const marauder = activities.marauder || {};
+  const weaponLabels = {fists: "кулаки", knife: "нож", automatic: "автомат"};
   $("modeValue").textContent = labels[me.mode] || me.mode;
   $("speedValue").textContent = myBoat ? Math.abs(myBoat.speed).toFixed(1) : me.mode === "swim" ? "плывёт" : me.running ? "бежит" : "идёт";
   $("hullValue").textContent = myBoat ? `${Math.round(myBoat.hull)}%` : "—";
   $("waterValue").textContent = myBoat ? `${Math.round(myBoat.water)}%` : "—";
   $("towValue").textContent = !world.tow ? "нет" : world.tow.towerBoat === me.activeBoat ? "тащишь" : world.tow.towedBoat === me.activeBoat ? "тебя тащат" : "рядом";
-  $("otherValue").textContent = `${Math.round(distance(me, other))} м`;
-  $("actionButton").textContent = me.mode === "boat" ? "Выйти / буксир / обслуживание" : me.mode === "roof" ? "Сесть за руль" : "Сесть в лодку";
+  $("otherValue").textContent = activities.presence?.[1 - playerIndex] ? `${Math.round(distance(me, other))} м` : "ждём";
+  $("healthValue").textContent = combat.alive === false ? `возрождение ${Math.ceil(combat.respawnRemaining || 0)} с` : `${Math.round(combat.health ?? 100)}%`;
+  $("weaponValue").textContent = combat.equipped === "automatic" ? `автомат, ${combat.ammo || 0}` : weaponLabels[combat.equipped] || "кулаки";
+  $("cargoValue").textContent = combat.carriedCrate ? "в руках" : myBoat?.cargo?.length ? `${myBoat.cargo.length}, вес ${Math.round(myBoat.cargoWeight || 0)}` : "нет";
+  $("scoreValue").textContent = String(activities.score?.[playerIndex] || 0);
+  $("marauderValue").textContent = marauder.destroyed ? "уничтожен" : `${Math.round(marauder.hull ?? 100)}%`;
+  $("actionButton").textContent = combat.carriedCrate ? "Положить / передать / погрузить" : me.mode === "boat" ? "Груз / выйти / буксир" : me.mode === "roof" ? "Груз / сесть за руль" : "Взять груз / сесть в лодку";
   $("jumpButton").textContent = me.mode === "boat" ? "Плавучий тормоз" : me.mode === "roof" ? "Спрыгнуть" : "Прыжок / крыша";
+  $("attackButton").textContent = combat.equipped === "automatic" ? "Огонь" : combat.equipped === "knife" ? "Удар ножом" : "Удар";
+  $("weaponButton").textContent = `Оружие: ${weaponLabels[combat.equipped] || "кулаки"}`;
   audio.updateWorld(world, playerIndex);
   drawMap(world);
 }
@@ -372,50 +410,81 @@ function drawMap(currentWorld) {
   }
 
   for (const player of currentWorld.players) {
-    if (player.mode === "boat") continue;
+    if (player.mode === "boat" || player.mode === "dead") continue;
     ctx.fillStyle = player.id === playerIndex ? "#ffffff" : "#ffdc7e";
     ctx.beginPath();
     ctx.arc(player.x * sx, player.y * sy, player.mode === "roof" ? 7 : 5, 0, Math.PI * 2);
     ctx.fill();
   }
+
+  for (const crate of currentWorld.freeActivities?.crates || []) {
+    if (crate.state !== "world") continue;
+    ctx.fillStyle = crate.rarity === "rare" ? "#ffcc4d" : "#d9b77d";
+    ctx.fillRect(crate.x * sx - 4, crate.y * sy - 4, 8, 8);
+  }
+
+  const marauder = currentWorld.freeActivities?.marauder;
+  if (marauder?.active && !marauder.destroyed) {
+    ctx.save();
+    ctx.translate(marauder.x * sx, marauder.y * sy);
+    ctx.rotate(marauder.heading * Math.PI / 180);
+    ctx.fillStyle = "#d85c4a";
+    ctx.fillRect(-8, -15, 16, 30);
+    ctx.restore();
+  }
+}
+
+function setGestureMode(enabled, announceChange = true) {
+  gestureMode = Boolean(enabled);
+  document.body.classList.toggle("gesture-mode", gestureMode);
+  $("controlModeButton").setAttribute("aria-pressed", String(gestureMode));
+  $("controlModeButton").textContent = `Управление: ${gestureMode ? "жесты" : "кнопки"}`;
+  if (!gestureMode) releaseGestureDirection();
+  if (announceChange) announce(gestureMode ? "Включены жесты. Игровые кнопки скрыты." : "Включены кнопки. Игровые жесты отключены.");
 }
 
 function showButtonsForAssistiveInput() {
-  clearTimeout(gestureReturnTimer);
-  document.body.classList.remove("gesture-active");
+  if (!gestureMode) document.body.classList.remove("gesture-mode");
 }
 
-function hideButtonsAfterGesture() {
-  document.body.classList.add("gesture-active");
-  clearTimeout(gestureReturnTimer);
-  gestureReturnTimer = setTimeout(() => document.body.classList.remove("gesture-active"), 3800);
-}
-
-function bindHold(button, name) {
+function bindHold(button, name, minimumDuration = 0) {
+  const startedAt = new Map();
+  let releaseTimer = 0;
   const down = event => {
     if (event.pointerType === "touch") showButtonsForAssistiveInput();
     event.preventDefault();
     audio.init().catch(() => {});
+    clearTimeout(releaseTimer);
+    releaseTimer = 0;
+    startedAt.set(event.pointerId, performance.now());
     setControl(name, true);
     button.setPointerCapture?.(event.pointerId);
   };
-  const up = event => {
+  const finish = (event, cancelled = false) => {
+    const started = startedAt.get(event.pointerId);
+    if (started == null) return;
+    startedAt.delete(event.pointerId);
     event.preventDefault();
-    setControl(name, false);
+    const remaining = cancelled ? 0 : Math.max(0, minimumDuration - (performance.now() - started));
+    if (remaining > 0) releaseTimer = setTimeout(() => {
+      releaseTimer = 0;
+      setControl(name, false);
+    }, remaining);
+    else setControl(name, false);
   };
   button.addEventListener("pointerdown", down);
-  button.addEventListener("pointerup", up);
-  button.addEventListener("pointercancel", up);
-  button.addEventListener("lostpointercapture", up);
+  button.addEventListener("pointerup", event => finish(event));
+  button.addEventListener("pointercancel", event => finish(event, true));
+  button.addEventListener("lostpointercapture", event => finish(event, true));
 }
 
 function applyGestureDirection(direction) {
+  if (!gestureMode) return;
   if (direction === gestureDirection) return;
   if (gestureDirection) setControl(gestureDirection, false);
   gestureDirection = direction;
   if (gestureDirection) {
     setControl(gestureDirection, true);
-    hideButtonsAfterGesture();
   }
 }
 
@@ -425,7 +494,7 @@ function releaseGestureDirection() {
 }
 
 function beginTouch(event) {
-  if (event.pointerType !== "touch" || event.target.closest("button")) return;
+  if (!gestureMode || event.pointerType !== "touch" || event.target.closest("button, a, summary, input, textarea, select")) return;
   event.preventDefault();
   audio.init().catch(() => {});
   const point = {x: event.clientX, y: event.clientY, lastX: event.clientX, lastY: event.clientY};
@@ -434,7 +503,7 @@ function beginTouch(event) {
   touchGroup.points.set(event.pointerId, point);
   touchGroup.maxPointers = Math.max(touchGroup.maxPointers, activeTouches.size);
   if (touchGroup.maxPointers > 1) releaseGestureDirection();
-  $("playSurface").setPointerCapture?.(event.pointerId);
+  $("game").setPointerCapture?.(event.pointerId);
 }
 
 function moveTouch(event) {
@@ -454,6 +523,45 @@ function moveTouch(event) {
   if (localInput.run !== shouldRun) setControl("run", shouldRun);
 }
 
+function runGestureCommand(command) {
+  if (!command) return;
+  audio.init().catch(() => {});
+  if (command === "action") actionPulse("action");
+  else if (command === "jump") actionPulse("jump");
+  else if (command === "attack-light") actionPulse("attack", 140);
+  else if (command === "attack-heavy") actionPulse("attack", 680);
+  else if (command === "weapon") actionPulse("weapon");
+  else if (command === "pump") {
+    toggleControl("pump");
+    announce(`Насос ${localInput.pump ? "включён" : "выключен"}.`);
+  } else if (command === "repair") {
+    if (!localInput.repair) setControl("repair", true);
+    announce("Заделка пробоины началась.");
+  } else if (command === "status") {
+    if (world) announce(playerStatus(world, playerIndex), true);
+  } else if (command === "buttons") {
+    setGestureMode(false);
+  }
+}
+
+function runOneFingerTap(metrics) {
+  const now = performance.now();
+  if (lastSingleTapAt && now - lastSingleTapAt <= 310) {
+    clearTimeout(singleTapTimer);
+    singleTapTimer = 0;
+    lastSingleTapAt = 0;
+    runGestureCommand(classifyActionGesture({...metrics, taps: 2}));
+    return;
+  }
+  lastSingleTapAt = now;
+  clearTimeout(singleTapTimer);
+  singleTapTimer = setTimeout(() => {
+    lastSingleTapAt = 0;
+    singleTapTimer = 0;
+    runGestureCommand(classifyActionGesture({...metrics, taps: 1}));
+  }, 315);
+}
+
 function finishTouch(event, cancelled = false) {
   const point = activeTouches.get(event.pointerId);
   if (!point) return;
@@ -465,22 +573,16 @@ function finishTouch(event, cancelled = false) {
 
   const group = touchGroup;
   touchGroup = null;
-  const duration = group ? performance.now() - group.startedAt : Infinity;
-  const movements = group ? [...group.points.values()].map(item => Math.hypot(item.lastX - item.x, item.lastY - item.y)) : [];
-  const pumpTap = !cancelled && group && isTwoFingerTap({maxPointers: group.maxPointers, duration, movements});
   releaseGestureDirection();
   if (localInput.run) setControl("run", false);
-  if (pumpTap) {
-    toggleControl("pump");
-    announce(`Насос ${localInput.pump ? "включён" : "выключен"}.`);
-    hideButtonsAfterGesture();
-  } else if (document.body.classList.contains("gesture-active")) {
-    hideButtonsAfterGesture();
-  }
+  if (cancelled || !group) return;
+  const metrics = gestureMetrics(group);
+  if (metrics.pointers === 1 && metrics.movement <= 24 && metrics.duration < 520) runOneFingerTap(metrics);
+  else runGestureCommand(classifyActionGesture(metrics));
 }
 
 function bindGestures() {
-  const surface = $("playSurface");
+  const surface = $("game");
   surface.addEventListener("pointerdown", beginTouch, {passive: false});
   surface.addEventListener("pointermove", moveTouch, {passive: false});
   surface.addEventListener("pointerup", event => finishTouch(event, false), {passive: false});
@@ -504,6 +606,12 @@ function bindKeyboard() {
     } else if (!event.repeat && event.code === "Space") {
       event.preventDefault();
       actionPulse("jump");
+    } else if (event.code === "KeyX") {
+      event.preventDefault();
+      setControl("attack", true);
+    } else if (!event.repeat && event.code === "KeyZ") {
+      event.preventDefault();
+      actionPulse("weapon");
     } else if (!event.repeat && event.code === "KeyC") {
       event.preventDefault();
       toggleControl("pump");
@@ -516,6 +624,11 @@ function bindKeyboard() {
   }, true);
 
   window.addEventListener("keyup", event => {
+    if (event.code === "KeyX") {
+      event.preventDefault();
+      setControl("attack", false);
+      return;
+    }
     if (event.code === "ShiftLeft" || event.code === "ShiftRight") {
       event.preventDefault();
       setControl("run", false);
@@ -573,16 +686,23 @@ $("leaveButton").addEventListener("click", leaveGame);
 $("statusButton").addEventListener("click", () => {
   if (world) announce(playerStatus(world, playerIndex), true);
 });
+$("controlModeButton").addEventListener("click", () => setGestureMode(!gestureMode));
 bindHold($("upButton"), "up");
 bindHold($("downButton"), "down");
 bindHold($("leftButton"), "left");
 bindHold($("rightButton"), "right");
 $("actionButton").addEventListener("click", () => actionPulse("action"));
 $("jumpButton").addEventListener("click", () => actionPulse("jump"));
+bindHold($("attackButton"), "attack", 90);
+$("attackButton").addEventListener("click", event => {
+  if (event.detail === 0) actionPulse("attack");
+});
+$("weaponButton").addEventListener("click", () => actionPulse("weapon"));
 $("pumpButton").addEventListener("click", () => toggleControl("pump"));
 $("repairButton").addEventListener("click", () => toggleControl("repair"));
 bindGestures();
 bindKeyboard();
+setGestureMode(gestureMode, false);
 syncControlButtons();
 refreshRooms();
 roomRefreshTimer = setInterval(() => {
