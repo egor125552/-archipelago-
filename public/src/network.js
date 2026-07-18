@@ -17,12 +17,13 @@ export function normalizeRoomCode(value, maxLength = 6) {
   return result;
 }
 
-export function workerSocketUrl(locationLike, role) {
+export function workerSocketUrl(locationLike, role, mode = "") {
   const source = locationLike || globalThis.location;
   if (!source?.host) throw new Error("Адрес сервера комнат не определён");
   const protocol = source.protocol === "https:" ? "wss:" : "ws:";
   const safeRole = role === "captain" ? "captain" : "crew";
-  return `${protocol}//${source.host}/api/connect?role=${safeRole}`;
+  const modeQuery = mode ? `&mode=${mode === "free" ? "free" : "ops"}` : "";
+  return `${protocol}//${source.host}/api/connect?role=${safeRole}${modeQuery}`;
 }
 
 function cleanServerRoomId(value) {
@@ -80,7 +81,7 @@ export class PeerRoomTransport {
         reject(new Error("Сервер комнат не ответил за 12 секунд"));
       }, 12000);
 
-      const socket = new WebSocket(workerSocketUrl(globalThis.location, this.role));
+      const socket = new WebSocket(workerSocketUrl(globalThis.location, this.role, "ops"));
       this.socket = socket;
 
       socket.addEventListener("message", event => {
