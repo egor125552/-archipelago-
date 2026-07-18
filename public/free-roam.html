@@ -26,8 +26,8 @@
       </section>
       <details>
         <summary>Коротко об управлении</summary>
-        <p>На компьютере: стрелки — движение, F — контекстное действие, пробел — прыжок или крыша лодки, C — насос, V — пластина.</p>
-        <p>На iPhone: проведи одним пальцем по всему экрану. Двойное касание двумя пальцами переключает насос. После жеста кнопки исчезают и возвращаются через несколько секунд бездействия. VoiceOver забирает свои жесты себе, поэтому для него кнопки остаются на экране.</p>
+        <p>На компьютере: стрелки удерживают газ и руль, F выполняет действие по ситуации, пробел в лодке сбрасывает плавучий тормоз, C включает насос, V ставит пластину.</p>
+        <p>На iPhone: проведи пальцем и удерживай его в выбранной стороне — лодка продолжит газовать или рулить до отпускания. Короткое касание двумя пальцами переключает насос. После жеста кнопки временно скрываются; при управлении через VoiceOver они остаются доступны.</p>
       </details>
       <a class="back-link" href="/">Вернуться к операциям</a>
     </section>
@@ -56,9 +56,9 @@
         <div><span>Напарник</span><strong id="otherValue">—</strong></div>
       </section>
 
-      <section id="playSurface" class="play-surface" aria-label="Игровая поверхность. На сенсорном экране доступны жесты во всех направлениях">
+      <section id="playSurface" class="play-surface" aria-label="Игровая поверхность. Свайп с удержанием управляет лодкой или движением игрока">
         <canvas id="map" width="840" height="640" aria-hidden="true"></canvas>
-        <p id="gestureHint" class="gesture-hint">Жесты по всему экрану активны</p>
+        <p id="gestureHint" class="gesture-hint">Свайп и удержание по всему экрану</p>
 
         <section id="controls" class="controls" aria-label="Управление">
           <button id="leftButton" data-key="←" aria-keyshortcuts="ArrowLeft">Влево</button>
@@ -66,7 +66,7 @@
           <button id="rightButton" data-key="→" aria-keyshortcuts="ArrowRight">Вправо</button>
           <button id="downButton" data-key="↓" aria-keyshortcuts="ArrowDown">Назад / тормоз</button>
           <button id="actionButton" class="primary" data-key="F" aria-keyshortcuts="F">Действие</button>
-          <button id="jumpButton" data-key="Пробел" aria-keyshortcuts="Space">Прыжок / крыша</button>
+          <button id="jumpButton" data-key="Пробел" aria-keyshortcuts="Space">Плавучий тормоз</button>
           <button id="pumpButton" aria-pressed="false" data-key="C" aria-keyshortcuts="C">Насос: выключен</button>
           <button id="repairButton" aria-pressed="false" data-key="V" aria-keyshortcuts="V">Пластина: готова</button>
         </section>
@@ -75,11 +75,11 @@
       <details class="help">
         <summary>Что умеет действие F</summary>
         <p>У берега и на малой скорости — выйти из лодки. Рядом с другой лодкой — закрепить или снять буксир. В воде или на берегу — сесть в свободную лодку, в том числе чужую. На крыше — занять свободное место водителя.</p>
-        <p>Если тебя буксируют, насос и пластина работают на ходу. Газ в сторону буксира помогает. Если тянуть вбок или назад дольше двух секунд, натяжение растёт и трос рвётся.</p>
+        <p>При пустом баке F запускает аварийную заправку, а после перегрева — обслуживание мотора. Если тебя буксируют, насос и пластина работают на ходу. Газ по направлению буксира помогает; тяга в сторону повышает натяжение и может порвать трос.</p>
       </details>
     </section>
   </main>
-  <script type="module" src="src/free-roam-v2.js?v=2"></script>
+  <script type="module" src="src/free-roam-v3.js?v=3"></script>
   <script type="module" src="src/free-roam-accessibility.js?v=1"></script>
 </body>
 </html>
