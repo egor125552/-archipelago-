@@ -1,6 +1,7 @@
 "use strict";
 
 import * as base from "./free-roam-core-v3.js";
+import {operationSteeringDelta, shouldCenterRudder} from "./free-roam-steering-model.js";
 
 export const WORLD = base.WORLD;
 
@@ -39,16 +40,10 @@ function applyOperationSteering(world, safeDt) {
     const steer = Number(Boolean(input.right)) - Number(Boolean(input.left));
     const previousSteer = world.steeringPrevious[playerIndex] || 0;
 
-    if (!steer) {
-      // The operation controller drops residual rudder immediately when the
-      // wheel is released. Free roam used to keep turning for several frames.
+    if (shouldCenterRudder(steer)) {
       boat.rudder = 0;
     } else {
-      const direction = Math.sign(boat.speed || 1);
-      const accessibleFactor = clamp(Math.abs(boat.speed) / 4.5, 0.45, 1.35);
-      const detailedFactor = clamp(Math.abs(boat.speed) / 4, 0.55, 1.3);
-      const extraAuthority = 0.31 * accessibleFactor + 0.13 * detailedFactor;
-      boat.heading = wrapDeg(boat.heading + steer * extraAuthority * safeDt * 60 * direction);
+      boat.heading = wrapDeg(boat.heading + operationSteeringDelta(boat.speed, steer, safeDt));
     }
 
     if (steer !== previousSteer) {
