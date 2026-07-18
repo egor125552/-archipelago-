@@ -1,5 +1,7 @@
 "use strict";
 
+import {cargoNavigationTarget, updateCargoArrivalGuidance} from "./free-roam-cargo-guidance.js";
+
 const TARGET_LABELS = Object.freeze({
   plates: "ящик с пластинами",
   fuel: "ящик с топливом",
@@ -110,26 +112,18 @@ export function scenarioTarget(world, playerIndex) {
     if (cargoNeedsDock(world, playerIndex, "automatic")) return dockTarget();
     const automatic = lockedWorldCrate(world, playerIndex, crate => crate.kind === "automatic")
       || nearestWorldCrate(world, playerIndex, crate => crate.kind === "automatic");
-    if (automatic) return {
-      id: automatic.id,
-      kind: automatic.kind,
-      label: TARGET_LABELS[automatic.kind],
-      x: automatic.x,
-      y: automatic.y,
-    };
+    if (automatic) return cargoNavigationTarget(world.players[playerIndex], automatic, TARGET_LABELS[automatic.kind]);
   }
   if (scenario.phase === "salvage") {
     if (cargoNeedsDock(world, playerIndex)) return dockTarget();
     const crate = lockedWorldCrate(world, playerIndex, candidate => SALVAGE_KINDS.has(candidate.kind))
       || nearestWorldCrate(world, playerIndex, candidate => SALVAGE_KINDS.has(candidate.kind))
       || nearestWorldCrate(world, playerIndex, () => true);
-    if (crate) return {
-      id: crate.id,
-      kind: crate.kind,
-      label: TARGET_LABELS[crate.kind] || "ящик с припасами",
-      x: crate.x,
-      y: crate.y,
-    };
+    if (crate) return cargoNavigationTarget(
+      world.players[playerIndex],
+      crate,
+      TARGET_LABELS[crate.kind] || "ящик с припасами",
+    );
   }
   if (scenario.phase === "victory") {
     const prize = nearestWorldCrate(world, playerIndex, crate => crate.source === "pursuer" || crate.source === "marauder");
@@ -170,6 +164,7 @@ function updateTargets(world) {
     const target = scenarioTarget(world, index);
     scenario.targets[index] = target;
     if (target?.id?.startsWith("crate-")) scenario.lockedTargetIds[index] = target.id;
+    else if (target?.kind === "landing" && target.crateId) scenario.lockedTargetIds[index] = target.crateId;
   }
 }
 
@@ -248,6 +243,7 @@ export function updateFreeScenario(world, dt) {
   }
   updatePhase(world);
   updateTargets(world);
+  updateCargoArrivalGuidance(world, emit);
   handleSonar(world, dt);
 }
 

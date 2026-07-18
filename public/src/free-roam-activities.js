@@ -1,5 +1,7 @@
 "use strict";
 
+import {placeJoiningPlayer} from "./free-roam-player-spawn.js";
+
 const WORLD_CRATES = Object.freeze([
   {id: "crate-plates", kind: "plates", rarity: "common", weight: 2, x: 136, y: 34},
   {id: "crate-fuel", kind: "fuel", rarity: "common", weight: 3, x: 282, y: 45},
@@ -93,7 +95,9 @@ function randomSpawn(state, crate) {
 export function setPresence(world, playerIndex, present) {
   const state = ensureActivities(world);
   if (state.presence[playerIndex] == null) return;
+  const wasPresent = state.presence[playerIndex];
   state.presence[playerIndex] = Boolean(present);
+  if (!wasPresent && state.presence[playerIndex]) placeJoiningPlayer(world, playerIndex);
 }
 
 export function storeActivityInput(world, playerIndex, input) {

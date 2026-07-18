@@ -144,7 +144,7 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
     const metres = distance(this.listenerPoint, target);
     if (metres > 190) return;
     const previous = this.cargoBeaconAt.get(target.id) || 0;
-    const interval = clamp(1.45 + metres / 80, 1.45, 3.4);
+    const interval = clamp(0.16 + metres / 42, 0.16, 2.7);
     if (now < previous) return;
     this.cargoBeaconAt.set(target.id, now + interval);
     const pan = relativeMovementPan(this.listenerPoint, target);
@@ -247,6 +247,11 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
         return;
       case "scenario-sonar":
         this.playSynthPip({pan: spatial.pan, frequency: 760, gain: 0.13, duration: 0.12});
+        return;
+      case "scenario-arrival":
+        this.playSynthPip({pan: spatial.pan, frequency: 920, gain: 0.16, duration: 0.1});
+        this.playSynthPip({pan: spatial.pan, frequency: 1120, gain: 0.18, duration: 0.13, delay: 0.16});
+        if (event.targetId) this.cargoBeaconAt.set(event.targetId, (this.ctx?.currentTime || 0) + 0.8);
         return;
       case "pursuer-warning":
         this.playSynthPip({frequency: 270, gain: 0.11, duration: 0.18});

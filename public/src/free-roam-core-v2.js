@@ -2,6 +2,7 @@
 
 import {CONFIG} from "./game-core-v18.js?free=2";
 import {applyCollisionDamage, collisionSeverity} from "./collision-model.js";
+import {unattendedLeakMultiplier} from "./free-roam-unattended-boat.js";
 
 export const WORLD = Object.freeze({
   width: 420,
@@ -450,7 +451,11 @@ function updateBoat(world, boatState, dt) {
     emit(world, "engine-stall", "Двигатель перегрелся и заглох.", targets);
   }
 
-  boatState.water = clamp(boatState.water + boatState.leak * dt * 0.33, 0, 100);
+  boatState.water = clamp(
+    boatState.water + boatState.leak * dt * 0.33 * unattendedLeakMultiplier(boatState, WORLD.shoreY),
+    0,
+    100,
+  );
   boatState.pumpActive = Boolean(input.pump);
   if (boatState.pumpActive) boatState.water = clamp(boatState.water - dt * 7.5, 0, 100);
   processHullRepair(world, boatState, input, dt);
