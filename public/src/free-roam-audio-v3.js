@@ -65,6 +65,10 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
       this.playSpatialMovement(event, playerIndex);
       return;
     }
+    if (event.type === "action-denied") {
+      this.handle([{type: "ui-deny"}]);
+      return;
+    }
     super.handleFreeEvent(event, playerIndex);
   }
 }
