@@ -99,15 +99,15 @@ test("an intact hull does not enter a fake repair state", () => {
   assert.match(state.message, /Корпус цел/);
 });
 
-test("the coast brake uses a logical name and release assets use cache generation 24", async () => {
+test("the coast brake uses a logical name and release assets use cache generation 27", async () => {
   const [html, app, progression] = await Promise.all([
     readFile(new URL("../public/index.html", import.meta.url), "utf8"),
     readFile(new URL("../public/src/app.js", import.meta.url), "utf8"),
     readFile(new URL("../public/src/progression.js", import.meta.url), "utf8"),
   ]);
-  assert.match(html, /game-core-v18\.js\?v=24\.0/);
-  assert.match(html, /app\.js\?v=24\.0/);
-  assert.match(app, /progression\.js\?v=24\.0/);
+  assert.match(html, /game-core-v18\.js\?v=27\.0/);
+  assert.match(html, /app\.js\?v=27\.0/);
+  assert.match(app, /progression\.js\?v=27\.0/);
   assert.match(progression, /Автотормоз наката/);
   assert.doesNotMatch(progression, /Береговой автотормоз/);
 

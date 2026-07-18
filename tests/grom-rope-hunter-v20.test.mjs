@@ -143,7 +143,7 @@ test("the complete level-six Grom operation remains winnable with ordinary contr
   assert.equal(events.some(event => event.type === "collision"), false);
 });
 
-test("the hunter mostly pursues but also patrols, circles, stops and retreats", () => {
+test("the hunter uses current neural tactics and keeps pressure on the player", () => {
   const state = grom();
   state.hunter.ramCooldown = 999;
   const samples = [];
@@ -151,10 +151,14 @@ test("the hunter mostly pursues but also patrols, circles, stops and retreats", 
     step(state, 0.1);
     if (elapsed >= CONFIG.hunterSpawnDelay) samples.push(state.hunter.mode);
   }
-  const modes = new Set(samples);
-  for (const mode of ["pursuit", "circle", "patrol", "stop", "retreat"]) assert.ok(modes.has(mode), mode);
-  const pursuit = samples.filter(mode => mode === "pursuit").length;
-  assert.ok(pursuit > samples.length / 2, `${pursuit}/${samples.length}`);
+  const currentTactics = new Set([
+    "pressure", "intercept", "flank-left", "flank-right", "block-objective",
+    "counter-circle", "counter-reverse", "bait-ram", "ignore-decoy", "recover",
+  ]);
+  assert.ok(samples.length > 0);
+  assert.ok(samples.every(mode => currentTactics.has(mode)), [...new Set(samples)].join(", "));
+  const activePressure = samples.filter(mode => mode !== "recover").length;
+  assert.ok(activePressure > samples.length / 2, `${activePressure}/${samples.length}`);
 });
 
 test("the pursuer loses hull and speed when it rams the player", () => {
@@ -207,7 +211,7 @@ test("a fast Grom can ram and eventually disable the pursuer", () => {
   assert.ok(state.boat.hull > 0);
 });
 
-test("VoiceOver turn pulses restore the same control focus and release assets use cache v24", async () => {
+test("VoiceOver turn pulses restore the same control focus and release assets use cache v27", async () => {
   const [gameplay, html, audio] = await Promise.all([
     readFile(new URL("../public/src/gameplay-v6.js", import.meta.url), "utf8"),
     readFile(new URL("../public/index.html", import.meta.url), "utf8"),
@@ -216,7 +220,7 @@ test("VoiceOver turn pulses restore the same control focus and release assets us
   assert.match(gameplay, /function keepReaderFocus\(button\)/);
   assert.match(gameplay, /requestAnimationFrame\(restore\)/);
   assert.ok((gameplay.match(/keepReaderFocus\(button\)/g) || []).length >= 6);
-  assert.match(html, /game-core-v18\.js\?v=24\.0/);
-  assert.match(html, /audio-engine-v13\.js\?v=24\.0/);
+  assert.match(html, /game-core-v18\.js\?v=27\.0/);
+  assert.match(html, /audio-engine-v13\.js\?v=27\.0/);
   assert.match(audio, /hunter-destroyed/);
 });

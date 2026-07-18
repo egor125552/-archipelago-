@@ -87,7 +87,7 @@ test("the near-standstill steering warning is replaced once the boat gains speed
   assert.match(state.message, /Лодка набрала ход/);
 });
 
-test("release UI explains loading, route state, one-click braking and cache generation 24", async () => {
+test("release UI explains loading, route state, one-click braking and cache generation 27", async () => {
   const [app, gameplay, html] = await Promise.all([
     readFile(new URL("../public/src/app.js", import.meta.url), "utf8"),
     readFile(new URL("../public/src/gameplay-v6.js", import.meta.url), "utf8"),
@@ -101,6 +101,6 @@ test("release UI explains loading, route state, one-click braking and cache gene
   assert.match(gameplay, /Math\.abs\(speed\) <= 0\.25/);
   assert.match(gameplay, /Задний ход:/);
   assert.match(html, /Режим маршрута/);
-  assert.match(html, /game-core-v18\.js\?v=24\.0/);
-  assert.match(html, /audio-engine-v13\.js\?v=24\.0/);
+  assert.match(html, /game-core-v18\.js\?v=27\.0/);
+  assert.match(html, /audio-engine-v13\.js\?v=27\.0/);
 });

@@ -228,7 +228,7 @@ test("release UI exposes water restart and compact VoiceOver text", async () => 
     readFile(new URL("../public/src/gameplay-v9.js", import.meta.url), "utf8"),
     readFile(new URL("../public/src/audio-engine-v10.js", import.meta.url), "utf8"),
   ]);
-  assert.match(html, /game-core-v18\.js\?v=24\.0/);
+  assert.match(html, /game-core-v18\.js\?v=27\.0/);
   assert.match(html, /После стабилизации мотор запускается сам/);
   assert.match(app, /waterEngine\?\.canRestart/);
   assert.match(gameplay, /Запустить мотор/);

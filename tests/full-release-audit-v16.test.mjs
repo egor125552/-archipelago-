@@ -412,7 +412,7 @@ test("release UI, network recovery, speech and bundled audio expose the audited 
     readFile(new URL("../public/styles.css", import.meta.url), "utf8"),
   ]);
   assert.match(html, /id="routeModeButton"/);
-  assert.match(html, /game-core-v18\.js\?v=24\.0/);
+  assert.match(html, /game-core-v18\.js\?v=27\.0/);
   assert.match(html, /Чистый проход без столкновения/);
   assert.match(styles, /grid-area: route/);
   assert.match(app, /bestByLevel/);
