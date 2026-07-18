@@ -7,7 +7,7 @@ export const WORLD = Object.freeze({
   landMinX: 118,
   landMaxX: 302,
   landMinY: 8,
-  landMaxY: 68,
+  landMaxY: 76,
   towRestLength: 20,
   towMaximumLength: 35,
 });
@@ -156,6 +156,15 @@ function boundaryPan(side) {
 function processBoundaries(world) {
   for (let index = 0; index < world.players.length; index += 1) {
     const player = world.players[index];
+    if (player.mode === "foot" && player.y > WORLD.shoreY + 3) {
+      player.mode = "swim";
+      player.running = false;
+      emit(world, "splash", "Ты вошёл в воду.", [index], {
+        sourcePlayer: index,
+        x: player.x,
+        y: player.y,
+      });
+    }
     if (player.mode === "foot") {
       const oldX = player.x;
       const oldY = player.y;
@@ -236,10 +245,10 @@ function processTowPhysics(world, dt) {
   const desiredHeading = Math.atan2(nx, -ny) * 180 / Math.PI;
   const headingError = Math.abs(wrapDeg(towed.heading - desiredHeading));
   const helping = Boolean(input.up) && headingError <= 48;
-  const opposing = (Boolean(input.up) && headingError >= 105) || Boolean(input.down);
+  const opposing = (Boolean(input.up) && headingError >= 82) || Boolean(input.down);
 
   const springForce = stretch * 0.92 + Math.max(0, separationRate) * 0.44;
-  const force = Math.max(0, springForce + (opposing ? 5.2 : 0) - (helping ? 1.8 : 0));
+  const force = Math.max(0, springForce + (opposing ? 7 : 0) - (helping ? 1.8 : 0));
 
   if (stretch > 0) {
     const correction = Math.min(2.4, stretch * 0.46);
@@ -253,12 +262,12 @@ function processTowPhysics(world, dt) {
     tower.speed *= Math.max(0.965, 1 - force * 0.0018);
   }
 
-  if (!input.left && !input.right && Math.abs(towed.speed) > 0.25) {
+  if (!opposing && !input.left && !input.right && Math.abs(towed.speed) > 0.25) {
     const followRate = helping ? 58 : 42;
     towed.heading = approachAngle(towed.heading, desiredHeading, followRate * dt);
   }
 
-  const targetTension = clamp(force / 8.4 + (opposing ? 0.45 : 0), 0, 1.45);
+  const targetTension = clamp(force / 8.4 + (opposing ? 0.55 : 0), 0, 1.45);
   tow.tension += (targetTension - tow.tension) * Math.min(1, dt * 5.2);
   if (tow.tension > 1.12) tow.strainTime += dt;
   else tow.strainTime = Math.max(0, tow.strainTime - dt * 1.8);
