@@ -4,6 +4,16 @@ import {FreeRoamAudio as BaseFreeRoamAudio} from "./free-roam-audio-v2.js";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));
+const wrapDeg = value => ((value + 180) % 360 + 360) % 360 - 180;
+
+export function relativeMovementPan(listener, source) {
+  const dx = (Number(source?.x) || 0) - (Number(listener?.x) || 0);
+  const dy = (Number(source?.y) || 0) - (Number(listener?.y) || 0);
+  if (Math.hypot(dx, dy) < 0.001) return 0;
+  const absolute = Math.atan2(dx, -dy) * 180 / Math.PI;
+  const relative = wrapDeg(absolute - (Number(listener?.heading) || 0));
+  return clamp(relative / 78, -1, 1);
+}
 
 export class FreeRoamAudio extends BaseFreeRoamAudio {
   constructor() {
@@ -42,7 +52,7 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
     const metres = distance(this.listenerPoint, event);
     if (metres > 72) return;
     const proximity = clamp(1 - metres / 72, 0, 1);
-    const pan = clamp(((Number(event.x) || 0) - (Number(this.listenerPoint.x) || 0)) / 42, -1, 1);
+    const pan = relativeMovementPan(this.listenerPoint, event);
     if (event.type === "swim-step") {
       this.play(this.buffers.has("waterSide") ? "waterSide" : "waterSoft", {
         gain: 0.05 + proximity * 0.25,
