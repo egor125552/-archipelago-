@@ -21,6 +21,26 @@ function setHidden(id, hidden) {
   if (node) node.hidden = value;
 }
 
+function installFreeRoamEntry() {
+  if (byId("freeRoamEntry")) return;
+  const start = byId("startScreen");
+  const progression = byId("progressionPanel");
+  if (!start || !progression) return;
+  const section = document.createElement("section");
+  section.id = "freeRoamEntry";
+  section.className = "panel";
+  section.innerHTML = `
+    <p class="eyebrow">Новый режим</p>
+    <h2>Свободная бухта</h2>
+    <p>Две отдельные лодки без заданий: таран, физический буксир, выход на берег, плавание, крыши лодок и угон оставленного катера.</p>
+    <a href="/free-roam.html" class="free-roam-link">Открыть свободный онлайн-мир</a>
+  `;
+  progression.parentNode.insertBefore(section, progression);
+  const style = document.createElement("style");
+  style.textContent = `.free-roam-link{display:block;min-height:3.4rem;padding:.9rem;border-radius:1rem;background:var(--accent);color:#00141b;text-align:center;font-weight:900;text-decoration:none}.free-roam-link:focus-visible{outline:4px solid var(--focus);outline-offset:3px}`;
+  document.head.appendChild(style);
+}
+
 function syncV9() {
   const api = window.__echoArchipelago;
   const view = api?.getView?.();
@@ -56,5 +76,6 @@ byId("safetyButton")?.addEventListener("click", event => {
   syncV9();
 }, true);
 
+installFreeRoamEntry();
 setInterval(syncV9, 180);
 window.__echoGameplayV9 = {sync: syncV9};
