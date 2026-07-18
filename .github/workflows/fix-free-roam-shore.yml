@@ -1,0 +1,75 @@
+name: Fix free-roam shore transition
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/fix-free-roam-shore.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply focused fixes and verify Node tests
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          core = Path('public/src/free-roam-core-v5.js')
+          text = core.read_text()
+          old = '  landMaxY: 68,'
+          if old not in text:
+            raise SystemExit('landMaxY pattern missing')
+          text = text.replace(old, '  landMaxY: 76,', 1)
+          old = '''    if (player.mode === "foot") {
+      const oldX = player.x;'''
+          new = '''    if (player.mode === "foot" && player.y > WORLD.shoreY + 3) {
+      player.mode = "swim";
+      player.running = false;
+      emit(world, "splash", "Ты вошёл в воду.", [index], {
+        sourcePlayer: index,
+        x: player.x,
+        y: player.y,
+      });
+    }
+    if (player.mode === "foot") {
+      const oldX = player.x;'''
+          if old not in text:
+            raise SystemExit('boundary pattern missing')
+          text = text.replace(old, new, 1)
+          core.write_text(text)
+
+          client = Path('public/src/free-roam-v3.js')
+          js = client.read_text()
+          old = '"Свободных миров нет. Кнопка входа создаст ожидание первого игрока."'
+          new = '"Свободных миров нет. Кнопка входа создаст новый мир и сделает тебя его ведущим."'
+          if old not in js:
+            raise SystemExit('room summary pattern missing')
+          js = js.replace(old, new, 1)
+          old = 'ctx.arc(player.x * sx, player.y * sy, player.mode === "roof" ? 7 : 5, 0, Math.PI * 2);'
+          new = 'ctx.arc(player.x * sx, player.y * sy, (player.mode === "roof" ? 7 : 5) + Math.min(4, Number(player.jumpHeight) || 0), 0, Math.PI * 2);'
+          if old not in js:
+            raise SystemExit('jump drawing pattern missing')
+          js = js.replace(old, new, 1)
+          client.write_text(js)
+          PY
+
+          npm ci
+          npm test
+
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add public/src/free-roam-core-v5.js public/src/free-roam-v3.js
+          git rm .github/workflows/fix-free-roam-shore.yml
+          git commit -m "Keep the finite shore open to swimming"
+          git push origin HEAD:main
