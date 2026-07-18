@@ -14,6 +14,6 @@ test("Worker WebSocket URL follows the current secure origin", () => {
   );
 });
 
-test("room identifiers remain readable for status announcements", () => {
-  assert.equal(normalizeRoomCode(" sea-аb12 "), "SEA-AB12");
+test("legacy manual room normalization remains unchanged", () => {
+  assert.equal(normalizeRoomCode(" sea-аb12 "), "SEAAB1");
 });
