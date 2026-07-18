@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
   <meta name="theme-color" content="#071217">
   <title>Свободная бухта — Эхо-Архипелаг</title>
-  <link rel="stylesheet" href="free-roam.css?v=1">
+  <link rel="stylesheet" href="free-roam.css?v=2">
 </head>
 <body>
   <a class="skip" href="#main">К игре</a>
@@ -26,7 +26,7 @@
       </section>
       <details>
         <summary>Коротко об управлении</summary>
-        <p>На компьютере: стрелки — движение, F — контекстное действие, пробел — прыжок или крыша лодки, C — насос, V — ремонт.</p>
+        <p>На компьютере: стрелки — движение, F — контекстное действие, пробел — прыжок или крыша лодки, C — насос, V — пластина.</p>
         <p>На iPhone: проведи одним пальцем по всему экрану. Двойное касание двумя пальцами переключает насос. После жеста кнопки исчезают и возвращаются через несколько секунд бездействия. VoiceOver забирает свои жесты себе, поэтому для него кнопки остаются на экране.</p>
       </details>
       <a class="back-link" href="/">Вернуться к операциям</a>
@@ -68,17 +68,18 @@
           <button id="actionButton" class="primary" data-key="F" aria-keyshortcuts="F">Действие</button>
           <button id="jumpButton" data-key="Пробел" aria-keyshortcuts="Space">Прыжок / крыша</button>
           <button id="pumpButton" aria-pressed="false" data-key="C" aria-keyshortcuts="C">Насос: выключен</button>
-          <button id="repairButton" aria-pressed="false" data-key="V" aria-keyshortcuts="V">Ремонт: выключен</button>
+          <button id="repairButton" aria-pressed="false" data-key="V" aria-keyshortcuts="V">Пластина: готова</button>
         </section>
       </section>
 
       <details class="help">
         <summary>Что умеет действие F</summary>
         <p>У берега и на малой скорости — выйти из лодки. Рядом с другой лодкой — закрепить или снять буксир. В воде или на берегу — сесть в свободную лодку, в том числе чужую. На крыше — занять свободное место водителя.</p>
-        <p>Если тебя буксируют, насос и ремонт работают. Газ в сторону буксира помогает. Если тянуть вбок или назад дольше двух секунд, натяжение растёт и трос рвётся.</p>
+        <p>Если тебя буксируют, насос и пластина работают на ходу. Газ в сторону буксира помогает. Если тянуть вбок или назад дольше двух секунд, натяжение растёт и трос рвётся.</p>
       </details>
     </section>
   </main>
-  <script type="module" src="src/free-roam.js?v=1"></script>
+  <script type="module" src="src/free-roam-v2.js?v=2"></script>
+  <script type="module" src="src/free-roam-accessibility.js?v=1"></script>
 </body>
 </html>
