@@ -22,5 +22,24 @@ test("ramming uses the established collision sound path", () => {
     severity: 6,
     impactSpeed: 6,
     hardImpact: true,
+    shore: false,
+    scrape: false,
+    damage: 0,
+    absorbed: 0,
+    pan: 0,
+  });
+});
+
+test("shore impacts keep the operation shoreline branch", () => {
+  assert.deepEqual(operationEventForFreeEvent({type: "collision", strength: 7, shore: true, damage: 12, pan: -0.3}), {
+    type: "collision",
+    severity: 7,
+    impactSpeed: 7,
+    hardImpact: true,
+    shore: true,
+    scrape: false,
+    damage: 12,
+    absorbed: 0,
+    pan: -0.3,
   });
 });
