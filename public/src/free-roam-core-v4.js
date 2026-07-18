@@ -14,13 +14,39 @@ function ensureState(world) {
   return world;
 }
 
+function placePlayersTogether(world) {
+  const positions = [
+    {x: 199, y: 158, heading: 0},
+    {x: 219, y: 158, heading: 0},
+  ];
+  for (let index = 0; index < Math.min(world.boats.length, positions.length); index += 1) {
+    const boat = world.boats[index];
+    const position = positions[index];
+    boat.x = position.x;
+    boat.y = position.y;
+    boat.heading = position.heading;
+    boat.speed = 0;
+    boat.throttle = 0;
+    boat.rudder = 0;
+    const player = world.players[index];
+    if (player) {
+      player.mode = "boat";
+      player.activeBoat = boat.id;
+      player.x = boat.x;
+      player.y = boat.y;
+      player.heading = boat.heading;
+    }
+  }
+  return world;
+}
+
 function emit(world, type, text, targets, extra = {}) {
   world.events ||= [];
   world.events.push({type, text, targets, at: world.time, operationEvent: true, ...extra});
 }
 
 export function createFreeWorld() {
-  return ensureState(base.createFreeWorld());
+  return placePlayersTogether(ensureState(base.createFreeWorld()));
 }
 
 export function setPlayerInput(world, playerIndex, input) {
