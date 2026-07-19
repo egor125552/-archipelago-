@@ -1,6 +1,6 @@
 "use strict";
 
-import {criticalInjuryMix} from "./free-roam-critical-injury.js?v=31";
+import {criticalInjuryMix} from "./free-roam-critical-injury.js?v=32";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 export const HEALTH_RECOVERY_DELAY = 6;

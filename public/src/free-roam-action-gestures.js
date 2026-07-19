@@ -25,6 +25,7 @@ export function classifyActionGesture({pointers, duration, dx, dy, movement, tap
     if (held) return "repair";
     return taps >= 2 ? "status" : "sonar";
   }
+  if (taps >= 2) return "targets";
   return held ? "attack-heavy" : "attack-light";
 }
 

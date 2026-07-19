@@ -11,13 +11,14 @@ import {
   spawnRareCrate,
   storeActivityInput,
   updateActivities,
-} from "./free-roam-activities.js?v=31";
-import {applyCombatDamage, combatStatus, ensureCombat, updateCombat} from "./free-roam-combat.js?v=31";
-import {ensureMarauder, releaseStolenCargo, updateMarauder} from "./free-roam-marauder.js?v=31";
-import {ensureFreeScenario, scenarioStatus, updateFreeScenario} from "./free-roam-scenario.js?v=31";
-import {suppressIncapacitatedMovement, updatePhysicalActors} from "./free-roam-physical-actors.js?v=31";
+} from "./free-roam-activities.js?v=32";
+import {applyCombatDamage, combatStatus, ensureCombat, updateCombat} from "./free-roam-combat.js?v=32";
+import {ensureMarauder, releaseStolenCargo, updateMarauder} from "./free-roam-marauder.js?v=32";
+import {ensureFreeScenario, scenarioStatus, updateFreeScenario} from "./free-roam-scenario.js?v=32";
+import {suppressIncapacitatedMovement, updatePhysicalActors} from "./free-roam-physical-actors.js?v=32";
 import {handleAssistedBoarding} from "./free-roam-boarding-assist.js?v=29";
-import {ensurePursuerSquad, updatePursuerSquad} from "./free-roam-pursuer-squad.js?v=31";
+import {ensurePursuerSquad, updatePursuerSquad} from "./free-roam-pursuer-squad.js?v=32";
+import {ensureHostileGunners, updateHostileGunners} from "./free-roam-hostile-gunners.js?v=32";
 
 export const WORLD = Object.freeze({...base.WORLD});
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -29,6 +30,7 @@ function ensureState(world) {
   ensureCombat(world);
   ensureMarauder(world);
   ensurePursuerSquad(world);
+  ensureHostileGunners(world);
   ensureFreeScenario(world);
   return world;
 }
@@ -88,6 +90,11 @@ export function stepFreeWorld(world, dt) {
   updateMarauder(world, safeDt, {spawnRareCrate});
   updatePursuerSquad(world, safeDt, {
     spawnRareCrate,
+    damagePlayer(targetWorld, targetIndex, amount, details) {
+      return applyCombatDamage(targetWorld, targetIndex, amount, -1, details, combatHelpers);
+    },
+  });
+  updateHostileGunners(world, safeDt, {
     damagePlayer(targetWorld, targetIndex, amount, details) {
       return applyCombatDamage(targetWorld, targetIndex, amount, -1, details, combatHelpers);
     },

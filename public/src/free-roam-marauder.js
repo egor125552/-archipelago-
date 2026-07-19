@@ -1,5 +1,7 @@
 "use strict";
 
+import {assignedPlayerForPursuer} from "./free-roam-pursuer-squad.js?v=32";
+
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));
 const wrapDeg = value => ((value + 180) % 360 + 360) % 360 - 180;
@@ -239,6 +241,15 @@ export function updateMarauder(world, dt, helpers = {}) {
   marauder.ramCooldown = Math.max(0, marauder.ramCooldown - dt);
   marauder.stealCooldown = Math.max(0, marauder.stealCooldown - dt);
   marauder.recoveryRemaining = Math.max(0, marauder.recoveryRemaining - dt);
+  const assignedPlayerIndex = assignedPlayerForPursuer(world, marauder.id);
+  const assignedPlayer = world.players?.[assignedPlayerIndex];
+  if (assignedPlayer?.combat?.alive && ["foot", "swim"].includes(assignedPlayer.mode)) {
+    steerToward(marauder, {
+      x: assignedPlayer.x,
+      y: assignedPlayer.mode === "foot" ? 78 : clamp(assignedPlayer.y, 78, 313),
+    }, dt);
+    return;
+  }
   const target = chooseTargetBoat(world);
   if (!target) return;
   marauder.targetBoat = target.id;

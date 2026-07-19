@@ -5,10 +5,12 @@ import {
   injuryMixTarget,
   registerCombatDamage,
   updateCombatRecovery,
-} from "./free-roam-combat-recovery.js?v=31";
-import {COMBAT_TUNING} from "./free-roam-combat-tuning.js?v=31";
-import {isCriticalHealth} from "./free-roam-critical-injury.js?v=31";
-import {activePursuers, damageEscort} from "./free-roam-pursuer-squad.js?v=31";
+} from "./free-roam-combat-recovery.js?v=32";
+import {COMBAT_TUNING} from "./free-roam-combat-tuning.js?v=32";
+import {isCriticalHealth} from "./free-roam-critical-injury.js?v=32";
+import {activePursuers, damageEscort} from "./free-roam-pursuer-squad.js?v=32";
+import {describeCombatTarget, resolveCombatTarget} from "./free-roam-targeting.js?v=32";
+import {damageHostileGunner} from "./free-roam-hostile-gunners.js?v=32";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));
@@ -45,6 +47,8 @@ function createCombatState() {
     injuryMix: 0,
     lastDamageAt: -999,
     recoveryStarted: false,
+    lockedTargetId: null,
+    lastTargetRequestId: null,
   };
 }
 
@@ -66,6 +70,8 @@ export function ensureCombat(world) {
     if (!Number.isFinite(combat.attackCharge)) combat.attackCharge = 0;
     if (!Number.isFinite(combat.attackCooldown)) combat.attackCooldown = 0;
     if (!Number.isFinite(combat.injuryMix)) combat.injuryMix = 0;
+    if (typeof combat.lockedTargetId !== "string") combat.lockedTargetId = null;
+    if (typeof combat.lastTargetRequestId !== "string") combat.lastTargetRequestId = null;
     ensureRecoveryState(combat);
   }
 }
@@ -334,9 +340,23 @@ function fireAutomatic(world, attackerIndex, helpers) {
     emit(world, "gun-empty", "Патроны закончились. Выбраны кулаки.", [attackerIndex]);
     return;
   }
+  const lockedTarget = resolveCombatTarget(
+    world,
+    attackerIndex,
+    combat.lockedTargetId,
+    COMBAT_TUNING.automaticRange,
+  );
+  if (combat.lockedTargetId && !lockedTarget) {
+    combat.lockedTargetId = null;
+    combat.attackCooldown = COMBAT_TUNING.automaticShotInterval;
+    emit(world, "target-lost", "Цель потеряна или ушла слишком далеко.", [attackerIndex], {
+      sourcePlayer: attackerIndex,
+    });
+    return;
+  }
   combat.ammo -= 1;
   combat.attackCooldown = COMBAT_TUNING.automaticShotInterval;
-  const closeTarget = nearestTarget(
+  const closeTarget = lockedTarget || nearestTarget(
     world,
     attackerIndex,
     COMBAT_TUNING.automaticCloseRange,
@@ -365,16 +385,54 @@ function fireAutomatic(world, attackerIndex, helpers) {
     });
     return;
   }
+  attacker.heading = bearing(attacker, target.point);
   if (target.kind === "player") {
     damagePlayer(world, target.index, COMBAT_TUNING.automaticDamage, attackerIndex, {
       weapon: "automatic",
       heavy: false,
       eventType: "gun-hit",
     }, helpers);
+    if (!target.point?.combat?.alive) {
+      combat.lockedTargetId = null;
+      emit(world, "target-cleared", "", [attackerIndex], {sourcePlayer: attackerIndex});
+    }
+    return;
+  }
+  if (target.kind === "boat") {
+    const boat = target.point;
+    boat.hull = clamp(boat.hull - 5, 0.05, 100);
+    boat.leak = clamp((Number(boat.leak) || 0) + 0.18, 0, 16);
+    emit(world, "gun-boat-hit", `Попадание по лодке игрока ${target.playerIndex + 1}.`, [attackerIndex], {
+      sourcePlayer: attackerIndex,
+      targetPlayer: target.playerIndex,
+      targetBoat: boat.id,
+      x: boat.x,
+      y: boat.y,
+    });
+    emit(world, "gun-boat-damaged", `Автомат попал в твою лодку. Корпус ${Math.round(boat.hull)}.`, [target.playerIndex], {
+      sourcePlayer: attackerIndex,
+      targetPlayer: target.playerIndex,
+      targetBoat: boat.id,
+      hull: boat.hull,
+      x: boat.x,
+      y: boat.y,
+    });
+    return;
+  }
+  if (target.kind === "gunner") {
+    damageHostileGunner(world, target.gunnerId, 12, attackerIndex);
+    if (target.point?.destroyed) {
+      combat.lockedTargetId = null;
+      emit(world, "target-cleared", "", [attackerIndex], {sourcePlayer: attackerIndex});
+    }
     return;
   }
   if (target.kind === "escort") {
     damageEscort(world, target.pursuerId, 12, attackerIndex, helpers);
+    if (target.point?.destroyed) {
+      combat.lockedTargetId = null;
+      emit(world, "target-cleared", "", [attackerIndex], {sourcePlayer: attackerIndex});
+    }
     return;
   }
   const marauder = target.point;
@@ -386,7 +444,11 @@ function fireAutomatic(world, attackerIndex, helpers) {
     x: marauder.x,
     y: marauder.y,
   });
-  if (marauder.hull <= 0) destroyMarauder(world, attackerIndex, helpers);
+  if (marauder.hull <= 0) {
+    destroyMarauder(world, attackerIndex, helpers);
+    combat.lockedTargetId = null;
+    emit(world, "target-cleared", "", [attackerIndex], {sourcePlayer: attackerIndex});
+  }
 }
 
 function cycleWeapon(world, playerIndex) {
@@ -438,6 +500,11 @@ export function updateCombat(world, dt, helpers = {}) {
     const previous = state.previousInputs[index] || {};
     combat.attackCooldown = Math.max(0, combat.attackCooldown - dt);
 
+    if (!state.presence[index]) {
+      combat.attackCharge = 0;
+      continue;
+    }
+
     if (combat.pendingDamage > 0 && combat.alive) {
       const damage = combat.pendingDamage;
       combat.pendingDamage = 0;
@@ -479,6 +546,53 @@ export function updateCombat(world, dt, helpers = {}) {
       });
     }
     combat.injuryMix = injuryMixTarget(combat);
+
+    if (input.targetId !== combat.lastTargetRequestId) {
+      combat.lastTargetRequestId = input.targetId;
+      const requestedTarget = resolveCombatTarget(
+        world,
+        index,
+        input.targetId,
+        COMBAT_TUNING.automaticRange,
+      );
+      combat.lockedTargetId = requestedTarget?.id || null;
+      if (requestedTarget) {
+        combat.equipped = combat.weapons.automatic && combat.ammo > 0 ? "automatic" : combat.equipped;
+        player.heading = bearing(player, requestedTarget.point);
+        emit(
+          world,
+          "target-locked",
+          `${describeCombatTarget(requestedTarget)} Захват подтверждён. Удерживай X, когда захочешь стрелять.`,
+          [index],
+          {
+            sourcePlayer: index,
+            targetId: requestedTarget.id,
+            targetKind: requestedTarget.kind,
+            x: requestedTarget.point.x,
+            y: requestedTarget.point.y,
+          },
+        );
+      } else if (input.targetId) {
+        emit(world, "target-lost", "Эта цель уже недоступна. Открой список клавишей M и выбери другую.", [index], {
+          sourcePlayer: index,
+          targetId: input.targetId,
+        });
+      }
+    }
+    const trackedTarget = resolveCombatTarget(
+      world,
+      index,
+      combat.lockedTargetId,
+      COMBAT_TUNING.automaticRange,
+    );
+    if (combat.lockedTargetId && !trackedTarget) {
+      combat.lockedTargetId = null;
+      emit(world, "target-lost", "Цель потеряна или ушла слишком далеко.", [index], {
+        sourcePlayer: index,
+      });
+    } else if (trackedTarget) {
+      player.heading = bearing(player, trackedTarget.point);
+    }
 
     if (input.weapon && !previous.weapon) cycleWeapon(world, index);
     if (combat.knockedDown) {

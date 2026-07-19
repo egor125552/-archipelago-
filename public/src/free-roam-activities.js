@@ -1,15 +1,15 @@
 "use strict";
 
 import {placeJoiningPlayer} from "./free-roam-player-spawn.js";
-import {deliverCarriedCargoAtDock, updateCargoActionPrompts} from "./free-roam-cargo-actions.js?v=31";
+import {deliverCarriedCargoAtDock, updateCargoActionPrompts} from "./free-roam-cargo-actions.js?v=32";
 import {
   CARGO_ACTION_RANGE,
   LANDING_MAX_X,
   LANDING_MIN_X,
   isBoatDockZone,
-} from "./free-roam-cargo-rules.js?v=31";
-import {updateFootDockDelivery} from "./free-roam-foot-dock.js?v=31";
-import {grantWeaponFromCrate} from "./free-roam-weapon-crates.js?v=31";
+} from "./free-roam-cargo-rules.js?v=32";
+import {updateFootDockDelivery} from "./free-roam-foot-dock.js?v=32";
+import {grantWeaponFromCrate} from "./free-roam-weapon-crates.js?v=32";
 
 const WORLD_CRATES = Object.freeze([
   {id: "crate-plates", kind: "plates", rarity: "common", weight: 2, x: 180, y: 34},
@@ -119,6 +119,7 @@ export function storeActivityInput(world, playerIndex, input) {
     weapon: Boolean(input?.weapon),
     action: Boolean(input?.action),
     sonar: Boolean(input?.sonar),
+    targetId: typeof input?.targetId === "string" ? input.targetId : null,
   };
 }
 

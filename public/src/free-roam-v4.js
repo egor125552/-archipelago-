@@ -9,10 +9,12 @@ import {
   setPlayerPresence,
   snapshotWorld,
   stepFreeWorld,
-} from "./free-roam-core-v6.js?v=31";
-import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=31";
+} from "./free-roam-core-v6.js?v=32";
+import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=32";
 import {directionFromDelta} from "./free-roam-gesture-model.js";
 import {classifyActionGesture, gestureMetrics} from "./free-roam-action-gestures.js";
+import {resolveCombatTarget} from "./free-roam-targeting.js?v=32";
+import {createTargetMenu} from "./free-roam-target-menu.js?v=32";
 
 const $ = id => document.getElementById(id);
 const SPEECH_RATE = 1.18;
@@ -30,6 +32,7 @@ const localInput = {
   attack: false,
   weapon: false,
   sonar: false,
+  targetId: null,
 };
 const activeTouches = new Map();
 const holdTimers = new Map();
@@ -231,7 +234,10 @@ function connect(role) {
     }
 
     if (message.type === "network-closed") {
-      if (isHost && world) setPlayerPresence(world, 1, false);
+      if (isHost && world) {
+        setPlayerPresence(world, 1, false);
+        setPlayerInput(world, 1, {});
+      }
       const waiting = message.waitingFor === "captain" ? "создателя мира" : "второго игрока";
       announce(`Игрок отключился. Комната сохранена и ждёт ${waiting}.`, true);
     }
@@ -328,12 +334,25 @@ function syncControlButtons() {
 function handleGameEvent(event) {
   audio.handleFreeEvent(event, playerIndex);
   if (!event?.targets?.includes(playerIndex)) return;
+  if (
+    targetMenu.isOpen()
+    && ["player-knockdown", "player-death"].includes(event.type)
+    && event.targetPlayer === playerIndex
+  ) {
+    targetMenu.close(false);
+  }
+  if (["target-lost", "target-cleared"].includes(event.type)) {
+    localInput.targetId = null;
+    sendInput(true);
+  }
   if (["hull-repair-complete", "repair-blocked"].includes(event.type)) setControl("repair", false);
   if (!event.text) return;
   const critical = [
     "sink", "ram", "tow-detach", "flood-emergency-start", "flood-emergency-warning",
     "flood-emergency-failed", "engine-stall", "engine-flooded", "fuel-empty-ready",
+    "player-knockdown-notice", "player-death",
   ].includes(event.type);
+  if (targetMenu.isOpen() && !critical) return;
   announce(event.text, critical);
 }
 
@@ -365,10 +384,12 @@ function render() {
   const pursuerSquad = world.freePursuerSquad || {};
   const activeEscorts = (pursuerSquad.escorts || []).filter(escort => escort.active && !escort.destroyed);
   const activePursuerCount = activeEscorts.length + (marauder.active && !marauder.destroyed ? 1 : 0);
+  const activeGunners = (world.freeHostileGunners?.gunners || []).filter(gunner => gunner.active && !gunner.destroyed);
   const sonarPursuer = world.freeScenario?.targets?.[playerIndex]?.kind === "pursuer"
     ? [marauder, ...activeEscorts].find(pursuer => pursuer.id === world.freeScenario.targets[playerIndex].id)
     : null;
   const weaponLabels = {fists: "кулаки", knife: "нож", automatic: "автомат"};
+  const lockedCombatTarget = resolveCombatTarget(world, playerIndex, combat.lockedTargetId, 420);
   $("modeValue").textContent = combat.knockedDown ? "сбит с ног" : labels[me.mode] || me.mode;
   $("speedValue").textContent = combat.knockedDown ? "оглушён" : myBoat ? Math.abs(myBoat.speed).toFixed(1) : me.mode === "swim" ? "плывёт" : me.running ? "бежит" : "идёт";
   $("hullValue").textContent = myBoat ? `${Math.round(myBoat.hull)}%` : "—";
@@ -381,6 +402,7 @@ function render() {
       ? `${Math.round(combat.health ?? 100)}%, оглушён`
       : `${Math.round(combat.health ?? 100)}%`;
   $("weaponValue").textContent = combat.equipped === "automatic" ? `автомат, ${combat.ammo || 0}` : weaponLabels[combat.equipped] || "кулаки";
+  $("targetValue").textContent = lockedCombatTarget?.label || "не выбрана";
   $("cargoValue").textContent = combat.carriedCrate ? "в руках" : myBoat?.cargo?.length ? `${myBoat.cargo.length}, вес ${Math.round(myBoat.cargoWeight || 0)}` : "нет";
   $("scoreValue").textContent = String(activities.score?.[playerIndex] || 0);
   $("scenarioValue").textContent = {
@@ -391,7 +413,7 @@ function render() {
     victory: "пройден",
   }[world.freeScenario?.phase] || "доставка";
   $("marauderValue").textContent = activePursuerCount
-    ? `${activePursuerCount} в бою; цель ${Math.round(sonarPursuer?.hull ?? marauder.hull ?? 0)}%; пуль ${(pursuerSquad.projectiles || []).length}`
+    ? `${activePursuerCount} катера; стрелков ${activeGunners.length}; цель ${Math.round(sonarPursuer?.hull ?? marauder.hull ?? 0)}%; пуль ${(pursuerSquad.projectiles || []).length + (world.freeHostileGunners?.projectiles || []).length}`
     : world.freeScenario?.phase === "victory"
       ? "все уничтожены"
       : "ещё не появились";
@@ -407,6 +429,8 @@ function render() {
   $("jumpButton").textContent = me.mode === "boat" ? "Плавучий тормоз" : me.mode === "roof" ? "Спрыгнуть" : "Прыжок / крыша";
   $("attackButton").textContent = combat.equipped === "automatic" ? "Огонь" : combat.equipped === "knife" ? "Удар ножом" : "Удар";
   $("weaponButton").textContent = `Оружие: ${weaponLabels[combat.equipped] || "кулаки"}`;
+  $("targetButton").setAttribute("aria-pressed", String(targetMenu.isOpen()));
+  $("targetButton").textContent = targetMenu.isOpen() ? "Выбор цели открыт" : "Выбрать цель";
   audio.updateWorld(world, playerIndex);
   drawMap(world);
 }
@@ -482,6 +506,19 @@ function drawMap(currentWorld) {
   }
   for (const projectile of currentWorld.freePursuerSquad?.projectiles || []) {
     ctx.fillStyle = "#fff2a8";
+    ctx.beginPath();
+    ctx.arc(projectile.x * sx, projectile.y * sy, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  for (const gunner of currentWorld.freeHostileGunners?.gunners || []) {
+    if (!gunner.active || gunner.destroyed) continue;
+    ctx.fillStyle = "#ff8e72";
+    ctx.beginPath();
+    ctx.arc(gunner.x * sx, gunner.y * sy, 5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  for (const projectile of currentWorld.freeHostileGunners?.projectiles || []) {
+    ctx.fillStyle = "#ffd49a";
     ctx.beginPath();
     ctx.arc(projectile.x * sx, projectile.y * sy, 2.5, 0, Math.PI * 2);
     ctx.fill();
@@ -566,6 +603,7 @@ function moveTouch(event) {
   event.preventDefault();
   point.lastX = event.clientX;
   point.lastY = event.clientY;
+  if (targetMenu.isOpen()) return;
   if (!touchGroup || touchGroup.maxPointers !== 1 || activeTouches.size !== 1) return;
   const deltaX = point.lastX - point.x;
   const deltaY = point.lastY - point.y;
@@ -586,6 +624,7 @@ function runGestureCommand(command) {
   else if (command === "attack-heavy") actionPulse("attack", 680);
   else if (command === "weapon") actionPulse("weapon");
   else if (command === "sonar") actionPulse("sonar");
+  else if (command === "targets") targetMenu.open();
   else if (command === "pump") {
     toggleControl("pump");
     announce(`Насос ${localInput.pump ? "включён" : "выключен"}.`);
@@ -634,7 +673,17 @@ function finishTouch(event, cancelled = false) {
   if (localInput.run) setControl("run", false);
   if (cancelled || !group) return;
   const metrics = gestureMetrics(group);
-  if (metrics.pointers <= 2 && metrics.movement <= 24 && metrics.duration < 520) runTapGesture(metrics);
+  if (targetMenu.isOpen()) {
+    if (metrics.pointers === 1 && metrics.movement > 24) {
+      targetMenu.cycle(metrics.dy < 0 ? -1 : 1);
+    } else if (metrics.pointers === 1) {
+      targetMenu.confirm();
+    } else {
+      targetMenu.close(true);
+    }
+    return;
+  }
+  if (metrics.pointers <= 3 && metrics.movement <= 24 && metrics.duration < 520) runTapGesture(metrics);
   else runGestureCommand(classifyActionGesture(metrics));
 }
 
@@ -650,6 +699,23 @@ function bindKeyboard() {
   const map = {ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right"};
   window.addEventListener("keydown", event => {
     if ($("game").hidden || event.altKey || event.ctrlKey || event.metaKey || event.isComposing || event.target.matches("input, textarea, select, [contenteditable='true']")) return;
+    if (!event.repeat && event.code === "KeyM") {
+      event.preventDefault();
+      if (targetMenu.isOpen()) targetMenu.close(true);
+      else targetMenu.open();
+      audio.init().catch(() => {});
+      return;
+    }
+    if (targetMenu.isOpen()) {
+      if (!event.repeat && event.code === "ArrowUp") targetMenu.cycle(-1);
+      else if (!event.repeat && event.code === "ArrowDown") targetMenu.cycle(1);
+      else if (!event.repeat && event.code === "Enter") targetMenu.confirm();
+      else if (!event.repeat && event.code === "Escape") targetMenu.close(true);
+      else if (!event.code.startsWith("Arrow")) return;
+      event.preventDefault();
+      audio.init().catch(() => {});
+      return;
+    }
     const movement = map[event.code] || map[event.key];
     if (event.code === "ShiftLeft" || event.code === "ShiftRight") {
       event.preventDefault();
@@ -731,6 +797,17 @@ async function refreshRooms() {
   }
 }
 
+const targetMenu = createTargetMenu({
+  getWorld: () => world,
+  getPlayerIndex: () => playerIndex,
+  getTargetId: () => localInput.targetId,
+  setTargetId: value => { localInput.targetId = value; },
+  releaseMovement: releaseAllMovement,
+  sendInput: () => sendInput(true),
+  announce,
+  render,
+});
+
 document.addEventListener("click", event => {
   if (event.detail === 0 && event.target.closest("button")) readerInputDetected = true;
 }, true);
@@ -758,6 +835,10 @@ $("attackButton").addEventListener("click", event => {
   if (event.detail === 0) actionPulse("attack");
 });
 $("weaponButton").addEventListener("click", () => actionPulse("weapon"));
+$("targetButton").addEventListener("click", () => {
+  if (targetMenu.isOpen()) targetMenu.close(true);
+  else targetMenu.open();
+});
 $("sonarButton").addEventListener("click", () => actionPulse("sonar"));
 $("pumpButton").addEventListener("click", () => toggleControl("pump"));
 $("repairButton").addEventListener("click", () => toggleControl("repair"));
@@ -785,4 +866,5 @@ window.__freeRoam = {
   roomId: () => roomId,
   preferredRoom: () => preferredRoomId,
   handleEvent: event => handleGameEvent(event),
+  targeting: targetMenu.snapshot,
 };

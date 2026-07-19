@@ -4,10 +4,12 @@ export const PURSUER_SQUAD_TUNING = Object.freeze({
   range: 455,
   bulletSpeed: 64,
   aimSeconds: 0.65,
-  playerDamage: 8,
-  boatDamage: 4,
-  maxProjectiles: 10,
+  playerDamage: 3,
+  boatDamage: 1.5,
+  maxProjectiles: 20,
   projectileSeconds: 7.4,
+  burstShots: 5,
+  burstInterval: 0.14,
 });
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -49,6 +51,8 @@ function createEscort(id, x, y, heading, fireCooldown) {
     targetPlayer: 0,
     fireCooldown,
     aimRemaining: 0,
+    burstRemaining: 0,
+    burstCooldown: 0,
     contactCooldown: 0,
     rewardDropped: false,
   };
@@ -59,7 +63,7 @@ export function ensurePursuerSquad(world) {
     activated: false,
     seed: 0x671a9d,
     nextProjectileId: 1,
-    primaryWeapon: {targetPlayer: 0, fireCooldown: 1.2, aimRemaining: 0},
+    primaryWeapon: {targetPlayer: 0, fireCooldown: 1.2, aimRemaining: 0, burstRemaining: 0, burstCooldown: 0},
     assignments: {},
     escorts: [],
     projectiles: [],
@@ -68,7 +72,7 @@ export function ensurePursuerSquad(world) {
   if (typeof state.activated !== "boolean") state.activated = false;
   if (!Number.isFinite(state.seed)) state.seed = 0x671a9d;
   if (!Number.isFinite(state.nextProjectileId)) state.nextProjectileId = 1;
-  state.primaryWeapon ||= {targetPlayer: 0, fireCooldown: 1.2, aimRemaining: 0};
+  state.primaryWeapon ||= {targetPlayer: 0, fireCooldown: 1.2, aimRemaining: 0, burstRemaining: 0, burstCooldown: 0};
   state.assignments ||= {};
   state.escorts ||= [];
   state.projectiles ||= [];
@@ -82,7 +86,7 @@ export function activatePursuerSquad(world) {
   if (state.activated && state.escorts.length === 2) return state;
   const anchor = world.freeActivities?.marauder || {x: 330, y: 245, heading: 300};
   state.activated = true;
-  state.primaryWeapon = {targetPlayer: 0, fireCooldown: 1.2, aimRemaining: 0};
+  state.primaryWeapon = {targetPlayer: 0, fireCooldown: 1.2, aimRemaining: 0, burstRemaining: 0, burstCooldown: 0};
   state.assignments = {};
   state.escorts = [
     createEscort(
@@ -126,6 +130,12 @@ export function assignedPursuerForPlayer(world, playerIndex) {
   const pursuerId = Object.entries(state.assignments)
     .find(([, assignedPlayer]) => assignedPlayer === playerIndex)?.[0];
   return activePursuerById(world, pursuerId);
+}
+
+export function assignedPlayerForPursuer(world, pursuerId) {
+  const state = ensurePursuerSquad(world);
+  const playerIndex = state.assignments[pursuerId];
+  return Number.isInteger(playerIndex) ? playerIndex : null;
 }
 
 export function nearestActivePursuer(world, point) {
@@ -350,16 +360,29 @@ function updateWeapon(world, state, shooter, weapon, dt, playerIndex) {
   const assigned = assignedTarget(world, playerIndex, shooter);
   if (!assigned) {
     weapon.aimRemaining = 0;
+    weapon.burstRemaining = 0;
     weapon.fireCooldown = Math.max(Number(weapon.fireCooldown) || 0, 0.35);
     return;
   }
   weapon.targetPlayer = playerIndex;
   weapon.fireCooldown = Math.max(0, (Number(weapon.fireCooldown) || 0) - dt);
+  weapon.burstCooldown = Math.max(0, (Number(weapon.burstCooldown) || 0) - dt);
   if (weapon.aimRemaining > 0) {
     weapon.aimRemaining = Math.max(0, weapon.aimRemaining - dt);
     if (weapon.aimRemaining > 0) return;
-    spawnProjectile(world, state, shooter, weapon);
-    weapon.fireCooldown = 1.45 + nextRandom(state) * 0.7;
+    weapon.burstRemaining = PURSUER_SQUAD_TUNING.burstShots;
+    weapon.burstCooldown = 0;
+  }
+  if ((Number(weapon.burstRemaining) || 0) > 0) {
+    if (weapon.burstCooldown > 0) return;
+    if (!spawnProjectile(world, state, shooter, weapon)) {
+      weapon.burstRemaining = 0;
+      weapon.fireCooldown = 0.5;
+      return;
+    }
+    weapon.burstRemaining -= 1;
+    weapon.burstCooldown = PURSUER_SQUAD_TUNING.burstInterval;
+    if (weapon.burstRemaining <= 0) weapon.fireCooldown = 1.05 + nextRandom(state) * 0.55;
     return;
   }
   if (weapon.fireCooldown > 0) return;
@@ -378,6 +401,12 @@ function updateWeapon(world, state, shooter, weapon, dt, playerIndex) {
     x: shooter.x,
     y: shooter.y,
   });
+}
+
+function hasDismountedGunner(world, pursuerId) {
+  return (world.freeHostileGunners?.gunners || []).some(gunner =>
+    gunner.pursuerId === pursuerId && gunner.active && !gunner.destroyed
+  );
 }
 
 function segmentCircleHit(x1, y1, x2, y2, circle, radius) {
@@ -558,11 +587,21 @@ export function updatePursuerSquad(world, dt, helpers = {}) {
     moveEscort(world, escort, dt, targetPlayer);
     separateEscortFromBoats(world, escort, helpers);
     if (!escort.active || escort.destroyed) continue;
-    updateWeapon(world, state, escort, escort, dt, targetPlayer);
+    if (hasDismountedGunner(world, escort.id)) {
+      escort.aimRemaining = 0;
+      escort.burstRemaining = 0;
+    } else {
+      updateWeapon(world, state, escort, escort, dt, targetPlayer);
+    }
   }
   const primary = world.freeActivities?.marauder;
   if (primary?.active && !primary.destroyed) {
-    updateWeapon(world, state, primary, state.primaryWeapon, dt, state.assignments[primary.id]);
+    if (hasDismountedGunner(world, primary.id)) {
+      state.primaryWeapon.aimRemaining = 0;
+      state.primaryWeapon.burstRemaining = 0;
+    } else {
+      updateWeapon(world, state, primary, state.primaryWeapon, dt, state.assignments[primary.id]);
+    }
   }
   updateProjectiles(world, state, dt, helpers);
   return state;

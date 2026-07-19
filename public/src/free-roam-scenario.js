@@ -1,6 +1,6 @@
 "use strict";
 
-import {cargoNavigationTarget, updateCargoArrivalGuidance} from "./free-roam-cargo-guidance.js?v=31";
+import {cargoNavigationTarget, updateCargoArrivalGuidance} from "./free-roam-cargo-guidance.js?v=32";
 import {
   activatePursuerSquad,
   activePursuerById,
@@ -8,8 +8,9 @@ import {
   assignedPursuerForPlayer,
   isPursuerSquadDefeated,
   nearestActivePursuer,
-} from "./free-roam-pursuer-squad.js?v=31";
-import {automaticCargoDelivered} from "./free-roam-weapon-crates.js?v=31";
+} from "./free-roam-pursuer-squad.js?v=32";
+import {automaticCargoDelivered} from "./free-roam-weapon-crates.js?v=32";
+import {activeHostileGunners} from "./free-roam-hostile-gunners.js?v=32";
 
 const TARGET_LABELS = Object.freeze({
   plates: "ящик с пластинами",
@@ -271,7 +272,11 @@ function updatePhase(world) {
     activatePursuer(world);
   }
   const pursuer = world.freeActivities.marauder;
-  if (scenario.phase === "pursuit" && isPursuerSquadDefeated(world)) {
+  if (
+    scenario.phase === "pursuit"
+    && isPursuerSquadDefeated(world)
+    && activeHostileGunners(world).length === 0
+  ) {
     scenario.phase = "victory";
     pursuer.respawnAt = 0;
     emit(world, "scenario-victory", "Все три катера уничтожены. Сценарий пройден; забери разные трофеи и продолжай исследовать бухту.", [0, 1]);
@@ -299,7 +304,7 @@ export function scenarioStatus(world, playerIndex) {
     salvage: `Задача: доставь ещё ${remainingSalvage === 1 ? "один обычный ящик" : "два обычных ящика"}.`,
     arm: "Задача: найди и доставь автомат.",
     warning: `Преследователь появится через ${Math.max(0, Math.ceil(scenario.warningUntil - world.time))} секунд.`,
-    pursuit: `Задача: уничтожь все три катера. Осталось ${activePursuers(world).length}.`,
+    pursuit: `Задача: уничтожь все катера и высадившихся стрелков. Катеров осталось ${activePursuers(world).length}, стрелков ${activeHostileGunners(world).length}.`,
     victory: "Сценарий пройден.",
   };
   if (!target) return phases[scenario.phase] || "";

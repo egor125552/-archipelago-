@@ -7,7 +7,7 @@ import {
   SHORE_Y,
   clampCargoCoordinate,
   isBoatDockPosition,
-} from "./free-roam-cargo-rules.js?v=31";
+} from "./free-roam-cargo-rules.js?v=32";
 
 const LANDING_Y = 88;
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));

@@ -1,9 +1,9 @@
 "use strict";
 
-import {FreeRoamAudio as BaseFreeRoamAudio, spatialGainForDistance} from "./free-roam-audio-v4.js?v=31";
-import {relativeMovementPan} from "./free-roam-audio-v3.js?v=31";
-import {injuryLowpassFrequency} from "./free-roam-combat-recovery.js?v=31";
-import {COMBAT_TUNING} from "./free-roam-combat-tuning.js?v=31";
+import {FreeRoamAudio as BaseFreeRoamAudio, spatialGainForDistance} from "./free-roam-audio-v4.js?v=32";
+import {relativeMovementPan} from "./free-roam-audio-v3.js?v=32";
+import {injuryLowpassFrequency} from "./free-roam-combat-recovery.js?v=32";
+import {COMBAT_TUNING} from "./free-roam-combat-tuning.js?v=32";
 
 const ROOT = "/assets/audio/free-roam-v25/";
 const COMBAT_SOUNDS = Object.freeze({
@@ -318,6 +318,7 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
         }]);
         return;
       case "pursuer-hit":
+      case "gunner-hit":
         if (event.weapon === "ram") {
           this.handle([{
             type: "collision",
@@ -334,6 +335,14 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
           gain: 0.72 * spatial.gain,
           lowpass: 8400,
         });
+        return;
+      case "pursuer-gunner-landed":
+        this.playSynthPip({pan: spatial.pan, frequency: 310, gain: 0.13, duration: 0.12});
+        this.playSynthPip({pan: spatial.pan, frequency: 190, gain: 0.15, duration: 0.22, delay: 0.16});
+        return;
+      case "gunner-destroyed":
+        this.playSynthPip({pan: spatial.pan, frequency: 340, gain: 0.13, duration: 0.1});
+        this.playSynthPip({pan: spatial.pan, frequency: 150, gain: 0.15, duration: 0.24, delay: 0.12});
         return;
       case "pursuer-ram":
         this.handle([{type: "collision", severity: 1.7, impactSpeed: event.strength || 8, hardImpact: true, damage: event.damage || 8, pan: spatial.pan}]);
