@@ -1,6 +1,6 @@
 "use strict";
 
-import * as base from "./free-roam-core-v2.js";
+import * as base from "./free-roam-core-v2.js?v=35";
 import {CONFIG} from "./game-core-v18.js?free=3";
 
 export const WORLD = base.WORLD;

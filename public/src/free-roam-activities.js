@@ -119,6 +119,7 @@ export function storeActivityInput(world, playerIndex, input) {
     weapon: Boolean(input?.weapon),
     action: Boolean(input?.action),
     sonar: Boolean(input?.sonar),
+    guide: Boolean(input?.guide),
     targetId: typeof input?.targetId === "string" ? input.targetId : null,
   };
 }

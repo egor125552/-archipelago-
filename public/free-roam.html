@@ -26,7 +26,7 @@
       </section>
       <details>
         <summary>Коротко об управлении</summary>
-        <p>На компьютере: стрелки удерживают газ и руль. На берегу Shift вместе со стрелкой включает бег. F выполняет действие по ситуации, пробел в лодке сбрасывает плавучий тормоз, Q включает сонар, C — насос, V — пластину. X бьёт или стреляет, Z меняет оружие. M открывает выбор цели; вверх и вниз листают, Enter подтверждает без выстрела.</p>
+        <p>На компьютере: стрелки удерживают газ и руль. На берегу Shift вместе со стрелкой включает бег. F выполняет действие по ситуации, пробел в лодке сбрасывает плавучий тормоз, Q включает сонар, Y мягко доворачивает лодку к цели сонара, C — насос, V — пластину. X бьёт или стреляет, Z меняет оружие. M открывает выбор цели; вверх и вниз листают, Enter подтверждает без выстрела.</p>
         <p>На iPhone жесты включены по умолчанию почти на всём экране: свайп с удержанием управляет движением, касание выполняет действие, двойное касание включает прыжок, а удержание даёт сильный удар. Касание двумя пальцами включает сонар; взмах двумя вверх — насос; удержание двумя — пластина; взмах двумя вбок — оружие; двойное касание двумя — состояние; взмах вниз возвращает кнопки. Три пальца — быстрый удар, двойное касание тремя — выбор цели. В выборе цели вертикальный свайп листает, касание подтверждает, два пальца отменяют.</p>
       </details>
       <a class="back-link" href="/">Вернуться к операциям</a>
@@ -79,6 +79,7 @@
           <button id="weaponButton" data-key="Z" aria-keyshortcuts="Z">Оружие: кулаки</button>
           <button id="targetButton" data-key="M" aria-keyshortcuts="M" aria-pressed="false">Выбрать цель</button>
           <button id="sonarButton" class="primary" data-key="Q" aria-keyshortcuts="Q">Сонар: текущая цель</button>
+          <button id="guideButton" data-key="Y" aria-keyshortcuts="Y" aria-pressed="false">Курс к сонару: выключен</button>
           <button id="pumpButton" aria-pressed="false" data-key="C" aria-keyshortcuts="C">Насос: выключен</button>
           <button id="repairButton" aria-pressed="false" data-key="V" aria-keyshortcuts="V">Пластина: готова</button>
         </section>
@@ -97,7 +98,7 @@
       </details>
     </section>
   </main>
-  <script type="module" src="src/free-roam-v4.js?v=34"></script>
+  <script type="module" src="src/free-roam-v4.js?v=35"></script>
   <script type="module" src="src/free-roam-accessibility.js?v=1"></script>
   <script type="module" src="src/free-roam-speech-fix.js?v=1"></script>
 </body>

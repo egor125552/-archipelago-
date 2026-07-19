@@ -11,6 +11,7 @@ import {
 } from "./free-roam-pursuer-squad.js?v=32";
 import {automaticCargoDelivered} from "./free-roam-weapon-crates.js?v=32";
 import {activeHostileGunners} from "./free-roam-hostile-gunners.js?v=32";
+import {ensureSonarGuide, updateSonarGuide} from "./free-roam-sonar-guide.js?v=35";
 
 const TARGET_LABELS = Object.freeze({
   plates: "ящик с пластинами",
@@ -43,6 +44,7 @@ export function createFreeScenario(playerCount = 2) {
     beaconUntil: Array.from({length: playerCount}, () => 0),
     sonarCooldown: Array.from({length: playerCount}, () => 0),
     lockedPursuerIds: Array.from({length: playerCount}, () => null),
+    guideEnabled: Array.from({length: playerCount}, () => false),
   };
 }
 
@@ -61,6 +63,7 @@ export function ensureFreeScenario(world) {
   while (scenario.beaconUntil.length < world.players.length) scenario.beaconUntil.push(0);
   while (scenario.sonarCooldown.length < world.players.length) scenario.sonarCooldown.push(0);
   while (scenario.lockedPursuerIds.length < world.players.length) scenario.lockedPursuerIds.push(null);
+  ensureSonarGuide(world);
   if (created && scenario.phase === "salvage" && world.freeActivities?.marauder) {
     world.freeActivities.marauder.active = false;
     world.freeActivities.marauder.speed = 0;
@@ -291,6 +294,7 @@ export function updateFreeScenario(world, dt) {
   }
   updatePhase(world);
   updateTargets(world);
+  updateSonarGuide(world, emit);
   updateCargoArrivalGuidance(world, emit);
   handleSonar(world, dt);
 }
@@ -308,5 +312,6 @@ export function scenarioStatus(world, playerIndex) {
     victory: "Сценарий пройден.",
   };
   if (!target) return phases[scenario.phase] || "";
-  return `${phases[scenario.phase] || ""} Цель сонара: ${target.label}, ${Math.round(distance(world.players[playerIndex], target))} метров.`;
+  const guide = scenario.guideEnabled?.[playerIndex] ? " Мягкий курс включён." : "";
+  return `${phases[scenario.phase] || ""} Цель сонара: ${target.label}, ${Math.round(distance(world.players[playerIndex], target))} метров.${guide}`;
 }

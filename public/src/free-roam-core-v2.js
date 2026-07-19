@@ -402,7 +402,8 @@ function updateBoat(world, boatState, dt) {
   if (input.repair && !previous.repair) emit(world, "hull-repair-start", "Заделка пробоины началась.", targets);
 
   const steer = Number(input.right) - Number(input.left);
-  const thrust = Number(input.up) - Number(input.down);
+  let thrust = Number(input.up) - Number(input.down);
+  if (thrust && boundaryBlocksThrust(boatState, thrust)) thrust = 0;
   boatState.rudder += (steer - boatState.rudder) * Math.min(1, dt * 7);
   boatState.throttle += (thrust - boatState.throttle) * Math.min(1, dt * 4.5);
   if (boatState.engineStalled || boatState.emergencyActive) boatState.throttle = 0;
@@ -479,6 +480,20 @@ function updateBoat(world, boatState, dt) {
   } else if (!boatState.engineStalled || boatState.water > (CONFIG.waterEngineRestartWater || 35)) {
     boatState.restartProgress = 0;
   }
+}
+
+function boundaryBlocksThrust(boatState, thrust) {
+  const side = boatState.boundaryContact;
+  if (!side || !thrust) return false;
+  const direction = Math.sign(thrust);
+  const heading = rad(boatState.heading);
+  const requested = {
+    x: Math.sin(heading) * direction,
+    y: -Math.cos(heading) * direction,
+  };
+  return (side === "left" && requested.x < -0.03)
+    || (side === "right" && requested.x > 0.03)
+    || (side === "open-water" && requested.y > 0.03);
 }
 
 function resolveBoatCollision(world) {

@@ -1,6 +1,6 @@
 "use strict";
 
-import * as base from "./free-roam-core-v4.js";
+import * as base from "./free-roam-core-v4.js?v=35";
 
 export const WORLD = Object.freeze({
   ...base.WORLD,
@@ -304,24 +304,27 @@ function processBoatBoundaries(world) {
     if (!boat || boat.sunk) continue;
     const velocity = boatVelocity(boat);
     let side = null;
-    let inwardHeading = boat.heading;
     if (boat.x <= minX && velocity.x < -0.08) {
       side = "left";
-      inwardHeading = 90;
     } else if (boat.x >= maxX && velocity.x > 0.08) {
       side = "right";
-      inwardHeading = -90;
     } else if (boat.y >= maxY && velocity.y > 0.08) {
       side = "open-water";
-      inwardHeading = 0;
     }
-    if (!side) continue;
+    if (!side) {
+      const clearLeft = boat.boundaryContact === "left" && boat.x > minX + 0.6;
+      const clearRight = boat.boundaryContact === "right" && boat.x < maxX - 0.6;
+      const clearOpenWater = boat.boundaryContact === "open-water" && boat.y < maxY - 0.6;
+      if (clearLeft || clearRight || clearOpenWater) boat.boundaryContact = null;
+      continue;
+    }
 
-    boat.x = clamp(boat.x, minX + 1.4, maxX - 1.4);
-    boat.y = clamp(boat.y, WORLD.shoreY + 4, maxY - 1.4);
-    boat.speed *= -0.18;
+    boat.x = clamp(boat.x, minX, maxX);
+    boat.y = clamp(boat.y, WORLD.shoreY + 4, maxY);
+    boat.speed = 0;
     boat.throttle = 0;
-    boat.heading = approachAngle(boat.heading, inwardHeading, 58);
+    boat.rudder = 0;
+    boat.boundaryContact = side;
     if (world.time - world.freeMeta.boatBoundaryAt[index] < 1.1) continue;
     world.freeMeta.boatBoundaryAt[index] = world.time;
     const target = boat.driver ?? boat.owner;

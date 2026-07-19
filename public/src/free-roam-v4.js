@@ -9,7 +9,7 @@ import {
   setPlayerPresence,
   snapshotWorld,
   stepFreeWorld,
-} from "./free-roam-core-v6.js?v=32";
+} from "./free-roam-core-v6.js?v=35";
 import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=32";
 import {directionFromDelta} from "./free-roam-gesture-model.js";
 import {classifyActionGesture, gestureMetrics} from "./free-roam-action-gestures.js";
@@ -32,6 +32,7 @@ const localInput = {
   attack: false,
   weapon: false,
   sonar: false,
+  guide: false,
   targetId: null,
 };
 const activeTouches = new Map();
@@ -353,6 +354,7 @@ function releaseAllMovement() {
   localInput.jump = false;
   localInput.weapon = false;
   localInput.sonar = false;
+  localInput.guide = false;
   for (const timer of holdTimers.values()) clearTimeout(timer);
   holdTimers.clear();
   activeTouches.clear();
@@ -369,6 +371,9 @@ function syncControlButtons() {
   $("pumpButton").textContent = `Насос: ${localInput.pump ? "включён" : "выключен"}`;
   $("repairButton").setAttribute("aria-pressed", String(localInput.repair));
   $("repairButton").textContent = `Пластина: ${localInput.repair ? "ставится" : "готова"}`;
+  const guideActive = Boolean(world?.freeScenario?.guideEnabled?.[playerIndex]);
+  $("guideButton").setAttribute("aria-pressed", String(guideActive));
+  $("guideButton").textContent = `Курс к сонару: ${guideActive ? "включён" : "выключен"}`;
 }
 
 function handleGameEvent(event) {
@@ -471,6 +476,7 @@ function render() {
   $("weaponButton").textContent = `Оружие: ${weaponLabels[combat.equipped] || "кулаки"}`;
   $("targetButton").setAttribute("aria-pressed", String(targetMenu.isOpen()));
   $("targetButton").textContent = targetMenu.isOpen() ? "Выбор цели открыт" : "Выбрать цель";
+  syncControlButtons();
   audio.updateWorld(world, playerIndex);
   drawMap(world);
 }
@@ -664,6 +670,7 @@ function runGestureCommand(command) {
   else if (command === "attack-heavy") actionPulse("attack", 680);
   else if (command === "weapon") actionPulse("weapon");
   else if (command === "sonar") actionPulse("sonar");
+  else if (command === "guide") actionPulse("guide");
   else if (command === "targets") targetMenu.open();
   else if (command === "pump") {
     toggleControl("pump");
@@ -785,6 +792,9 @@ function bindKeyboard() {
     } else if (!event.repeat && event.code === "KeyQ") {
       event.preventDefault();
       actionPulse("sonar");
+    } else if (!event.repeat && event.code === "KeyY") {
+      event.preventDefault();
+      actionPulse("guide");
     } else return;
     audio.init().catch(() => {});
   }, true);
@@ -880,6 +890,7 @@ $("targetButton").addEventListener("click", () => {
   else targetMenu.open();
 });
 $("sonarButton").addEventListener("click", () => actionPulse("sonar"));
+$("guideButton").addEventListener("click", () => actionPulse("guide"));
 $("pumpButton").addEventListener("click", () => toggleControl("pump"));
 $("repairButton").addEventListener("click", () => toggleControl("repair"));
 bindGestures();

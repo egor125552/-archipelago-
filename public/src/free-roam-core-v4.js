@@ -1,6 +1,6 @@
 "use strict";
 
-import * as base from "./free-roam-core-v3.js";
+import * as base from "./free-roam-core-v3.js?v=35";
 import {operationSteeringDelta, shouldCenterRudder} from "./free-roam-steering-model.js";
 
 export const WORLD = base.WORLD;
@@ -63,7 +63,9 @@ function applyOperationSteering(world, safeDt) {
     const boat = world.boats[player.activeBoat];
     if (!boat || boat.sunk) continue;
     const input = world.operationInputs?.[playerIndex] || world.inputs?.[playerIndex] || {};
-    const steer = Number(Boolean(input.right)) - Number(Boolean(input.left));
+    const manualSteer = Number(Boolean(input.right)) - Number(Boolean(input.left));
+    const guideSteer = manualSteer ? 0 : clamp(Number(boat.sonarGuideSteer) || 0, -0.28, 0.28);
+    const steer = manualSteer || guideSteer;
     const previousSteer = world.steeringPrevious[playerIndex] || 0;
 
     if (shouldCenterRudder(steer)) {
@@ -72,11 +74,11 @@ function applyOperationSteering(world, safeDt) {
       boat.heading = wrapDeg(boat.heading + operationSteeringDelta(boat.speed, steer, safeDt));
     }
 
-    if (steer !== previousSteer) {
-      if (steer) {
+    if (manualSteer !== previousSteer) {
+      if (manualSteer) {
         emit(world, "turn", "", [playerIndex], {
-          direction: steer < 0 ? "left" : "right",
-          pan: steer < 0 ? -0.88 : 0.88,
+          direction: manualSteer < 0 ? "left" : "right",
+          pan: manualSteer < 0 ? -0.88 : 0.88,
         });
       } else if (previousSteer) {
         emit(world, "turn-complete", "", [playerIndex], {
@@ -84,7 +86,7 @@ function applyOperationSteering(world, safeDt) {
           pan: previousSteer < 0 ? -0.5 : 0.5,
         });
       }
-      world.steeringPrevious[playerIndex] = steer;
+      world.steeringPrevious[playerIndex] = manualSteer;
     }
   }
 }

@@ -1,6 +1,6 @@
 "use strict";
 
-import * as base from "./free-roam-core-v5.js";
+import * as base from "./free-roam-core-v5.js?v=35";
 import {
   activityStatus,
   dropCarriedCrate,
@@ -11,10 +11,10 @@ import {
   spawnRareCrate,
   storeActivityInput,
   updateActivities,
-} from "./free-roam-activities.js?v=32";
+} from "./free-roam-activities.js?v=35";
 import {applyCombatDamage, combatStatus, ensureCombat, updateCombat} from "./free-roam-combat.js?v=32";
 import {ensureMarauder, releaseStolenCargo, updateMarauder} from "./free-roam-marauder.js?v=32";
-import {ensureFreeScenario, scenarioStatus, updateFreeScenario} from "./free-roam-scenario.js?v=32";
+import {ensureFreeScenario, scenarioStatus, updateFreeScenario} from "./free-roam-scenario.js?v=35";
 import {suppressIncapacitatedMovement, updatePhysicalActors} from "./free-roam-physical-actors.js?v=32";
 import {handleAssistedBoarding} from "./free-roam-boarding-assist.js?v=29";
 import {ensurePursuerSquad, updatePursuerSquad} from "./free-roam-pursuer-squad.js?v=32";
