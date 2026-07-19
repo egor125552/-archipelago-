@@ -44,6 +44,8 @@ const tapTimers = new Map();
 const lastTapAt = new Map();
 let roomRefreshTimer = 0;
 let heartbeatTimer = 0;
+let reconnectTimer = 0;
+let leavingGame = false;
 let preferredRoomId = "";
 let socket = null;
 let world = null;
@@ -130,6 +132,11 @@ function stopHeartbeat() {
   heartbeatTimer = 0;
 }
 
+function stopReconnect() {
+  clearTimeout(reconnectTimer);
+  reconnectTimer = 0;
+}
+
 function startHeartbeat() {
   stopHeartbeat();
   send({type: "heartbeat", at: Date.now()});
@@ -150,23 +157,46 @@ function openGame(text) {
   requestAnimationFrame(frame);
 }
 
-function connect(role) {
+function reconnectSoloWorld(savedWorld) {
+  if (leavingGame || reconnectTimer || $("game").hidden) return;
+  announce("Связь с комнатой обновляется. Твой мир и лодка сохранены.", true);
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = 0;
+    if (!leavingGame && !$("game").hidden) connect("captain", savedWorld);
+  }, 900);
+}
+
+function connect(role, savedWorld = null) {
   audio.init().catch(() => {});
+  stopReconnect();
   const requestedRole = role;
+  const reconnecting = Boolean(savedWorld);
   isHost = requestedRole === "captain";
   playerIndex = isHost ? 0 : 1;
   $("hostButton").disabled = true;
   $("joinButton").disabled = true;
-  announce(requestedRole === "captain" ? "Создаю свободный мир…" : "Ищу свободный мир…");
+  announce(
+    reconnecting
+      ? "Восстанавливаю связь со свободным миром…"
+      : requestedRole === "captain"
+        ? "Создаю свободный мир…"
+        : "Ищу свободный мир…",
+  );
 
-  socket = new WebSocket(socketUrl(role));
-  socket.addEventListener("open", startHeartbeat);
-  socket.addEventListener("message", event => {
+  const connection = new WebSocket(socketUrl(role));
+  let lobbyReady = false;
+  socket = connection;
+  connection.addEventListener("open", () => {
+    if (socket === connection) startHeartbeat();
+  });
+  connection.addEventListener("message", event => {
+    if (socket !== connection) return;
     let message;
     try { message = JSON.parse(String(event.data)); }
     catch (_) { return; }
 
     if (message.type === "lobby-ready") {
+      lobbyReady = true;
       roomId = message.room || "";
       const actualRole = message.role || requestedRole;
       isHost = actualRole === "captain";
@@ -174,7 +204,7 @@ function connect(role) {
       $("roomLabel").textContent = `Свободный мир ${roomId}`;
       if (isHost) {
         const resumed = Boolean(message.resumeWorld);
-        world = message.resumeWorld || createFreeWorld();
+        world = message.resumeWorld || savedWorld || createFreeWorld();
         setPlayerPresence(world, 0, true);
         setPlayerPresence(world, 1, Boolean(message.matched));
         const openedText = resumed
@@ -186,7 +216,8 @@ function connect(role) {
               ? "Ожидавший мир уже закрылся до подключения. Создан новый мир; ждём второго игрока."
               : "Свободных миров не было. Создан новый мир; ждём второго игрока."
             : "Мир создан. Можно ездить одному; ждём второго игрока.";
-        openGame(openedText);
+        if ($("game").hidden) openGame(openedText);
+        else announce("Связь восстановлена. Твой мир продолжает работать.", true);
         sendSnapshot(true);
       } else if (!message.matched) {
         announce("Свободных миров не было. Создано место ожидания первого игрока.");
@@ -243,17 +274,26 @@ function connect(role) {
     }
   });
 
-  socket.addEventListener("error", () => {
+  connection.addEventListener("error", () => {
+    if (socket !== connection || lobbyReady || !$("game").hidden) return;
     announce("Cloudflare Worker не открыл свободный мир. Обнови страницу и попробуй ещё раз.", true);
     resetButtons();
   });
-  socket.addEventListener("close", () => {
+  connection.addEventListener("close", () => {
+    if (socket !== connection) return;
     stopHeartbeat();
-    if ($("game").hidden) resetButtons();
+    const playingAlone = lobbyReady
+      && isHost
+      && world
+      && !world.freeActivities?.presence?.[1];
+    if (playingAlone && !leavingGame) reconnectSoloWorld(world);
+    else if ($("game").hidden) resetButtons();
   });
 }
 
 function leaveGame() {
+  leavingGame = true;
+  stopReconnect();
   releaseAllMovement();
   stopHeartbeat();
   audio.stopAll();

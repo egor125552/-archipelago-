@@ -92,7 +92,10 @@ export class Lobby {
         if (!socket) continue;
         const lastSeen = Number(room.lastSeen[role]) || Number(room.createdAt) || now;
         const expired = now - lastSeen > ROOM_HEARTBEAT_TIMEOUT_MS;
-        if (!socketLooksOpen(socket) || expired) this.removeRole(room, role, true);
+        const freeRoomWithLiveSocket = room.mode === "free" && socketLooksOpen(socket);
+        if (!socketLooksOpen(socket) || (expired && !freeRoomWithLiveSocket)) {
+          this.removeRole(room, role, true);
+        }
       }
       if (!room.captain && !room.crew) this.rooms.delete(room.id);
     }
