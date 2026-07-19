@@ -7,6 +7,7 @@ import {
   updateCombatRecovery,
 } from "./free-roam-combat-recovery.js?v=29";
 import {COMBAT_TUNING} from "./free-roam-combat-tuning.js?v=29";
+import {isCriticalHealth} from "./free-roam-critical-injury.js";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));
@@ -106,12 +107,10 @@ function nearestTarget(world, attackerIndex, range, cone, includeMarauder = true
   return result;
 }
 
-function knockDown(world, targetIndex, attackerIndex, pushDistance, duration, weapon) {
+function pushPlayer(world, targetIndex, attackerIndex, pushDistance, sourcePoint = null) {
   const target = world.players[targetIndex];
-  const attacker = world.players[attackerIndex];
-  if (!target?.combat?.alive) return;
-  target.combat.knockedDown = true;
-  target.combat.knockdownRemaining = Math.max(target.combat.knockdownRemaining, duration);
+  const attacker = world.players[attackerIndex] || sourcePoint;
+  if (!target || !attacker || pushDistance <= 0) return;
   const dx = target.x - attacker.x;
   const dy = target.y - attacker.y;
   const length = Math.hypot(dx, dy) || 1;
@@ -124,7 +123,23 @@ function knockDown(world, targetIndex, attackerIndex, pushDistance, duration, we
     target.x = (boat?.x || target.x) + dx / length * 7;
     target.y = (boat?.y || target.y) + Math.max(7, dy / length * 7);
   }
-  emit(world, "player-knockdown", "Тебя сбили с ног.", [targetIndex, attackerIndex], {
+}
+
+function knockDown(world, targetIndex, attackerIndex, pushDistance, duration, weapon, sourcePoint = null) {
+  const target = world.players[targetIndex];
+  if (!target?.combat?.alive) return;
+  target.combat.knockedDown = true;
+  target.combat.knockdownRemaining = Math.max(target.combat.knockdownRemaining, duration);
+  pushPlayer(world, targetIndex, attackerIndex, pushDistance, sourcePoint);
+  const impactTargets = attackerIndex >= 0 ? [targetIndex, attackerIndex] : [targetIndex];
+  emit(world, "player-knockdown", "", impactTargets, {
+    sourcePlayer: attackerIndex,
+    targetPlayer: targetIndex,
+    weapon,
+    x: target.x,
+    y: target.y,
+  });
+  emit(world, "player-knockdown-notice", "Тебя сбили с ног.", [targetIndex], {
     sourcePlayer: attackerIndex,
     targetPlayer: targetIndex,
     weapon,
@@ -178,7 +193,9 @@ function damagePlayer(world, targetIndex, amount, attackerIndex, details, helper
   registerCombatDamage(combat, world.time);
   const stunFactor = details.heavy ? 1.8 : details.weapon === "fists" ? 1.8 : 0.92;
   combat.stun = clamp(combat.stun + amount * stunFactor, 0, 100);
-  emit(world, details.eventType || "combat-hit", `Здоровье ${Math.round(combat.health)}.`, attackerIndex >= 0 ? [targetIndex, attackerIndex] : [targetIndex], {
+  combat.injuryMix = injuryMixTarget(combat);
+  const impactTargets = attackerIndex >= 0 ? [targetIndex, attackerIndex] : [targetIndex];
+  emit(world, details.eventType || "combat-hit", "", impactTargets, {
     sourcePlayer: attackerIndex,
     targetPlayer: targetIndex,
     weapon: details.weapon,
@@ -188,16 +205,43 @@ function damagePlayer(world, targetIndex, amount, attackerIndex, details, helper
     x: target.x,
     y: target.y,
   });
+  emit(world, "combat-health", `Здоровье ${Math.round(combat.health)}.`, [targetIndex], {
+    sourcePlayer: attackerIndex,
+    targetPlayer: targetIndex,
+    weapon: details.weapon,
+    damage: amount,
+    health: combat.health,
+    x: target.x,
+    y: target.y,
+  });
   if (combat.health <= 0) {
     killPlayer(world, targetIndex, attackerIndex, helpers);
     return true;
   }
-  if (details.heavy) {
-    knockDown(world, targetIndex, attackerIndex, 7.5, COMBAT_TUNING.heavyKnockdownSeconds, details.weapon);
-  } else if (details.weapon === "fists" && combat.stun >= COMBAT_TUNING.lightKnockdownStun) {
-    knockDown(world, targetIndex, attackerIndex, 3.5, COMBAT_TUNING.lightKnockdownSeconds, details.weapon);
+  if (isCriticalHealth(combat.health) && !combat.knockedDown) {
+    knockDown(
+      world,
+      targetIndex,
+      attackerIndex,
+      details.heavy ? 7.5 : 3.5,
+      details.heavy ? COMBAT_TUNING.heavyKnockdownSeconds : COMBAT_TUNING.lightKnockdownSeconds,
+      details.weapon,
+      details.sourcePoint,
+    );
+  } else if (details.heavy && !combat.knockedDown) {
+    pushPlayer(world, targetIndex, attackerIndex, 4.5, details.sourcePoint);
   }
   return true;
+}
+
+export function applyCombatDamage(world, targetIndex, amount, attackerIndex = -1, details = {}, helpers = {}) {
+  ensureCombat(world);
+  return damagePlayer(world, targetIndex, amount, attackerIndex, {
+    weapon: details.weapon || "environment",
+    heavy: Boolean(details.heavy),
+    eventType: details.eventType || "combat-hit",
+    sourcePoint: details.sourcePoint || null,
+  }, helpers);
 }
 
 function performMelee(world, attackerIndex, heavyRequested, helpers) {
@@ -422,8 +466,7 @@ export function updateCombat(world, dt, helpers = {}) {
         y: player.y,
       });
     }
-    const injuryTarget = injuryMixTarget(combat);
-    combat.injuryMix += (injuryTarget - combat.injuryMix) * Math.min(1, dt * 1.8);
+    combat.injuryMix = injuryMixTarget(combat);
 
     if (input.weapon && !previous.weapon) cycleWeapon(world, index);
     if (combat.knockedDown) {

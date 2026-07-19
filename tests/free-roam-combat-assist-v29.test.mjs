@@ -87,9 +87,11 @@ test("full knockdown muffling reaches the requested fifty to one hundred hertz",
   assert.ok(frequency <= 100);
 });
 
-test("a heavy punch leaves the target down for substantially longer", () => {
+test("a critical heavy punch leaves the target down for substantially longer", () => {
   const world = createFreeWorld();
   putPlayersOnShore(world, 5);
+  world.players[1].combat.health = 27;
+  world.players[1].combat.lastDamageAt = world.time;
   setPlayerInput(world, 0, {attack: true});
   run(world, 0.5);
   setPlayerInput(world, 0, {attack: false});

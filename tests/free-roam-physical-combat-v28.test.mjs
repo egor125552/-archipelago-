@@ -47,6 +47,8 @@ test("a fist attack reaches a nearby physical player at nine metres", () => {
 test("a knocked-down player cannot crawl while the stun is active", () => {
   const world = createFreeWorld();
   putPlayersOnShore(world, 4);
+  world.players[1].combat.health = 27;
+  world.players[1].combat.lastDamageAt = world.time;
   setPlayerInput(world, 0, {attack: true});
   run(world, 0.7);
   setPlayerInput(world, 0, {attack: false});
@@ -61,9 +63,11 @@ test("a knocked-down player cannot crawl while the stun is active", () => {
   assert.equal(target.x, startX);
 });
 
-test("three ordinary paced fist hits still produce a real stun", () => {
+test("three ordinary paced fist hits produce a real stun at critical health", () => {
   const world = createFreeWorld();
   putPlayersOnShore(world, 4);
+  world.players[1].combat.health = 34;
+  world.players[1].combat.lastDamageAt = world.time;
 
   pulse(world, 0, "attack", 0.12);
   run(world, 0.45);

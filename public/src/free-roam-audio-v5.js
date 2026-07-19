@@ -101,7 +101,7 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
 
   smoothInjuryMix(nextMix) {
     const mix = clamp(Number(nextMix) || 0, 0, 1);
-    this.injuryMix += (mix - this.injuryMix) * 0.16;
+    this.injuryMix = mix;
     if (!this.ctx || !this.injuryDry || !this.injuryWet) return;
     const now = this.ctx.currentTime;
     this.injuryFilter?.frequency.setTargetAtTime(injuryLowpassFrequency(this.injuryMix), now, 0.36);

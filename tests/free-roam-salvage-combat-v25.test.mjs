@@ -91,7 +91,7 @@ test("cargo weight slows a loaded boat without stopping it", () => {
   assert.ok(Math.abs(loaded.boats[0].speed) > 2);
 });
 
-test("short and held X attacks are different, and a heavy hit knocks the opponent down", () => {
+test("short and held X attacks differ, while a healthy heavy hit pushes without false knockdown", () => {
   const world = createFreeWorld();
   setPlayerPresence(world, 1, true);
   const a = world.players[0];
@@ -104,21 +104,25 @@ test("short and held X attacks are different, and a heavy hit knocks the opponen
   assert.ok(b.combat.health < healthBefore);
   assert.equal(b.combat.knockedDown, false);
 
+  const xBeforeHeavy = b.x;
   setPlayerInput(world, 0, {attack: true});
   run(world, 0.72);
   setPlayerInput(world, 0, {attack: false});
   const events = run(world, 0.08);
-  assert.equal(b.combat.knockedDown, true);
+  assert.equal(b.combat.knockedDown, false);
+  assert.ok(b.x > xBeforeHeavy + 3);
   assert.ok(events.some(event => event.type === "combat-heavy-hit"));
 });
 
-test("three quick light punches reliably stun and push the opponent", () => {
+test("three quick light punches knock down an opponent only at critical health", () => {
   const world = createFreeWorld();
   setPlayerPresence(world, 1, true);
   const attacker = world.players[0];
   const target = world.players[1];
   Object.assign(attacker, {mode: "foot", activeBoat: null, x: 190, y: 50, heading: 90});
   Object.assign(target, {mode: "foot", activeBoat: null, x: 195.5, y: 50, heading: 270});
+  target.combat.health = 34;
+  target.combat.lastDamageAt = world.time;
   const startX = target.x;
 
   pulse(world, 0, "attack", 0.12);
