@@ -2,10 +2,16 @@
 
 import {placeJoiningPlayer} from "./free-roam-player-spawn.js";
 import {deliverCarriedCargoAtDock, updateCargoActionPrompts} from "./free-roam-cargo-actions.js";
+import {
+  CARGO_ACTION_RANGE,
+  LANDING_MAX_X,
+  LANDING_MIN_X,
+} from "./free-roam-cargo-rules.js";
+import {updateFootDockDelivery} from "./free-roam-foot-dock.js";
 
 const WORLD_CRATES = Object.freeze([
-  {id: "crate-plates", kind: "plates", rarity: "common", weight: 2, x: 136, y: 34},
-  {id: "crate-fuel", kind: "fuel", rarity: "common", weight: 3, x: 282, y: 45},
+  {id: "crate-plates", kind: "plates", rarity: "common", weight: 2, x: 180, y: 34},
+  {id: "crate-fuel", kind: "fuel", rarity: "common", weight: 3, x: 254, y: 45},
   {id: "crate-pump", kind: "pump", rarity: "uncommon", weight: 3, x: 205, y: 112},
   {id: "crate-value", kind: "valuable", rarity: "uncommon", weight: 4, x: 82, y: 218},
   {id: "crate-knife", kind: "knife", rarity: "rare", weight: 1, x: 338, y: 244},
@@ -89,7 +95,9 @@ function nextRandom(state) {
 
 function randomSpawn(state, crate) {
   const onLand = nextRandom(state) < 0.38;
-  crate.x = onLand ? 126 + nextRandom(state) * 168 : 34 + nextRandom(state) * 352;
+  crate.x = onLand
+    ? LANDING_MIN_X + nextRandom(state) * (LANDING_MAX_X - LANDING_MIN_X)
+    : 34 + nextRandom(state) * 352;
   crate.y = onLand ? 16 + nextRandom(state) * 48 : 96 + nextRandom(state) * 190;
 }
 
@@ -118,7 +126,7 @@ function nearestAvailableCrate(state, point, maximum = Infinity) {
   for (const crate of state.crates) {
     if (crate.state !== "world") continue;
     const metres = distance(crate, point);
-    if (metres < best) {
+    if (metres <= best + 0.001) {
       found = crate;
       best = metres;
     }
@@ -266,7 +274,7 @@ export function handleActivityAction(world, playerIndex) {
 
   if (stealStowedCargo(world, playerIndex)) return true;
 
-  const nearest = nearestAvailableCrate(state, player, player.mode === "boat" ? 12 : 7);
+  const nearest = nearestAvailableCrate(state, player, CARGO_ACTION_RANGE);
   if (!nearest.crate) return false;
   if (player.mode === "boat") {
     const boat = world.boats[player.activeBoat];
@@ -410,6 +418,7 @@ export function updateActivities(world, dt) {
   ensureActivities(world);
   updateCrates(world);
   for (const boat of world.boats || []) updateBoatLoad(world, boat, dt);
+  updateFootDockDelivery(world, dt, rewardPlayer, emit);
   updateCargoActionPrompts(world, emit);
 }
 

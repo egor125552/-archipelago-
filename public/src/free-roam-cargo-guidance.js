@@ -1,10 +1,14 @@
 "use strict";
 
-const SHORE_Y = 72;
-const DOCK_MIN_X = 154;
-const DOCK_MAX_X = 266;
+import {
+  CARGO_ACTION_RANGE,
+  LANDING_MAX_X,
+  LANDING_MIN_X,
+  SHORE_Y,
+  clampCargoCoordinate,
+} from "./free-roam-cargo-rules.js";
+
 const LANDING_Y = 88;
-const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));
 
 export function cargoNavigationTarget(player, crate, label) {
@@ -16,7 +20,7 @@ export function cargoNavigationTarget(player, crate, label) {
     kind: "landing",
     crateId: crate.id,
     label: `береговая высадка к цели: ${label}`,
-    x: clamp(crate.x, DOCK_MIN_X + 8, DOCK_MAX_X - 8),
+    x: clampCargoCoordinate(crate.x, LANDING_MIN_X, LANDING_MAX_X),
     y: LANDING_Y,
   };
 }
@@ -24,7 +28,7 @@ export function cargoNavigationTarget(player, crate, label) {
 function arrivalLimit(player, target) {
   if (target.kind === "landing") return 15;
   if (target.kind === "dock") return 16;
-  return player?.mode === "boat" ? 12 : 7;
+  return CARGO_ACTION_RANGE;
 }
 
 function arrivalText(player, target) {

@@ -147,7 +147,7 @@ test("a player cannot walk through a boat or the active pursuer", () => {
   assert.ok(Math.hypot(player.x - pursuer.x, player.y - pursuer.y) >= 8.19);
 });
 
-test("a carried crate can be handed in manually on foot at the dock", () => {
+test("a carried crate is accepted at the dock when F is pressed", () => {
   const world = createFreeWorld();
   const player = world.players[0];
   const crate = world.freeActivities.crates.find(candidate => candidate.kind === "plates");
@@ -159,7 +159,7 @@ test("a carried crate can be handed in manually on foot at the dock", () => {
 
   assert.equal(player.combat.carriedCrate, null);
   assert.equal(crate.state, "delivered");
-  assert.ok(events.some(event => event.type === "cargo-delivered" && /вручную/i.test(event.text)));
+  assert.ok(events.some(event => event.type === "cargo-delivered" && /принят причалом/i.test(event.text)));
 });
 
 test("approaching a loaded enemy boat clearly explains how to steal its cargo", () => {

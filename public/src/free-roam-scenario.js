@@ -93,8 +93,14 @@ function lockedWorldCrate(world, playerIndex, predicate) {
   return crate?.state === "world" && predicate(crate) ? crate : null;
 }
 
-function dockTarget() {
-  return {id: "dock", kind: "dock", label: "причал для разгрузки", x: 210, y: 76};
+function dockTarget(player) {
+  return {
+    id: "dock",
+    kind: "dock",
+    label: "причал для разгрузки",
+    x: clamp(Number(player?.x) || 210, 154, 266),
+    y: player?.mode === "boat" ? 82 : 65,
+  };
 }
 
 export function scenarioTarget(world, playerIndex) {
@@ -109,13 +115,13 @@ export function scenarioTarget(world, playerIndex) {
     return {id: "open-water", kind: "warning", label: "выход из бухты", x: 210, y: 255};
   }
   if (scenario.phase === "arm") {
-    if (cargoNeedsDock(world, playerIndex, "automatic")) return dockTarget();
+    if (cargoNeedsDock(world, playerIndex, "automatic")) return dockTarget(world.players[playerIndex]);
     const automatic = lockedWorldCrate(world, playerIndex, crate => crate.kind === "automatic")
       || nearestWorldCrate(world, playerIndex, crate => crate.kind === "automatic");
     if (automatic) return cargoNavigationTarget(world.players[playerIndex], automatic, TARGET_LABELS[automatic.kind]);
   }
   if (scenario.phase === "salvage") {
-    if (cargoNeedsDock(world, playerIndex)) return dockTarget();
+    if (cargoNeedsDock(world, playerIndex)) return dockTarget(world.players[playerIndex]);
     const crate = lockedWorldCrate(world, playerIndex, candidate => SALVAGE_KINDS.has(candidate.kind))
       || nearestWorldCrate(world, playerIndex, candidate => SALVAGE_KINDS.has(candidate.kind))
       || nearestWorldCrate(world, playerIndex, () => true);
@@ -135,7 +141,7 @@ export function scenarioTarget(world, playerIndex) {
       y: prize.y,
     };
   }
-  return dockTarget();
+  return dockTarget(world.players[playerIndex]);
 }
 
 function directionText(player, target) {

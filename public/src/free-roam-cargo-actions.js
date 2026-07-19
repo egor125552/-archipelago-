@@ -1,18 +1,13 @@
 "use strict";
 
-const DOCK_MIN_X = 154;
-const DOCK_MAX_X = 266;
-const DOCK_FOOT_Y = 76;
+import {isFootDockZone} from "./free-roam-cargo-rules.js";
+
 const THEFT_NOTICE_DISTANCE = 14;
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));
 
 export function deliverCarriedCargoAtDock(world, playerIndex, crate, rewardPlayer, emit) {
   const player = world.players[playerIndex];
-  const atDock = player
-    && ["foot", "swim"].includes(player.mode)
-    && player.x >= DOCK_MIN_X
-    && player.x <= DOCK_MAX_X
-    && player.y <= DOCK_FOOT_Y;
+  const atDock = isFootDockZone(player);
   if (!atDock || !crate) return false;
   const boat = world.boats.find(candidate => candidate.owner === playerIndex) || world.boats[0];
   rewardPlayer(world, playerIndex, boat, crate);
@@ -21,7 +16,7 @@ export function deliverCarriedCargoAtDock(world, playerIndex, crate, rewardPlaye
   crate.carriedBy = null;
   crate.stowedBoat = null;
   crate.respawnAt = world.time + 12;
-  emit(world, "cargo-delivered", "Ты вручную сдал ящик на причале.", [0, 1], {
+  emit(world, "cargo-delivered", "Ящик принят причалом автоматически.", [0, 1], {
     sourcePlayer: playerIndex,
     count: 1,
     score: world.freeActivities.score[playerIndex],
