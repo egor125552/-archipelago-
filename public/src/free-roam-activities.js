@@ -1,13 +1,13 @@
 "use strict";
 
 import {placeJoiningPlayer} from "./free-roam-player-spawn.js";
-import {deliverCarriedCargoAtDock, updateCargoActionPrompts} from "./free-roam-cargo-actions.js";
+import {deliverCarriedCargoAtDock, updateCargoActionPrompts} from "./free-roam-cargo-actions.js?v=30";
 import {
   CARGO_ACTION_RANGE,
   LANDING_MAX_X,
   LANDING_MIN_X,
-} from "./free-roam-cargo-rules.js";
-import {updateFootDockDelivery} from "./free-roam-foot-dock.js";
+} from "./free-roam-cargo-rules.js?v=30";
+import {updateFootDockDelivery} from "./free-roam-foot-dock.js?v=30";
 
 const WORLD_CRATES = Object.freeze([
   {id: "crate-plates", kind: "plates", rarity: "common", weight: 2, x: 180, y: 34},
@@ -15,7 +15,7 @@ const WORLD_CRATES = Object.freeze([
   {id: "crate-pump", kind: "pump", rarity: "uncommon", weight: 3, x: 205, y: 112},
   {id: "crate-value", kind: "valuable", rarity: "uncommon", weight: 4, x: 82, y: 218},
   {id: "crate-knife", kind: "knife", rarity: "rare", weight: 1, x: 338, y: 244},
-  {id: "crate-automatic", kind: "automatic", rarity: "rare", weight: 4, x: 116, y: 286},
+  {id: "crate-automatic", kind: "automatic", rarity: "rare", weight: 4, x: 116, y: 286, singleUse: true},
   {id: "crate-ammo", kind: "ammo", rarity: "uncommon", weight: 2, x: 316, y: 146},
 ]);
 
@@ -340,7 +340,7 @@ function deliverBoatCargo(world, boat) {
     const crate = state.crates.find(candidate => candidate.id === id);
     if (!crate) continue;
     rewardPlayer(world, playerIndex, boat, crate);
-    crate.state = "delivered";
+    crate.state = crate.singleUse ? "consumed" : "delivered";
     crate.carriedBy = null;
     crate.stowedBoat = null;
     crate.respawnAt = world.time + 12;
@@ -437,6 +437,7 @@ export function spawnRareCrate(world, x, y, kind = "automatic", source = "maraud
     x,
     y,
     source,
+    singleUse: source === "pursuer",
   });
   state.crates.push(crate);
   emit(world, "cargo-spawn", `Появился редкий ящик: ${LABELS[kind] || "ценный груз"}.`, [0, 1], {

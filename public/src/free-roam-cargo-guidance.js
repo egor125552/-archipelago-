@@ -6,7 +6,7 @@ import {
   LANDING_MIN_X,
   SHORE_Y,
   clampCargoCoordinate,
-} from "./free-roam-cargo-rules.js";
+} from "./free-roam-cargo-rules.js?v=30";
 
 const LANDING_Y = 88;
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));

@@ -116,6 +116,10 @@ function resolvePlayersAgainstBoats(world, state) {
     if (pursuer?.active && !pursuer.destroyed) {
       separatePointFromBody(player, pursuer, PLAYER_RADIUS + PURSUER_RADIUS, index ? 1 : -1);
     }
+    for (const escort of world.freePursuerSquad?.escorts || []) {
+      if (!escort.active || escort.destroyed) continue;
+      separatePointFromBody(player, escort, PLAYER_RADIUS + PURSUER_RADIUS, index ? 1 : -1);
+    }
   }
 }
 

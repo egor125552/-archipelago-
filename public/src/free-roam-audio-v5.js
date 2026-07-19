@@ -1,9 +1,9 @@
 "use strict";
 
-import {FreeRoamAudio as BaseFreeRoamAudio, spatialGainForDistance} from "./free-roam-audio-v4.js";
-import {relativeMovementPan} from "./free-roam-audio-v3.js";
-import {injuryLowpassFrequency} from "./free-roam-combat-recovery.js?v=29";
-import {COMBAT_TUNING} from "./free-roam-combat-tuning.js?v=29";
+import {FreeRoamAudio as BaseFreeRoamAudio, spatialGainForDistance} from "./free-roam-audio-v4.js?v=30";
+import {relativeMovementPan} from "./free-roam-audio-v3.js?v=30";
+import {injuryLowpassFrequency} from "./free-roam-combat-recovery.js?v=30";
+import {COMBAT_TUNING} from "./free-roam-combat-tuning.js?v=30";
 
 const ROOT = "/assets/audio/free-roam-v25/";
 const COMBAT_SOUNDS = Object.freeze({
@@ -179,7 +179,12 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
   }
 
   updateMarauderEngine(world) {
-    const marauder = world?.freeActivities?.marauder;
+    const targetId = world?.freeScenario?.targets?.[this.localPlayerIndex]?.id;
+    const primary = world?.freeActivities?.marauder;
+    const selectedEscort = world?.freePursuerSquad?.escorts?.find(escort => (
+      escort.id === targetId && escort.active && !escort.destroyed
+    ));
+    const marauder = selectedEscort || primary;
     if (!this.ctx || !this.listenerPoint || !marauder?.active || marauder.destroyed) {
       if (this.ctx && this.marauderEngine) this.marauderEngine.gain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.18);
       return;
@@ -266,7 +271,59 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
         });
         return;
       }
+      case "pursuer-aim": {
+        const aimSpatial = this.eventPanAndGain(event, 520);
+        const warningGain = 0.085 + aimSpatial.gain * 0.075;
+        this.playSynthPip({pan: aimSpatial.pan, frequency: 260, gain: warningGain, duration: 0.08});
+        this.playSynthPip({pan: aimSpatial.pan, frequency: 340, gain: warningGain * 1.08, duration: 0.1, delay: 0.14});
+        return;
+      }
+      case "enemy-gun-shot": {
+        const shotSpatial = this.eventPanAndGain(event, 780);
+        this.play("automaticShot", {
+          pan: shotSpatial.pan,
+          gain: 0.92 * shotSpatial.gain,
+          rate: 0.94,
+          lowpass: 11500,
+        });
+        return;
+      }
+      case "enemy-bullet-near":
+        this.play("swingLight", {
+          pan: spatial.pan,
+          gain: 0.42 * spatial.gain,
+          rate: 1.28,
+          lowpass: 9800,
+        });
+        return;
+      case "enemy-bullet-boat-hit":
+        this.play("gunHit", {pan: spatial.pan, gain: 0.9 * spatial.gain, lowpass: 9800});
+        if (this.buffers.has("hullCreak")) {
+          this.play("hullCreak", {pan: spatial.pan, gain: 0.24 * spatial.gain, rate: 0.82, lowpass: 4200});
+        }
+        return;
+      case "escort-contact":
+        this.handle([{
+          type: "collision",
+          severity: 0.82,
+          impactSpeed: 5.5,
+          hardImpact: false,
+          damage: 0,
+          pan: spatial.pan,
+        }]);
+        return;
       case "pursuer-hit":
+        if (event.weapon === "ram") {
+          this.handle([{
+            type: "collision",
+            severity: 1.12,
+            impactSpeed: 8.5,
+            hardImpact: true,
+            damage: event.damage || 9,
+            pan: spatial.pan,
+          }]);
+          return;
+        }
         this.play("gunHit", {
           pan: spatial.pan,
           gain: 0.72 * spatial.gain,
@@ -289,6 +346,10 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
         return;
       case "pursuer-arrival":
         this.playSynthPip({pan: spatial.pan, frequency: 190, gain: 0.16, duration: 0.28});
+        return;
+      case "pursuer-destroyed":
+        this.playSynthPip({pan: spatial.pan, frequency: 420, gain: 0.14, duration: 0.1});
+        this.playSynthPip({pan: spatial.pan, frequency: 180, gain: 0.16, duration: 0.24, delay: 0.12});
         return;
       case "player-knockdown":
         if (this.buffers.has("punchBodySet")) {

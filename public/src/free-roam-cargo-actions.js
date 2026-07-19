@@ -1,6 +1,6 @@
 "use strict";
 
-import {isFootDockZone} from "./free-roam-cargo-rules.js";
+import {isFootDockZone} from "./free-roam-cargo-rules.js?v=30";
 
 const THEFT_NOTICE_DISTANCE = 14;
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));
@@ -12,7 +12,7 @@ export function deliverCarriedCargoAtDock(world, playerIndex, crate, rewardPlaye
   const boat = world.boats.find(candidate => candidate.owner === playerIndex) || world.boats[0];
   rewardPlayer(world, playerIndex, boat, crate);
   player.combat.carriedCrate = null;
-  crate.state = "delivered";
+  crate.state = crate.singleUse ? "consumed" : "delivered";
   crate.carriedBy = null;
   crate.stowedBoat = null;
   crate.respawnAt = world.time + 12;

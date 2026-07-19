@@ -1,6 +1,13 @@
 "use strict";
 
-import {cargoNavigationTarget, updateCargoArrivalGuidance} from "./free-roam-cargo-guidance.js";
+import {cargoNavigationTarget, updateCargoArrivalGuidance} from "./free-roam-cargo-guidance.js?v=30";
+import {
+  activatePursuerSquad,
+  activePursuerById,
+  activePursuers,
+  isPursuerSquadDefeated,
+  nearestActivePursuer,
+} from "./free-roam-pursuer-squad.js?v=30";
 
 const TARGET_LABELS = Object.freeze({
   plates: "ящик с пластинами",
@@ -32,6 +39,7 @@ export function createFreeScenario(playerCount = 2) {
     lockedTargetIds: Array.from({length: playerCount}, () => null),
     beaconUntil: Array.from({length: playerCount}, () => 0),
     sonarCooldown: Array.from({length: playerCount}, () => 0),
+    lockedPursuerIds: Array.from({length: playerCount}, () => null),
   };
 }
 
@@ -44,10 +52,12 @@ export function ensureFreeScenario(world) {
   scenario.lockedTargetIds ||= [null, null];
   scenario.beaconUntil ||= [0, 0];
   scenario.sonarCooldown ||= [0, 0];
+  scenario.lockedPursuerIds ||= [null, null];
   while (scenario.targets.length < world.players.length) scenario.targets.push(null);
   while (scenario.lockedTargetIds.length < world.players.length) scenario.lockedTargetIds.push(null);
   while (scenario.beaconUntil.length < world.players.length) scenario.beaconUntil.push(0);
   while (scenario.sonarCooldown.length < world.players.length) scenario.sonarCooldown.push(0);
+  while (scenario.lockedPursuerIds.length < world.players.length) scenario.lockedPursuerIds.push(null);
   if (created && scenario.phase === "salvage" && world.freeActivities?.marauder) {
     world.freeActivities.marauder.active = false;
     world.freeActivities.marauder.speed = 0;
@@ -106,9 +116,17 @@ function dockTarget(player) {
 export function scenarioTarget(world, playerIndex) {
   const scenario = ensureFreeScenario(world);
   if (scenario.phase === "pursuit") {
-    const pursuer = world.freeActivities?.marauder;
-    if (pursuer?.active && !pursuer.destroyed) {
-      return {id: "pursuer", kind: "pursuer", label: "катер-преследователь", x: pursuer.x, y: pursuer.y};
+    const pursuer = activePursuerById(world, scenario.lockedPursuerIds[playerIndex])
+      || nearestActivePursuer(world, world.players[playerIndex]);
+    if (pursuer) {
+      scenario.lockedPursuerIds[playerIndex] = pursuer.id;
+      return {
+        id: pursuer.id,
+        kind: "pursuer",
+        label: "выбранный катер-преследователь",
+        x: pursuer.x,
+        y: pursuer.y,
+      };
     }
   }
   if (scenario.phase === "warning") {
@@ -167,10 +185,24 @@ function directionText(player, target) {
 function updateTargets(world) {
   const scenario = world.freeScenario;
   for (let index = 0; index < world.players.length; index += 1) {
+    const previous = scenario.targets[index];
     const target = scenarioTarget(world, index);
     scenario.targets[index] = target;
     if (target?.id?.startsWith("crate-")) scenario.lockedTargetIds[index] = target.id;
     else if (target?.kind === "landing" && target.crateId) scenario.lockedTargetIds[index] = target.crateId;
+    if (
+      scenario.phase === "pursuit"
+      && previous?.kind === "pursuer"
+      && target?.kind === "pursuer"
+      && previous.id !== target.id
+    ) {
+      emit(world, "scenario-objective", "Предыдущий катер уничтожен. Сонар захватил следующую цель.", [index], {
+        sourcePlayer: index,
+        targetId: target.id,
+        x: target.x,
+        y: target.y,
+      });
+    }
   }
 }
 
@@ -209,7 +241,8 @@ function activatePursuer(world) {
   pursuer.ramCooldown = 4;
   pursuer.recoveryRemaining = 0;
   pursuer.respawnAt = 0;
-  emit(world, "pursuer-arrival", "В бухту вошёл катер-преследователь. Сонар теперь ведёт только к нему. Бей автоматом или тараном.", [0, 1], {
+  activatePursuerSquad(world);
+  emit(world, "pursuer-arrival", "В бухту вошли три катера-преследователя. Сонар держит одну цель. Уклоняйся от физических пуль и уничтожь все три.", [0, 1], {
     x: pursuer.x,
     y: pursuer.y,
   });
@@ -234,10 +267,10 @@ function updatePhase(world) {
     activatePursuer(world);
   }
   const pursuer = world.freeActivities.marauder;
-  if (scenario.phase === "pursuit" && pursuer.destroyed) {
+  if (scenario.phase === "pursuit" && isPursuerSquadDefeated(world)) {
     scenario.phase = "victory";
     pursuer.respawnAt = 0;
-    emit(world, "scenario-victory", "Катер-преследователь уничтожен. Сценарий пройден; теперь можно спокойно собирать оставшиеся припасы.", [0, 1]);
+    emit(world, "scenario-victory", "Все три катера уничтожены. Сценарий пройден; забери разные трофеи и продолжай исследовать бухту.", [0, 1]);
   }
 }
 
@@ -262,7 +295,7 @@ export function scenarioStatus(world, playerIndex) {
     salvage: `Задача: доставь ещё ${remainingSalvage === 1 ? "один обычный ящик" : "два обычных ящика"}.`,
     arm: "Задача: найди и доставь автомат.",
     warning: `Преследователь появится через ${Math.max(0, Math.ceil(scenario.warningUntil - world.time))} секунд.`,
-    pursuit: "Задача: уничтожь катер-преследователь автоматом или тараном.",
+    pursuit: `Задача: уничтожь все три катера. Осталось ${activePursuers(world).length}.`,
     victory: "Сценарий пройден.",
   };
   if (!target) return phases[scenario.phase] || "";

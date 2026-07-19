@@ -5,9 +5,10 @@ import {
   injuryMixTarget,
   registerCombatDamage,
   updateCombatRecovery,
-} from "./free-roam-combat-recovery.js?v=29";
-import {COMBAT_TUNING} from "./free-roam-combat-tuning.js?v=29";
-import {isCriticalHealth} from "./free-roam-critical-injury.js";
+} from "./free-roam-combat-recovery.js?v=30";
+import {COMBAT_TUNING} from "./free-roam-combat-tuning.js?v=30";
+import {isCriticalHealth} from "./free-roam-critical-injury.js?v=30";
+import {activePursuers, damageEscort} from "./free-roam-pursuer-squad.js?v=30";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));
@@ -88,8 +89,15 @@ function activeTargets(world, attackerIndex) {
     const player = world.players[index];
     if (player?.combat?.alive) targets.push({kind: "player", index, point: player});
   }
-  const marauder = world.freeActivities?.marauder;
-  if (marauder?.active && !marauder.destroyed) targets.push({kind: "marauder", index: -1, point: marauder});
+  const primary = world.freeActivities?.marauder;
+  for (const pursuer of activePursuers(world)) {
+    targets.push({
+      kind: pursuer === primary ? "marauder" : "escort",
+      index: -1,
+      pursuerId: pursuer.id,
+      point: pursuer,
+    });
+  }
   return targets;
 }
 
@@ -98,7 +106,7 @@ function nearestTarget(world, attackerIndex, range, cone, includeMarauder = true
   let result = null;
   let best = range;
   for (const target of activeTargets(world, attackerIndex)) {
-    if (!includeMarauder && target.kind === "marauder") continue;
+    if (!includeMarauder && target.kind !== "player") continue;
     const metres = distance(attacker, target.point);
     if (metres > best || !inAttackCone(attacker, target.point, range, cone)) continue;
     best = metres;
@@ -274,7 +282,7 @@ function performMelee(world, attackerIndex, heavyRequested, helpers) {
     x: attacker.x,
     y: attacker.y,
   });
-  if (!target && armouredTarget?.kind === "marauder") {
+  if (!target && armouredTarget && armouredTarget.kind !== "player") {
     emit(world, "armoured-target", "Кулаки и нож не пробьют катер. Используй автомат или таран лодкой.", [attackerIndex], {
       sourcePlayer: attackerIndex,
       weapon,
@@ -315,7 +323,7 @@ function destroyMarauder(world, attackerIndex, helpers) {
     x: marauder.x,
     y: marauder.y,
   });
-  helpers?.spawnRareCrate?.(world, marauder.x, marauder.y, "automatic", "pursuer");
+  helpers?.spawnRareCrate?.(world, marauder.x, marauder.y, "valuable", "pursuer");
 }
 
 function fireAutomatic(world, attackerIndex, helpers) {
@@ -363,6 +371,10 @@ function fireAutomatic(world, attackerIndex, helpers) {
       heavy: false,
       eventType: "gun-hit",
     }, helpers);
+    return;
+  }
+  if (target.kind === "escort") {
+    damageEscort(world, target.pursuerId, 12, attackerIndex, helpers);
     return;
   }
   const marauder = target.point;

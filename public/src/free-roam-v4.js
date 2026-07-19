@@ -9,8 +9,8 @@ import {
   setPlayerPresence,
   snapshotWorld,
   stepFreeWorld,
-} from "./free-roam-core-v6.js?v=29";
-import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=29";
+} from "./free-roam-core-v6.js?v=30";
+import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=30";
 import {directionFromDelta} from "./free-roam-gesture-model.js";
 import {classifyActionGesture, gestureMetrics} from "./free-roam-action-gestures.js";
 
@@ -359,6 +359,12 @@ function render() {
   const activities = world.freeActivities || {};
   const combat = me.combat || {};
   const marauder = activities.marauder || {};
+  const pursuerSquad = world.freePursuerSquad || {};
+  const activeEscorts = (pursuerSquad.escorts || []).filter(escort => escort.active && !escort.destroyed);
+  const activePursuerCount = activeEscorts.length + (marauder.active && !marauder.destroyed ? 1 : 0);
+  const sonarPursuer = world.freeScenario?.targets?.[playerIndex]?.kind === "pursuer"
+    ? [marauder, ...activeEscorts].find(pursuer => pursuer.id === world.freeScenario.targets[playerIndex].id)
+    : null;
   const weaponLabels = {fists: "кулаки", knife: "нож", automatic: "автомат"};
   $("modeValue").textContent = combat.knockedDown ? "сбит с ног" : labels[me.mode] || me.mode;
   $("speedValue").textContent = combat.knockedDown ? "оглушён" : myBoat ? Math.abs(myBoat.speed).toFixed(1) : me.mode === "swim" ? "плывёт" : me.running ? "бежит" : "идёт";
@@ -381,11 +387,11 @@ function render() {
     pursuit: "погоня",
     victory: "пройден",
   }[world.freeScenario?.phase] || "доставка";
-  $("marauderValue").textContent = marauder.destroyed
-    ? "уничтожен"
-    : marauder.active
-      ? `${Math.round(marauder.hull ?? 72)}%`
-      : "ещё не появился";
+  $("marauderValue").textContent = activePursuerCount
+    ? `${activePursuerCount} в бою; цель ${Math.round(sonarPursuer?.hull ?? marauder.hull ?? 0)}%; пуль ${(pursuerSquad.projectiles || []).length}`
+    : world.freeScenario?.phase === "victory"
+      ? "все уничтожены"
+      : "ещё не появились";
   $("actionButton").textContent = combat.knockedDown
     ? "Сбит с ног — жди"
     : combat.carriedCrate
@@ -461,6 +467,21 @@ function drawMap(currentWorld) {
     ctx.fillStyle = "#d85c4a";
     ctx.fillRect(-8, -15, 16, 30);
     ctx.restore();
+  }
+  for (const escort of currentWorld.freePursuerSquad?.escorts || []) {
+    if (!escort.active || escort.destroyed) continue;
+    ctx.save();
+    ctx.translate(escort.x * sx, escort.y * sy);
+    ctx.rotate(escort.heading * Math.PI / 180);
+    ctx.fillStyle = "#f06a52";
+    ctx.fillRect(-7, -14, 14, 28);
+    ctx.restore();
+  }
+  for (const projectile of currentWorld.freePursuerSquad?.projectiles || []) {
+    ctx.fillStyle = "#fff2a8";
+    ctx.beginPath();
+    ctx.arc(projectile.x * sx, projectile.y * sy, 2.5, 0, Math.PI * 2);
+    ctx.fill();
   }
 }
 
