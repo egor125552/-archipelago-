@@ -9,8 +9,8 @@ import {
   setPlayerPresence,
   snapshotWorld,
   stepFreeWorld,
-} from "./free-roam-core-v6.js?v=30";
-import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=30";
+} from "./free-roam-core-v6.js?v=31";
+import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=31";
 import {directionFromDelta} from "./free-roam-gesture-model.js";
 import {classifyActionGesture, gestureMetrics} from "./free-roam-action-gestures.js";
 
@@ -170,10 +170,13 @@ function connect(role) {
       playerIndex = isHost ? 0 : 1;
       $("roomLabel").textContent = `Свободный мир ${roomId}`;
       if (isHost) {
-        world = createFreeWorld();
+        const resumed = Boolean(message.resumeWorld);
+        world = message.resumeWorld || createFreeWorld();
         setPlayerPresence(world, 0, true);
         setPlayerPresence(world, 1, Boolean(message.matched));
-        const openedText = message.matched
+        const openedText = resumed
+          ? "Мир восстановлен. Ты принял управление без сброса грузов, катеров и сценария."
+          : message.matched
           ? "Свободный мир найден. Ты принял управление миром; второй игрок уже рядом."
           : requestedRole === "auto"
             ? message.replacedStale

@@ -1,13 +1,15 @@
 "use strict";
 
-import {cargoNavigationTarget, updateCargoArrivalGuidance} from "./free-roam-cargo-guidance.js?v=30";
+import {cargoNavigationTarget, updateCargoArrivalGuidance} from "./free-roam-cargo-guidance.js?v=31";
 import {
   activatePursuerSquad,
   activePursuerById,
   activePursuers,
+  assignedPursuerForPlayer,
   isPursuerSquadDefeated,
   nearestActivePursuer,
-} from "./free-roam-pursuer-squad.js?v=30";
+} from "./free-roam-pursuer-squad.js?v=31";
+import {automaticCargoDelivered} from "./free-roam-weapon-crates.js?v=31";
 
 const TARGET_LABELS = Object.freeze({
   plates: "ящик с пластинами",
@@ -116,14 +118,16 @@ function dockTarget(player) {
 export function scenarioTarget(world, playerIndex) {
   const scenario = ensureFreeScenario(world);
   if (scenario.phase === "pursuit") {
-    const pursuer = activePursuerById(world, scenario.lockedPursuerIds[playerIndex])
+    const assigned = assignedPursuerForPlayer(world, playerIndex);
+    const pursuer = assigned
+      || activePursuerById(world, scenario.lockedPursuerIds[playerIndex])
       || nearestActivePursuer(world, world.players[playerIndex]);
     if (pursuer) {
       scenario.lockedPursuerIds[playerIndex] = pursuer.id;
       return {
         id: pursuer.id,
         kind: "pursuer",
-        label: "выбранный катер-преследователь",
+        label: assigned ? "твой назначенный катер-преследователь" : "выбранный катер-преследователь",
         x: pursuer.x,
         y: pursuer.y,
       };
@@ -251,13 +255,13 @@ function activatePursuer(world) {
 function updatePhase(world) {
   const scenario = world.freeScenario;
   const delivered = world.freeActivities.delivered.reduce((sum, value) => sum + (Number(value) || 0), 0);
-  const armed = world.players.some(player => player.combat?.weapons?.automatic);
+  const automaticDelivered = automaticCargoDelivered(world);
 
   if (scenario.phase === "salvage" && delivered >= 2) {
     scenario.phase = "arm";
     emit(world, "scenario-objective", "Первая задача выполнена. Теперь найди и доставь ящик с автоматом. Сонар ведёт к нему.", [0, 1]);
   }
-  if (scenario.phase === "arm" && armed) {
+  if (scenario.phase === "arm" && automaticDelivered) {
     scenario.phase = "warning";
     scenario.warningUntil = world.time + 8;
     emit(world, "pursuer-warning", "Автомат получен. Через восемь секунд появится катер-преследователь. Выходи на открытую воду.", [0, 1]);

@@ -148,6 +148,7 @@ export class Lobby {
         createdAt: Date.now(),
         pending: {captain: [], crew: []},
         lastSeen: {captain: 0, crew: 0},
+        lastFreeSnapshot: null,
       };
       this.rooms.set(id, room);
     }
@@ -173,6 +174,9 @@ export class Lobby {
       mode,
       matched,
       waitingFor: matched ? null : oppositeRole(role),
+      resumeWorld: mode === "free" && role === "captain"
+        ? room.lastFreeSnapshot?.world || null
+        : null,
     });
 
     if (matched) this.finishMatch(room);
@@ -197,6 +201,14 @@ export class Lobby {
     const message = parseMessage(rawData);
     if (!message || typeof message !== "object") return;
     if (message.type === "heartbeat") return;
+    if (
+      client.mode === "free"
+      && client.role === "captain"
+      && message.type === "free-snapshot"
+      && message.world
+    ) {
+      room.lastFreeSnapshot = message;
+    }
 
     const otherRole = oppositeRole(client.role);
     const other = room[otherRole];

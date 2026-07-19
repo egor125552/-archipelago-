@@ -6,7 +6,8 @@ import {
   LANDING_MIN_X,
   SHORE_Y,
   clampCargoCoordinate,
-} from "./free-roam-cargo-rules.js?v=30";
+  isBoatDockPosition,
+} from "./free-roam-cargo-rules.js?v=31";
 
 const LANDING_Y = 88;
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));
@@ -27,7 +28,6 @@ export function cargoNavigationTarget(player, crate, label) {
 
 function arrivalLimit(player, target) {
   if (target.kind === "landing") return 15;
-  if (target.kind === "dock") return 16;
   return CARGO_ACTION_RANGE;
 }
 
@@ -55,7 +55,15 @@ export function updateCargoArrivalGuidance(world, emit) {
     const player = world.players[index];
     const target = scenario.targets[index];
     const targetId = target?.id || null;
-    const inside = Boolean(target && distance(player, target) <= arrivalLimit(player, target));
+    const boat = player?.mode === "boat" ? world.boats[player.activeBoat] : null;
+    const inside = Boolean(
+      target
+      && (
+        target.kind === "dock" && boat
+          ? isBoatDockPosition(boat)
+          : distance(player, target) <= arrivalLimit(player, target)
+      ),
+    );
     const sameTarget = scenario.arrivalTargets[index] === targetId;
     if (inside && (!sameTarget || !scenario.arrivalInside[index])) {
       emit(world, "scenario-arrival", arrivalText(player, target), [index], {

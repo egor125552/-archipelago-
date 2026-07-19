@@ -1,6 +1,6 @@
 "use strict";
 
-import {isFootDockZone} from "./free-roam-cargo-rules.js?v=30";
+import {isFootDockZone} from "./free-roam-cargo-rules.js?v=31";
 
 const THEFT_NOTICE_DISTANCE = 14;
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));

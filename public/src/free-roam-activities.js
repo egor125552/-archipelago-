@@ -1,13 +1,15 @@
 "use strict";
 
 import {placeJoiningPlayer} from "./free-roam-player-spawn.js";
-import {deliverCarriedCargoAtDock, updateCargoActionPrompts} from "./free-roam-cargo-actions.js?v=30";
+import {deliverCarriedCargoAtDock, updateCargoActionPrompts} from "./free-roam-cargo-actions.js?v=31";
 import {
   CARGO_ACTION_RANGE,
   LANDING_MAX_X,
   LANDING_MIN_X,
-} from "./free-roam-cargo-rules.js?v=30";
-import {updateFootDockDelivery} from "./free-roam-foot-dock.js?v=30";
+  isBoatDockZone,
+} from "./free-roam-cargo-rules.js?v=31";
+import {updateFootDockDelivery} from "./free-roam-foot-dock.js?v=31";
+import {grantWeaponFromCrate} from "./free-roam-weapon-crates.js?v=31";
 
 const WORLD_CRATES = Object.freeze([
   {id: "crate-plates", kind: "plates", rarity: "common", weight: 2, x: 180, y: 34},
@@ -201,6 +203,7 @@ function stow(world, crate, boat, playerIndex) {
   boat.cargo.push(crate.id);
   const player = world.players[playerIndex];
   if (player?.combat) player.combat.carriedCrate = null;
+  grantWeaponFromCrate(world, crate, playerIndex, emit);
   emit(world, "cargo-stowed", `${LABELS[crate.kind] || "Груз"} закреплён на лодке.`, [playerIndex], {
     sourcePlayer: playerIndex,
     crateId: crate.id,
@@ -284,6 +287,7 @@ export function handleActivityAction(world, playerIndex) {
   nearest.crate.carriedBy = playerIndex;
   nearest.crate.stowedBoat = null;
   player.combat.carriedCrate = nearest.crate.id;
+  grantWeaponFromCrate(world, nearest.crate, playerIndex, emit);
   emit(world, "cargo-pickup", `Ты поднял: ${LABELS[nearest.crate.kind] || "груз"}.`, [playerIndex], {
     sourcePlayer: playerIndex,
     crateId: nearest.crate.id,
@@ -315,11 +319,7 @@ function rewardPlayer(world, playerIndex, boat, crate) {
       }
       break;
     case "automatic":
-      if (combat) {
-        combat.weapons.automatic = true;
-        combat.ammo += 48;
-        combat.equipped = "automatic";
-      }
+      grantWeaponFromCrate(world, crate, playerIndex);
       break;
     case "ammo":
       if (combat) combat.ammo += 30;
@@ -359,13 +359,13 @@ function deliverBoatCargo(world, boat) {
 
 function updateDockDelivery(world, boat, dt) {
   const state = world.freeActivities;
-  const atDock = boat.x >= 154 && boat.x <= 266 && boat.y <= 90 && Math.abs(boat.speed) < 1.5;
+  const atDock = isBoatDockZone(boat);
   if (!atDock || !boat.cargo.length) {
     state.dockProgress[boat.id] = 0;
     return;
   }
   state.dockProgress[boat.id] += dt;
-  if (state.dockProgress[boat.id] < 0.8) return;
+  if (state.dockProgress[boat.id] < 0.45) return;
   state.dockProgress[boat.id] = 0;
   deliverBoatCargo(world, boat);
 }

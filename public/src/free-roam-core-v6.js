@@ -11,13 +11,13 @@ import {
   spawnRareCrate,
   storeActivityInput,
   updateActivities,
-} from "./free-roam-activities.js?v=30";
-import {applyCombatDamage, combatStatus, ensureCombat, updateCombat} from "./free-roam-combat.js?v=30";
-import {ensureMarauder, releaseStolenCargo, updateMarauder} from "./free-roam-marauder.js?v=30";
-import {ensureFreeScenario, scenarioStatus, updateFreeScenario} from "./free-roam-scenario.js?v=30";
-import {suppressIncapacitatedMovement, updatePhysicalActors} from "./free-roam-physical-actors.js?v=30";
+} from "./free-roam-activities.js?v=31";
+import {applyCombatDamage, combatStatus, ensureCombat, updateCombat} from "./free-roam-combat.js?v=31";
+import {ensureMarauder, releaseStolenCargo, updateMarauder} from "./free-roam-marauder.js?v=31";
+import {ensureFreeScenario, scenarioStatus, updateFreeScenario} from "./free-roam-scenario.js?v=31";
+import {suppressIncapacitatedMovement, updatePhysicalActors} from "./free-roam-physical-actors.js?v=31";
 import {handleAssistedBoarding} from "./free-roam-boarding-assist.js?v=29";
-import {ensurePursuerSquad, updatePursuerSquad} from "./free-roam-pursuer-squad.js?v=30";
+import {ensurePursuerSquad, updatePursuerSquad} from "./free-roam-pursuer-squad.js?v=31";
 
 export const WORLD = Object.freeze({...base.WORLD});
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));

@@ -1,7 +1,7 @@
 "use strict";
 
-import {deliverCarriedCargoAtDock} from "./free-roam-cargo-actions.js?v=30";
-import {isFootDockZone} from "./free-roam-cargo-rules.js?v=30";
+import {deliverCarriedCargoAtDock} from "./free-roam-cargo-actions.js?v=31";
+import {isFootDockZone} from "./free-roam-cargo-rules.js?v=31";
 
 const AUTO_DELIVERY_SECONDS = 0.45;
 

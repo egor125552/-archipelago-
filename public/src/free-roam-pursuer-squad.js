@@ -60,6 +60,7 @@ export function ensurePursuerSquad(world) {
     seed: 0x671a9d,
     nextProjectileId: 1,
     primaryWeapon: {targetPlayer: 0, fireCooldown: 1.2, aimRemaining: 0},
+    assignments: {},
     escorts: [],
     projectiles: [],
   };
@@ -68,6 +69,7 @@ export function ensurePursuerSquad(world) {
   if (!Number.isFinite(state.seed)) state.seed = 0x671a9d;
   if (!Number.isFinite(state.nextProjectileId)) state.nextProjectileId = 1;
   state.primaryWeapon ||= {targetPlayer: 0, fireCooldown: 1.2, aimRemaining: 0};
+  state.assignments ||= {};
   state.escorts ||= [];
   state.projectiles ||= [];
   const primary = world.freeActivities?.marauder;
@@ -81,6 +83,7 @@ export function activatePursuerSquad(world) {
   const anchor = world.freeActivities?.marauder || {x: 330, y: 245, heading: 300};
   state.activated = true;
   state.primaryWeapon = {targetPlayer: 0, fireCooldown: 1.2, aimRemaining: 0};
+  state.assignments = {};
   state.escorts = [
     createEscort(
       "pursuer-2",
@@ -116,6 +119,13 @@ export function activePursuers(world) {
 
 export function activePursuerById(world, pursuerId) {
   return activePursuers(world).find(pursuer => pursuer.id === pursuerId) || null;
+}
+
+export function assignedPursuerForPlayer(world, playerIndex) {
+  const state = ensurePursuerSquad(world);
+  const pursuerId = Object.entries(state.assignments)
+    .find(([, assignedPlayer]) => assignedPlayer === playerIndex)?.[0];
+  return activePursuerById(world, pursuerId);
 }
 
 export function nearestActivePursuer(world, point) {
@@ -168,33 +178,74 @@ function velocityForPlayer(world, playerIndex) {
   return {x: x / length * speed, y: y / length * speed};
 }
 
-function chooseTargetPlayer(world, shooter) {
-  let result = null;
-  let best = Infinity;
-  for (const candidate of presentPlayers(world)) {
-    const actor = actorForPlayer(world, candidate.index);
-    const metres = distance(shooter, actor);
-    if (metres >= best) continue;
-    best = metres;
-    result = {...candidate, actor, distance: metres};
-  }
-  return result;
+function assignedTarget(world, playerIndex, shooter) {
+  const candidate = presentPlayers(world).find(item => item.index === playerIndex);
+  if (!candidate) return null;
+  const actor = actorForPlayer(world, candidate.index);
+  return {...candidate, actor, distance: distance(shooter, actor)};
 }
 
-function moveEscort(world, escort, dt) {
-  const target = chooseTargetPlayer(world, escort);
+function reconcileAssignments(world, state) {
+  const pursuers = activePursuers(world);
+  const livePlayers = presentPlayers(world).map(({index}) => index);
+  const livePlayerSet = new Set(livePlayers);
+  const coveredPlayers = new Set();
+  const next = {};
+
+  for (const pursuer of pursuers) {
+    const playerIndex = state.assignments[pursuer.id];
+    if (!livePlayerSet.has(playerIndex) || coveredPlayers.has(playerIndex)) continue;
+    next[pursuer.id] = playerIndex;
+    coveredPlayers.add(playerIndex);
+  }
+
+  const waitingPlayers = livePlayers.filter(index => !coveredPlayers.has(index));
+  for (const pursuer of pursuers) {
+    if (Number.isInteger(next[pursuer.id]) || !waitingPlayers.length) continue;
+    const playerIndex = waitingPlayers.shift();
+    next[pursuer.id] = playerIndex;
+    emit(
+      world,
+      "pursuer-target-lock",
+      "Катер-преследователь выбрал тебя. Только его двойной низкий сигнал предупреждает о выстреле по тебе.",
+      [playerIndex],
+      {
+        sourcePlayer: -1,
+        sourcePursuerId: pursuer.id,
+        targetPlayer: playerIndex,
+        x: pursuer.x,
+        y: pursuer.y,
+      },
+    );
+  }
+  state.assignments = next;
+}
+
+function moveEscort(world, escort, dt, playerIndex) {
+  let target = assignedTarget(world, playerIndex, escort);
+  const reserve = !target;
+  if (reserve) {
+    const primary = world.freeActivities?.marauder;
+    if (primary?.active && !primary.destroyed) {
+      const side = escort.id === "pursuer-2" ? -1 : 1;
+      const actor = {x: primary.x + side * 24, y: primary.y + 30};
+      target = {actor, distance: distance(escort, actor)};
+    }
+  }
   if (!target) {
     escort.speed *= Math.max(0, 1 - dt * 2);
     return;
   }
-  escort.targetPlayer = target.index;
+  if (!reserve) escort.targetPlayer = playerIndex;
   const flank = escort.id === "pursuer-2" ? -1 : 1;
   let desired = bearing(escort, target.actor);
-  if (target.distance < 62) desired = wrapDeg(desired + 180);
-  else if (target.distance < 130) desired = wrapDeg(desired + flank * 68);
+  if (!reserve && target.distance < 62) desired = wrapDeg(desired + 180);
+  else if (!reserve && target.distance < 130) desired = wrapDeg(desired + flank * 68);
   const turn = clamp(wrapDeg(desired - escort.heading), -74 * dt, 74 * dt);
   escort.heading = wrapDeg(escort.heading + turn);
-  const desiredSpeed = target.distance > 145 ? 15 : target.distance < 58 ? 13.5 : 11.5;
+  const desiredSpeed = reserve
+    ? target.distance > 42 ? 10 : target.distance < 18 ? 5 : 7
+    : target.distance > 145 ? 15 : target.distance < 58 ? 13.5 : 11.5;
   escort.speed += clamp(desiredSpeed - escort.speed, -10 * dt, 8 * dt);
   const angle = escort.heading * Math.PI / 180;
   escort.x = clamp(escort.x + Math.sin(angle) * escort.speed * dt, 7, 413);
@@ -295,7 +346,14 @@ function spawnProjectile(world, state, shooter, weapon) {
   return true;
 }
 
-function updateWeapon(world, state, shooter, weapon, dt) {
+function updateWeapon(world, state, shooter, weapon, dt, playerIndex) {
+  const assigned = assignedTarget(world, playerIndex, shooter);
+  if (!assigned) {
+    weapon.aimRemaining = 0;
+    weapon.fireCooldown = Math.max(Number(weapon.fireCooldown) || 0, 0.35);
+    return;
+  }
+  weapon.targetPlayer = playerIndex;
   weapon.fireCooldown = Math.max(0, (Number(weapon.fireCooldown) || 0) - dt);
   if (weapon.aimRemaining > 0) {
     weapon.aimRemaining = Math.max(0, weapon.aimRemaining - dt);
@@ -305,7 +363,7 @@ function updateWeapon(world, state, shooter, weapon, dt) {
     return;
   }
   if (weapon.fireCooldown > 0) return;
-  const target = chooseTargetPlayer(world, shooter);
+  const target = assigned;
   if (!target || target.distance > PURSUER_SQUAD_TUNING.range) {
     weapon.fireCooldown = 0.35;
     return;
@@ -380,7 +438,10 @@ function hitBoat(world, projectile, boat, x, y) {
     .filter(({player}) => ["boat", "roof"].includes(player.mode) && player.activeBoat === boat.id)
     .map(({index}) => index);
   const targets = occupants.length ? occupants : [boat.driver ?? boat.owner].filter(Number.isInteger);
-  emit(world, "enemy-bullet-boat-hit", `Пуля попала в лодку. Корпус ${Math.round(boat.hull)}.`, targets, {
+  const text = occupants.length
+    ? `Пуля попала в твою лодку. Корпус ${Math.round(boat.hull)}.`
+    : `Пуля попала в твою пустую лодку. Корпус ${Math.round(boat.hull)}.`;
+  emit(world, "enemy-bullet-boat-hit", text, targets, {
     sourcePlayer: -1,
     sourcePursuerId: projectile.sourcePursuerId,
     projectileId: projectile.id,
@@ -489,17 +550,19 @@ export function updatePursuerSquad(world, dt, helpers = {}) {
   const state = ensurePursuerSquad(world);
   if (world.freeScenario?.phase === "pursuit" && !state.activated) activatePursuerSquad(world);
   if (!state.activated) return state;
+  reconcileAssignments(world, state);
   for (const escort of state.escorts) {
     if (!escort.active || escort.destroyed) continue;
     escort.contactCooldown = Math.max(0, (Number(escort.contactCooldown) || 0) - dt);
-    moveEscort(world, escort, dt);
+    const targetPlayer = state.assignments[escort.id];
+    moveEscort(world, escort, dt, targetPlayer);
     separateEscortFromBoats(world, escort, helpers);
     if (!escort.active || escort.destroyed) continue;
-    updateWeapon(world, state, escort, escort, dt);
+    updateWeapon(world, state, escort, escort, dt, targetPlayer);
   }
   const primary = world.freeActivities?.marauder;
   if (primary?.active && !primary.destroyed) {
-    updateWeapon(world, state, primary, state.primaryWeapon, dt);
+    updateWeapon(world, state, primary, state.primaryWeapon, dt, state.assignments[primary.id]);
   }
   updateProjectiles(world, state, dt, helpers);
   return state;

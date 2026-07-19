@@ -5,10 +5,10 @@ import {
   injuryMixTarget,
   registerCombatDamage,
   updateCombatRecovery,
-} from "./free-roam-combat-recovery.js?v=30";
-import {COMBAT_TUNING} from "./free-roam-combat-tuning.js?v=30";
-import {isCriticalHealth} from "./free-roam-critical-injury.js?v=30";
-import {activePursuers, damageEscort} from "./free-roam-pursuer-squad.js?v=30";
+} from "./free-roam-combat-recovery.js?v=31";
+import {COMBAT_TUNING} from "./free-roam-combat-tuning.js?v=31";
+import {isCriticalHealth} from "./free-roam-critical-injury.js?v=31";
+import {activePursuers, damageEscort} from "./free-roam-pursuer-squad.js?v=31";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));

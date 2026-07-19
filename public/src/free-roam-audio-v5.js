@@ -1,9 +1,9 @@
 "use strict";
 
-import {FreeRoamAudio as BaseFreeRoamAudio, spatialGainForDistance} from "./free-roam-audio-v4.js?v=30";
-import {relativeMovementPan} from "./free-roam-audio-v3.js?v=30";
-import {injuryLowpassFrequency} from "./free-roam-combat-recovery.js?v=30";
-import {COMBAT_TUNING} from "./free-roam-combat-tuning.js?v=30";
+import {FreeRoamAudio as BaseFreeRoamAudio, spatialGainForDistance} from "./free-roam-audio-v4.js?v=31";
+import {relativeMovementPan} from "./free-roam-audio-v3.js?v=31";
+import {injuryLowpassFrequency} from "./free-roam-combat-recovery.js?v=31";
+import {COMBAT_TUNING} from "./free-roam-combat-tuning.js?v=31";
 
 const ROOT = "/assets/audio/free-roam-v25/";
 const COMBAT_SOUNDS = Object.freeze({
@@ -278,11 +278,16 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
         this.playSynthPip({pan: aimSpatial.pan, frequency: 340, gain: warningGain * 1.08, duration: 0.1, delay: 0.14});
         return;
       }
+      case "pursuer-target-lock":
+        this.playSynthPip({pan: spatial.pan, frequency: 210, gain: 0.12, duration: 0.13});
+        this.playSynthPip({pan: spatial.pan, frequency: 210, gain: 0.12, duration: 0.13, delay: 0.2});
+        this.playSynthPip({pan: spatial.pan, frequency: 160, gain: 0.14, duration: 0.2, delay: 0.4});
+        return;
       case "enemy-gun-shot": {
         const shotSpatial = this.eventPanAndGain(event, 780);
         this.play("automaticShot", {
           pan: shotSpatial.pan,
-          gain: 0.92 * shotSpatial.gain,
+          gain: 0.72 * shotSpatial.gain,
           rate: 0.94,
           lowpass: 11500,
         });
