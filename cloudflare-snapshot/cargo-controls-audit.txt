@@ -1,0 +1,497 @@
+# Cargo, gesture and target control audit
+
+## cargo_and_pickups
+
+public/src/game-core-v16.js:44: ["w4-cargo-mid", "грузовая секция слева", -65, 120, 7, 13, 40],
+public/src/game-core-v16.js:64: ["w5-cargo-west", "грузовые обломки слева", -105, 205, 7, 12, 36],
+public/src/game-core-v16.js:65: ["w5-bow-east", "нос сухогруза справа", 70, 235, 9, 16, 52],
+public/src/game-core-v16.js:86: ["w6-cargo-west", "контейнеры слева", -145, 280, 8, 14, 44],
+public/src/game-core-v16.js:87: ["w6-stern-east", "корма сухогруза справа", 110, 300, 10, 17, 58],
+public/src/game-core-v13.js:60: Object.freeze({id: "risk-5b-entry", gateKey: "bow-gap", label: "вход у носа сухогруза", x: 48, y: 215, award: false}),
+public/src/game-core-v13.js:61: Object.freeze({id: "risk-5b-exit", gateKey: "bow-gap", label: "выход у сухогруза", x: 42, y: 240, award: true}),
+public/zero-shift/index.html:7: <title>Нулевая смена — загрузка</title>
+public/zero-shift/index.html:12: <p role="status" aria-live="polite">Загрузка станции…</p>
+public/zero-shift/index.html:47: document.body.innerHTML = '<main style="font:18px system-ui,sans-serif;max-width:720px;margin:40px auto;padding:20px;line-height:1.5"><h1>Нулевая смена</h1><p role="alert">Игра не загрузилась. Обнови страницу. Ошибка: ' + String(error.message || error).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])) + '</p></main>';
+cloudflare-snapshot/src/game-core-v16.js:44: ["w4-cargo-mid", "грузовая секция слева", -65, 120, 7, 13, 40],
+cloudflare-snapshot/src/game-core-v16.js:64: ["w5-cargo-west", "грузовые обломки слева", -105, 205, 7, 12, 36],
+cloudflare-snapshot/src/game-core-v16.js:65: ["w5-bow-east", "нос сухогруза справа", 70, 235, 9, 16, 52],
+cloudflare-snapshot/src/game-core-v16.js:86: ["w6-cargo-west", "контейнеры слева", -145, 280, 8, 14, 44],
+cloudflare-snapshot/src/game-core-v16.js:87: ["w6-stern-east", "корма сухогруза справа", 110, 300, 10, 17, 58],
+cloudflare-snapshot/src/game-core-v13.js:60: Object.freeze({id: "risk-5b-entry", gateKey: "bow-gap", label: "вход у носа сухогруза", x: 48, y: 215, award: false}),
+cloudflare-snapshot/src/game-core-v13.js:61: Object.freeze({id: "risk-5b-exit", gateKey: "bow-gap", label: "выход у сухогруза", x: 42, y: 240, award: true}),
+
+## three_finger
+
+public/src/free-roam-gesture-model.js:9: export function isTwoFingerTap({maxPointers, duration, movements}, options = {}) {
+public/src/free-roam-gesture-model.js:12: return maxPointers === 2
+public/src/free-roam-v3.js:433: if (!touchGroup) touchGroup = {startedAt: performance.now(), points: new Map(), maxPointers: 0};
+public/src/free-roam-v3.js:435: touchGroup.maxPointers = Math.max(touchGroup.maxPointers, activeTouches.size);
+public/src/free-roam-v3.js:436: if (touchGroup.maxPointers > 1) releaseGestureDirection();
+public/src/free-roam-v3.js:446: if (!touchGroup || touchGroup.maxPointers !== 1 || activeTouches.size !== 1) return;
+public/src/free-roam-v3.js:464: if (activeTouches.size > 0) return;
+public/src/free-roam-v3.js:470: const pumpTap = !cancelled && group && isTwoFingerTap({maxPointers: group.maxPointers, duration, movements});
+cloudflare-snapshot/src/free-roam-gesture-model.js:9: export function isTwoFingerTap({maxPointers, duration, movements}, options = {}) {
+cloudflare-snapshot/src/free-roam-gesture-model.js:12: return maxPointers === 2
+cloudflare-snapshot/src/free-roam-v3.js:433: if (!touchGroup) touchGroup = {startedAt: performance.now(), points: new Map(), maxPointers: 0};
+cloudflare-snapshot/src/free-roam-v3.js:435: touchGroup.maxPointers = Math.max(touchGroup.maxPointers, activeTouches.size);
+cloudflare-snapshot/src/free-roam-v3.js:436: if (touchGroup.maxPointers > 1) releaseGestureDirection();
+cloudflare-snapshot/src/free-roam-v3.js:446: if (!touchGroup || touchGroup.maxPointers !== 1 || activeTouches.size !== 1) return;
+cloudflare-snapshot/src/free-roam-v3.js:464: if (activeTouches.size > 0) return;
+cloudflare-snapshot/src/free-roam-v3.js:470: const pumpTap = !cancelled && group && isTwoFingerTap({maxPointers: group.maxPointers, duration, movements});
+
+## strong_hit
+
+public/index.html:60: <button id="buyRamKeel"></button>
+public/src/app.js:112: requestAnimationFrame(() => {
+public/src/app.js:190: "ram-keel": "buyRamKeel",
+public/src/app.js:382: requestAnimationFrame(() => $("gameTitle").focus({preventScroll: true}));
+public/src/app.js:386: cancelAnimationFrame(raf);
+public/src/app.js:389: const frame = now => {
+public/src/app.js:404: raf = requestAnimationFrame(frame);
+public/src/app.js:406: raf = requestAnimationFrame(frame);
+public/src/app.js:622: cancelAnimationFrame(raf);
+public/src/app.js:637: requestAnimationFrame(() => $("soloButton").focus({preventScroll: true}));
+public/src/app.js:686: $("buyRamKeel").addEventListener("click", () => buyUpgrade("ram-keel"));
+public/src/free-roam-core-v2.js:384: boatState.hull = clamp(boatState.hull + (CONFIG.hullRepairAmount || 22), 0, 100);
+public/src/free-roam-core-v2.js:385: boatState.leak = clamp(boatState.leak - (CONFIG.leakRepairAmount || 3.2), 0, 16);
+public/src/free-roam-core-v2.js:423: const impactSpeed = Math.abs(boatState.speed);
+public/src/free-roam-core-v2.js:425: if (impactSpeed > (CONFIG.shoreScrapeSpeed || 1.25) && boatState.collisionCooldown <= 0) {
+public/src/free-roam-core-v2.js:426: const severity = collisionSeverity(impactSpeed);
+public/src/free-roam-core-v2.js:427: const hard = impactSpeed >= (CONFIG.shoreHardImpactSpeed || 5);
+public/src/free-roam-core-v2.js:428: const ramp = clamp((impactSpeed - (CONFIG.shoreScrapeSpeed || 1.25)) / ((CONFIG.shoreHardImpactSpeed || 5) - (CONFIG.shoreScrapeSpeed || 1.25)), 0, 1);
+public/src/free-roam-core-v2.js:429: const rawDamage = ((CONFIG.shoreBaseDamage || 6) + (CONFIG.shoreSeverityDamage || 15) * severity) * ramp;
+public/src/free-roam-core-v2.js:430: const impact = applyCollisionDamage(boatState, rawDamage);
+public/src/free-roam-core-v2.js:431: boatState.leak = clamp(boatState.leak + impact.damage * 0.08, 0, 16);
+public/src/free-roam-core-v2.js:432: boatState.collisionCooldown = CONFIG.shoreImpactCooldown || 1.35;
+public/src/free-roam-core-v2.js:433: emit(world, "collision", hard ? "Сильный удар о берег." : "Удар о берег.", targets, {strength: impactSpeed, damage: impact.damage, shore: true});
+public/src/free-roam-core-v2.js:435: boatState.speed = impactSpeed <= (CONFIG.shoreScrapeSpeed || 1.25) ? 0 : -Math.sign(boatState.speed || 1) * Math.min(impactSpeed, Math.max(0.35, impactSpeed * 0.35));
+public/src/free-roam-core-v2.js:496: const impactSpeed = Math.abs(a.speed - b.speed) + Math.abs(a.speed) * 0.35 + Math.abs(b.speed) * 0.35;
+public/src/free-roam-core-v2.js:497: if (impactSpeed <= 2 || a.collisionCooldown > 0 || b.collisionCooldown > 0) return;
+public/src/free-roam-core-v2.js:498: const severity = collisionSeverity(impactSpeed);
+public/src/free-roam-core-v2.js:499: const impactA = applyCollisionDamage(a, 15 * severity);
+public/src/free-roam-core-v2.js:500: const impactB = applyCollisionDamage(b, 15 * severity);
+public/src/free-roam-core-v2.js:501: a.leak = clamp(a.leak + impactA.damage * 0.08, 0, 16);
+public/src/free-roam-core-v2.js:502: b.leak = clamp(b.leak + impactB.damage * 0.08, 0, 16);
+public/src/free-roam-core-v2.js:507: emit(world, "ram", `Столкновение лодок. Корпус минус ${Math.round(impactA.damage)} и ${Math.round(impactB.damage)}.`, [0, 1], {strength: impactSpeed});
+public/src/free-roam-v3.js:33: let previousFrame = 0;
+public/src/free-roam-v3.js:89: requestAnimationFrame(() => {
+public/src/free-roam-v3.js:98: url.searchParams.set("role", role);
+public/src/free-roam-v3.js:99: url.searchParams.set("mode", "free");
+public/src/free-roam-v3.js:100: if (role === "auto" && preferredRoomId) url.searchParams.set("room", preferredRoomId);
+public/src/free-roam-v3.js:128: requestAnimationFrame(() => $("gameTitle").focus({preventScroll: true}));
+public/src/free-roam-v3.js:129: previousFrame = performance.now();
+public/src/free-roam-v3.js:130: requestAnimationFrame(frame);
+public/src/free-roam-v3.js:297: "sink", "ram", "tow-detach", "flood-emergency-start", "flood-emergency-warning",
+public/src/free-roam-v3.js:303: function frame(now) {
+public/src/free-roam-v3.js:305: const dt = Math.min(0.1, Math.max(0, (now - previousFrame) / 1000));
+public/src/free-roam-v3.js:306: previousFrame = now;
+public/src/free-roam-v3.js:316: requestAnimationFrame(frame);
+public/src/progression.js:37: id: "ram-keel",
+public/src/audio-engine-v6.js:10: hullImpactReal: "https://raw.githubusercontent.com/Aurorastation/Aurora.3/b50f42f9d3981ff1b9158c87c08524c38e9a3be9/sound/machines/hatch_close1.ogg",
+public/src/audio-engine-v6.js:107: this.play("hullImpactReal", {pan: event.pan || 0, gain: 0.72, rate: 0.92, lowpass: 5400});
+public/src/audio-engine-v11.js:140: } else if (event.type === "hunter-ram") {
+public/src/gameplay-v4.js:24: requestAnimationFrame(() => { live.textContent = text; });
+public/src/game-core-v16.js:22: hunterRamCooldown: 3.6,
+public/src/game-core-v16.js:97: const RAM_MULTIPLIER = Object.freeze({strizh: 1, kasatka: 0.92, burevestnik: 1.12, grom: 1.7});
+public/src/game-core-v16.js:167: if (!Number.isFinite(state.hunter.ramCooldown)) state.hunter.ramCooldown = 0;
+public/src/game-core-v16.js:297: // Shoreline contacts are emitted without physical impact fields by v7 and
+public/src/game-core-v16.js:299: if (!Number.isFinite(event.impactSpeed) && !Number.isFinite(event.damage)) return;
+public/src/game-core-v16.js:308: const speed = Math.abs(Number(event.impactSpeed) || 0);
+public/src/game-core-v16.js:309: const modelRam = RAM_MULTIPLIER[state.boat.modelId] || 1;
+public/src/game-core-v16.js:310: const keel = state.progression?.upgrades?.ramKeel ? 1.45 : 1;
+public/src/game-core-v16.js:311: const ramForce = (4 + Math.pow(speed, 1.5) * 0.58) * modelRam * keel;
+public/src/game-core-v16.js:312: hazard.durability = clamp(hazard.durability - ramForce, 0, hazard.maxDurability);
+public/src/game-core-v16.js:313: event.wreckDamage = ramForce;
+public/src/game-core-v16.js:318: const keelProtection = state.progression?.upgrades?.ramKeel ? 0.68 : 1;
+public/src/game-core-v16.js:326: if (!embeddedBefore && speed >= 9 && ramForce >= 20 && hazard.fragmentRisk) {
+public/src/game-core-v16.js:461: // side choice, so several nearby wrecks cannot flip it every frame.
+public/src/game-core-v16.js:518: function ramPlayer(state, events, now) {
+public/src/game-core-v16.js:521: if (hunter.destroyed || metres > CONFIG.hunterCollisionRadius || hunter.ramCooldown > 0 || state.damageControl?.floodEmergency) return;
+public/src/game-core-v16.js:540: const playerLedImpact = Math.abs(state.boat.speed) >= 7.5 && playerClosing > hunterClosing + 0.75;
+public/src/game-core-v16.js:544: hunter.ramCooldown = CONFIG.hunterRamCooldown;
+public/src/game-core-v16.js:545: hunter.recoverUntil = now + CONFIG.hunterRamCooldown;
+public/src/game-core-v16.js:550: if (playerLedImpact) {
+public/src/game-core-v16.js:551: const modelRam = RAM_MULTIPLIER[state.boat.modelId] || 1;
+public/src/game-core-v16.js:552: const keel = state.progression?.upgrades?.ramKeel ? 1.45 : 1;
+public/src/game-core-v16.js:553: const hunterDamage = clamp((5 + Math.pow(relativeSpeed, 1.18) * 0.72) * modelRam * keel, 8, 42);
+public/src/game-core-v16.js:554: const selfImpact = applyCollisionDamage(state.boat, clamp(2.5 + relativeSpeed * 0.3, 4, 13));
+public/src/game-core-v16.js:557: const result = damageHunter(state, hunterDamage, events, {pan, impactSpeed: relativeSpeed});
+public/src/game-core-v16.js:563: playerDamage: selfImpact.damage,
+public/src/game-core-v16.js:564: absorbed: selfImpact.absorbed,
+public/src/game-core-v16.js:565: impactSpeed: relativeSpeed,
+public/src/game-core-v16.js:568: noteHunterOutcome(state, "hunter-hit", {damage: result.damage, impactSpeed: relativeSpeed});
+public/src/game-core-v16.js:573: const impact = applyCollisionDamage(state.boat, rawDamage);
+public/src/game-core-v16.js:574: const hunterImpact = damageHunter(state, clamp(2.5 + relativeSpeed * 0.26, 4, 12), events, {pan, impactSpeed: relativeSpeed});
+public/src/game-core-v16.js:578: type: "hunter-ram",
+public/src/game-core-v16.js:579: damage: impact.damage,
+public/src/game-core-v16.js:580: absorbed: impact.absorbed,
+public/src/game-core-v16.js:581: hunterDamage: hunterImpact.damage,
+public/src/game-core-v16.js:583: impactSpeed: relativeSpeed,
+public/src/game-core-v16.js:586: noteHunterOutcome(state, "hunter-ram", {damage: impact.damage, impactSpeed: relativeSpeed});
+public/src/game-core-v16.js:593: hunter.ramCooldown = Math.max(0, hunter.ramCooldown - dt);
+public/src/game-core-v16.js:636: ramPlayer(state, events, now);
+public/src/game-core-v16.js:661: const ram = events.find(event => event.type === "hunter-ram");
+public/src/game-core-v16.js:669: else if (ram) state.message = `Таран. Корпус минус ${Math.round(ram.damage || 0)}%.`;
+public/src/game-core-v16.js:768: ramBait: state.hunter.brain?.ramBait || 0,
+public/src/game-core-v16.js:773: ramCooldown: state.hunter.ramCooldown,
+public/src/audio-engine-v7.js:22: envelope.gain.exponentialRampToValueAtTime(Math.max(0.0002, gain), at + 0.008);
+public/src/audio-engine-v7.js:23: envelope.gain.exponentialRampToValueAtTime(0.0001, at + duration);
+public/src/hunter-brain.js:16: "bait-ram",
+public/src/hunter-brain.js:29: "bait-ram": "уклоняется от тарана",
+public/src/hunter-brain.js:173: clamp(snapshot.ramBait || 0, 0, 1),
+public/src/hunter-brain.js:210: ramBait: 0,
+public/src/hunter-brain.js:215: successfulRams: 0,
+public/src/hunter-brain.js:241: brain.ramBait = smooth(brain.ramBait, deliberateClosing ? 1 : 0, dt, deliberateClosing ? 2.8 : 0.7);
+public/src/hunter-brain.js:266: ramBait: brain.ramBait,
+public/src/hunter-brain.js:294: if (brain.ramBait > 0.36 || brain.playerLedHits > 0.65) addBias(logits, "bait-ram", 2.9);
+public/src/hunter-brain.js:375: if (tactic === "bait-ram") {
+public/src/hunter-brain.js:394: "bait-ram": 0.84,
+public/src/hunter-brain.js:412: brain.ramBait = clamp(brain.ramBait + 0.55, 0, 1);
+public/src/hunter-brain.js:413: } else if (kind === "hunter-ram") {
+public/src/hunter-brain.js:414: brain.successfulRams += 1;
+public/src/hunter-brain.js:416: brain.ramBait = clamp(brain.ramBait - 0.25, 0, 1);
+public/src/free-roam-core-v3.js:243: if (newEvents.some(event => ["collision", "ram", "anchor"].includes(event.type))) return;
+public/src/game-core.js:304: const impactSpeed = Math.abs(boat.speed);
+public/src/game-core.js:305: const severity = collisionSeverity(impactSpeed);
+public/src/game-core.js:306: const impact = applyCollisionDamage(boat, hazard.damage * severity);
+public/src/game-core.js:308: const armorText = impact.absorbed > 0 ? ` Броня поглотила ${Math.round(impact.absorbed)}.` : "";
+public/src/game-core.js:309: state.message = `Удар о ${hazard.type === "reef" ? "риф" : "обломки"}. Потеря корпуса: ${Math.round(impact.damage)} процентов.${armorText}`;
+public/src/game-core.js:310: pushEvent(state, "collision", state.message, {hazard: hazard.id, damage: impact.damage, absorbed: impact.absorbed, impactSpeed});
+public/src/game-core.js:311: events.push({type: "collision", severity, damage: impact.damage, absorbed: impact.absorbed, armor: impact.armor, impactSpeed, pan: hazard.x < boat.x ? -0.7 : 0.7});
+public/src/game-core-v5.js:13: hullRepairAmount: 22,
+public/src/game-core-v5.js:14: leakRepairAmount: 3.2,
+public/src/game-core-v5.js:234: boat.hull = clamp(boat.hull + CONFIG.hullRepairAmount, 0, 100);
+public/src/game-core-v5.js:235: boat.leak = clamp(boat.leak - CONFIG.leakRepairAmount, 0, 16);
+public/src/game-core-v8.js:170: const impactSpeed = Math.abs(previousSpeed);
+public/src/game-core-v8.js:171: const severity = collisionSeverity(impactSpeed);
+public/src/game-core-v8.js:172: const impact = applyCollisionDamage(state.boat, hazard.damage * severity);
+public/src/game-core-v8.js:176: damage: impact.damage,
+public/src/game-core-v8.js:177: absorbed: impact.absorbed,
+public/src/game-core-v8.js:178: armor: impact.armor,
+public/src/game-core-v8.js:179: impactSpeed,
+public/src/free-roam-v2.js:21: let previousFrame = 0;
+public/src/free-roam-v2.js:40: requestAnimationFrame(() => {
+public/src/free-roam-v2.js:140: requestAnimationFrame(() => $("gameTitle").focus({preventScroll: true}));
+public/src/free-roam-v2.js:141: previousFrame = performance.now();
+public/src/free-roam-v2.js:142: requestAnimationFrame(frame);
+public/src/free-roam-v2.js:202: if (event.text) announce(event.text, ["sink", "ram", "tow-detach", "flood-emergency-start", "flood-emergency-warning", "flood-emergency-failed"].includes(event.type));
+public/src/free-roam-v2.js:206: function frame(now) {
+public/src/free-roam-v2.js:208: const dt = Math.min(.1, Math.max(0, (now - previousFrame) / 1000));
+public/src/free-roam-v2.js:209: previousFrame = now;
+public/src/free-roam-v2.js:219: requestAnimationFrame(frame);
+public/src/game-core-v12.js:81: ramKeel: source.upgrades?.["ram-keel"] === true,
+public/src/game-core-v12.js:142: for (const key of ["coastBrake", "miniArmor", "highFlowPump", "ramKeel", "debrisTools"]) {
+public/src/game-core-v9.js:95: // on the next frame, making the promised repair window impossible to use.
+public/src/hunter-virtual-players.js:30: Object.freeze({id: "ram-bait", label: "разворачивает нос и таранит", tactic: "bait-ram"}),
+public/src/hunter-virtual-players.js:42: case "idle": return {speed: 0, turn: 0, decoy: false, ram: 0};
+public/src/hunter-virtual-players.js:43: case "reverse": return {speed: -4.2 + noise, turn: Math.sin(time * 0.7) * 0.08, decoy: false, ram: 0};
+public/src/hunter-virtual-players.js:44: case "straight": return {speed: 17 + noise * 4, turn: 0, decoy: false, ram: 0};
+public/src/hunter-virtual-players.js:45: case "grom-escape": return {speed: 32 + noise * 3, turn: Math.sin(time * 0.35) * 0.03, decoy: false, ram: 0};
+public/src/hunter-virtual-players.js:46: case "ram-bait": return {speed: 13.5 + noise * 3, turn: Math.sin(time * 0.9) * 0.11, decoy: false, ram: 1};
+public/src/hunter-virtual-players.js:47: case "circle-left": return {speed: 11 + noise * 2, turn: -0.82, decoy: false, ram: 0.1};
+public/src/hunter-virtual-players.js:48: case "circle-right": return {speed: 11 + noise * 2, turn: 0.82, decoy: false, ram: 0.1};
+public/src/hunter-virtual-players.js:49: case "zigzag-left": return {speed: 15 + noise * 3, turn: Math.sin(time * 2.5) < 0 ? -0.75 : -0.15, decoy: false, ram: 0};
+public/src/hunter-virtual-players.js:50: case "zigzag-right": return {speed: 15 + noise * 3, turn: Math.sin(time * 2.5) > 0 ? 0.75 : 0.15, decoy: false, ram: 0};
+public/src/hunter-virtual-players.js:51: case "repeat-decoy": return {speed: 18 + noise * 2, turn: Math.sin(time) * 0.08, decoy: time > 1, ram: 0};
+public/src/hunter-virtual-players.js:52: case "damaged-hunter": return {speed: 12 + noise * 2, turn: Math.sin(time * 0.8) * 0.2, decoy: false, ram: 0.35};
+public/src/hunter-virtual-players.js:53: default: return {speed: 12, turn: 0, decoy: false, ram: 0};
+public/src/hunter-virtual-players.js:66: let failedAttacks = profile.id.includes("circle") ? 1.2 : profile.id === "ram-bait" ? 1.7 : 0;
+public/src/hunter-virtual-players.js:67: let playerLedHits = profile.id === "ram-bait" ? 1.1 + random() * 1.2 : 0;
+public/src/hunter-virtual-players.js:111: ramBait: action.ram,
+public/src/hunter-virtual-players.js:202: parameterCount: weights.w1.length + weights.b1.length + weights.w2.length + weights.b2.length + weights.w3.length + weights.b3.length,
+public/src/gameplay-v5.js:29: requestAnimationFrame(() => { live.textContent = text; });
+public/src/free-roam-audio.js:17: case "ram":
+public/src/free-roam-audio.js:21: impactSpeed: event.strength || 0,
+public/src/free-roam-audio.js:22: hardImpact: (event.strength || 0) >= 5,
+public/src/gameplay-v6.js:34: requestAnimationFrame(restore);
+public/src/gameplay-v6.js:47: requestAnimationFrame(() => { live.textContent = text; });
+public/src/gameplay-v6.js:182: const ram = current.boat.modelId === "grom" && Math.abs(current.boat.speed) >= 8
+public/src/gameplay-v6.js:185: return `Преследователь ${side}, ${Math.round(currentView.hunter.distance)} м. Корпус ${Math.round(currentView.hunter.hull)}%. ${currentView.hunter.modeLabel}.${ram}`;
+public/src/audio-engine-v13.js:12: } else if (!event.hardImpact) {
+public/src/game-core-v18.js:9: shoreImpactCooldown: 1.35,
+public/src/game-core-v18.js:11: shoreHardImpactSpeed: 5,
+public/src/game-core-v18.js:40: state.shoreImpact ||= {};
+public/src/game-core-v18.js:41: if (!Number.isFinite(state.shoreImpact.lastAt)) state.shoreImpact.lastAt = -999;
+public/src/game-core-v18.js:75: function strengthenShoreImpact(state, events, previousSpeed, previousMessage) {
+public/src/game-core-v18.js:78: && !Number.isFinite(event.impactSpeed));
+public/src/game-core-v18.js:91: if (now - state.shoreImpact.lastAt < CONFIG.shoreImpactCooldown) {
+public/src/game-core-v18.js:97: state.shoreImpact.lastAt = now;
+public/src/game-core-v18.js:98: const impactSpeed = Math.abs(Number(previousSpeed) || 0);
+public/src/game-core-v18.js:99: const severity = collisionSeverity(impactSpeed);
+public/src/game-core-v18.js:100: const scrape = impactSpeed <= CONFIG.shoreScrapeSpeed;
+public/src/game-core-v18.js:101: const hardImpact = impactSpeed >= CONFIG.shoreHardImpactSpeed;
+public/src/game-core-v18.js:102: const damageRamp = clamp(
+public/src/game-core-v18.js:103: (impactSpeed - CONFIG.shoreScrapeSpeed) / (CONFIG.shoreHardImpactSpeed - CONFIG.shoreScrapeSpeed),
+public/src/game-core-v18.js:109: : (CONFIG.shoreBaseDamage + CONFIG.shoreSeverityDamage * severity) * damageRamp;
+public/src/game-core-v18.js:110: const impact = applyCollisionDamage(state.boat, rawDamage);
+public/src/game-core-v18.js:111: const rebound = Math.min(impactSpeed, Math.max(0.35, impactSpeed * 0.35));
+public/src/game-core-v18.js:119: hardImpact,
+public/src/game-core-v18.js:120: damage: impact.damage,
+public/src/game-core-v18.js:121: absorbed: impact.absorbed,
+public/src/game-core-v18.js:122: armor: impact.armor,
+public/src/game-core-v18.js:123: impactSpeed,
+public/src/game-core-v18.js:129: const armor = impact.absorbed > 0 ? ` Броня приняла ${Math.round(impact.absorbed)}.` : "";
+public/src/game-core-v18.js:130: const impactText = hardImpact ? "Сильный удар" : "Удар";
+public/src/game-core-v18.js:131: const damageText = impact.damage < 1 ? impact.damage.toFixed(1) : Math.round(impact.damage);
+public/src/game-core-v18.js:132: state.message = `${impactText} о берег. Корпус минус ${damageText}%.${armor}`;
+public/src/game-core-v18.js:271: // several frames after the player has already let go of the button.
+public/src/game-core-v18.js:334: strengthenShoreImpact(state, events, previousSpeed, previousMessage);
+public/tests/free-roam-browser.html:54: check(w.boats[0].hull < hull && w.boats[1].hull < 100, "boats damage each other by ramming");
+cloudflare-snapshot/index.html:60: <button id="buyRamKeel"></button>
+cloudflare-snapshot/src/app.js:112: requestAnimationFrame(() => {
+cloudflare-snapshot/src/app.js:190: "ram-keel": "buyRamKeel",
+cloudflare-snapshot/src/app.js:382: requestAnimationFrame(() => $("gameTitle").focus({preventScroll: true}));
+cloudflare-snapshot/src/app.js:386: cancelAnimationFrame(raf);
+cloudflare-snapshot/src/app.js:389: const frame = now => {
+cloudflare-snapshot/src/app.js:404: raf = requestAnimationFrame(frame);
+cloudflare-snapshot/src/app.js:406: raf = requestAnimationFrame(frame);
+cloudflare-snapshot/src/app.js:622: cancelAnimationFrame(raf);
+cloudflare-snapshot/src/app.js:637: requestAnimationFrame(() => $("soloButton").focus({preventScroll: true}));
+cloudflare-snapshot/src/app.js:686: $("buyRamKeel").addEventListener("click", () => buyUpgrade("ram-keel"));
+cloudflare-snapshot/src/free-roam-core-v2.js:384: boatState.hull = clamp(boatState.hull + (CONFIG.hullRepairAmount || 22), 0, 100);
+cloudflare-snapshot/src/free-roam-core-v2.js:385: boatState.leak = clamp(boatState.leak - (CONFIG.leakRepairAmount || 3.2), 0, 16);
+cloudflare-snapshot/src/free-roam-core-v2.js:423: const impactSpeed = Math.abs(boatState.speed);
+cloudflare-snapshot/src/free-roam-core-v2.js:425: if (impactSpeed > (CONFIG.shoreScrapeSpeed || 1.25) && boatState.collisionCooldown <= 0) {
+cloudflare-snapshot/src/free-roam-core-v2.js:426: const severity = collisionSeverity(impactSpeed);
+cloudflare-snapshot/src/free-roam-core-v2.js:427: const hard = impactSpeed >= (CONFIG.shoreHardImpactSpeed || 5);
+cloudflare-snapshot/src/free-roam-core-v2.js:428: const ramp = clamp((impactSpeed - (CONFIG.shoreScrapeSpeed || 1.25)) / ((CONFIG.shoreHardImpactSpeed || 5) - (CONFIG.shoreScrapeSpeed || 1.25)), 0, 1);
+cloudflare-snapshot/src/free-roam-core-v2.js:429: const rawDamage = ((CONFIG.shoreBaseDamage || 6) + (CONFIG.shoreSeverityDamage || 15) * severity) * ramp;
+cloudflare-snapshot/src/free-roam-core-v2.js:430: const impact = applyCollisionDamage(boatState, rawDamage);
+cloudflare-snapshot/src/free-roam-core-v2.js:431: boatState.leak = clamp(boatState.leak + impact.damage * 0.08, 0, 16);
+cloudflare-snapshot/src/free-roam-core-v2.js:432: boatState.collisionCooldown = CONFIG.shoreImpactCooldown || 1.35;
+cloudflare-snapshot/src/free-roam-core-v2.js:433: emit(world, "collision", hard ? "Сильный удар о берег." : "Удар о берег.", targets, {strength: impactSpeed, damage: impact.damage, shore: true});
+cloudflare-snapshot/src/free-roam-core-v2.js:435: boatState.speed = impactSpeed <= (CONFIG.shoreScrapeSpeed || 1.25) ? 0 : -Math.sign(boatState.speed || 1) * Math.min(impactSpeed, Math.max(0.35, impactSpeed * 0.35));
+cloudflare-snapshot/src/free-roam-core-v2.js:496: const impactSpeed = Math.abs(a.speed - b.speed) + Math.abs(a.speed) * 0.35 + Math.abs(b.speed) * 0.35;
+cloudflare-snapshot/src/free-roam-core-v2.js:497: if (impactSpeed <= 2 || a.collisionCooldown > 0 || b.collisionCooldown > 0) return;
+cloudflare-snapshot/src/free-roam-core-v2.js:498: const severity = collisionSeverity(impactSpeed);
+cloudflare-snapshot/src/free-roam-core-v2.js:499: const impactA = applyCollisionDamage(a, 15 * severity);
+cloudflare-snapshot/src/free-roam-core-v2.js:500: const impactB = applyCollisionDamage(b, 15 * severity);
+cloudflare-snapshot/src/free-roam-core-v2.js:501: a.leak = clamp(a.leak + impactA.damage * 0.08, 0, 16);
+cloudflare-snapshot/src/free-roam-core-v2.js:502: b.leak = clamp(b.leak + impactB.damage * 0.08, 0, 16);
+cloudflare-snapshot/src/free-roam-core-v2.js:507: emit(world, "ram", `Столкновение лодок. Корпус минус ${Math.round(impactA.damage)} и ${Math.round(impactB.damage)}.`, [0, 1], {strength: impactSpeed});
+cloudflare-snapshot/src/free-roam-v3.js:33: let previousFrame = 0;
+cloudflare-snapshot/src/free-roam-v3.js:89: requestAnimationFrame(() => {
+cloudflare-snapshot/src/free-roam-v3.js:98: url.searchParams.set("role", role);
+cloudflare-snapshot/src/free-roam-v3.js:99: url.searchParams.set("mode", "free");
+cloudflare-snapshot/src/free-roam-v3.js:100: if (role === "auto" && preferredRoomId) url.searchParams.set("room", preferredRoomId);
+cloudflare-snapshot/src/free-roam-v3.js:128: requestAnimationFrame(() => $("gameTitle").focus({preventScroll: true}));
+cloudflare-snapshot/src/free-roam-v3.js:129: previousFrame = performance.now();
+cloudflare-snapshot/src/free-roam-v3.js:130: requestAnimationFrame(frame);
+cloudflare-snapshot/src/free-roam-v3.js:297: "sink", "ram", "tow-detach", "flood-emergency-start", "flood-emergency-warning",
+cloudflare-snapshot/src/free-roam-v3.js:303: function frame(now) {
+cloudflare-snapshot/src/free-roam-v3.js:305: const dt = Math.min(0.1, Math.max(0, (now - previousFrame) / 1000));
+cloudflare-snapshot/src/free-roam-v3.js:306: previousFrame = now;
+cloudflare-snapshot/src/free-roam-v3.js:316: requestAnimationFrame(frame);
+cloudflare-snapshot/src/progression.js:37: id: "ram-keel",
+cloudflare-snapshot/src/audio-engine-v6.js:10: hullImpactReal: "https://raw.githubusercontent.com/Aurorastation/Aurora.3/b50f42f9d3981ff1b9158c87c08524c38e9a3be9/sound/machines/hatch_close1.ogg",
+cloudflare-snapshot/src/audio-engine-v6.js:107: this.play("hullImpactReal", {pan: event.pan || 0, gain: 0.72, rate: 0.92, lowpass: 5400});
+cloudflare-snapshot/src/audio-engine-v11.js:140: } else if (event.type === "hunter-ram") {
+cloudflare-snapshot/src/game-core-v16.js:22: hunterRamCooldown: 3.6,
+cloudflare-snapshot/src/game-core-v16.js:97: const RAM_MULTIPLIER = Object.freeze({strizh: 1, kasatka: 0.92, burevestnik: 1.12, grom: 1.7});
+cloudflare-snapshot/src/game-core-v16.js:167: if (!Number.isFinite(state.hunter.ramCooldown)) state.hunter.ramCooldown = 0;
+cloudflare-snapshot/src/game-core-v16.js:297: // Shoreline contacts are emitted without physical impact fields by v7 and
+cloudflare-snapshot/src/game-core-v16.js:299: if (!Number.isFinite(event.impactSpeed) && !Number.isFinite(event.damage)) return;
+cloudflare-snapshot/src/game-core-v16.js:308: const speed = Math.abs(Number(event.impactSpeed) || 0);
+cloudflare-snapshot/src/game-core-v16.js:309: const modelRam = RAM_MULTIPLIER[state.boat.modelId] || 1;
+cloudflare-snapshot/src/game-core-v16.js:310: const keel = state.progression?.upgrades?.ramKeel ? 1.45 : 1;
+cloudflare-snapshot/src/game-core-v16.js:311: const ramForce = (4 + Math.pow(speed, 1.5) * 0.58) * modelRam * keel;
+cloudflare-snapshot/src/game-core-v16.js:312: hazard.durability = clamp(hazard.durability - ramForce, 0, hazard.maxDurability);
+cloudflare-snapshot/src/game-core-v16.js:313: event.wreckDamage = ramForce;
+cloudflare-snapshot/src/game-core-v16.js:318: const keelProtection = state.progression?.upgrades?.ramKeel ? 0.68 : 1;
+cloudflare-snapshot/src/game-core-v16.js:326: if (!embeddedBefore && speed >= 9 && ramForce >= 20 && hazard.fragmentRisk) {
+cloudflare-snapshot/src/game-core-v16.js:461: // side choice, so several nearby wrecks cannot flip it every frame.
+cloudflare-snapshot/src/game-core-v16.js:518: function ramPlayer(state, events, now) {
+cloudflare-snapshot/src/game-core-v16.js:521: if (hunter.destroyed || metres > CONFIG.hunterCollisionRadius || hunter.ramCooldown > 0 || state.damageControl?.floodEmergency) return;
+cloudflare-snapshot/src/game-core-v16.js:540: const playerLedImpact = Math.abs(state.boat.speed) >= 7.5 && playerClosing > hunterClosing + 0.75;
+cloudflare-snapshot/src/game-core-v16.js:544: hunter.ramCooldown = CONFIG.hunterRamCooldown;
+cloudflare-snapshot/src/game-core-v16.js:545: hunter.recoverUntil = now + CONFIG.hunterRamCooldown;
+cloudflare-snapshot/src/game-core-v16.js:550: if (playerLedImpact) {
+cloudflare-snapshot/src/game-core-v16.js:551: const modelRam = RAM_MULTIPLIER[state.boat.modelId] || 1;
+cloudflare-snapshot/src/game-core-v16.js:552: const keel = state.progression?.upgrades?.ramKeel ? 1.45 : 1;
+cloudflare-snapshot/src/game-core-v16.js:553: const hunterDamage = clamp((5 + Math.pow(relativeSpeed, 1.18) * 0.72) * modelRam * keel, 8, 42);
+cloudflare-snapshot/src/game-core-v16.js:554: const selfImpact = applyCollisionDamage(state.boat, clamp(2.5 + relativeSpeed * 0.3, 4, 13));
+cloudflare-snapshot/src/game-core-v16.js:557: const result = damageHunter(state, hunterDamage, events, {pan, impactSpeed: relativeSpeed});
+cloudflare-snapshot/src/game-core-v16.js:563: playerDamage: selfImpact.damage,
+cloudflare-snapshot/src/game-core-v16.js:564: absorbed: selfImpact.absorbed,
+cloudflare-snapshot/src/game-core-v16.js:565: impactSpeed: relativeSpeed,
+cloudflare-snapshot/src/game-core-v16.js:568: noteHunterOutcome(state, "hunter-hit", {damage: result.damage, impactSpeed: relativeSpeed});
+cloudflare-snapshot/src/game-core-v16.js:573: const impact = applyCollisionDamage(state.boat, rawDamage);
+cloudflare-snapshot/src/game-core-v16.js:574: const hunterImpact = damageHunter(state, clamp(2.5 + relativeSpeed * 0.26, 4, 12), events, {pan, impactSpeed: relativeSpeed});
+cloudflare-snapshot/src/game-core-v16.js:578: type: "hunter-ram",
+cloudflare-snapshot/src/game-core-v16.js:579: damage: impact.damage,
+cloudflare-snapshot/src/game-core-v16.js:580: absorbed: impact.absorbed,
+cloudflare-snapshot/src/game-core-v16.js:581: hunterDamage: hunterImpact.damage,
+cloudflare-snapshot/src/game-core-v16.js:583: impactSpeed: relativeSpeed,
+cloudflare-snapshot/src/game-core-v16.js:586: noteHunterOutcome(state, "hunter-ram", {damage: impact.damage, impactSpeed: relativeSpeed});
+cloudflare-snapshot/src/game-core-v16.js:593: hunter.ramCooldown = Math.max(0, hunter.ramCooldown - dt);
+cloudflare-snapshot/src/game-core-v16.js:636: ramPlayer(state, events, now);
+cloudflare-snapshot/src/game-core-v16.js:661: const ram = events.find(event => event.type === "hunter-ram");
+cloudflare-snapshot/src/game-core-v16.js:669: else if (ram) state.message = `Таран. Корпус минус ${Math.round(ram.damage || 0)}%.`;
+cloudflare-snapshot/src/game-core-v16.js:768: ramBait: state.hunter.brain?.ramBait || 0,
+cloudflare-snapshot/src/game-core-v16.js:773: ramCooldown: state.hunter.ramCooldown,
+cloudflare-snapshot/src/audio-engine-v7.js:22: envelope.gain.exponentialRampToValueAtTime(Math.max(0.0002, gain), at + 0.008);
+cloudflare-snapshot/src/audio-engine-v7.js:23: envelope.gain.exponentialRampToValueAtTime(0.0001, at + duration);
+cloudflare-snapshot/src/hunter-brain.js:16: "bait-ram",
+cloudflare-snapshot/src/hunter-brain.js:29: "bait-ram": "уклоняется от тарана",
+cloudflare-snapshot/src/hunter-brain.js:173: clamp(snapshot.ramBait || 0, 0, 1),
+cloudflare-snapshot/src/hunter-brain.js:210: ramBait: 0,
+cloudflare-snapshot/src/hunter-brain.js:215: successfulRams: 0,
+cloudflare-snapshot/src/hunter-brain.js:241: brain.ramBait = smooth(brain.ramBait, deliberateClosing ? 1 : 0, dt, deliberateClosing ? 2.8 : 0.7);
+cloudflare-snapshot/src/hunter-brain.js:266: ramBait: brain.ramBait,
+cloudflare-snapshot/src/hunter-brain.js:294: if (brain.ramBait > 0.36 || brain.playerLedHits > 0.65) addBias(logits, "bait-ram", 2.9);
+cloudflare-snapshot/src/hunter-brain.js:375: if (tactic === "bait-ram") {
+cloudflare-snapshot/src/hunter-brain.js:394: "bait-ram": 0.84,
+cloudflare-snapshot/src/hunter-brain.js:412: brain.ramBait = clamp(brain.ramBait + 0.55, 0, 1);
+cloudflare-snapshot/src/hunter-brain.js:413: } else if (kind === "hunter-ram") {
+cloudflare-snapshot/src/hunter-brain.js:414: brain.successfulRams += 1;
+cloudflare-snapshot/src/hunter-brain.js:416: brain.ramBait = clamp(brain.ramBait - 0.25, 0, 1);
+cloudflare-snapshot/src/free-roam-core-v3.js:243: if (newEvents.some(event => ["collision", "ram", "anchor"].includes(event.type))) return;
+cloudflare-snapshot/src/game-core.js:304: const impactSpeed = Math.abs(boat.speed);
+cloudflare-snapshot/src/game-core.js:305: const severity = collisionSeverity(impactSpeed);
+cloudflare-snapshot/src/game-core.js:306: const impact = applyCollisionDamage(boat, hazard.damage * severity);
+cloudflare-snapshot/src/game-core.js:308: const armorText = impact.absorbed > 0 ? ` Броня поглотила ${Math.round(impact.absorbed)}.` : "";
+cloudflare-snapshot/src/game-core.js:309: state.message = `Удар о ${hazard.type === "reef" ? "риф" : "обломки"}. Потеря корпуса: ${Math.round(impact.damage)} процентов.${armorText}`;
+cloudflare-snapshot/src/game-core.js:310: pushEvent(state, "collision", state.message, {hazard: hazard.id, damage: impact.damage, absorbed: impact.absorbed, impactSpeed});
+cloudflare-snapshot/src/game-core.js:311: events.push({type: "collision", severity, damage: impact.damage, absorbed: impact.absorbed, armor: impact.armor, impactSpeed, pan: hazard.x < boat.x ? -0.7 : 0.7});
+cloudflare-snapshot/src/game-core-v5.js:13: hullRepairAmount: 22,
+cloudflare-snapshot/src/game-core-v5.js:14: leakRepairAmount: 3.2,
+cloudflare-snapshot/src/game-core-v5.js:234: boat.hull = clamp(boat.hull + CONFIG.hullRepairAmount, 0, 100);
+cloudflare-snapshot/src/game-core-v5.js:235: boat.leak = clamp(boat.leak - CONFIG.leakRepairAmount, 0, 16);
+cloudflare-snapshot/src/game-core-v8.js:170: const impactSpeed = Math.abs(previousSpeed);
+cloudflare-snapshot/src/game-core-v8.js:171: const severity = collisionSeverity(impactSpeed);
+cloudflare-snapshot/src/game-core-v8.js:172: const impact = applyCollisionDamage(state.boat, hazard.damage * severity);
+cloudflare-snapshot/src/game-core-v8.js:176: damage: impact.damage,
+cloudflare-snapshot/src/game-core-v8.js:177: absorbed: impact.absorbed,
+cloudflare-snapshot/src/game-core-v8.js:178: armor: impact.armor,
+cloudflare-snapshot/src/game-core-v8.js:179: impactSpeed,
+cloudflare-snapshot/src/game-core-v12.js:81: ramKeel: source.upgrades?.["ram-keel"] === true,
+cloudflare-snapshot/src/game-core-v12.js:142: for (const key of ["coastBrake", "miniArmor", "highFlowPump", "ramKeel", "debrisTools"]) {
+cloudflare-snapshot/src/game-core-v9.js:95: // on the next frame, making the promised repair window impossible to use.
+cloudflare-snapshot/src/free-roam-audio.js:17: case "ram":
+cloudflare-snapshot/src/free-roam-audio.js:21: impactSpeed: event.strength || 0,
+cloudflare-snapshot/src/free-roam-audio.js:22: hardImpact: (event.strength || 0) >= 5,
+cloudflare-snapshot/src/gameplay-v6.js:34: requestAnimationFrame(restore);
+cloudflare-snapshot/src/gameplay-v6.js:47: requestAnimationFrame(() => { live.textContent = text; });
+cloudflare-snapshot/src/gameplay-v6.js:182: const ram = current.boat.modelId === "grom" && Math.abs(current.boat.speed) >= 8
+cloudflare-snapshot/src/gameplay-v6.js:185: return `Преследователь ${side}, ${Math.round(currentView.hunter.distance)} м. Корпус ${Math.round(currentView.hunter.hull)}%. ${currentView.hunter.modeLabel}.${ram}`;
+cloudflare-snapshot/src/audio-engine-v13.js:12: } else if (!event.hardImpact) {
+cloudflare-snapshot/src/game-core-v18.js:9: shoreImpactCooldown: 1.35,
+cloudflare-snapshot/src/game-core-v18.js:11: shoreHardImpactSpeed: 5,
+cloudflare-snapshot/src/game-core-v18.js:40: state.shoreImpact ||= {};
+cloudflare-snapshot/src/game-core-v18.js:41: if (!Number.isFinite(state.shoreImpact.lastAt)) state.shoreImpact.lastAt = -999;
+cloudflare-snapshot/src/game-core-v18.js:75: function strengthenShoreImpact(state, events, previousSpeed, previousMessage) {
+cloudflare-snapshot/src/game-core-v18.js:78: && !Number.isFinite(event.impactSpeed));
+cloudflare-snapshot/src/game-core-v18.js:91: if (now - state.shoreImpact.lastAt < CONFIG.shoreImpactCooldown) {
+cloudflare-snapshot/src/game-core-v18.js:97: state.shoreImpact.lastAt = now;
+cloudflare-snapshot/src/game-core-v18.js:98: const impactSpeed = Math.abs(Number(previousSpeed) || 0);
+cloudflare-snapshot/src/game-core-v18.js:99: const severity = collisionSeverity(impactSpeed);
+cloudflare-snapshot/src/game-core-v18.js:100: const scrape = impactSpeed <= CONFIG.shoreScrapeSpeed;
+cloudflare-snapshot/src/game-core-v18.js:101: const hardImpact = impactSpeed >= CONFIG.shoreHardImpactSpeed;
+cloudflare-snapshot/src/game-core-v18.js:102: const damageRamp = clamp(
+cloudflare-snapshot/src/game-core-v18.js:103: (impactSpeed - CONFIG.shoreScrapeSpeed) / (CONFIG.shoreHardImpactSpeed - CONFIG.shoreScrapeSpeed),
+cloudflare-snapshot/src/game-core-v18.js:109: : (CONFIG.shoreBaseDamage + CONFIG.shoreSeverityDamage * severity) * damageRamp;
+cloudflare-snapshot/src/game-core-v18.js:110: const impact = applyCollisionDamage(state.boat, rawDamage);
+cloudflare-snapshot/src/game-core-v18.js:111: const rebound = Math.min(impactSpeed, Math.max(0.35, impactSpeed * 0.35));
+cloudflare-snapshot/src/game-core-v18.js:119: hardImpact,
+cloudflare-snapshot/src/game-core-v18.js:120: damage: impact.damage,
+cloudflare-snapshot/src/game-core-v18.js:121: absorbed: impact.absorbed,
+cloudflare-snapshot/src/game-core-v18.js:122: armor: impact.armor,
+cloudflare-snapshot/src/game-core-v18.js:123: impactSpeed,
+cloudflare-snapshot/src/game-core-v18.js:129: const armor = impact.absorbed > 0 ? ` Броня приняла ${Math.round(impact.absorbed)}.` : "";
+cloudflare-snapshot/src/game-core-v18.js:130: const impactText = hardImpact ? "Сильный удар" : "Удар";
+cloudflare-snapshot/src/game-core-v18.js:131: const damageText = impact.damage < 1 ? impact.damage.toFixed(1) : Math.round(impact.damage);
+cloudflare-snapshot/src/game-core-v18.js:132: state.message = `${impactText} о берег. Корпус минус ${damageText}%.${armor}`;
+cloudflare-snapshot/src/game-core-v18.js:271: // several frames after the player has already let go of the button.
+cloudflare-snapshot/src/game-core-v18.js:334: strengthenShoreImpact(state, events, previousSpeed, previousMessage);
+
+## targeting
+
+public/src/game-core-v7.js:81: if (!("lockedTargetId" in state.navigation)) state.navigation.lockedTargetId = null;
+public/src/game-core-v7.js:86: function finalObjective(state, id = state.navigation.lockedTargetId) {
+public/src/game-core-v7.js:200: state.navigation.lockedTargetId = null;
+public/src/game-core-v7.js:221: if (result.ok && state.navigation.assistEnabled && !state.navigation.lockedTargetId) {
+public/src/game-core-v7.js:232: state.navigation.lockedTargetId = objective.id;
+public/src/game-core-v7.js:255: state.navigation.lockedTargetId = null;
+public/src/game-core-v7.js:267: const objective = state.navigation.lockedTargetId ? finalObjective(state) : null;
+public/src/game-core-v7.js:283: lockedTargetId: state.navigation.lockedTargetId,
+public/src/audio-engine-v7.js:31: if (!navigation?.assistEnabled || !navigation.lockedTargetId || navigation.guideDistance == null) return;
+public/src/game-core-v11.js:22: function objectiveFor(state, id = state.navigation?.lockedTargetId) {
+public/src/game-core-v11.js:64: const targetId = state.navigation.lockedTargetId;
+public/src/hunter-brain.js:181: const locked = state.world?.survivors?.find(item => item.id === state.navigation?.lockedTargetId && !item.rescued);
+public/src/game-core-v13.js:104: function objectiveFor(state, id = state.navigation?.lockedTargetId) {
+public/src/game-core-v13.js:220: resetRiskTarget(state, state.riskRoute.enabled ? state.navigation?.lockedTargetId : null);
+public/src/game-core-v8.js:37: function objectiveFor(state, id = state.navigation.lockedTargetId) {
+public/src/game-core-v8.js:246: const target = objectiveFor(state, state.navigation.lockedTargetId);
+public/src/game-core-v8.js:304: const target = state.navigation.lockedTargetId ? objectiveFor(state) : null;
+public/src/game-core-v6.js:26: if (!("lockedTargetId" in state.navigation)) state.navigation.lockedTargetId = null;
+public/src/game-core-v6.js:33: function resolveObjective(state, id = state.navigation.lockedTargetId) {
+public/src/game-core-v6.js:106: state.navigation.lockedTargetId = state.sonar.lastResult.id || null;
+public/src/game-core-v6.js:148: state.navigation.lockedTargetId = target.id;
+public/src/game-core-v6.js:172: lockedTargetId: state.navigation.lockedTargetId,
+public/src/audio-engine-v8.js:14: if (!navigation?.assistEnabled || navigation.beaconSuppressed || navigation.rescueMode || !navigation.lockedTargetId || navigation.guideDistance == null) return;
+public/src/game-core-v10.js:33: function objectiveFor(state, id = state.navigation?.lockedTargetId) {
+public/src/game-core-v10.js:132: const active = state.rescued >= 2 && state.navigation.lockedTargetId === "harbor";
+public/src/game-core-v10.js:182: const targetId = state.navigation.lockedTargetId;
+public/src/game-core-v15.js:64: const id = state.navigation?.lockedTargetId || state.sonar?.lastResult?.id;
+public/src/game-core-v18.js:308: const sonarWasUnused = !state.navigation?.lockedTargetId
+public/src/game-core-v18.js:321: state.navigation.lockedTargetId = null;
+public/src/game-core-v17.js:20: const locked = state.world?.survivors?.find(item => item.id === state.navigation?.lockedTargetId && !item.rescued);
+cloudflare-snapshot/feature-search.txt:3: ## KeyM
+cloudflare-snapshot/feature-search.txt:18: ## target selection
+cloudflare-snapshot/src/game-core-v7.js:81: if (!("lockedTargetId" in state.navigation)) state.navigation.lockedTargetId = null;
+cloudflare-snapshot/src/game-core-v7.js:86: function finalObjective(state, id = state.navigation.lockedTargetId) {
+cloudflare-snapshot/src/game-core-v7.js:200: state.navigation.lockedTargetId = null;
+cloudflare-snapshot/src/game-core-v7.js:221: if (result.ok && state.navigation.assistEnabled && !state.navigation.lockedTargetId) {
+cloudflare-snapshot/src/game-core-v7.js:232: state.navigation.lockedTargetId = objective.id;
+cloudflare-snapshot/src/game-core-v7.js:255: state.navigation.lockedTargetId = null;
+cloudflare-snapshot/src/game-core-v7.js:267: const objective = state.navigation.lockedTargetId ? finalObjective(state) : null;
+cloudflare-snapshot/src/game-core-v7.js:283: lockedTargetId: state.navigation.lockedTargetId,
+cloudflare-snapshot/src/audio-engine-v7.js:31: if (!navigation?.assistEnabled || !navigation.lockedTargetId || navigation.guideDistance == null) return;
+cloudflare-snapshot/src/game-core-v11.js:22: function objectiveFor(state, id = state.navigation?.lockedTargetId) {
+cloudflare-snapshot/src/game-core-v11.js:64: const targetId = state.navigation.lockedTargetId;
+cloudflare-snapshot/src/hunter-brain.js:181: const locked = state.world?.survivors?.find(item => item.id === state.navigation?.lockedTargetId && !item.rescued);
+cloudflare-snapshot/src/game-core-v13.js:104: function objectiveFor(state, id = state.navigation?.lockedTargetId) {
+cloudflare-snapshot/src/game-core-v13.js:220: resetRiskTarget(state, state.riskRoute.enabled ? state.navigation?.lockedTargetId : null);
+cloudflare-snapshot/src/game-core-v8.js:37: function objectiveFor(state, id = state.navigation.lockedTargetId) {
+cloudflare-snapshot/src/game-core-v8.js:246: const target = objectiveFor(state, state.navigation.lockedTargetId);
+cloudflare-snapshot/src/game-core-v8.js:304: const target = state.navigation.lockedTargetId ? objectiveFor(state) : null;
+cloudflare-snapshot/src/game-core-v6.js:26: if (!("lockedTargetId" in state.navigation)) state.navigation.lockedTargetId = null;
+cloudflare-snapshot/src/game-core-v6.js:33: function resolveObjective(state, id = state.navigation.lockedTargetId) {
+cloudflare-snapshot/src/game-core-v6.js:106: state.navigation.lockedTargetId = state.sonar.lastResult.id || null;
+cloudflare-snapshot/src/game-core-v6.js:148: state.navigation.lockedTargetId = target.id;
+cloudflare-snapshot/src/game-core-v6.js:172: lockedTargetId: state.navigation.lockedTargetId,
+cloudflare-snapshot/src/audio-engine-v8.js:14: if (!navigation?.assistEnabled || navigation.beaconSuppressed || navigation.rescueMode || !navigation.lockedTargetId || navigation.guideDistance == null) return;
+cloudflare-snapshot/src/game-core-v10.js:33: function objectiveFor(state, id = state.navigation?.lockedTargetId) {
+cloudflare-snapshot/src/game-core-v10.js:132: const active = state.rescued >= 2 && state.navigation.lockedTargetId === "harbor";
+cloudflare-snapshot/src/game-core-v10.js:182: const targetId = state.navigation.lockedTargetId;
+cloudflare-snapshot/src/game-core-v15.js:64: const id = state.navigation?.lockedTargetId || state.sonar?.lastResult?.id;
+cloudflare-snapshot/src/game-core-v18.js:308: const sonarWasUnused = !state.navigation?.lockedTargetId
+cloudflare-snapshot/src/game-core-v18.js:321: state.navigation.lockedTargetId = null;
+cloudflare-snapshot/src/game-core-v17.js:20: const locked = state.world?.survivors?.find(item => item.id === state.navigation?.lockedTargetId && !item.rescued);
+
+## firing
+
+public/index.html:148: <p>Нажми сонар, совмести маяк с центром и дай газ. Курс удерживается автоматически. Трос можно подготовить заранее: маяк не пропадёт. До 30 метров веди лодку сам; затем включится автоподход, лодка подойдёт и остановится в 14 метрах. Дождись сообщения «Человек на борту».</p>
+public/index.html:156: <p>В обычном режиме сонар закрепляет следующего человека, а после двух спасений — центр Южной гавани. Промежуточных точек и скрытых переключений нет. Двойной центральный сигнал захватывает прямой курс: при отпущенном руле игра автоматически держит цель точно впереди. Основные прямые коридоры очищены от препятствий. У человека лодка сама замедлится до зоны троса, а у гавани — до безопасной швартовочной скорости.</p>
+public/index.html:160: <p>Со второго уровня рядом с сонаром открывается явный переключатель маршрута. Сначала выбери режим, затем нажми сонар; одно переключение само по себе не меняет текущий маяк. Обычный маршрут остаётся прямым и использует удержание курса. Рискованный сонар по очереди ведёт к озвученным входу и выходу узкого прохода; на всём этом отрезке автоподруливание и учебная страховка приостановлены, поэтому высокий стереомаяк нужно держать по центру вручную. Режим не меняется скрытно. Чистый проход без столкновения один раз даёт 150 очков и 100 дополнительных жетонов после победы. После выхода прямой помощник включается снова.</p>
+public/free-roam.html:29: <p>На компьютере: стрелки удерживают газ и руль. На берегу Shift вместе со стрелкой включает бег. F выполняет действие по ситуации, пробел в лодке сбрасывает плавучий тормоз, C включает насос, V ставит пластину.</p>
+public/src/game-core-v11.js:137: state.message = `Финальный подход к ${objectiveLabel(objective)}. Газ снят автоматически; держи маяк по центру до зоны троса.`;
+public/src/game-core-v8.js:260: ? ` Сама цель находится примерно в ${Math.round(direct.distance)} метрах; после прохода маяк автоматически довернёт к ней.`
+public/src/keyboard-controls-v1.js:71: <p>Стрелки: руль, газ и обычный тормоз. S — сонар. C — насос. V — пластина. R — трос. Пробел — плавучий тормоз. Enter — быстрое действие.</p>
+cloudflare-snapshot/index.html:148: <p>Нажми сонар, совмести маяк с центром и дай газ. Курс удерживается автоматически. Трос можно подготовить заранее: маяк не пропадёт. До 30 метров веди лодку сам; затем включится автоподход, лодка подойдёт и остановится в 14 метрах. Дождись сообщения «Человек на борту».</p>
+cloudflare-snapshot/index.html:156: <p>В обычном режиме сонар закрепляет следующего человека, а после двух спасений — центр Южной гавани. Промежуточных точек и скрытых переключений нет. Двойной центральный сигнал захватывает прямой курс: при отпущенном руле игра автоматически держит цель точно впереди. Основные прямые коридоры очищены от препятствий. У человека лодка сама замедлится до зоны троса, а у гавани — до безопасной швартовочной скорости.</p>
+cloudflare-snapshot/index.html:160: <p>Со второго уровня рядом с сонаром открывается явный переключатель маршрута. Сначала выбери режим, затем нажми сонар; одно переключение само по себе не меняет текущий маяк. Обычный маршрут остаётся прямым и использует удержание курса. Рискованный сонар по очереди ведёт к озвученным входу и выходу узкого прохода; на всём этом отрезке автоподруливание и учебная страховка приостановлены, поэтому высокий стереомаяк нужно держать по центру вручную. Режим не меняется скрытно. Чистый проход без столкновения один раз даёт 150 очков и 100 дополнительных жетонов после победы. После выхода прямой помощник включается снова.</p>
+cloudflare-snapshot/feature-search.txt:7: ## weapon
+cloudflare-snapshot/feature-search.txt:9: public/index.html:148: <p>Нажми сонар, совмести маяк с центром и дай газ. Курс удерживается автоматически. Трос можно подготовить заранее: маяк не пропадёт. До 30 метров веди лодку сам; затем включится автоподход, лодка подойдёт и остановится в 14 метрах. Дождись сообщения «Человек на борту».</p>
+cloudflare-snapshot/feature-search.txt:10: public/index.html:156: <p>В обычном режиме сонар закрепляет следующего человека, а после двух спасений — центр Южной гавани. Промежуточных точек и скрытых переключений нет. Двойной центральный сигнал захватывает прямой курс: при отпущенном руле игра автоматически держит цель точно впереди. Основные прямые коридоры очищены от препятствий. У человека лодка сама замедлится до зоны троса, а у гавани — до безопасной швартовочной скорости.</p>
+cloudflare-snapshot/feature-search.txt:11: public/src/game-core-v11.js:137: state.message = `Финальный подход к ${objectiveLabel(objective)}. Газ снят автоматически; держи маяк по центру до зоны троса.`;
+cloudflare-snapshot/feature-search.txt:12: public/src/game-core-v8.js:260: ? ` Сама цель находится примерно в ${Math.round(direct.distance)} метрах; после прохода маяк автоматически довернёт к ней.`
+cloudflare-snapshot/feature-search.txt:13: cloudflare-snapshot/index.html:148: <p>Нажми сонар, совмести маяк с центром и дай газ. Курс удерживается автоматически. Трос можно подготовить заранее: маяк не пропадёт. До 30 метров веди лодку сам; затем включится автоподход, лодка подойдёт и остановится в 14 метрах. Дождись сообщения «Человек на борту».</p>
+cloudflare-snapshot/feature-search.txt:14: cloudflare-snapshot/index.html:156: <p>В обычном режиме сонар закрепляет следующего человека, а после двух спасений — центр Южной гавани. Промежуточных точек и скрытых переключений нет. Двойной центральный сигнал захватывает прямой курс: при отпущенном руле игра автоматически держит цель точно впереди. Основные прямые коридоры очищены от препятствий. У человека лодка сама замедлится до зоны троса, а у гавани — до безопасной швартовочной скорости.</p>
+cloudflare-snapshot/feature-search.txt:15: cloudflare-snapshot/src/game-core-v11.js:137: state.message = `Финальный подход к ${objectiveLabel(objective)}. Газ снят автоматически; держи маяк по центру до зоны троса.`;
+cloudflare-snapshot/feature-search.txt:16: cloudflare-snapshot/src/game-core-v8.js:260: ? ` Сама цель находится примерно в ${Math.round(direct.distance)} метрах; после прохода маяк автоматически довернёт к ней.`
+cloudflare-snapshot/free-roam.html:29: <p>На компьютере: стрелки удерживают газ и руль. На берегу Shift вместе со стрелкой включает бег. F выполняет действие по ситуации, пробел в лодке сбрасывает плавучий тормоз, C включает насос, V ставит пластину.</p>
+cloudflare-snapshot/src/game-core-v11.js:137: state.message = `Финальный подход к ${objectiveLabel(objective)}. Газ снят автоматически; держи маяк по центру до зоны троса.`;
+cloudflare-snapshot/src/game-core-v8.js:260: ? ` Сама цель находится примерно в ${Math.round(direct.distance)} метрах; после прохода маяк автоматически довернёт к ней.`
+cloudflare-snapshot/src/keyboard-controls-v1.js:71: <p>Стрелки: руль, газ и обычный тормоз. S — сонар. C — насос. V — пластина. R — трос. Пробел — плавучий тормоз. Enter — быстрое действие.</p>
+
