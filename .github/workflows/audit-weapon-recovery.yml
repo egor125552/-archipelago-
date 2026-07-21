@@ -1,0 +1,51 @@
+name: Audit recovered weapon feature
+
+on:
+  push:
+    branches:
+      - recovery/cloudflare-live
+    paths:
+      - .github/workflows/audit-weapon-recovery.yml
+
+permissions:
+  contents: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery/cloudflare-live
+          fetch-depth: 0
+
+      - name: Search all deployed and repository sources
+        shell: bash
+        run: |
+          mkdir -p cloudflare-snapshot
+          {
+            echo '# Weapon and target feature audit'
+            echo
+            echo '## Exact keyboard and likely weapon terms'
+            echo
+            grep -RInE --exclude='feature-search.txt' --exclude-dir='.git' \
+              'KeyM|event\.(key|code).{0,40}(KeyM|["'"']m["'"'])|автомат|пулем[её]т|оруж|патрон|боеприпас|стрел|выстрел|ammo|weapon|machine.?gun|turret|bullet|projectile|shoot|fireCommand|select.?target|target.?select|cycle.?target|lock.?target' \
+              public cloudflare-snapshot 2>/dev/null || true
+            echo
+            echo '## All command names and keyboard bindings'
+            echo
+            grep -RInE --exclude='feature-search.txt' --exclude-dir='.git' \
+              'Key[A-Z]|sendCommand\(|command\(|KEY_BINDINGS|keydown|keyup' \
+              public cloudflare-snapshot 2>/dev/null || true
+          } > cloudflare-snapshot/feature-search.txt
+
+      - name: Commit audit report
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add cloudflare-snapshot/feature-search.txt
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Audit live deployment for weapon and target controls"
+          git push origin HEAD:recovery/cloudflare-live
