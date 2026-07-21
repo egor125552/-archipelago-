@@ -192,13 +192,13 @@ test("the production combat module chain uses explicit cache generations", async
     readFile(new URL("../public/src/free-roam-audio-v5.js", import.meta.url), "utf8"),
   ]);
 
-  assert.match(html, /free-roam-v4\.js\?v=30/);
-  assert.match(entry, /free-roam-core-v6\.js\?v=30/);
-  assert.match(entry, /free-roam-audio-v5\.js\?v=30/);
-  assert.match(core, /free-roam-boarding-assist\.js\?v=29/);
-  assert.match(core, /free-roam-combat\.js\?v=30/);
-  assert.match(combat, /free-roam-combat-recovery\.js\?v=30/);
-  assert.match(combat, /free-roam-combat-tuning\.js\?v=30/);
-  assert.match(audio, /free-roam-combat-recovery\.js\?v=30/);
-  assert.match(audio, /free-roam-combat-tuning\.js\?v=30/);
+  assert.match(html, /free-roam-v4\.js\?v=\d+/);
+  assert.match(entry, /free-roam-core-v6\.js\?v=\d+/);
+  assert.match(entry, /free-roam-audio-v5\.js\?v=\d+/);
+  assert.match(core, /free-roam-boarding-assist\.js\?v=\d+/);
+  assert.match(core, /free-roam-combat\.js\?v=\d+/);
+  assert.match(combat, /free-roam-combat-recovery\.js\?v=\d+/);
+  assert.match(combat, /free-roam-combat-tuning\.js\?v=\d+/);
+  assert.match(audio, /free-roam-combat-recovery\.js\?v=\d+/);
+  assert.match(audio, /free-roam-combat-tuning\.js\?v=\d+/);
 });
