@@ -34,6 +34,12 @@ const DEFERRED_SOUNDS = Object.freeze({
   lakeWaterV25: ROOT + "lake-water.mp3",
 });
 
+const RAPID_SOUND_LIMITS = Object.freeze({
+  automaticShot: Object.freeze({minimumGap: 0.032, maximumVoices: 6}),
+  gunHit: Object.freeze({minimumGap: 0.024, maximumVoices: 5}),
+  swingLight: Object.freeze({minimumGap: 0.028, maximumVoices: 4}),
+});
+
 function copyAlias(buffers, target, source) {
   const buffer = buffers.get(source);
   if (buffer) buffers.set(target, buffer);
@@ -44,6 +50,32 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
     super();
     this.bundledCorePromise = null;
     this.deferredStarted = false;
+    this.rapidSoundAt = new Map();
+    this.rapidSoundVoices = new Map();
+    if (this.spatialDiagnostics) this.spatialDiagnostics.rapidSoundsDropped = 0;
+  }
+
+  play(name, options = {}) {
+    const limit = options.loop ? null : RAPID_SOUND_LIMITS[name];
+    if (!limit || !this.ctx) return super.play(name, options);
+    const now = this.ctx.currentTime;
+    const voices = this.rapidSoundVoices.get(name) || new Set();
+    const lastAt = this.rapidSoundAt.get(name) ?? -Infinity;
+    if (now - lastAt < limit.minimumGap || voices.size >= limit.maximumVoices) {
+      if (this.spatialDiagnostics) this.spatialDiagnostics.rapidSoundsDropped += 1;
+      return null;
+    }
+    const source = super.play(name, options);
+    if (!source) return null;
+    this.rapidSoundAt.set(name, now);
+    voices.add(source);
+    this.rapidSoundVoices.set(name, voices);
+    const inheritedEnded = source.onended;
+    source.onended = event => {
+      voices.delete(source);
+      inheritedEnded?.call(source, event);
+    };
+    return source;
   }
 
   createTone(name, frequency, duration = 0.16) {

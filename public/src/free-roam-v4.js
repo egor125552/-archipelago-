@@ -9,9 +9,15 @@ import {
   setPlayerPresence,
   snapshotWorld,
   stepFreeWorld,
-} from "./free-roam-core-v6.js?v=39";
-import {FreeRoamAudio} from "./free-roam-audio-v6.js?v=39";
+} from "./free-roam-core-v6.js?v=40";
+import {FreeRoamAudio} from "./free-roam-audio-v6.js?v=40";
 import {createSpeechController} from "./free-roam-speech.js?v=39";
+import {
+  applyWorldDelta,
+  compactWorldSnapshot,
+  createReplicatedWorld,
+  createWorldDelta,
+} from "./free-roam-world-delta.js?v=40";
 import {directionFromDelta} from "./free-roam-gesture-model.js";
 import {classifyActionGesture, gestureMetrics} from "./free-roam-action-gestures.js";
 import {resolveCombatTarget} from "./free-roam-targeting.js?v=32";
@@ -19,9 +25,9 @@ import {createTargetMenu} from "./free-roam-target-menu.js?v=32";
 
 const $ = id => document.getElementById(id);
 const SPEECH_RATE = 1.18;
-const SNAPSHOT_INTERVAL_MS = 50;
-const SNAPSHOT_BACKPRESSURE_BYTES = 48 * 1024;
-const MAX_GUEST_PREDICTION_MS = 240;
+const SNAPSHOT_INTERVAL_MS = 33;
+const SNAPSHOT_BACKPRESSURE_BYTES = 24 * 1024;
+const CHECKPOINT_INTERVAL_MS = 12_000;
 const STATUS_RENDER_INTERVAL_MS = 100;
 const AUDIO_RENDER_INTERVAL_MS = 32;
 const CANVAS_RENDER_INTERVAL_MS = 32;
@@ -63,8 +69,11 @@ let roomId = "";
 let previousFrame = 0;
 let lastSnapshotAt = 0;
 let lastAuthoritativeSnapshotAt = 0;
+let lastCheckpointAt = 0;
 let snapshotSequence = 0;
 let lastSnapshotSequence = -1;
+let networkBaseline = null;
+let awaitingFullSnapshot = false;
 let inputSequence = 0;
 let lastRemoteInputSequence = 0;
 let lastAcknowledgedInput = 0;
@@ -236,10 +245,13 @@ function connect(role, savedWorld = null) {
       playerIndex = isHost ? 0 : 1;
       $("roomLabel").textContent = `Свободный мир ${roomId}`;
       lastSnapshotSequence = -1;
+      awaitingFullSnapshot = false;
       lastAcknowledgedInput = 0;
       inputSentAt.clear();
       if (isHost) {
         lastRemoteInputSequence = 0;
+        networkBaseline = null;
+        lastCheckpointAt = performance.now();
         const resumed = Boolean(message.resumeWorld);
         world = message.resumeWorld || savedWorld || createFreeWorld();
         setPlayerPresence(world, 0, true);
@@ -256,6 +268,7 @@ function connect(role, savedWorld = null) {
         if ($("game").hidden) openGame(openedText);
         else announce("Связь восстановлена. Твой мир продолжает работать.", true);
         sendSnapshot(true);
+        sendCheckpoint(performance.now(), true);
       } else if (!message.matched) {
         announce("Свободных миров не было. Создано место ожидания первого игрока.");
       } else {
@@ -275,6 +288,8 @@ function connect(role, savedWorld = null) {
         announce("Второй игрок подключён к свободной бухте.", true);
         sendSnapshot(true);
       } else {
+        lastSnapshotSequence = -1;
+        awaitingFullSnapshot = true;
         announce("Первый игрок подключён. Загружаю бухту…", true);
         send({type: "free-hello"});
       }
@@ -301,6 +316,11 @@ function connect(role, savedWorld = null) {
       return;
     }
 
+    if (message.type === "free-resync" && isHost) {
+      sendSnapshot(true);
+      return;
+    }
+
     if (message.type === "free-input" && isHost && world) {
       const sequence = Math.max(0, Number(message.sequence) || 0);
       if (sequence && sequence <= lastRemoteInputSequence) return;
@@ -318,21 +338,33 @@ function connect(role, savedWorld = null) {
       if (Number.isFinite(sequence) && sequence <= lastSnapshotSequence) return;
       if (Number.isFinite(sequence)) lastSnapshotSequence = sequence;
       world = message.world;
+      awaitingFullSnapshot = false;
       lastAuthoritativeSnapshotAt = performance.now();
-      setPlayerInput(world, playerIndex, localInput);
-      const acknowledged = Math.max(0, Number(message.ackInput) || 0);
-      if (acknowledged > lastAcknowledgedInput) {
-        const sentAt = inputSentAt.get(acknowledged);
-        if (sentAt != null) {
-          const sample = Math.max(0, performance.now() - sentAt);
-          controlLatencyMs = controlLatencyMs == null ? sample : controlLatencyMs * 0.68 + sample * 0.32;
-        }
-        lastAcknowledgedInput = acknowledged;
-        for (const sequenceNumber of [...inputSentAt.keys()]) {
-          if (sequenceNumber <= acknowledged) inputSentAt.delete(sequenceNumber);
-        }
-      }
+      acknowledgeInput(message.ackInput);
       if ($("game").hidden) openGame("Ты вошёл в свободную бухту. У тебя отдельная лодка.");
+      return;
+    }
+
+    if (message.type === "free-delta" && !isHost) {
+      const sequence = Number(message.sequence);
+      const expected = lastSnapshotSequence + 1;
+      if (!world || awaitingFullSnapshot || !Number.isFinite(sequence)) return;
+      if (sequence <= lastSnapshotSequence) return;
+      if (sequence !== expected) {
+        awaitingFullSnapshot = true;
+        send({type: "free-resync", expected, received: sequence});
+        return;
+      }
+      try {
+        world = applyWorldDelta(world, message.delta ?? null);
+      } catch (_) {
+        awaitingFullSnapshot = true;
+        send({type: "free-resync", expected, received: sequence});
+        return;
+      }
+      lastSnapshotSequence = sequence;
+      lastAuthoritativeSnapshotAt = performance.now();
+      acknowledgeInput(message.ackInput);
       return;
     }
 
@@ -383,17 +415,64 @@ function leaveGame() {
   location.href = "/free-roam.html";
 }
 
-function sendSnapshot(force = false) {
+function acknowledgeInput(rawAcknowledged) {
+  const acknowledged = Math.max(0, Number(rawAcknowledged) || 0);
+  if (acknowledged <= lastAcknowledgedInput) return;
+  const sentAt = inputSentAt.get(acknowledged);
+  if (sentAt != null) {
+    const sample = Math.max(0, performance.now() - sentAt);
+    controlLatencyMs = controlLatencyMs == null ? sample : controlLatencyMs * 0.68 + sample * 0.32;
+  }
+  lastAcknowledgedInput = acknowledged;
+  for (const sequenceNumber of [...inputSentAt.keys()]) {
+    if (sequenceNumber <= acknowledged) inputSentAt.delete(sequenceNumber);
+  }
+}
+
+function sendSnapshot(forceFull = false) {
   if (!isHost || !world) return;
   const now = performance.now();
-  if (!force && now - lastSnapshotAt < SNAPSHOT_INTERVAL_MS) return;
+  if (!forceFull && now - lastSnapshotAt < SNAPSHOT_INTERVAL_MS) return;
+  if (!forceFull && Number(socket?.bufferedAmount) > SNAPSHOT_BACKPRESSURE_BYTES) return;
+
+  const sequence = snapshotSequence + 1;
+  if (forceFull || !networkBaseline) {
+    const fullWorld = compactWorldSnapshot(createReplicatedWorld(world));
+    const sent = send({
+      type: "free-snapshot",
+      sequence,
+      ackInput: lastRemoteInputSequence,
+      world: fullWorld,
+    });
+    if (!sent) return;
+    networkBaseline = fullWorld;
+  } else {
+    const delta = createWorldDelta(createReplicatedWorld(world), networkBaseline);
+    const sent = send({
+      type: "free-delta",
+      sequence,
+      ackInput: lastRemoteInputSequence,
+      delta,
+    }, {dropIfBusy: true});
+    if (!sent) {
+      // The diff updates its baseline in place. A failed send therefore needs
+      // a fresh authoritative state rather than a delta with missing changes.
+      networkBaseline = null;
+      return;
+    }
+  }
+  snapshotSequence = sequence;
+  lastSnapshotAt = now;
+}
+
+function sendCheckpoint(now, force = false) {
+  if (!isHost || !world || (!force && now - lastCheckpointAt < CHECKPOINT_INTERVAL_MS)) return;
+  if (!force && Number(socket?.bufferedAmount) > SNAPSHOT_BACKPRESSURE_BYTES) return;
   const sent = send({
-    type: "free-snapshot",
-    sequence: ++snapshotSequence,
-    ackInput: lastRemoteInputSequence,
-    world: snapshotWorld(world),
-  }, {dropIfBusy: !force});
-  if (sent) lastSnapshotAt = now;
+    type: "free-checkpoint",
+    world: compactWorldSnapshot(snapshotWorld(world)),
+  }, {dropIfBusy: true});
+  if (sent) lastCheckpointAt = now;
 }
 
 function sendInput(force = false) {
@@ -517,12 +596,7 @@ function frame(now) {
     for (const event of events) handleGameEvent(event);
     if (events.length) send({type: "free-events", events});
     sendSnapshot();
-  } else if (world && now - lastAuthoritativeSnapshotAt <= MAX_GUEST_PREDICTION_MS) {
-    // Predict the guest's own controls between authoritative snapshots. The
-    // next host snapshot corrects the small drift, while steering feels local.
-    setPlayerInput(world, playerIndex, localInput);
-    stepInChunks(world, dt);
-    drainEvents(world);
+    sendCheckpoint(now);
   }
   render(now);
   requestAnimationFrame(frame);

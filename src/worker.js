@@ -211,25 +211,31 @@ export class Lobby {
     if (
       client.mode === "free"
       && client.role === "captain"
-      && message.type === "free-snapshot"
+      && message.type === "free-checkpoint"
       && message.world
     ) {
-      room.lastFreeSnapshot = message;
+      // Checkpoints retain the complete authoritative simulation for host
+      // recovery. The peer-facing snapshot is intentionally only a render view.
+      room.lastFreeSnapshot = {type: "free-snapshot", world: message.world};
+      return;
     }
 
     const otherRole = oppositeRole(client.role);
     const other = room[otherRole];
     if (other) {
       // Forward the original frame instead of parsing and serializing the full
-      // world a second time. If a browser falls behind, discard stale snapshots
+      // world a second time. If a browser falls behind, discard stale deltas
       // while preserving controls and game events.
       safeSend(other, message, {
         rawData,
-        dropIfBusy: message.type === "free-snapshot",
+        dropIfBusy: message.type === "free-delta",
       });
       return;
     }
 
+    // A delta is only meaningful after the peer's current baseline. A newly
+    // connected peer always asks the captain for a fresh full snapshot.
+    if (message.type === "free-delta") return;
     const queue = room.pending[client.role];
     if (message.type === "snapshot" || message.type === "free-snapshot") {
       const previous = queue.findIndex(item => item?.type === message.type);

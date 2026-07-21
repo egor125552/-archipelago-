@@ -9,7 +9,7 @@ import {
   isBoatDockZone,
 } from "./free-roam-cargo-rules.js?v=32";
 import {updateFootDockDelivery} from "./free-roam-foot-dock.js?v=38";
-import {grantWeaponFromCrate} from "./free-roam-weapon-crates.js?v=32";
+import {grantWeaponFromCrate} from "./free-roam-weapon-crates.js?v=40";
 
 const WORLD_CRATES = Object.freeze([
   {id: "crate-plates", kind: "plates", rarity: "common", weight: 2, x: 180, y: 34},

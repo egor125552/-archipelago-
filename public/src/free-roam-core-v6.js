@@ -11,7 +11,7 @@ import {
   spawnRareCrate,
   storeActivityInput,
   updateActivities,
-} from "./free-roam-activities.js?v=38";
+} from "./free-roam-activities.js?v=40";
 import {applyCombatDamage, combatStatus, ensureCombat, updateCombat} from "./free-roam-combat.js?v=32";
 import {ensureMarauder, releaseStolenCargo, updateMarauder} from "./free-roam-marauder.js?v=32";
 import {ensureFreeScenario, scenarioStatus, updateFreeScenario} from "./free-roam-scenario.js?v=38";
