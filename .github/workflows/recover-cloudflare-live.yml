@@ -1,0 +1,191 @@
+name: Recover live Cloudflare snapshot
+
+on:
+  push:
+    branches:
+      - recovery/cloudflare-live
+    paths:
+      - .github/workflows/recover-cloudflare-live.yml
+
+permissions:
+  contents: write
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery/cloudflare-live
+          fetch-depth: 0
+
+      - name: Download deployed static application
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from __future__ import annotations
+
+          import hashlib
+          import json
+          import re
+          import shutil
+          import urllib.parse
+          import urllib.request
+          from collections import deque
+          from html.parser import HTMLParser
+          from pathlib import Path
+
+          ORIGIN = "https://archipelago.k69ysrndm7.workers.dev"
+          OUTPUT = Path("cloudflare-snapshot")
+          PUBLIC = Path("public")
+          OUTPUT.mkdir(exist_ok=True)
+
+          class Links(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.urls = []
+              def handle_starttag(self, tag, attrs):
+                  values = dict(attrs)
+                  if tag in {"script", "img", "source", "audio"} and values.get("src"):
+                      self.urls.append(values["src"])
+                  if tag == "link" and values.get("href"):
+                      self.urls.append(values["href"])
+
+          def request(url: str) -> tuple[bytes, str]:
+              req = urllib.request.Request(
+                  url,
+                  headers={
+                      "User-Agent": "Echo-Archipelago-Recovery/1.0",
+                      "Cache-Control": "no-cache",
+                      "Pragma": "no-cache",
+                  },
+              )
+              with urllib.request.urlopen(req, timeout=45) as response:
+                  return response.read(), response.headers.get_content_type()
+
+          def normalize(raw: str, base: str) -> str | None:
+              raw = raw.strip().strip('"\'')
+              if not raw or raw.startswith(("data:", "blob:", "mailto:", "javascript:", "#")):
+                  return None
+              absolute = urllib.parse.urljoin(base, raw)
+              parsed = urllib.parse.urlsplit(absolute)
+              origin = urllib.parse.urlsplit(ORIGIN)
+              if (parsed.scheme, parsed.netloc) != (origin.scheme, origin.netloc):
+                  return None
+              if parsed.path.startswith("/api/"):
+                  return None
+              return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path or "/", "", ""))
+
+          def local_path(url: str) -> Path:
+              path = urllib.parse.urlsplit(url).path
+              if path.endswith("/"):
+                  path += "index.html"
+              return OUTPUT / path.lstrip("/")
+
+          def js_dependencies(text: str, base: str):
+              patterns = [
+                  r'''(?:import|export)\s+(?:[^;]*?\s+from\s+)?["']([^"']+)["']''',
+                  r'''import\s*\(\s*["']([^"']+)["']\s*\)''',
+                  r'''new\s+URL\s*\(\s*["']([^"']+)["']\s*,\s*import\.meta\.url\s*\)''',
+              ]
+              for pattern in patterns:
+                  for match in re.finditer(pattern, text):
+                      candidate = normalize(match.group(1), base)
+                      if candidate:
+                          yield candidate
+
+          seeds = [
+              f"{ORIGIN}/",
+              f"{ORIGIN}/free-roam.html",
+          ]
+          queue = deque(seeds)
+          seen = set()
+          manifest = []
+          failures = []
+
+          while queue:
+              url = queue.popleft()
+              if url in seen:
+                  continue
+              seen.add(url)
+              try:
+                  data, content_type = request(url)
+              except Exception as error:
+                  failures.append(f"{url}: {error}")
+                  continue
+
+              destination = local_path(url)
+              destination.parent.mkdir(parents=True, exist_ok=True)
+              destination.write_bytes(data)
+              manifest.append({
+                  "url": url,
+                  "path": str(destination.relative_to(OUTPUT)),
+                  "bytes": len(data),
+                  "sha256": hashlib.sha256(data).hexdigest(),
+                  "content_type": content_type,
+              })
+
+              text = None
+              if content_type.startswith("text/") or destination.suffix in {".js", ".mjs", ".json", ".css", ".html"}:
+                  text = data.decode("utf-8", errors="replace")
+
+              if destination.suffix == ".html" and text is not None:
+                  parser = Links()
+                  parser.feed(text)
+                  for raw in parser.urls:
+                      candidate = normalize(raw, url)
+                      if candidate:
+                          queue.append(candidate)
+                  for block in re.findall(r'<script[^>]+type=["\']importmap["\'][^>]*>(.*?)</script>', text, re.S | re.I):
+                      try:
+                          imports = json.loads(block).get("imports", {})
+                      except Exception:
+                          imports = {}
+                      for raw in imports.values():
+                          candidate = normalize(str(raw), url)
+                          if candidate:
+                              queue.append(candidate)
+
+              if destination.suffix in {".js", ".mjs"} and text is not None:
+                  queue.extend(js_dependencies(text, url))
+
+          (OUTPUT / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+          (OUTPUT / "failures.txt").write_text("\n".join(failures) + ("\n" if failures else ""), encoding="utf-8")
+
+          differences = []
+          for item in sorted(manifest, key=lambda value: value["path"]):
+              snapshot = OUTPUT / item["path"]
+              repository = PUBLIC / item["path"]
+              if not repository.exists():
+                  differences.append(f"NEW  {item['path']}")
+              elif hashlib.sha256(repository.read_bytes()).hexdigest() != item["sha256"]:
+                  differences.append(f"DIFF {item['path']}")
+
+          report = [
+              "# Cloudflare live snapshot",
+              "",
+              f"Downloaded files: {len(manifest)}",
+              f"Download failures: {len(failures)}",
+              "",
+              "## Files different from GitHub public/",
+              "",
+          ]
+          report.extend(f"- `{line}`" for line in differences)
+          if not differences:
+              report.append("- No differences found.")
+          (OUTPUT / "DIFF.md").write_text("\n".join(report) + "\n", encoding="utf-8")
+          PY
+
+      - name: Commit recovered snapshot
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add cloudflare-snapshot
+          if git diff --cached --quiet; then
+            echo "No snapshot changes"
+            exit 0
+          fi
+          git commit -m "Recover current Cloudflare deployment snapshot"
+          git push origin HEAD:recovery/cloudflare-live
