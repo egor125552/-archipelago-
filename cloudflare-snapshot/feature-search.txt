@@ -1,0 +1,260 @@
+# Live/GitHub feature search
+
+## KeyM
+
+NO MATCHES
+
+## weapon
+
+public/index.html:148: <p>Нажми сонар, совмести маяк с центром и дай газ. Курс удерживается автоматически. Трос можно подготовить заранее: маяк не пропадёт. До 30 метров веди лодку сам; затем включится автоподход, лодка подойдёт и остановится в 14 метрах. Дождись сообщения «Человек на борту».</p>
+public/index.html:156: <p>В обычном режиме сонар закрепляет следующего человека, а после двух спасений — центр Южной гавани. Промежуточных точек и скрытых переключений нет. Двойной центральный сигнал захватывает прямой курс: при отпущенном руле игра автоматически держит цель точно впереди. Основные прямые коридоры очищены от препятствий. У человека лодка сама замедлится до зоны троса, а у гавани — до безопасной швартовочной скорости.</p>
+public/src/game-core-v11.js:137: state.message = `Финальный подход к ${objectiveLabel(objective)}. Газ снят автоматически; держи маяк по центру до зоны троса.`;
+public/src/game-core-v8.js:260: ? ` Сама цель находится примерно в ${Math.round(direct.distance)} метрах; после прохода маяк автоматически довернёт к ней.`
+cloudflare-snapshot/index.html:148: <p>Нажми сонар, совмести маяк с центром и дай газ. Курс удерживается автоматически. Трос можно подготовить заранее: маяк не пропадёт. До 30 метров веди лодку сам; затем включится автоподход, лодка подойдёт и остановится в 14 метрах. Дождись сообщения «Человек на борту».</p>
+cloudflare-snapshot/index.html:156: <p>В обычном режиме сонар закрепляет следующего человека, а после двух спасений — центр Южной гавани. Промежуточных точек и скрытых переключений нет. Двойной центральный сигнал захватывает прямой курс: при отпущенном руле игра автоматически держит цель точно впереди. Основные прямые коридоры очищены от препятствий. У человека лодка сама замедлится до зоны троса, а у гавани — до безопасной швартовочной скорости.</p>
+cloudflare-snapshot/src/game-core-v11.js:137: state.message = `Финальный подход к ${objectiveLabel(objective)}. Газ снят автоматически; держи маяк по центру до зоны троса.`;
+cloudflare-snapshot/src/game-core-v8.js:260: ? ` Сама цель находится примерно в ${Math.round(direct.distance)} метрах; после прохода маяк автоматически довернёт к ней.`
+
+## target selection
+
+NO MATCHES
+
+## commands and keys
+
+public/free-roam.html:64: <button id="leftButton" data-key="←" aria-keyshortcuts="ArrowLeft">Влево</button>
+public/free-roam.html:65: <button id="upButton" data-key="↑" aria-keyshortcuts="ArrowUp">Вперёд</button>
+public/free-roam.html:66: <button id="rightButton" data-key="→" aria-keyshortcuts="ArrowRight">Вправо</button>
+public/free-roam.html:67: <button id="downButton" data-key="↓" aria-keyshortcuts="ArrowDown">Назад / тормоз</button>
+public/free-roam.html:68: <button id="actionButton" class="primary" data-key="F" aria-keyshortcuts="F">Действие</button>
+public/free-roam.html:69: <button id="jumpButton" data-key="Пробел" aria-keyshortcuts="Space">Плавучий тормоз</button>
+public/free-roam.html:70: <button id="pumpButton" aria-pressed="false" data-key="C" aria-keyshortcuts="C">Насос: выключен</button>
+public/free-roam.html:71: <button id="repairButton" aria-pressed="false" data-key="V" aria-keyshortcuts="V">Пластина: готова</button>
+public/src/app.js:362: const result = command(stateBox.state, message.action, "crew");
+public/src/app.js:570: function sendCommand(action) {
+public/src/app.js:573: const result = command(stateBox.state, action, "captain");
+public/src/app.js:647: $("sonarButton").addEventListener("click", () => sendCommand("sonar"));
+public/src/app.js:648: $("routeModeButton").addEventListener("click", () => sendCommand("risk-route-toggle"));
+public/src/app.js:649: $("quickAction").addEventListener("click", () => sendCommand("quick"));
+public/src/app.js:650: $("repairButton").addEventListener("click", () => sendCommand("repair"));
+public/src/app.js:651: $("debrisButton").addEventListener("click", () => sendCommand("debris-remove"));
+public/src/app.js:652: $("refuelButton").addEventListener("click", () => sendCommand("refuel"));
+public/src/app.js:653: $("decoyButton").addEventListener("click", () => sendCommand("hunter-decoy"));
+public/src/app.js:654: $("pumpAssistButton").addEventListener("click", () => sendCommand("pump-assist-toggle"));
+public/src/app.js:655: $("anchorButton").addEventListener("click", () => sendCommand("anchor"));
+public/src/app.js:696: window.addEventListener("keydown", event => {
+public/src/app.js:702: if (event.key.toLowerCase() === "s") sendCommand("sonar");
+public/src/app.js:703: if (event.key === " ") { event.preventDefault(); sendCommand("quick"); }
+public/src/app.js:707: window.addEventListener("keyup", event => {
+public/src/audio-engine.js:103: for (const name of [...this.loops.keys()]) this.stopLoop(name);
+public/src/free-roam-accessibility.js:11: window.dispatchEvent(new KeyboardEvent(type, {
+public/src/free-roam-accessibility.js:25: dispatchKey("keydown", binding);
+public/src/free-roam-accessibility.js:26: setTimeout(() => dispatchKey("keyup", binding), binding.duration);
+public/src/free-roam-audio.js:73: const available = Object.keys(FOOTSTEPS).filter(name => this.buffers.has(name));
+public/src/free-roam-v2.js:359: function bindKeyboard() {
+public/src/free-roam-v2.js:361: window.addEventListener("keydown", event => {
+public/src/free-roam-v2.js:366: } else if (!event.repeat && event.code === "KeyF") {
+public/src/free-roam-v2.js:372: } else if (!event.repeat && event.code === "KeyC") {
+public/src/free-roam-v2.js:375: } else if (!event.repeat && event.code === "KeyV") {
+public/src/free-roam-v2.js:381: window.addEventListener("keyup", event => {
+public/src/free-roam-v2.js:426: bindKeyboard();
+public/src/free-roam-v3.js:490: function bindKeyboard() {
+public/src/free-roam-v3.js:492: window.addEventListener("keydown", event => {
+public/src/free-roam-v3.js:501: } else if (!event.repeat && event.code === "KeyF") {
+public/src/free-roam-v3.js:507: } else if (!event.repeat && event.code === "KeyC") {
+public/src/free-roam-v3.js:511: } else if (!event.repeat && event.code === "KeyV") {
+public/src/free-roam-v3.js:518: window.addEventListener("keyup", event => {
+public/src/free-roam-v3.js:585: bindKeyboard();
+public/src/game-core-v10.js:168: export function command(state, action, actor = "captain") {
+public/src/game-core-v10.js:170: const result = base.command(state, action, actor);
+public/src/game-core-v11.js:161: export function command(state, action, actor = "captain") {
+public/src/game-core-v11.js:163: const result = base.command(state, action, actor);
+public/src/game-core-v12.js:267: export function command(state, action, actor = "captain") {
+public/src/game-core-v12.js:269: const result = base.command(state, action, actor);
+public/src/game-core-v13.js:159: if (!Array.isArray(state.riskRoute.clearedKeys)) state.riskRoute.clearedKeys = [];
+public/src/game-core-v13.js:160: state.riskRoute.clearedKeys = [...new Set(state.riskRoute.clearedKeys.filter(key => typeof key === "string"))];
+public/src/game-core-v13.js:163: if (!Number.isFinite(state.riskRoute.cleanGates)) state.riskRoute.cleanGates = state.riskRoute.clearedKeys.length;
+public/src/game-core-v13.js:278: const alreadyCleared = state.riskRoute.clearedKeys.includes(key);
+public/src/game-core-v13.js:285: state.riskRoute.clearedKeys.push(key);
+public/src/game-core-v13.js:369: export function command(state, action, actor = "captain") {
+public/src/game-core-v13.js:390: const result = base.command(state, action, actor);
+public/src/game-core-v14.js:189: export function command(state, action, actor = "captain") {
+public/src/game-core-v14.js:193: return base.command(state, action, actor);
+public/src/game-core-v15.js:282: export function command(state, action, actor = "captain") {
+public/src/game-core-v15.js:311: const result = base.command(state, action, actor);
+public/src/game-core-v16.js:696: export function command(state, action, actor = "captain") {
+public/src/game-core-v16.js:700: const result = base.command(state, action, actor);
+public/src/game-core-v17.js:128: export function command(state, action, actor = "captain") {
+public/src/game-core-v17.js:130: return base.command(state, action, actor);
+public/src/game-core-v18.js:277: export function command(state, action, actor = "captain") {
+public/src/game-core-v18.js:296: const result = base.command(state, action, actor);
+public/src/game-core-v18.js:300: return base.command(state, action, actor);
+public/src/game-core-v4.js:24: for (const key of Object.keys(state.collisions || {})) state.collisions[key] -= amount;
+public/src/game-core-v4.js:25: for (const key of Object.keys(state.feedback || {})) {
+public/src/game-core-v4.js:98: export function command(state, action, actor = "captain") {
+public/src/game-core-v4.js:101: if (state.mode === "coop" && actor !== "crew") return base.command(state, action, actor);
+public/src/game-core-v4.js:104: return base.command(state, action, actor);
+public/src/game-core-v5.js:94: export function command(state, action, actor = "captain") {
+public/src/game-core-v5.js:111: const result = base.command(state, action, actor);
+public/src/game-core-v6.js:92: export function command(state, action, actor = "captain") {
+public/src/game-core-v6.js:103: const result = base.command(state, action, actor);
+public/src/game-core-v7.js:217: export function command(state, action, actor = "captain") {
+public/src/game-core-v7.js:220: const result = base.command(state, action, actor);
+public/src/game-core-v7.js:227: const result = base.command(state, action, actor);
+public/src/game-core-v8.js:233: export function command(state, action, actor = "captain") {
+public/src/game-core-v8.js:244: const result = base.command(state, action, actor);
+public/src/game-core-v9-1.js:15: export function command(state, action, actor = "captain") {
+public/src/game-core-v9-1.js:16: const result = base.command(state, action, actor);
+public/src/game-core-v9.js:300: export function command(state, action, actor = "captain") {
+public/src/game-core-v9.js:315: const result = base.command(state, action, actor);
+public/src/game-core.js:123: export function command(state, action, actor = "captain") {
+public/src/gameplay-v5.js:188: const id = Object.keys(controlMap).find(key => controlMap[key] === control);
+public/src/gameplay-v6.js:368: const id = Object.keys(controlMap).find(key => controlMap[key] === control);
+public/src/gameplay-v8.js:5: function command(action) {
+public/src/gameplay-v8.js:9: byId("locationButton")?.addEventListener("click", () => command("where"));
+public/src/gameplay-v8.js:10: byId("firstRescueButton")?.addEventListener("click", () => command("tutorial-first"));
+public/src/gameplay-v9.js:1: import "./keyboard-controls-v1.js?v=2";
+public/src/keyboard-controls-v1.js:3: const KEY_BINDINGS = Object.freeze({
+public/src/keyboard-controls-v1.js:8: KeyS: Object.freeze({kind: "command", command: "sonar"}),
+public/src/keyboard-controls-v1.js:9: KeyC: Object.freeze({kind: "toggle-control", control: "pump"}),
+public/src/keyboard-controls-v1.js:10: KeyV: Object.freeze({kind: "toggle-control", control: "hullRepair"}),
+public/src/keyboard-controls-v1.js:11: KeyR: Object.freeze({kind: "toggle-control", control: "rescue"}),
+public/src/keyboard-controls-v1.js:17: s: KEY_BINDINGS.KeyS,
+public/src/keyboard-controls-v1.js:18: c: KEY_BINDINGS.KeyC,
+public/src/keyboard-controls-v1.js:19: v: KEY_BINDINGS.KeyV,
+public/src/keyboard-controls-v1.js:20: r: KEY_BINDINGS.KeyR,
+public/src/keyboard-controls-v1.js:21: " ": KEY_BINDINGS.Space,
+public/src/keyboard-controls-v1.js:22: Enter: KEY_BINDINGS.Enter,
+public/src/keyboard-controls-v1.js:23: ArrowLeft: KEY_BINDINGS.ArrowLeft,
+public/src/keyboard-controls-v1.js:24: ArrowRight: KEY_BINDINGS.ArrowRight,
+public/src/keyboard-controls-v1.js:25: ArrowUp: KEY_BINDINGS.ArrowUp,
+public/src/keyboard-controls-v1.js:26: ArrowDown: KEY_BINDINGS.ArrowDown,
+public/src/keyboard-controls-v1.js:29: export function getKeyboardBinding(key, modifiers = {}, code = "") {
+public/src/keyboard-controls-v1.js:31: if (code && KEY_BINDINGS[code]) return KEY_BINDINGS[code];
+public/src/keyboard-controls-v1.js:36: export function isEditableKeyboardTarget(target) {
+public/src/keyboard-controls-v1.js:60: button.setAttribute("aria-keyshortcuts", ariaShortcut);
+public/src/keyboard-controls-v1.js:113: function installKeyboardControls() {
+public/src/keyboard-controls-v1.js:135: window.addEventListener("keydown", event => {
+public/src/keyboard-controls-v1.js:136: if (!gameIsActive() || isEditableKeyboardTarget(event.target)) return;
+public/src/keyboard-controls-v1.js:137: const binding = getKeyboardBinding(event.key, event, event.code);
+public/src/keyboard-controls-v1.js:157: window.addEventListener("keyup", event => {
+public/src/keyboard-controls-v1.js:158: const binding = getKeyboardBinding(event.key, event, event.code);
+public/src/keyboard-controls-v1.js:161: if (gameIsActive() && !isEditableKeyboardTarget(event.target)) stopGameKey(event);
+public/src/keyboard-controls-v1.js:170: window.__echoKeyboardControls = {
+public/src/keyboard-controls-v1.js:173: getBinding: getKeyboardBinding,
+public/src/keyboard-controls-v1.js:179: installKeyboardControls();
+cloudflare-snapshot/free-roam.html:64: <button id="leftButton" data-key="←" aria-keyshortcuts="ArrowLeft">Влево</button>
+cloudflare-snapshot/free-roam.html:65: <button id="upButton" data-key="↑" aria-keyshortcuts="ArrowUp">Вперёд</button>
+cloudflare-snapshot/free-roam.html:66: <button id="rightButton" data-key="→" aria-keyshortcuts="ArrowRight">Вправо</button>
+cloudflare-snapshot/free-roam.html:67: <button id="downButton" data-key="↓" aria-keyshortcuts="ArrowDown">Назад / тормоз</button>
+cloudflare-snapshot/free-roam.html:68: <button id="actionButton" class="primary" data-key="F" aria-keyshortcuts="F">Действие</button>
+cloudflare-snapshot/free-roam.html:69: <button id="jumpButton" data-key="Пробел" aria-keyshortcuts="Space">Плавучий тормоз</button>
+cloudflare-snapshot/free-roam.html:70: <button id="pumpButton" aria-pressed="false" data-key="C" aria-keyshortcuts="C">Насос: выключен</button>
+cloudflare-snapshot/free-roam.html:71: <button id="repairButton" aria-pressed="false" data-key="V" aria-keyshortcuts="V">Пластина: готова</button>
+cloudflare-snapshot/manifest.json:129: "url": "https://archipelago.k69ysrndm7.workers.dev/src/keyboard-controls-v1.js",
+cloudflare-snapshot/manifest.json:130: "path": "src/keyboard-controls-v1.js",
+cloudflare-snapshot/src/app.js:362: const result = command(stateBox.state, message.action, "crew");
+cloudflare-snapshot/src/app.js:570: function sendCommand(action) {
+cloudflare-snapshot/src/app.js:573: const result = command(stateBox.state, action, "captain");
+cloudflare-snapshot/src/app.js:647: $("sonarButton").addEventListener("click", () => sendCommand("sonar"));
+cloudflare-snapshot/src/app.js:648: $("routeModeButton").addEventListener("click", () => sendCommand("risk-route-toggle"));
+cloudflare-snapshot/src/app.js:649: $("quickAction").addEventListener("click", () => sendCommand("quick"));
+cloudflare-snapshot/src/app.js:650: $("repairButton").addEventListener("click", () => sendCommand("repair"));
+cloudflare-snapshot/src/app.js:651: $("debrisButton").addEventListener("click", () => sendCommand("debris-remove"));
+cloudflare-snapshot/src/app.js:652: $("refuelButton").addEventListener("click", () => sendCommand("refuel"));
+cloudflare-snapshot/src/app.js:653: $("decoyButton").addEventListener("click", () => sendCommand("hunter-decoy"));
+cloudflare-snapshot/src/app.js:654: $("pumpAssistButton").addEventListener("click", () => sendCommand("pump-assist-toggle"));
+cloudflare-snapshot/src/app.js:655: $("anchorButton").addEventListener("click", () => sendCommand("anchor"));
+cloudflare-snapshot/src/app.js:696: window.addEventListener("keydown", event => {
+cloudflare-snapshot/src/app.js:702: if (event.key.toLowerCase() === "s") sendCommand("sonar");
+cloudflare-snapshot/src/app.js:703: if (event.key === " ") { event.preventDefault(); sendCommand("quick"); }
+cloudflare-snapshot/src/app.js:707: window.addEventListener("keyup", event => {
+cloudflare-snapshot/src/audio-engine.js:103: for (const name of [...this.loops.keys()]) this.stopLoop(name);
+cloudflare-snapshot/src/free-roam-accessibility.js:11: window.dispatchEvent(new KeyboardEvent(type, {
+cloudflare-snapshot/src/free-roam-accessibility.js:25: dispatchKey("keydown", binding);
+cloudflare-snapshot/src/free-roam-accessibility.js:26: setTimeout(() => dispatchKey("keyup", binding), binding.duration);
+cloudflare-snapshot/src/free-roam-audio.js:73: const available = Object.keys(FOOTSTEPS).filter(name => this.buffers.has(name));
+cloudflare-snapshot/src/free-roam-v3.js:490: function bindKeyboard() {
+cloudflare-snapshot/src/free-roam-v3.js:492: window.addEventListener("keydown", event => {
+cloudflare-snapshot/src/free-roam-v3.js:501: } else if (!event.repeat && event.code === "KeyF") {
+cloudflare-snapshot/src/free-roam-v3.js:507: } else if (!event.repeat && event.code === "KeyC") {
+cloudflare-snapshot/src/free-roam-v3.js:511: } else if (!event.repeat && event.code === "KeyV") {
+cloudflare-snapshot/src/free-roam-v3.js:518: window.addEventListener("keyup", event => {
+cloudflare-snapshot/src/free-roam-v3.js:585: bindKeyboard();
+cloudflare-snapshot/src/game-core-v10.js:168: export function command(state, action, actor = "captain") {
+cloudflare-snapshot/src/game-core-v10.js:170: const result = base.command(state, action, actor);
+cloudflare-snapshot/src/game-core-v11.js:161: export function command(state, action, actor = "captain") {
+cloudflare-snapshot/src/game-core-v11.js:163: const result = base.command(state, action, actor);
+cloudflare-snapshot/src/game-core-v12.js:267: export function command(state, action, actor = "captain") {
+cloudflare-snapshot/src/game-core-v12.js:269: const result = base.command(state, action, actor);
+cloudflare-snapshot/src/game-core-v13.js:159: if (!Array.isArray(state.riskRoute.clearedKeys)) state.riskRoute.clearedKeys = [];
+cloudflare-snapshot/src/game-core-v13.js:160: state.riskRoute.clearedKeys = [...new Set(state.riskRoute.clearedKeys.filter(key => typeof key === "string"))];
+cloudflare-snapshot/src/game-core-v13.js:163: if (!Number.isFinite(state.riskRoute.cleanGates)) state.riskRoute.cleanGates = state.riskRoute.clearedKeys.length;
+cloudflare-snapshot/src/game-core-v13.js:278: const alreadyCleared = state.riskRoute.clearedKeys.includes(key);
+cloudflare-snapshot/src/game-core-v13.js:285: state.riskRoute.clearedKeys.push(key);
+cloudflare-snapshot/src/game-core-v13.js:369: export function command(state, action, actor = "captain") {
+cloudflare-snapshot/src/game-core-v13.js:390: const result = base.command(state, action, actor);
+cloudflare-snapshot/src/game-core-v14.js:189: export function command(state, action, actor = "captain") {
+cloudflare-snapshot/src/game-core-v14.js:193: return base.command(state, action, actor);
+cloudflare-snapshot/src/game-core-v15.js:282: export function command(state, action, actor = "captain") {
+cloudflare-snapshot/src/game-core-v15.js:311: const result = base.command(state, action, actor);
+cloudflare-snapshot/src/game-core-v16.js:696: export function command(state, action, actor = "captain") {
+cloudflare-snapshot/src/game-core-v16.js:700: const result = base.command(state, action, actor);
+cloudflare-snapshot/src/game-core-v17.js:128: export function command(state, action, actor = "captain") {
+cloudflare-snapshot/src/game-core-v17.js:130: return base.command(state, action, actor);
+cloudflare-snapshot/src/game-core-v18.js:277: export function command(state, action, actor = "captain") {
+cloudflare-snapshot/src/game-core-v18.js:296: const result = base.command(state, action, actor);
+cloudflare-snapshot/src/game-core-v18.js:300: return base.command(state, action, actor);
+cloudflare-snapshot/src/game-core-v4.js:24: for (const key of Object.keys(state.collisions || {})) state.collisions[key] -= amount;
+cloudflare-snapshot/src/game-core-v4.js:25: for (const key of Object.keys(state.feedback || {})) {
+cloudflare-snapshot/src/game-core-v4.js:98: export function command(state, action, actor = "captain") {
+cloudflare-snapshot/src/game-core-v4.js:101: if (state.mode === "coop" && actor !== "crew") return base.command(state, action, actor);
+cloudflare-snapshot/src/game-core-v4.js:104: return base.command(state, action, actor);
+cloudflare-snapshot/src/game-core-v5.js:94: export function command(state, action, actor = "captain") {
+cloudflare-snapshot/src/game-core-v5.js:111: const result = base.command(state, action, actor);
+cloudflare-snapshot/src/game-core-v6.js:92: export function command(state, action, actor = "captain") {
+cloudflare-snapshot/src/game-core-v6.js:103: const result = base.command(state, action, actor);
+cloudflare-snapshot/src/game-core-v7.js:217: export function command(state, action, actor = "captain") {
+cloudflare-snapshot/src/game-core-v7.js:220: const result = base.command(state, action, actor);
+cloudflare-snapshot/src/game-core-v7.js:227: const result = base.command(state, action, actor);
+cloudflare-snapshot/src/game-core-v8.js:233: export function command(state, action, actor = "captain") {
+cloudflare-snapshot/src/game-core-v8.js:244: const result = base.command(state, action, actor);
+cloudflare-snapshot/src/game-core-v9-1.js:15: export function command(state, action, actor = "captain") {
+cloudflare-snapshot/src/game-core-v9-1.js:16: const result = base.command(state, action, actor);
+cloudflare-snapshot/src/game-core-v9.js:300: export function command(state, action, actor = "captain") {
+cloudflare-snapshot/src/game-core-v9.js:315: const result = base.command(state, action, actor);
+cloudflare-snapshot/src/game-core.js:123: export function command(state, action, actor = "captain") {
+cloudflare-snapshot/src/gameplay-v6.js:368: const id = Object.keys(controlMap).find(key => controlMap[key] === control);
+cloudflare-snapshot/src/gameplay-v8.js:5: function command(action) {
+cloudflare-snapshot/src/gameplay-v8.js:9: byId("locationButton")?.addEventListener("click", () => command("where"));
+cloudflare-snapshot/src/gameplay-v8.js:10: byId("firstRescueButton")?.addEventListener("click", () => command("tutorial-first"));
+cloudflare-snapshot/src/gameplay-v9.js:1: import "./keyboard-controls-v1.js?v=2";
+cloudflare-snapshot/src/keyboard-controls-v1.js:3: const KEY_BINDINGS = Object.freeze({
+cloudflare-snapshot/src/keyboard-controls-v1.js:8: KeyS: Object.freeze({kind: "command", command: "sonar"}),
+cloudflare-snapshot/src/keyboard-controls-v1.js:9: KeyC: Object.freeze({kind: "toggle-control", control: "pump"}),
+cloudflare-snapshot/src/keyboard-controls-v1.js:10: KeyV: Object.freeze({kind: "toggle-control", control: "hullRepair"}),
+cloudflare-snapshot/src/keyboard-controls-v1.js:11: KeyR: Object.freeze({kind: "toggle-control", control: "rescue"}),
+cloudflare-snapshot/src/keyboard-controls-v1.js:17: s: KEY_BINDINGS.KeyS,
+cloudflare-snapshot/src/keyboard-controls-v1.js:18: c: KEY_BINDINGS.KeyC,
+cloudflare-snapshot/src/keyboard-controls-v1.js:19: v: KEY_BINDINGS.KeyV,
+cloudflare-snapshot/src/keyboard-controls-v1.js:20: r: KEY_BINDINGS.KeyR,
+cloudflare-snapshot/src/keyboard-controls-v1.js:21: " ": KEY_BINDINGS.Space,
+cloudflare-snapshot/src/keyboard-controls-v1.js:22: Enter: KEY_BINDINGS.Enter,
+cloudflare-snapshot/src/keyboard-controls-v1.js:23: ArrowLeft: KEY_BINDINGS.ArrowLeft,
+cloudflare-snapshot/src/keyboard-controls-v1.js:24: ArrowRight: KEY_BINDINGS.ArrowRight,
+cloudflare-snapshot/src/keyboard-controls-v1.js:25: ArrowUp: KEY_BINDINGS.ArrowUp,
+cloudflare-snapshot/src/keyboard-controls-v1.js:26: ArrowDown: KEY_BINDINGS.ArrowDown,
+cloudflare-snapshot/src/keyboard-controls-v1.js:29: export function getKeyboardBinding(key, modifiers = {}, code = "") {
+cloudflare-snapshot/src/keyboard-controls-v1.js:31: if (code && KEY_BINDINGS[code]) return KEY_BINDINGS[code];
+cloudflare-snapshot/src/keyboard-controls-v1.js:36: export function isEditableKeyboardTarget(target) {
+cloudflare-snapshot/src/keyboard-controls-v1.js:60: button.setAttribute("aria-keyshortcuts", ariaShortcut);
+cloudflare-snapshot/src/keyboard-controls-v1.js:113: function installKeyboardControls() {
+cloudflare-snapshot/src/keyboard-controls-v1.js:135: window.addEventListener("keydown", event => {
+cloudflare-snapshot/src/keyboard-controls-v1.js:136: if (!gameIsActive() || isEditableKeyboardTarget(event.target)) return;
+cloudflare-snapshot/src/keyboard-controls-v1.js:137: const binding = getKeyboardBinding(event.key, event, event.code);
+cloudflare-snapshot/src/keyboard-controls-v1.js:157: window.addEventListener("keyup", event => {
+cloudflare-snapshot/src/keyboard-controls-v1.js:158: const binding = getKeyboardBinding(event.key, event, event.code);
+cloudflare-snapshot/src/keyboard-controls-v1.js:161: if (gameIsActive() && !isEditableKeyboardTarget(event.target)) stopGameKey(event);
+cloudflare-snapshot/src/keyboard-controls-v1.js:170: window.__echoKeyboardControls = {
+cloudflare-snapshot/src/keyboard-controls-v1.js:173: getBinding: getKeyboardBinding,
+cloudflare-snapshot/src/keyboard-controls-v1.js:179: installKeyboardControls();
+
