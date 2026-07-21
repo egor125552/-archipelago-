@@ -1,0 +1,408 @@
+[
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/",
+    "path": "index.html",
+    "bytes": 19743,
+    "sha256": "3d9bfbd22b7f2d626e7228ccc90507222150e5d11f1ac226e53fedcc6bd35971",
+    "content_type": "text/html"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/free-roam.html",
+    "path": "free-roam.html",
+    "bytes": 6676,
+    "sha256": "03f7ac5d02f2d07339bb00eed00481f14cf69c0d4796ad0f0d8550748c0bb76b",
+    "content_type": "text/html"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/styles.css",
+    "path": "styles.css",
+    "bytes": 5548,
+    "sha256": "76a14fe1f16d6f3cb0a294abc715585dd64b76f248ff8bcc6edefed3c13ffc61",
+    "content_type": "text/css"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/app.js",
+    "path": "src/app.js",
+    "bytes": 32425,
+    "sha256": "d1cc2e3d4a4b48a1b88d0a4b3f8cd614bdd15574e4ad301281cd3fc7cf2e6da5",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/room-ui-fix.js",
+    "path": "src/room-ui-fix.js",
+    "bytes": 6719,
+    "sha256": "b83a793cd2e3d33647d0f17045c80817f32dbb7c9546a2122a35a02d7fa6d31b",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/gameplay-v6.js",
+    "path": "src/gameplay-v6.js",
+    "bytes": 21264,
+    "sha256": "26c2850e40fe3086acab9ad479a5c70ed7c28b88eddd786a2c407a39e35333bf",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/gameplay-v8.js",
+    "path": "src/gameplay-v8.js",
+    "bytes": 303,
+    "sha256": "660482015ca76c6d0b4f0b686970191b11cc96986a2cc885108781de425eeb94",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/gameplay-v9.js",
+    "path": "src/gameplay-v9.js",
+    "bytes": 3396,
+    "sha256": "0fe30b9394a3e7b4bd2eaaf7450e56442761cb7ca15afd7c5fc1eb6adddc91eb",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/game-core-v18.js",
+    "path": "src/game-core-v18.js",
+    "bytes": 16769,
+    "sha256": "592f79b31e773d97743aa277747f6d8c3c159437a8f8c05bf628e93db79bc039",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/audio-engine-v13.js",
+    "path": "src/audio-engine-v13.js",
+    "bytes": 1986,
+    "sha256": "725ea2da40bbed45b9593e052245d5083c34348a62239b5e0f63ae0997f837df",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/free-roam.css",
+    "path": "free-roam.css",
+    "bytes": 4275,
+    "sha256": "10efd9460c2ac4b7092aa6229712de36cbbf5c74fd6ce103eb9e5d4eb7f5b95d",
+    "content_type": "text/css"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/free-roam-v3.js",
+    "path": "src/free-roam-v3.js",
+    "bytes": 22935,
+    "sha256": "4840acff0c7d1dea16e88db658763a4868d7976f802e4321825783d96a49e9bf",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/free-roam-accessibility.js",
+    "path": "src/free-roam-accessibility.js",
+    "bytes": 861,
+    "sha256": "07cf1fcec6f84fc5fccfc633814cefea7f8517e6d0d9ca9ca3dd32c0d72e0591",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/free-roam-speech-fix.js",
+    "path": "src/free-roam-speech-fix.js",
+    "bytes": 3026,
+    "sha256": "73f82289dfe9b2d2897aeb94ab083bd1308943c1b3511586f0cc774fa2ab9dca",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/game-core.js",
+    "path": "src/game-core.js",
+    "bytes": 20682,
+    "sha256": "a090b66496f0b8b0e9332dfcd0c4db3b936521fdbf3408d4d5499df2296caa4b",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/audio-engine.js",
+    "path": "src/audio-engine.js",
+    "bytes": 6666,
+    "sha256": "2e2f62d35e38dafaafd1b51b1d897c9fd9b61e18bcf16b013d70f107c8452f13",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/network.js",
+    "path": "src/network.js",
+    "bytes": 5232,
+    "sha256": "c31ec67901e813d72f6c97c738c03f18208cc7f715be177d81633b6e2d03d508",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/progression.js",
+    "path": "src/progression.js",
+    "bytes": 8151,
+    "sha256": "92092f5ed1d77dcad575703d74df54bbe18ce3c417fb48aece71cb629af393aa",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/keyboard-controls-v1.js",
+    "path": "src/keyboard-controls-v1.js",
+    "bytes": 6992,
+    "sha256": "6deb0843e089c9100ee3f68560fcc82d00e024f5cdbf93466142ea88a0e84ced",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/game-core-v17.js",
+    "path": "src/game-core-v17.js",
+    "bytes": 8499,
+    "sha256": "f61866dbe9a85b3e952b1b80be512348105fd30a23b85417f4a7adeff4a294ed",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/collision-model.js",
+    "path": "src/collision-model.js",
+    "bytes": 951,
+    "sha256": "706d111af8804f0afeca5d17432817a5878fd218117c8e477508d67285296c8d",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/audio-engine-v12.js",
+    "path": "src/audio-engine-v12.js",
+    "bytes": 1210,
+    "sha256": "a2e6a187b33117081bb9587e240d65d1e80964b7eea44ea351ba79ba60835bf4",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/free-roam-core-v5.js",
+    "path": "src/free-roam-core-v5.js",
+    "bytes": 14994,
+    "sha256": "bcc6199bbcfb5786c428e3ef75801dc258b2a8647dcb89fc19782a9d12e4f8b3",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/free-roam-audio-v4.js",
+    "path": "src/free-roam-audio-v4.js",
+    "bytes": 6556,
+    "sha256": "356e48fcb5e31e827f7749bcca0d6cf0210db32112a710ea616da386b0d6745d",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/free-roam-gesture-model.js",
+    "path": "src/free-roam-gesture-model.js",
+    "bytes": 617,
+    "sha256": "b7d332657ab7d39d6a57eeda5617fe50b63390fbb34bb6690ed5bb58b1ae5999",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/game-core-v16.js",
+    "path": "src/game-core-v16.js",
+    "bytes": 35554,
+    "sha256": "36fa46ab0027869a8a3a486a6555cb2d8225a0309a45c99f0a76a8bc3d2e9153",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/audio-engine-v11.js",
+    "path": "src/audio-engine-v11.js",
+    "bytes": 6450,
+    "sha256": "88a016ee927d54c3b0fa6950863d265a365cf87b8bcdd2b53d4862415aa32f39",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/free-roam-core-v4.js",
+    "path": "src/free-roam-core-v4.js",
+    "bytes": 4183,
+    "sha256": "1828fe6f383c0282435c3817b4f7307d84b39afacd1aaaaa894323e5b4ff9ed2",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/free-roam-audio-v3.js",
+    "path": "src/free-roam-audio-v3.js",
+    "bytes": 2852,
+    "sha256": "c3cd106a62af316220de19eea69e855741ac666c0cdd4be2dbc6551c15e2aeb0",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/game-core-v15.js",
+    "path": "src/game-core-v15.js",
+    "bytes": 17368,
+    "sha256": "ad50d75f15ff3dc5efbda2e2e195d2a2aaaa4bdb8403b05821df107aa22ed6bf",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/hunter-brain.js",
+    "path": "src/hunter-brain.js",
+    "bytes": 17785,
+    "sha256": "80e100adf091dcc505dd5b607e8a3c0ea050f281c14e2ffd7c2457dbe7863a5a",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/audio-engine-v10.js",
+    "path": "src/audio-engine-v10.js",
+    "bytes": 2446,
+    "sha256": "6de45868783c87befa0557e566f4497255a08314135c71e260e32538f82f7111",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/free-roam-core-v3.js",
+    "path": "src/free-roam-core-v3.js",
+    "bytes": 15155,
+    "sha256": "22f77b0be26753f35382c7352d2d157bf674bf315784d98d5d2d7d7439b70b9a",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/free-roam-steering-model.js",
+    "path": "src/free-roam-steering-model.js",
+    "bytes": 617,
+    "sha256": "611a14d3dc43bd7dffdb6b729a2bd12acb26b79c902cc7d3e83b4de68e0e0be5",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/free-roam-audio-v2.js",
+    "path": "src/free-roam-audio-v2.js",
+    "bytes": 359,
+    "sha256": "768426d5827044704742e33d5b62405fcaf5ca50576b3ae91aef59deb2a25059",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/game-core-v14.js",
+    "path": "src/game-core-v14.js",
+    "bytes": 11517,
+    "sha256": "246d7468f9aa0625f522c3b4ef6f968d99319df247bc0e3b4899d49227c00dc1",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/hunter-brain-weights.js",
+    "path": "src/hunter-brain-weights.js",
+    "bytes": 4541,
+    "sha256": "de25734d299e32f7e1806a8af7d6e00a89ebb4ea1ef89d0dacece0e9178c25c8",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/audio-engine-v9.js",
+    "path": "src/audio-engine-v9.js",
+    "bytes": 9966,
+    "sha256": "41755755bba51b25356795fedfba02b90c1f7370f9e0b134bd210e9189f93f5e",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/free-roam-core-v2.js",
+    "path": "src/free-roam-core-v2.js",
+    "bytes": 24273,
+    "sha256": "566172ddfac8d320eb77b592297299f5fcd53b72f9eb28e6349b35ce5bcf2a90",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/free-roam-audio.js",
+    "path": "src/free-roam-audio.js",
+    "bytes": 8565,
+    "sha256": "99594a20cb0acc62562ce8b7c5ab29a1a614bd5f7d9a278da3f27f2087f5d705",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/game-core-v13.js",
+    "path": "src/game-core-v13.js",
+    "bytes": 23842,
+    "sha256": "db10753febd7c71d46c5c32a7b4bc8aa7e783fa806a904cfd2a44e3222ec7c58",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/audio-engine-v8.js",
+    "path": "src/audio-engine-v8.js",
+    "bytes": 2279,
+    "sha256": "b784470c6e375bc7ef612617402e21d6d9512e308dc7ebf3d4e45e47bd7a8cdb",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/game-core-v12.js",
+    "path": "src/game-core-v12.js",
+    "bytes": 13639,
+    "sha256": "c9a4038ab50140284c6498857aafac628fed3d04f8d9e0c78b7beec5e384e6ab",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/audio-engine-v7-1.js",
+    "path": "src/audio-engine-v7-1.js",
+    "bytes": 758,
+    "sha256": "d5e41e67da0d379e2085d3790da02d300202b775b88368683e182e5e2e8652fe",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/game-core-v11.js",
+    "path": "src/game-core-v11.js",
+    "bytes": 10577,
+    "sha256": "258cc8ef94ac26d7c604f6f4bb59a07236d3483f950d6f47338d6863ef5aae96",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/audio-engine-v7.js",
+    "path": "src/audio-engine-v7.js",
+    "bytes": 3022,
+    "sha256": "41710375ec8b604d11c2570e45b3df1530387cebaf69391dc5a66792f43823d6",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/game-core-v10.js",
+    "path": "src/game-core-v10.js",
+    "bytes": 12210,
+    "sha256": "377157d7497fb09fc9e4e12500e67c46b72d6a5ad67e37c341f61046cd290479",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/audio-engine-v6.js",
+    "path": "src/audio-engine-v6.js",
+    "bytes": 5361,
+    "sha256": "fd03032fd7cb79918d9d3d5c9c512fcf298c538a927d4837929310e238fef44f",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/game-core-v9-1.js",
+    "path": "src/game-core-v9-1.js",
+    "bytes": 1015,
+    "sha256": "dacd55cb6f3559a38c4a585fb7d85be6ece1a440087807b3020fa79fad40edf1",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/audio-engine-v5.js",
+    "path": "src/audio-engine-v5.js",
+    "bytes": 6796,
+    "sha256": "81f28780245282b7482bd81b4b39e765df9e99451bf1ece3db63917d6eea4f97",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/game-core-v9.js",
+    "path": "src/game-core-v9.js",
+    "bytes": 19381,
+    "sha256": "77bf12dfd284e6258cb0c22bab290b0c648d609ba42ec910d2d43204cc07efcc",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/audio-engine-v4.js",
+    "path": "src/audio-engine-v4.js",
+    "bytes": 4773,
+    "sha256": "20504b5e0f827bc60ec82bd3b65dd4ec23023c5ad5e8f1d5427b69453c8008b2",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/game-core-v8.js",
+    "path": "src/game-core-v8.js",
+    "bytes": 15815,
+    "sha256": "d6cbbce9fbec692584760d4f5c213bd17e379c08fd039b15bf36db75ad78f080",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/game-core-v7-1.js",
+    "path": "src/game-core-v7-1.js",
+    "bytes": 977,
+    "sha256": "c04286fa7c6614a9fb0f690ce75b167482943866dc8ee2cf13a38b00d0d31594",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/game-core-v7.js",
+    "path": "src/game-core-v7.js",
+    "bytes": 13917,
+    "sha256": "ad2e6e9de07dd8bf31ff8cb66a534fad5c23b71f0125dc4b794ace2671955fcd",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/game-core-v6.js",
+    "path": "src/game-core-v6.js",
+    "bytes": 7839,
+    "sha256": "ad82548b83a7a96de4c9c5fe4cf699b8d5c53b7954471185ac6218d56749e300",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/game-core-v5.js",
+    "path": "src/game-core-v5.js",
+    "bytes": 13422,
+    "sha256": "3b6f1e7ff9b65e92297e7603a6c80e6d5d9f32e549b5bfe1b00554f394e4e461",
+    "content_type": "text/javascript"
+  },
+  {
+    "url": "https://archipelago.k69ysrndm7.workers.dev/src/game-core-v4.js",
+    "path": "src/game-core-v4.js",
+    "bytes": 6859,
+    "sha256": "30094d219653023e609479722dd5c2b6ac9c8bdc82d080a4f0876f428d642c6c",
+    "content_type": "text/javascript"
+  }
+]

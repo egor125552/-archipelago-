@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#061a24">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Эхо-Архипелаг — аудио-спасение</title>
+  <link rel="stylesheet" href="styles.css?v=27.0">
+</head>
+<body data-accessibility="touch" data-role="captain">
+  <a class="skip" href="#main">К игре</a>
+  <main id="main">
+    <section id="startScreen" class="start-shell" aria-labelledby="title">
+      <p class="eyebrow">кооперативная аудио-игра</p>
+      <h1 id="title">Эхо-Архипелаг</h1>
+      <p>Шесть спасательных операций в растущей речной бухте. Обычный сонар всегда ведёт прямо к цели. Поздние уровни добавляют разрушаемые обломки, новые лодки и преследователя. Для стереонавигации нужны наушники.</p>
+
+      <fieldset class="panel mode-picker">
+        <legend>Управление</legend>
+        <button id="modeTouch" aria-pressed="true">Без VoiceOver — удержание пальцем</button>
+        <button id="modeReader" aria-pressed="false">С VoiceOver или другим экранным диктором</button>
+        <p id="modeHint" class="hint"></p>
+      </fieldset>
+
+      <fieldset class="panel mode-picker">
+        <legend>Темп операции</legend>
+        <button id="paceFree" aria-pressed="true">Свободно — без таймера</button>
+        <button id="paceTimed" aria-pressed="false">Штормовой режим — 4 минуты</button>
+        <p id="paceHint" class="hint">Свободный режим: таймер не завершает операцию. Опасности, топливо и повреждения остаются.</p>
+      </fieldset>
+
+      <section id="progressionPanel" class="panel progression-panel" aria-labelledby="progressionTitle">
+        <h2 id="progressionTitle">Карта операций</h2>
+        <p id="profileSummary" class="profile-summary"></p>
+        <fieldset class="mode-picker operation-picker">
+          <legend>Выбери уровень</legend>
+          <button id="operation1" aria-pressed="true">Уровень 1 — Тихая бухта</button>
+          <button id="operation2" aria-pressed="false">Уровень 2 — закрыт</button>
+          <button id="operation3" aria-pressed="false">Уровень 3 — закрыт</button>
+          <button id="operation4" aria-pressed="false">Уровень 4 — закрыт</button>
+          <button id="operation5" aria-pressed="false">Уровень 5 — закрыт</button>
+          <button id="operation6" aria-pressed="false">Уровень 6 — закрыт</button>
+          <p id="operationDescription" class="hint"></p>
+        </fieldset>
+        <fieldset class="mode-picker boat-picker">
+          <legend>Лодка</legend>
+          <button id="boatStrizh" aria-pressed="true">Катер «Стриж» — выбран</button>
+          <button id="boatKasatka" aria-pressed="false">Катер «Касатка» — откроется на уровне 3</button>
+          <button id="boatBurevestnik" aria-pressed="false">Катер «Буревестник» — откроется на уровне 4</button>
+          <button id="boatGrom" aria-pressed="false">Катер «Гром» — откроется на уровне 6</button>
+          <p id="boatDescription" class="hint"></p>
+        </fieldset>
+        <section id="shopPanel" class="shop" hidden aria-labelledby="shopTitle">
+          <h3 id="shopTitle">Магазин спасслужбы</h3>
+          <p>Покупки постоянные и действуют во всех следующих одиночных операциях.</p>
+          <button id="buyCoastBrake"></button>
+          <button id="buyMiniArmor"></button>
+          <button id="buyHighFlowPump"></button>
+          <button id="buyRamKeel"></button>
+          <button id="buyDebrisTools"></button>
+        </section>
+        <p id="progressionStatus" class="hint" role="status" aria-live="polite"></p>
+      </section>
+
+      <section class="panel">
+        <h2>Одиночная игра</h2>
+        <p>Ты — капитан. Насос и ремонт двигателя находятся под твоим явным управлением. При желании можно отдельно включить более медленную автооткачку помощника. Учебная страховка мягко сбрасывает газ перед близким препятствием и может быть выключена во время игры.</p>
+        <button id="soloButton" class="primary">Начать одиночную спасательную операцию</button>
+      </section>
+
+      <section class="panel coop-panel">
+        <h2>Два игрока</h2>
+        <p>Капитан рулит и управляет ходом. Второй игрок ведёт сонар, насос, ремонт корпуса и спасательный трос.</p>
+        <label for="roomInput">Код интернет-комнаты</label>
+        <input id="roomInput" maxlength="6" inputmode="text" autocapitalize="characters" spellcheck="false" autocomplete="off" placeholder="например, VOLNA7">
+        <div class="grid2">
+          <button id="hostPeer" class="primary">Создать интернет-комнату</button>
+          <button id="joinPeer">Войти в интернет-комнату</button>
+          <button id="hostLocal">Создать тест в двух окнах компьютера</button>
+          <button id="joinLocal">Войти в тест в этом браузере</button>
+        </div>
+        <p id="localRoomNote" class="hint">Локальный режим предназначен только для двух одновременно активных окон на компьютере.</p>
+        <p id="networkStatus" class="hint" role="status" aria-live="polite">Для двух телефонов или разных сетей используй интернет-комнату. Код состоит из 4–6 латинских букв или цифр.</p>
+      </section>
+    </section>
+
+    <section id="gameScreen" hidden aria-labelledby="gameTitle">
+      <header class="game-header">
+        <div><p class="eyebrow"><span id="roleLabel">Капитан</span></p><h1 id="gameTitle" tabindex="-1">Эхо-Архипелаг</h1></div>
+        <div class="game-header-actions">
+          <button id="actionHintButton" class="small">Что делать сейчас?</button>
+          <button id="locationButton" class="small">Где я?</button>
+          <button id="firstRescueButton" class="small">Как спасти первого?</button>
+          <button id="assistButton" class="small" aria-pressed="true">Стереомаяк: включён</button>
+          <button id="safetyButton" class="small" aria-pressed="true">Учебная страховка: включена</button>
+          <button id="statusButton" class="small">Озвучить статус</button>
+          <button id="speechButton" class="small" aria-pressed="true">Игровая озвучка: включена</button>
+          <button id="soundButton" class="small">Звук: включён</button>
+        </div>
+      </header>
+      <div id="liveStatus" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+      <p id="missionMessage" class="mission"></p>
+      <p id="engineWarning" class="warning" hidden aria-live="polite"></p>
+      <p id="floodEmergencyStatus" class="warning" hidden></p>
+      <p id="hunterStatus" class="warning" hidden></p>
+
+      <section class="status-strip" aria-label="Состояние лодки">
+        <div><span>Уровень</span><strong id="operationLevel">1</strong></div><div><span>Лодка</span><strong id="boatName">Стриж</strong></div>
+        <div><span>Скорость</span><strong id="speed">0</strong></div><div><span>Ход</span><strong id="movementState">стоит</strong></div>
+        <div><span>Курс</span><strong id="heading">0°</strong></div><div><span>Корпус</span><strong id="hull">100%</strong></div>
+        <div><span>Броня</span><strong id="armor">нет</strong></div>
+        <div><span>Вода</span><strong id="water">0%</strong></div><div><span>Топливо</span><strong id="fuel">100%</strong></div>
+        <div><span>Обломки</span><strong id="debrisCount">0</strong></div>
+        <div><span>Мотор</span><strong id="temperature">24°</strong></div><div><span>Спасено</span><strong id="rescued">0/2</strong></div>
+        <div><span>Режим маршрута</span><strong id="riskRouteState">обычный; риск закрыт до уровня 2</strong></div>
+        <div><span>Время</span><strong id="time">Без лимита</strong></div>
+      </section>
+
+      <section class="control-deck" aria-label="Постоянная раскладка управления">
+        <button id="sonarButton" class="control sonar" aria-label="Сонар. Один раз озвучивает расстояние и закрепляет следующую цель; дальше направление показывает только высокий стереописк">СОНАР: ЗАКРЕПИТЬ ЦЕЛЬ</button>
+        <button id="routeModeButton" class="control route-mode" aria-pressed="false" aria-label="Выбрать обычный или рискованный маршрут до следующего нажатия сонара">МАРШРУТ: ОБЫЧНЫЙ</button>
+        <button id="leftButton" class="control left" aria-label="Поворот влево. Для поворота лодка должна хотя бы медленно двигаться">◀ ЛЕВО</button>
+        <button id="throttleButton" class="control throttle" aria-label="Газ вперёд. После отпускания лодка продолжит идти по инерции">ГАЗ ▲</button>
+        <button id="rightButton" class="control right" aria-label="Поворот вправо. Для поворота лодка должна хотя бы медленно двигаться">ПРАВО ▶</button>
+        <button id="reverseButton" class="control reverse" aria-label="Тормоз и задний ход. Нажатие VoiceOver останавливает лодку; у стоянки включает задний ход. Без VoiceOver удерживай для заднего хода">ТОРМОЗ ▼</button>
+        <button id="quickAction" class="control quick primary" aria-label="Быстрое контекстное действие">БЫСТРОЕ ДЕЙСТВИЕ</button>
+      </section>
+
+      <section class="systems panel" aria-label="Системы, ремонт и спасение">
+        <button id="pumpButton" aria-pressed="false">Включить насос</button>
+        <button id="pumpAssistButton" aria-pressed="false" hidden>Автооткачка помощника: выключена</button>
+        <button id="rescueButton" aria-pressed="false" aria-label="Подготовить спасательный трос. С 30 метров включится автоподход">Подать спасательный трос</button>
+        <button id="repairHullButton" aria-pressed="false">Заделать пробоину — пластин 3</button>
+        <button id="debrisButton" aria-pressed="false" hidden>Извлечь обломок</button>
+        <button id="repairButton">Обслужить двигатель</button>
+        <button id="refuelButton">Аварийная канистра — 1</button>
+        <button id="anchorButton">Сбросить плавучий тормоз</button>
+        <button id="decoyButton" hidden>Ложный буй — 2</button>
+      </section>
+
+      <details class="panel help" open>
+        <summary>Как понять, стоит лодка или идёт</summary>
+        <p>На стоянке слышны только тихие редкие всплески у борта. После начала движения появляется отдельный непрерывный кильватер: чем выше скорость, тем он яснее и громче. В строке состояния «Ход» отдельно указано движение вперёд или задним ходом. Кнопка «Где я?» тоже начинает сообщение с направления движения.</p>
+      </details>
+      <details class="panel help">
+        <summary>Как спасти первого человека</summary>
+        <p>Нажми сонар, совмести маяк с центром и дай газ. Курс удерживается автоматически. Трос можно подготовить заранее: маяк не пропадёт. До 30 метров веди лодку сам; затем включится автоподход, лодка подойдёт и остановится в 14 метрах. Дождись сообщения «Человек на борту».</p>
+      </details>
+      <details class="panel help">
+        <summary>Вода, пробоина и полное затопление</summary>
+        <p>Пробоина набирает воду вплоть до 100 процентов. Насос откачивает воду, а пластина уменьшает течь. Автооткачка помощника по умолчанию выключена; ручной насос быстрее. На 80 процентах мотор заливает. При полном затоплении или нулевом корпусе есть 45 секунд: доведи воду до 35 процентов или ниже, а корпус — до 5 или выше. Если корпус уже цел, пластина для выхода не нужна. Если вода уже откачана, насос тоже не обязателен. После стабилизации мотор запускается сам; газ или кнопка запускают его сразу. Только перегретый мотор требует четырёх секунд обслуживания.</p>
+      </details>
+      <details class="panel help">
+        <summary>Как устроена бухта и сонар</summary>
+        <p>В обычном режиме сонар закрепляет следующего человека, а после двух спасений — центр Южной гавани. Промежуточных точек и скрытых переключений нет. Двойной центральный сигнал захватывает прямой курс: при отпущенном руле игра автоматически держит цель точно впереди. Основные прямые коридоры очищены от препятствий. У человека лодка сама замедлится до зоны троса, а у гавани — до безопасной швартовочной скорости.</p>
+      </details>
+      <details class="panel help">
+        <summary>Обычный или рискованный маршрут</summary>
+        <p>Со второго уровня рядом с сонаром открывается явный переключатель маршрута. Сначала выбери режим, затем нажми сонар; одно переключение само по себе не меняет текущий маяк. Обычный маршрут остаётся прямым и использует удержание курса. Рискованный сонар по очереди ведёт к озвученным входу и выходу узкого прохода; на всём этом отрезке автоподруливание и учебная страховка приостановлены, поэтому высокий стереомаяк нужно держать по центру вручную. Режим не меняется скрытно. Чистый проход без столкновения один раз даёт 150 очков и 100 дополнительных жетонов после победы. После выхода прямой помощник включается снова.</p>
+      </details>
+      <details class="panel help">
+        <summary>Уровни, жетоны и сильные столкновения</summary>
+        <p>Операции 4–6 расширяют бухту. Металл можно таранить; бетон и рифы — нет. Застрявший металл сначала извлеки, затем ставь пластину. «Гром» несёт 30 пластин. Преследователь анализирует повторяющиеся манёвры небольшой нейросетью: стоянку, задний ход, круги, прямой побег, попытки тарана и повторные ложные буи. Физика и объезд препятствий остаются обычным предсказуемым кодом.</p>
+      </details>
+      <details class="panel help">
+        <summary>Топливо и берег</summary>
+        <p>Берег твёрдый: тихое касание только останавливает лодку, а быстрый удар сильно повреждает корпус и отбрасывает её. Плавучий тормоз после сброса восстанавливается 12 секунд. На операцию выдаётся одна аварийная канистра с 30 процентами топлива. Для заправки полностью остановись и закончи ручную откачку, ремонт или извлечение обломка. У Южной гавани бак можно бесплатно заполнить до 100 процентов. Если канистра пуста, а лодка заглохла далеко от гавани, операция завершится.</p>
+      </details>
+      <section id="resultPanel" class="panel result" hidden><h2>Операция завершена</h2><p id="resultText"></p><p id="rewardText"></p><button id="restartButton" class="primary">Вернуться к карте операций</button></section>
+    </section>
+  </main>
+  <script type="importmap">
+    {"imports":{"/src/game-core.js":"/src/game-core-v18.js?v=27.0","/src/audio-engine.js":"/src/audio-engine-v13.js?v=27.0"}}
+  </script>
+  <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js" defer></script>
+  <script type="module" src="src/app.js?v=27.0"></script>
+  <script type="module" src="src/room-ui-fix.js?v=27.0"></script>
+  <script type="module" src="src/gameplay-v6.js?v=27.0"></script>
+  <script type="module" src="src/gameplay-v8.js?v=27.0"></script>
+  <script type="module" src="src/gameplay-v9.js?v=27.0"></script>
+</body>
+</html>

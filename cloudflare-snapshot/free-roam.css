@@ -1,0 +1,60 @@
+:root {
+  color-scheme: dark;
+  --bg: #071217;
+  --panel: #10232b;
+  --panel2: #17343e;
+  --text: #f5fbfd;
+  --muted: #b9cbd1;
+  --accent: #7ee8ff;
+  --focus: #fff38a;
+  --danger: #ffb2a7;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { min-height: 100%; margin: 0; background: var(--bg); color: var(--text); }
+body { overscroll-behavior: none; }
+button { font: inherit; min-height: 3.25rem; border: 1px solid #416774; border-radius: .8rem; background: var(--panel2); color: var(--text); font-weight: 800; padding: .7rem .85rem; }
+button.primary { background: var(--accent); color: #041418; border-color: transparent; }
+button:focus-visible, a:focus-visible, summary:focus-visible { outline: 4px solid var(--focus); outline-offset: 3px; }
+button[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--accent) inset; }
+main { width: min(70rem, 100%); margin: 0 auto; padding: max(1rem, env(safe-area-inset-top)) 1rem calc(1rem + env(safe-area-inset-bottom)); }
+h1 { font-size: clamp(2rem, 8vw, 3.7rem); margin: .1rem 0 .45rem; letter-spacing: -.045em; }
+h2 { margin: 0 0 .5rem; }
+p { line-height: 1.48; }
+.eyebrow { margin: 0; color: var(--accent); font-size: .8rem; font-weight: 900; text-transform: uppercase; letter-spacing: .1em; }
+.lead { max-width: 48rem; color: var(--muted); }
+.shell { max-width: 52rem; margin: 0 auto; }
+.lobby-actions { display: grid; gap: .7rem; margin: 1.1rem 0; }
+.rooms, details, .help { margin: 1rem 0; padding: .9rem; border: 1px solid #31515d; border-radius: .9rem; background: var(--panel); }
+.rooms ul { margin: .4rem 0; padding-left: 1.3rem; }
+.small { min-height: 2.7rem; font-size: .9rem; }
+.back-link { display: inline-block; padding: .7rem 0; color: var(--accent); font-weight: 800; }
+.game-header { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; }
+.header-actions { display: flex; gap: .45rem; }
+.message { min-height: 3.2rem; margin: .65rem 0; padding: .65rem .8rem; border-left: .3rem solid var(--accent); background: rgba(126,232,255,.08); border-radius: .4rem; }
+.status { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: .4rem; }
+.status div { min-width: 0; padding: .48rem; border: 1px solid #31515d; border-radius: .65rem; background: #0b1c22; text-align: center; }
+.status span { display: block; color: var(--muted); font-size: .7rem; }
+.status strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.play-surface { position: relative; min-height: min(61vh, 38rem); margin-top: .65rem; border: 1px solid #31515d; border-radius: 1rem; overflow: hidden; background: #071b22; touch-action: none; }
+canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.gesture-hint { position: absolute; top: .5rem; left: .7rem; margin: 0; padding: .35rem .55rem; background: rgba(7,18,23,.8); border-radius: .5rem; color: var(--muted); font-size: .78rem; pointer-events: none; }
+.controls { position: absolute; inset: auto .65rem .65rem .65rem; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .45rem; padding: .55rem; border-radius: .85rem; background: rgba(7,18,23,.9); transition: opacity .18s ease; }
+.controls button::after { content: "  [" attr(data-key) "]"; opacity: .72; font-size: .78em; white-space: nowrap; }
+body.gesture-active .controls { opacity: 0; pointer-events: none; }
+body.gesture-active .gesture-hint { color: var(--accent); }
+.skip { position: absolute; left: -9999px; top: 0; background: white; color: black; padding: .8rem; z-index: 50; }
+.skip:focus { left: .5rem; top: .5rem; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+[hidden] { display: none !important; }
+@media (max-width: 44rem) {
+  .status { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .play-surface { min-height: 65vh; }
+  .controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .controls button { min-height: 3.7rem; }
+}
+@media (max-width: 25rem) {
+  .header-actions { flex-direction: column; }
+  .controls button::after { display: block; }
+}
+@media (prefers-reduced-motion: reduce) { .controls { transition: none; } }
