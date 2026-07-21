@@ -1,0 +1,141 @@
+# Full Git history audit for cargo combat feature
+
+## KeyM
+
+COMMIT 5ef5bb80c81a2d3df33c419bb37e6463e796e3d6 2026-07-19 19:09:45 +0300 feat: add deliberate targeting and shore pursuit
+
+## cargo_pickup
+
+COMMIT 5ef5bb80c81a2d3df33c419bb37e6463e796e3d6 2026-07-19 19:09:45 +0300 feat: add deliberate targeting and shore pursuit
+COMMIT cfb08787a5f7c9220dc4563e965e56c4bd99656e 2026-07-19 18:10:37 +0300 fix: make free-roam combat and rooms predictable
+COMMIT dd06b2183526d54ce3d98d3b65f92a0b9f90d43b 2026-07-19 17:22:14 +0300 feat: add a physical pursuer squad to free roam
+COMMIT c9ea2a47c3b4818d245dc607b8319d4126eabb0b 2026-07-19 16:22:36 +0300 fix: make shore cargo guidance match its actions
+COMMIT 3085db356a40dfc49c8c5db237cdda5fb800e6d6 2026-07-18 23:22:00 +0300 feat: make free-roam combat decisive
+COMMIT b63e58f6c25247313992c86d6c7f965c04b1a147 2026-07-18 22:27:49 +0300 feat: make free-roam actors physically real
+COMMIT 0ac95ab77912d7ff9bb1432d6625148a4201e1ef 2026-07-18 21:48:03 +0300 fix: make free-roam cargo collection understandable
+COMMIT 1e6fed365ecb4dea5b60e415163dc4d912299dbb 2026-07-18 21:27:31 +0300 fix: explain the free-roam cargo loop
+COMMIT 687a3dea1b8032ad67a04d6492f36dce604b3785 2026-07-18 21:08:39 +0300 fix: keep free-roam guidance stable
+COMMIT aa7ad6fd7eed7d5eba502df0f426cd5b79e7e4b3 2026-07-18 20:37:42 +0300 fix: make free-roam pursuit understandable
+COMMIT 0feb9d61b3d6fa465939d9efcdd5d91f724f08fe 2026-07-18 19:58:11 +0300 feat: expand free-roam salvage and combat
+COMMIT effca0d9d8f30835bfa7e6197a4a12ac1e04bc93 2026-07-18 13:35:49 +0300 Test real Worker lobby WebSocket relay
+COMMIT bceecb9ad8c8352f93ad8cf09af10646a0d708c2 2026-07-18 13:28:03 +0300 Replace room codes with Worker matchmaking
+COMMIT 3b99653817855b3cbc2293fa495ab85691bd3e33 2026-07-15 12:10:03 +0300 Publish Zero Shift through working Worker
+COMMIT 51a2eaafd83d94c150319ef9c5e5b29d8572f63a 2026-07-13 20:15:11 +0300 Expand campaign with wrecks and pursuit
+COMMIT 7cd7ae4d8863f4ea10a09e236c15102544643e86 2026-07-13 03:31:07 +0300 Fix internet room codes and mobile connection flow
+
+## three_finger
+
+COMMIT aa7ad6fd7eed7d5eba502df0f426cd5b79e7e4b3 2026-07-18 20:37:42 +0300 fix: make free-roam pursuit understandable
+COMMIT 0feb9d61b3d6fa465939d9efcdd5d91f724f08fe 2026-07-18 19:58:11 +0300 feat: expand free-roam salvage and combat
+
+## power_hit
+
+COMMIT 5ef5bb80c81a2d3df33c419bb37e6463e796e3d6 2026-07-19 19:09:45 +0300 feat: add deliberate targeting and shore pursuit
+COMMIT dd06b2183526d54ce3d98d3b65f92a0b9f90d43b 2026-07-19 17:22:14 +0300 feat: add a physical pursuer squad to free roam
+COMMIT bae4f408b5b52c42aaad2103b353c6d9773e67e7 2026-07-19 16:26:02 +0300 fix: reserve full combat stun for critical health
+COMMIT 3085db356a40dfc49c8c5db237cdda5fb800e6d6 2026-07-18 23:22:00 +0300 feat: make free-roam combat decisive
+COMMIT b63e58f6c25247313992c86d6c7f965c04b1a147 2026-07-18 22:27:49 +0300 feat: make free-roam actors physically real
+COMMIT aa7ad6fd7eed7d5eba502df0f426cd5b79e7e4b3 2026-07-18 20:37:42 +0300 fix: make free-roam pursuit understandable
+COMMIT 0feb9d61b3d6fa465939d9efcdd5d91f724f08fe 2026-07-18 19:58:11 +0300 feat: expand free-roam salvage and combat
+
+## target_cycle
+
+COMMIT 5ef5bb80c81a2d3df33c419bb37e6463e796e3d6 2026-07-19 19:09:45 +0300 feat: add deliberate targeting and shore pursuit
+COMMIT dd06b2183526d54ce3d98d3b65f92a0b9f90d43b 2026-07-19 17:22:14 +0300 feat: add a physical pursuer squad to free roam
+COMMIT bae4f408b5b52c42aaad2103b353c6d9773e67e7 2026-07-19 16:26:02 +0300 fix: reserve full combat stun for critical health
+COMMIT c9ea2a47c3b4818d245dc607b8319d4126eabb0b 2026-07-19 16:22:36 +0300 fix: make shore cargo guidance match its actions
+COMMIT 3085db356a40dfc49c8c5db237cdda5fb800e6d6 2026-07-18 23:22:00 +0300 feat: make free-roam combat decisive
+COMMIT 0ac95ab77912d7ff9bb1432d6625148a4201e1ef 2026-07-18 21:48:03 +0300 fix: make free-roam cargo collection understandable
+COMMIT 687a3dea1b8032ad67a04d6492f36dce604b3785 2026-07-18 21:08:39 +0300 fix: keep free-roam guidance stable
+COMMIT 0feb9d61b3d6fa465939d9efcdd5d91f724f08fe 2026-07-18 19:58:11 +0300 feat: expand free-roam salvage and combat
+COMMIT 9f4b9f04adfa194b2558b5db358c613f29df60fd 2026-07-14 17:32:04 +0300 Add browser-trained neural hunter [skip ci]
+COMMIT 209074a70b51309eb258750a455248cbc4b8ee18 2026-07-14 17:08:00 +0300 Add modular neural hunter brain
+COMMIT fd6dbc71815602b24cf4b87bc9f182e05a27d565 2026-07-14 16:24:55 +0300 Fix throttle release and absurd interactions
+COMMIT 073fa5b68c01f3d0e824f174b2258b1fa6c1b726 2026-07-14 13:22:31 +0000 Fix throttle release and absurd interactions
+COMMIT ac9bd33d8893754c9385c4dcaa90e5525ab56b65 2026-07-13 23:02:19 +0300 Fix Grom rescue and pursuit mechanics
+COMMIT 76cb877ead1d054b03f3039f34c2294f008c1cbb 2026-07-13 19:26:04 +0300 Fix water recovery and compact game feedback
+COMMIT b620f7da16d155de148cb8a718a22066c15a5bd2 2026-07-13 17:20:04 +0300 Add risk routes and stabilize release mechanics
+COMMIT ecc57bfe108c740abe1359b68c920ac6f449cab4 2026-07-13 14:45:11 +0300 Add direct course-hold navigation
+COMMIT a848ec175e2e3d9fa32d61a30d5f58803f8a400c 2026-07-13 13:42:52 +0300 Rebuild rescue routes and docking guidance
+COMMIT bc88df4e3a3b6414b3b7a714955c1f9feb8aba6e 2026-07-13 10:32:00 +0300 Make the bay finite and sonar navigation understandable (#13)
+COMMIT 567f68c884892db70661564f47af6ae6fe06b0bd 2026-07-13 10:28:22 +0300 Add calm rotating stereo beacon
+COMMIT 7f4e3ad089b09cfacc3f28ae8dcc801b65466960 2026-07-13 10:28:04 +0300 Add finite bay navigation and solid obstacle physics
+COMMIT 26f7b21b18249c01198d9287cb77a75bbf85027e 2026-07-13 10:16:51 +0300 Add calm rotating stereo beacon
+COMMIT 3baa9bf9675defa52868a6d9713419cf94a7a64d 2026-07-13 10:16:35 +0300 Add finite bay navigation and solid obstacle physics
+COMMIT 376c540938d45c8370ed8a56b06aa7ae1748ba43 2026-07-13 10:07:20 +0300 Add finite bay and stable stereo navigation
+COMMIT caf0da41b3b66ccd9f8b65e903875ab7f691050d 2026-07-13 10:05:11 +0300 Add dynamic stereo guide pips
+COMMIT 53b5b795490d0950cf60f9c849b1cf591d71cbd3 2026-07-13 10:04:53 +0300 Add finite bay map and stable stereo navigation
+COMMIT c7394884272b6e29b35e0eee4b3e38981c6e0ed3 2026-07-13 04:52:21 +0300 Test v6 sonar, navigation cues and coasting
+COMMIT d3efd5ddf4c248148497c869255c4eb52b65ef4a 2026-07-13 04:49:25 +0300 Add v6 sonar assistance and boat handling refinements
+
+## firing
+
+COMMIT b81e61967f5d896446df8f917dfb295626111f97 2026-07-19 19:54:14 +0300 fix: stop boats cleanly at bay boundaries
+COMMIT 5ef5bb80c81a2d3df33c419bb37e6463e796e3d6 2026-07-19 19:09:45 +0300 feat: add deliberate targeting and shore pursuit
+COMMIT cfb08787a5f7c9220dc4563e965e56c4bd99656e 2026-07-19 18:10:37 +0300 fix: make free-roam combat and rooms predictable
+COMMIT dd06b2183526d54ce3d98d3b65f92a0b9f90d43b 2026-07-19 17:22:14 +0300 feat: add a physical pursuer squad to free roam
+COMMIT bae4f408b5b52c42aaad2103b353c6d9773e67e7 2026-07-19 16:26:02 +0300 fix: reserve full combat stun for critical health
+COMMIT c9ea2a47c3b4818d245dc607b8319d4126eabb0b 2026-07-19 16:22:36 +0300 fix: make shore cargo guidance match its actions
+COMMIT 3085db356a40dfc49c8c5db237cdda5fb800e6d6 2026-07-18 23:22:00 +0300 feat: make free-roam combat decisive
+COMMIT b63e58f6c25247313992c86d6c7f965c04b1a147 2026-07-18 22:27:49 +0300 feat: make free-roam actors physically real
+COMMIT 0ac95ab77912d7ff9bb1432d6625148a4201e1ef 2026-07-18 21:48:03 +0300 fix: make free-roam cargo collection understandable
+COMMIT 1e6fed365ecb4dea5b60e415163dc4d912299dbb 2026-07-18 21:27:31 +0300 fix: explain the free-roam cargo loop
+COMMIT 687a3dea1b8032ad67a04d6492f36dce604b3785 2026-07-18 21:08:39 +0300 fix: keep free-roam guidance stable
+COMMIT aa7ad6fd7eed7d5eba502df0f426cd5b79e7e4b3 2026-07-18 20:37:42 +0300 fix: make free-roam pursuit understandable
+COMMIT 0feb9d61b3d6fa465939d9efcdd5d91f724f08fe 2026-07-18 19:58:11 +0300 feat: expand free-roam salvage and combat
+COMMIT 1415167b89727d679e9b16ed342e3d8f2c9420c4 2026-07-18 14:38:37 +0000 Polish free-roam lobby, running and gestures
+COMMIT 7a06b57901e8700931abc6e80adda65c785e5f81 2026-07-18 16:30:56 +0300 Enable corrected free roam controls
+COMMIT 6a9193fd495519cb34d1a0d6541d21b9f4916ff5 2026-07-18 15:42:07 +0300 Load familiar operation audio in free roam
+COMMIT df92fa833de34cb4cc34a94d626080d84ef2c40e 2026-07-18 15:22:52 +0300 Add minimal free-roam game page
+COMMIT fdbdd8018df25f62d7e4c2ad0c4d51e5d42dcbee 2026-07-18 13:29:13 +0300 Add code-free online room browser
+COMMIT 5045f6e3ac2be3834ee2350b2a6834bb4ff21da5 2026-07-14 15:18:17 +0300 Fix rescue and accessible control feedback
+COMMIT ac9bd33d8893754c9385c4dcaa90e5525ab56b65 2026-07-13 23:02:19 +0300 Fix Grom rescue and pursuit mechanics
+COMMIT 76cb877ead1d054b03f3039f34c2294f008c1cbb 2026-07-13 19:26:04 +0300 Fix water recovery and compact game feedback
+COMMIT b620f7da16d155de148cb8a718a22066c15a5bd2 2026-07-13 17:20:04 +0300 Add risk routes and stabilize release mechanics
+COMMIT ecc57bfe108c740abe1359b68c920ac6f449cab4 2026-07-13 14:45:11 +0300 Add direct course-hold navigation
+COMMIT a848ec175e2e3d9fa32d61a30d5f58803f8a400c 2026-07-13 13:42:52 +0300 Rebuild rescue routes and docking guidance
+COMMIT 0a43179707c80c52a6fee2c64cca2674238cae69 2026-07-13 12:43:19 +0300 Stabilize navigation, flooding, and river audio
+COMMIT 755680fdf833384ad20996d6e7b6ec64aa3fd4e9 2026-07-13 04:24:31 +0300 Enable v5 mechanics, guidance and audio
+COMMIT 4a14dd25f9c89f2927aeedcd7278bc1267daba30 2026-07-13 03:59:42 +0300 Add no-timer mode and clearer audio navigation
+COMMIT 5d16df80f3227cca6d1a05634e0ae8e2f00f5853 2026-07-13 03:33:10 +0300 Keep internet room code visible during gameplay
+COMMIT 0e364e00bf4762de9a8c6e1a3bc09c5dfd2e18af 2026-07-13 03:31:19 +0300 Clarify local rooms and sanitize internet room codes
+COMMIT f9647877c3fd5506cae6e8212641ed0b8e1e0d80 2026-07-13 02:48:59 +0300 Add accessible game interface
+
+## All visible refs
+
+a35039c421a0c2ccab8e4f36051ffb6038cdded3 refs/heads/recovery/cloudflare-live
+318be52edeb9875aa27ee2dbf8da75e96554bff5 refs/remotes/origin/HEAD
+7f4e7e46d06465987722ba348bf7e40a9c34e02f refs/remotes/origin/agent/finite-bay-navigation
+f04907788c408fde098ed4848c293d6ade56547a refs/remotes/origin/agent/finite-bay-sonar
+029887ee6f0a8d12da64dd143c5929edbf07194b refs/remotes/origin/agent/finite-bay-sonar-v2
+bfb376944fba92ba80ca84dde0052aafac3b43d7 refs/remotes/origin/agent/fix-throttle-absurdities
+bafa0f41096c2040466fa73f6272e1ce7e8a822f refs/remotes/origin/agent/hunter-obstacle-navigation
+606676b008cf9f3fe28f9826c4c507ab21aab616 refs/remotes/origin/agent/neural-hunter-brain
+0c86ed0726bd208b075ad725a4b836f52800af6e refs/remotes/origin/agent/river-water-repair-window
+7df2a2796a216e08f752a818098e9b77beefb3da refs/remotes/origin/agent/v7-hazard-corridor
+b7f92a83b14212dc414740f762268c832c10f802 refs/remotes/origin/audit/hunter-browser-2026-07-14
+9c9a5be51293847196156ab7fd02d3847d46da42 refs/remotes/origin/audit/hunter-obstacle-worker
+b373489f642e174f8edcdeec51c30c1ff174435d refs/remotes/origin/audit/neural-worker
+d419618629a0edaf55e02f2d006151c0b4605da8 refs/remotes/origin/audit/worker-v24
+d984b91b84c58670f4bf70dc3beb2d818aab7eda refs/remotes/origin/browser-worker-audit-2026-07-14
+650e8ce2430d7251cd5ce605f0415e7f6b813be4 refs/remotes/origin/ci-v5-validation
+9f8467ad54aeb148047890ac774c6d4df6cba035 refs/remotes/origin/ci-v6-validation
+e297eecacf819de5aef6e8a81d6a1258383c44d9 refs/remotes/origin/ci-v6-validation-final
+7aa55869e1ef775f97418bd1bb829f6c16d344f8 refs/remotes/origin/ci-v8-1-validation
+855265f071c442d859497a2d0897e03065bec763 refs/remotes/origin/ci-v8-validation
+c4746cf9da0322d801bcf8a3a840b43a157b0c63 refs/remotes/origin/ci/free-roam-browser-verification
+820e0afad499e3b4ff2c76fc46e6a7e57f08384d refs/remotes/origin/ci/free-roam-browser-verification-2
+5cf3654286432dee62d2851e1dc348b41591905d refs/remotes/origin/ci/free-roam-final-polish-verification
+21d8d7b5103fde56702cd35718abdc83fa7c5e84 refs/remotes/origin/ci/free-roam-final-verification
+3c252ea2a7d890ace19240b4787bcc2d56a7cccc refs/remotes/origin/ci/free-roam-polish-verification
+d798e81a0674d2f3552783b7ffa61764c44c4edc refs/remotes/origin/ci/free-roam-polish-verification-2
+fb40cc6d1ebcb7eab2395644ebd82597b05f7dc9 refs/remotes/origin/ci/free-roam-polish-verification-3
+4fffb6a0bff91cb2124763fdf64aed498daf0f29 refs/remotes/origin/ci/verify-20260718-1417
+66a840a785585341601eba21371db43721beb654 refs/remotes/origin/cloudflare/workers-autoconfig
+b81e61967f5d896446df8f917dfb295626111f97 refs/remotes/origin/feature/free-roam-salvage-combat
+318be52edeb9875aa27ee2dbf8da75e96554bff5 refs/remotes/origin/main
+a35039c421a0c2ccab8e4f36051ffb6038cdded3 refs/remotes/origin/recovery/cloudflare-live
+197781c0b412ee8d10a3bf41219e5cede20411a1 refs/remotes/origin/update_worker_name_to_archipelago
+6e0e0b43229198c119edd3887c207184f9e5d2f3 refs/remotes/origin/v6-1-final-validation
+d5fa4f643a1ce9b65388633a202a9ca5631fb9bd refs/remotes/origin/v6-real-route-validation
+
