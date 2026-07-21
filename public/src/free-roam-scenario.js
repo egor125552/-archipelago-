@@ -158,6 +158,7 @@ export function scenarioTarget(world, playerIndex) {
     );
   }
   if (scenario.phase === "victory") {
+    if (cargoNeedsDock(world, playerIndex)) return dockTarget(world.players[playerIndex]);
     const prize = nearestWorldCrate(world, playerIndex, crate => crate.source === "pursuer" || crate.source === "marauder");
     if (prize) return {
       id: prize.id,
@@ -166,6 +167,7 @@ export function scenarioTarget(world, playerIndex) {
       x: prize.x,
       y: prize.y,
     };
+    return null;
   }
   return dockTarget(world.players[playerIndex]);
 }
