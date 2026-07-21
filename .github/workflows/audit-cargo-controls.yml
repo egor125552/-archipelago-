@@ -1,0 +1,77 @@
+name: Audit cargo weapon and touch controls
+
+on:
+  push:
+    branches:
+      - recovery/cloudflare-live
+    paths:
+      - .github/workflows/audit-cargo-controls.yml
+
+permissions:
+  contents: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery/cloudflare-live
+          fetch-depth: 0
+
+      - name: Search cargo, gestures, impact and target controls
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          roots = [Path('public'), Path('cloudflare-snapshot')]
+          groups = {
+              'cargo_and_pickups': [r'cargo', r'груз', r'pickup', r'pick.?up', r'collect', r'подобр', r'предмет'],
+              'three_finger': [r'three.?finger', r'three.?touch', r'3.?finger', r'три\s+пальц', r'maxPointers', r'pointerCount', r'touches\.length', r'activeTouches\.size'],
+              'strong_hit': [r'power.?hit', r'heavy.?hit', r'strong.?hit', r'мощн.{0,20}удар', r'сильн.{0,20}удар', r'ram', r'impact'],
+              'targeting': [r'KeyM', r'key.{0,30}["\']m["\']', r'select.{0,20}target', r'target.{0,20}select', r'cycle.{0,20}target', r'lockedTarget', r'targetIndex', r'цель.{0,30}из'],
+              'firing': [r'fire', r'shoot', r'bullet', r'projectile', r'ammo', r'weapon', r'автомат', r'стрел', r'патрон', r'очеред'],
+          }
+
+          files = []
+          for root in roots:
+              if not root.exists():
+                  continue
+              files.extend(p for p in root.rglob('*') if p.is_file() and p.suffix.lower() in {'.js','.mjs','.html','.css','.json','.md','.txt'})
+
+          lines = ['# Cargo, gesture and target control audit', '']
+          for name, patterns in groups.items():
+              lines += [f'## {name}', '']
+              regex = re.compile('|'.join(f'(?:{p})' for p in patterns), re.I)
+              hits = []
+              for path in files:
+                  try:
+                      text = path.read_text(encoding='utf-8', errors='replace')
+                  except Exception:
+                      continue
+                  for number, line in enumerate(text.splitlines(), 1):
+                      if regex.search(line):
+                          hits.append(f'{path}:{number}: {line.strip()}')
+              if hits:
+                  lines.extend(hits[:1000])
+              else:
+                  lines.append('NO MATCHES')
+              lines.append('')
+
+          out = Path('cloudflare-snapshot/cargo-controls-audit.txt')
+          out.parent.mkdir(exist_ok=True)
+          out.write_text('\n'.join(lines) + '\n', encoding='utf-8')
+          PY
+
+      - name: Commit audit report
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add cloudflare-snapshot/cargo-controls-audit.txt
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Record cargo weapon and gesture audit"
+          git push origin HEAD:recovery/cloudflare-live
