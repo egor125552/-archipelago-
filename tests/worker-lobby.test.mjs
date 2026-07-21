@@ -71,9 +71,9 @@ globalThis.Response = FakeResponse;
 
 const {Lobby} = await import("../src/worker.js");
 
-function connectRequest(role, mode = "ops") {
+function connectRequest(role) {
   return {
-    url: `https://game.example/api/connect?role=${role}&mode=${mode}`,
+    url: `https://game.example/api/connect?role=${role}`,
     headers: {get: name => name.toLowerCase() === "upgrade" ? "websocket" : null},
   };
 }
@@ -134,34 +134,4 @@ test("join button can create a crew room that later accepts a captain", async ()
   await flush();
   assert.equal(captainMessages[0].room, crewMessages[0].room);
   assert.equal(captainMessages[0].matched, true);
-});
-
-test("a slow client drops stale world deltas but still receives recovery snapshots and events", async () => {
-  const lobby = new Lobby({});
-  const captainResponse = await lobby.fetch(connectRequest("captain", "free"));
-  const captainMessages = collect(captainResponse.webSocket);
-  const crewResponse = await lobby.fetch(connectRequest("crew", "free"));
-  const crewMessages = collect(crewResponse.webSocket);
-  await flush();
-
-  const crewServerSocket = crewResponse.webSocket.peer;
-  crewServerSocket.bufferedAmount = 80 * 1024;
-  const before = crewMessages.length;
-  captainResponse.webSocket.send(JSON.stringify({type: "free-snapshot", sequence: 8, world: {time: 4}}));
-  captainResponse.webSocket.send(JSON.stringify({type: "free-delta", sequence: 9, delta: [1, {time: [0, 5]}]}));
-  captainResponse.webSocket.send(JSON.stringify({type: "free-events", events: [{type: "collision"}]}));
-  await flush();
-
-  assert.equal(crewMessages.some(message => message.type === "free-snapshot" && message.sequence === 8), true);
-  assert.equal(crewMessages.some(message => message.type === "free-delta" && message.sequence === 9), false);
-  assert.equal(crewMessages.length, before + 2);
-  assert.equal(crewMessages.at(-1).type, "free-events");
-  assert.ok(captainMessages.some(message => message.type === "peer-connected"));
-
-  crewServerSocket.bufferedAmount = 0;
-  const afterRecovery = crewMessages.length;
-  captainResponse.webSocket.send(JSON.stringify({type: "free-checkpoint", world: {time: 6, inputs: [{up: true}]}}));
-  await flush();
-  assert.equal(crewMessages.length, afterRecovery);
-  assert.deepEqual(lobby.rooms.get(captainMessages[0].room).lastFreeSnapshot.world, {time: 6, inputs: [{up: true}]});
 });

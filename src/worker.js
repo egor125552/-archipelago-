@@ -7,7 +7,6 @@ const SOUND_PROXY = Object.freeze({
 });
 
 const ROOM_HEARTBEAT_TIMEOUT_MS = 18_000;
-const SNAPSHOT_BACKPRESSURE_BYTES = 64 * 1024;
 const ROOM_ROLES = Object.freeze(["captain", "crew"]);
 
 function json(data, status = 200) {
@@ -39,13 +38,10 @@ async function proxySound(request, source) {
   return response;
 }
 
-function safeSend(socket, payload, {rawData = null, dropIfBusy = false} = {}) {
+function safeSend(socket, payload) {
   try {
-    if (socket?.readyState !== 1) return false;
-    if (dropIfBusy && Number(socket.bufferedAmount) > SNAPSHOT_BACKPRESSURE_BYTES) return false;
-    socket.send(rawData ?? JSON.stringify(payload));
-    return true;
-  } catch (_) { return false; }
+    if (socket?.readyState === 1) socket.send(JSON.stringify(payload));
+  } catch (_) {}
 }
 
 function parseMessage(data) {
@@ -211,31 +207,19 @@ export class Lobby {
     if (
       client.mode === "free"
       && client.role === "captain"
-      && message.type === "free-checkpoint"
+      && message.type === "free-snapshot"
       && message.world
     ) {
-      // Checkpoints retain the complete authoritative simulation for host
-      // recovery. The peer-facing snapshot is intentionally only a render view.
-      room.lastFreeSnapshot = {type: "free-snapshot", world: message.world};
-      return;
+      room.lastFreeSnapshot = message;
     }
 
     const otherRole = oppositeRole(client.role);
     const other = room[otherRole];
     if (other) {
-      // Forward the original frame instead of parsing and serializing the full
-      // world a second time. If a browser falls behind, discard stale deltas
-      // while preserving controls and game events.
-      safeSend(other, message, {
-        rawData,
-        dropIfBusy: message.type === "free-delta",
-      });
+      safeSend(other, message);
       return;
     }
 
-    // A delta is only meaningful after the peer's current baseline. A newly
-    // connected peer always asks the captain for a fresh full snapshot.
-    if (message.type === "free-delta") return;
     const queue = room.pending[client.role];
     if (message.type === "snapshot" || message.type === "free-snapshot") {
       const previous = queue.findIndex(item => item?.type === message.type);
