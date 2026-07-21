@@ -1,0 +1,76 @@
+name: Verify salvage combat before merge
+
+on:
+  push:
+    branches:
+      - recovery/cloudflare-live
+    paths:
+      - .github/workflows/verify-salvage-combat-before-merge.yml
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery/cloudflare-live
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Check out feature branch in worktree
+        shell: bash
+        run: |
+          git fetch origin feature/free-roam-salvage-combat
+          git worktree add /tmp/salvage-combat origin/feature/free-roam-salvage-combat
+
+      - name: Run complete verification
+        shell: bash
+        run: |
+          set -o pipefail
+          cd /tmp/salvage-combat
+          npm ci 2>&1 | tee /tmp/npm-ci.log
+          npm test 2>&1 | tee /tmp/npm-test.log
+          node --check public/src/free-roam-v4.js 2>&1 | tee /tmp/check-client.log
+          node --check public/src/free-roam-core-v6.js 2>&1 | tee /tmp/check-core.log
+          node --check public/src/free-roam-combat.js 2>&1 | tee /tmp/check-combat.log
+          node --check public/src/free-roam-target-menu.js 2>&1 | tee /tmp/check-target.log
+          node --check src/worker.js 2>&1 | tee /tmp/check-worker.log
+
+      - name: Record successful verification
+        if: success()
+        shell: bash
+        run: |
+          {
+            echo '# Salvage combat verification'
+            echo
+            echo 'Branch: feature/free-roam-salvage-combat'
+            echo 'Commit: b81e61967f5d896446df8f917dfb295626111f97'
+            echo 'Result: PASS'
+            echo
+            echo 'Checks:'
+            echo '- npm ci'
+            echo '- npm test'
+            echo '- node --check free-roam-v4.js'
+            echo '- node --check free-roam-core-v6.js'
+            echo '- node --check free-roam-combat.js'
+            echo '- node --check free-roam-target-menu.js'
+            echo '- node --check src/worker.js'
+            echo
+            echo '## Test tail'
+            echo '```'
+            tail -n 40 /tmp/npm-test.log
+            echo '```'
+          } > cloudflare-snapshot/salvage-combat-verification.md
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add cloudflare-snapshot/salvage-combat-verification.md
+          git commit -m "Record salvage combat verification"
+          git push origin HEAD:recovery/cloudflare-live
