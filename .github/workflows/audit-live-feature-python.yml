@@ -1,0 +1,77 @@
+name: Audit live feature with Python
+
+on:
+  push:
+    branches:
+      - recovery/cloudflare-live
+    paths:
+      - .github/workflows/audit-live-feature-python.yml
+
+permissions:
+  contents: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery/cloudflare-live
+          fetch-depth: 0
+
+      - name: Search source text
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          roots = [Path("public"), Path("cloudflare-snapshot")]
+          extensions = {".js", ".mjs", ".html", ".css", ".json", ".md"}
+          patterns = {
+              "KeyM": re.compile(r"KeyM|event\.(?:key|code).{0,50}(?:KeyM|['\"]m['\"])", re.I),
+              "weapon": re.compile(r"автомат|пулем[её]т|оруж|патрон|боеприпас|выстрел|стрелять|ammo|weapon|machine.?gun|turret|bullet|projectile|shoot", re.I),
+              "target selection": re.compile(r"select.?target|target.?select|cycle.?target|lock.?target|выбор.{0,20}цел|выбрать.{0,20}цел|смен.{0,20}цел", re.I),
+              "commands and keys": re.compile(r"Key[A-Z]|KEY_BINDINGS|keydown|keyup|sendCommand\(|command\(", re.I),
+          }
+
+          report = ["# Live/GitHub feature search", ""]
+          for label, pattern in patterns.items():
+              report.extend([f"## {label}", ""])
+              matches = []
+              for root in roots:
+                  if not root.exists():
+                      continue
+                  for path in sorted(root.rglob("*")):
+                      if not path.is_file() or path.suffix.lower() not in extensions:
+                          continue
+                      if path.name == "feature-search.txt":
+                          continue
+                      try:
+                          lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+                      except Exception:
+                          continue
+                      for number, line in enumerate(lines, 1):
+                          if pattern.search(line):
+                              matches.append(f"{path}:{number}: {line.strip()}")
+              if matches:
+                  report.extend(matches)
+              else:
+                  report.append("NO MATCHES")
+              report.append("")
+
+          output = Path("cloudflare-snapshot/feature-search.txt")
+          output.parent.mkdir(parents=True, exist_ok=True)
+          output.write_text("\n".join(report) + "\n", encoding="utf-8")
+          PY
+
+      - name: Commit report
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add cloudflare-snapshot/feature-search.txt
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Audit live deployment for weapon and target controls"
+          git push origin HEAD:recovery/cloudflare-live
