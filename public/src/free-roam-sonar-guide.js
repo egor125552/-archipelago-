@@ -1,8 +1,5 @@
 "use strict";
 
-const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
-const wrapDeg = value => ((value + 180) % 360 + 360) % 360 - 180;
-
 function playerBoat(world, playerIndex) {
   const player = world.players?.[playerIndex];
   return player?.mode === "boat" && Number.isInteger(player.activeBoat)
@@ -10,7 +7,7 @@ function playerBoat(world, playerIndex) {
     : null;
 }
 
-function bearingTo(from, target) {
+export function bearingTo(from, target) {
   return Math.atan2(target.x - from.x, -(target.y - from.y)) * 180 / Math.PI;
 }
 
@@ -18,29 +15,39 @@ export function ensureSonarGuide(world) {
   const scenario = world.freeScenario;
   scenario.guideEnabled ||= Array.from({length: world.players?.length || 2}, () => false);
   while (scenario.guideEnabled.length < world.players.length) scenario.guideEnabled.push(false);
+  // Old saved worlds may still contain the former persistent steering mode.
+  // Clear it permanently: guidance is now a one-shot heading snap.
+  scenario.guideEnabled.fill(false);
   return scenario;
 }
 
-function toggleGuide(world, playerIndex, emit) {
+export function turnBoatToSonar(world, playerIndex, emit) {
   const scenario = ensureSonarGuide(world);
   const target = scenario.targets?.[playerIndex];
   if (!target) {
-    emit(world, "sonar-guide-unavailable", "Сонар пока не выбрал цель для мягкого курса.", [playerIndex], {sourcePlayer: playerIndex});
-    return;
+    emit(world, "sonar-guide-unavailable", "Сонар пока не выбрал цель для поворота.", [playerIndex], {sourcePlayer: playerIndex});
+    return false;
   }
-  scenario.guideEnabled[playerIndex] = !scenario.guideEnabled[playerIndex];
-  const enabled = scenario.guideEnabled[playerIndex];
+
   const boat = playerBoat(world, playerIndex);
-  if (boat) boat.sonarGuideSteer = 0;
+  if (!boat) {
+    emit(world, "sonar-guide-unavailable", "Поворот к сонару доступен только когда ты управляешь лодкой.", [playerIndex], {sourcePlayer: playerIndex});
+    return false;
+  }
+
+  boat.heading = bearingTo(boat, target);
+  boat.rudder = 0;
+  boat.sonarGuideSteer = 0;
+  boat.sonarGuideTargetId = null;
+  scenario.guideEnabled[playerIndex] = false;
   emit(
     world,
-    enabled ? "sonar-guide-on" : "sonar-guide-off",
-    enabled
-      ? `Мягкий курс к цели включён: ${target.label}. Лодка лишь слегка доворачивает; газ и скорость остаются у тебя.`
-      : "Мягкий курс к цели выключен.",
+    "sonar-guide-snap",
+    `Лодка мгновенно повёрнута прямо к цели сонара: ${target.label}.`,
     [playerIndex],
-    {sourcePlayer: playerIndex, targetId: target.id, x: target.x, y: target.y},
+    {sourcePlayer: playerIndex, targetId: target.id, x: target.x, y: target.y, heading: boat.heading},
   );
+  return true;
 }
 
 export function updateSonarGuide(world, emit) {
@@ -49,20 +56,12 @@ export function updateSonarGuide(world, emit) {
   const previous = world.freeActivities?.previousInputs || [];
 
   for (let index = 0; index < world.players.length; index += 1) {
-    if (inputs[index]?.guide && !previous[index]?.guide) toggleGuide(world, index, emit);
+    if (inputs[index]?.guide && !previous[index]?.guide) turnBoatToSonar(world, index, emit);
 
     const boat = playerBoat(world, index);
     if (!boat) continue;
-    const target = scenario.targets?.[index];
-    const manualSteer = Boolean(inputs[index]?.left || inputs[index]?.right);
-    if (!scenario.guideEnabled[index] || !target || manualSteer) {
-      boat.sonarGuideSteer = 0;
-      boat.sonarGuideTargetId = null;
-      continue;
-    }
-
-    const error = wrapDeg(bearingTo(boat, target) - (Number(boat.heading) || 0));
-    boat.sonarGuideSteer = Math.abs(error) <= 7 ? 0 : clamp(error / 140, -0.28, 0.28);
-    boat.sonarGuideTargetId = target.id;
+    boat.sonarGuideSteer = 0;
+    boat.sonarGuideTargetId = null;
+    scenario.guideEnabled[index] = false;
   }
 }
