@@ -1,0 +1,875 @@
+{
+  "url": "https://archipelago.k69ysrndm7.workers.dev/free-roam?cargoRuntimeAudit=1784644484406",
+  "title": "Свободная бухта — Эхо-Архипелаг",
+  "before": {
+    "label": "before",
+    "message": "Мир создан. Можно ездить одному; ждём второго игрока.",
+    "live": "Мир создан. Можно ездить одному; ждём второго игрока.",
+    "input": {
+      "up": false,
+      "down": false,
+      "left": false,
+      "right": false,
+      "run": false,
+      "pump": false,
+      "repair": false,
+      "action": false,
+      "jump": false
+    },
+    "worldKeys": [
+      "version",
+      "time",
+      "boats",
+      "players",
+      "inputs",
+      "previousInputs",
+      "tow",
+      "events",
+      "operationInputs",
+      "operationPreviousInputs",
+      "steeringPrevious",
+      "freeRun",
+      "freeMeta"
+    ],
+    "relevant": [],
+    "world": {
+      "version": 5,
+      "time": 1.205199999999995,
+      "boats": [
+        {
+          "id": 0,
+          "owner": 0,
+          "driver": 0,
+          "x": 199,
+          "y": 158,
+          "heading": 0,
+          "speed": 0,
+          "throttle": 0,
+          "rudder": 0,
+          "hull": 100,
+          "armor": 0,
+          "armorMax": 0,
+          "water": 0,
+          "leak": 0,
+          "fuel": 99.95781799999999,
+          "engineTemp": 24.367888291846857,
+          "engineStalled": false,
+          "pumpActive": false,
+          "repairPatches": 3,
+          "hullRepairProgress": 0,
+          "repairQuarter": 0,
+          "emergencyActive": false,
+          "emergencyRemaining": 45,
+          "emergencyWarned15": false,
+          "emergencyWarned5": false,
+          "restartProgress": 0,
+          "sunk": false,
+          "collisionCooldown": 0,
+          "moving": false,
+          "lastTurnCueHeading": 0,
+          "lastTurnCueAt": -999,
+          "lastSteerWarningAt": -999,
+          "floatingBrakeReadyAt": 0,
+          "refuelCanisters": 1,
+          "refuelActive": false,
+          "refuelProgress": 0,
+          "refuelQuarter": 0,
+          "engineServiceActive": false,
+          "engineServiceProgress": 0,
+          "engineServiceQuarter": 0,
+          "fuelEmptyAnnounced": false
+        },
+        {
+          "id": 1,
+          "owner": 1,
+          "driver": 1,
+          "x": 219,
+          "y": 158,
+          "heading": 0,
+          "speed": 0,
+          "throttle": 0,
+          "rudder": 0,
+          "hull": 100,
+          "armor": 0,
+          "armorMax": 0,
+          "water": 0,
+          "leak": 0,
+          "fuel": 99.95781799999999,
+          "engineTemp": 24.367888291846857,
+          "engineStalled": false,
+          "pumpActive": false,
+          "repairPatches": 3,
+          "hullRepairProgress": 0,
+          "repairQuarter": 0,
+          "emergencyActive": false,
+          "emergencyRemaining": 45,
+          "emergencyWarned15": false,
+          "emergencyWarned5": false,
+          "restartProgress": 0,
+          "sunk": false,
+          "collisionCooldown": 0,
+          "moving": false,
+          "lastTurnCueHeading": 180,
+          "lastTurnCueAt": -999,
+          "lastSteerWarningAt": -999,
+          "floatingBrakeReadyAt": 0,
+          "refuelCanisters": 1,
+          "refuelActive": false,
+          "refuelProgress": 0,
+          "refuelQuarter": 0,
+          "engineServiceActive": false,
+          "engineServiceProgress": 0,
+          "engineServiceQuarter": 0,
+          "fuelEmptyAnnounced": false
+        }
+      ],
+      "players": [
+        {
+          "id": 0,
+          "mode": "boat",
+          "activeBoat": 0,
+          "x": 199,
+          "y": 158,
+          "heading": 0,
+          "jumpTimer": 0,
+          "stepTimer": 0,
+          "running": false,
+          "airborne": false,
+          "jumpHeight": 0,
+          "jumpVelocity": 0
+        },
+        {
+          "id": 1,
+          "mode": "boat",
+          "activeBoat": 1,
+          "x": 219,
+          "y": 158,
+          "heading": 0,
+          "jumpTimer": 0,
+          "stepTimer": 0,
+          "running": false,
+          "airborne": false,
+          "jumpHeight": 0,
+          "jumpVelocity": 0
+        }
+      ],
+      "inputs": [
+        {
+          "up": false,
+          "down": false,
+          "left": false,
+          "right": false,
+          "pump": false,
+          "repair": false,
+          "action": false,
+          "jump": false
+        },
+        {
+          "up": false,
+          "down": false,
+          "left": false,
+          "right": false,
+          "pump": false,
+          "repair": false,
+          "action": false,
+          "jump": false
+        }
+      ],
+      "previousInputs": [
+        {
+          "up": false,
+          "down": false,
+          "left": false,
+          "right": false,
+          "pump": false,
+          "repair": false,
+          "action": false,
+          "jump": false
+        },
+        {
+          "up": false,
+          "down": false,
+          "left": false,
+          "right": false,
+          "pump": false,
+          "repair": false,
+          "action": false,
+          "jump": false
+        }
+      ],
+      "tow": null,
+      "events": [],
+      "operationInputs": [
+        {
+          "up": false,
+          "down": false,
+          "left": false,
+          "right": false,
+          "pump": false,
+          "repair": false,
+          "action": false,
+          "jump": false
+        },
+        {
+          "up": false,
+          "down": false,
+          "left": false,
+          "right": false,
+          "pump": false,
+          "repair": false,
+          "action": false,
+          "jump": false
+        }
+      ],
+      "operationPreviousInputs": [
+        {
+          "up": false,
+          "down": false,
+          "left": false,
+          "right": false,
+          "pump": false,
+          "repair": false,
+          "action": false,
+          "jump": false
+        },
+        {
+          "up": false,
+          "down": false,
+          "left": false,
+          "right": false,
+          "pump": false,
+          "repair": false,
+          "action": false,
+          "jump": false
+        }
+      ],
+      "steeringPrevious": [
+        0,
+        0
+      ],
+      "freeRun": [
+        false,
+        false
+      ],
+      "freeMeta": {
+        "boundaryAt": [
+          -999,
+          -999
+        ],
+        "waterBoundaryAt": [
+          -999,
+          -999
+        ],
+        "boatBoundaryAt": [
+          -999,
+          -999
+        ]
+      }
+    }
+  },
+  "afterM": {
+    "label": "after-KeyM",
+    "message": "Мир создан. Можно ездить одному; ждём второго игрока.",
+    "live": "Мир создан. Можно ездить одному; ждём второго игрока.",
+    "input": {
+      "up": false,
+      "down": false,
+      "left": false,
+      "right": false,
+      "run": false,
+      "pump": false,
+      "repair": false,
+      "action": false,
+      "jump": false
+    },
+    "worldKeys": [
+      "version",
+      "time",
+      "boats",
+      "players",
+      "inputs",
+      "previousInputs",
+      "tow",
+      "events",
+      "operationInputs",
+      "operationPreviousInputs",
+      "steeringPrevious",
+      "freeRun",
+      "freeMeta"
+    ],
+    "relevant": [],
+    "world": {
+      "version": 5,
+      "time": 1.7051999999999945,
+      "boats": [
+        {
+          "id": 0,
+          "owner": 0,
+          "driver": 0,
+          "x": 199,
+          "y": 158,
+          "heading": 0,
+          "speed": 0,
+          "throttle": 0,
+          "rudder": 0,
+          "hull": 100,
+          "armor": 0,
+          "armorMax": 0,
+          "water": 0,
+          "leak": 0,
+          "fuel": 99.94031799999999,
+          "engineTemp": 24.510398570035733,
+          "engineStalled": false,
+          "pumpActive": false,
+          "repairPatches": 3,
+          "hullRepairProgress": 0,
+          "repairQuarter": 0,
+          "emergencyActive": false,
+          "emergencyRemaining": 45,
+          "emergencyWarned15": false,
+          "emergencyWarned5": false,
+          "restartProgress": 0,
+          "sunk": false,
+          "collisionCooldown": 0,
+          "moving": false,
+          "lastTurnCueHeading": 0,
+          "lastTurnCueAt": -999,
+          "lastSteerWarningAt": -999,
+          "floatingBrakeReadyAt": 0,
+          "refuelCanisters": 1,
+          "refuelActive": false,
+          "refuelProgress": 0,
+          "refuelQuarter": 0,
+          "engineServiceActive": false,
+          "engineServiceProgress": 0,
+          "engineServiceQuarter": 0,
+          "fuelEmptyAnnounced": false
+        },
+        {
+          "id": 1,
+          "owner": 1,
+          "driver": 1,
+          "x": 219,
+          "y": 158,
+          "heading": 0,
+          "speed": 0,
+          "throttle": 0,
+          "rudder": 0,
+          "hull": 100,
+          "armor": 0,
+          "armorMax": 0,
+          "water": 0,
+          "leak": 0,
+          "fuel": 99.94031799999999,
+          "engineTemp": 24.510398570035733,
+          "engineStalled": false,
+          "pumpActive": false,
+          "repairPatches": 3,
+          "hullRepairProgress": 0,
+          "repairQuarter": 0,
+          "emergencyActive": false,
+          "emergencyRemaining": 45,
+          "emergencyWarned15": false,
+          "emergencyWarned5": false,
+          "restartProgress": 0,
+          "sunk": false,
+          "collisionCooldown": 0,
+          "moving": false,
+          "lastTurnCueHeading": 180,
+          "lastTurnCueAt": -999,
+          "lastSteerWarningAt": -999,
+          "floatingBrakeReadyAt": 0,
+          "refuelCanisters": 1,
+          "refuelActive": false,
+          "refuelProgress": 0,
+          "refuelQuarter": 0,
+          "engineServiceActive": false,
+          "engineServiceProgress": 0,
+          "engineServiceQuarter": 0,
+          "fuelEmptyAnnounced": false
+        }
+      ],
+      "players": [
+        {
+          "id": 0,
+          "mode": "boat",
+          "activeBoat": 0,
+          "x": 199,
+          "y": 158,
+          "heading": 0,
+          "jumpTimer": 0,
+          "stepTimer": 0,
+          "running": false,
+          "airborne": false,
+          "jumpHeight": 0,
+          "jumpVelocity": 0
+        },
+        {
+          "id": 1,
+          "mode": "boat",
+          "activeBoat": 1,
+          "x": 219,
+          "y": 158,
+          "heading": 0,
+          "jumpTimer": 0,
+          "stepTimer": 0,
+          "running": false,
+          "airborne": false,
+          "jumpHeight": 0,
+          "jumpVelocity": 0
+        }
+      ],
+      "inputs": [
+        {
+          "up": false,
+          "down": false,
+          "left": false,
+          "right": false,
+          "pump": false,
+          "repair": false,
+          "action": false,
+          "jump": false
+        },
+        {
+          "up": false,
+          "down": false,
+          "left": false,
+          "right": false,
+          "pump": false,
+          "repair": false,
+          "action": false,
+          "jump": false
+        }
+      ],
+      "previousInputs": [
+        {
+          "up": false,
+          "down": false,
+          "left": false,
+          "right": false,
+          "pump": false,
+          "repair": false,
+          "action": false,
+          "jump": false
+        },
+        {
+          "up": false,
+          "down": false,
+          "left": false,
+          "right": false,
+          "pump": false,
+          "repair": false,
+          "action": false,
+          "jump": false
+        }
+      ],
+      "tow": null,
+      "events": [],
+      "operationInputs": [
+        {
+          "up": false,
+          "down": false,
+          "left": false,
+          "right": false,
+          "pump": false,
+          "repair": false,
+          "action": false,
+          "jump": false
+        },
+        {
+          "up": false,
+          "down": false,
+          "left": false,
+          "right": false,
+          "pump": false,
+          "repair": false,
+          "action": false,
+          "jump": false
+        }
+      ],
+      "operationPreviousInputs": [
+        {
+          "up": false,
+          "down": false,
+          "left": false,
+          "right": false,
+          "pump": false,
+          "repair": false,
+          "action": false,
+          "jump": false
+        },
+        {
+          "up": false,
+          "down": false,
+          "left": false,
+          "right": false,
+          "pump": false,
+          "repair": false,
+          "action": false,
+          "jump": false
+        }
+      ],
+      "steeringPrevious": [
+        0,
+        0
+      ],
+      "freeRun": [
+        false,
+        false
+      ],
+      "freeMeta": {
+        "boundaryAt": [
+          -999,
+          -999
+        ],
+        "waterBoundaryAt": [
+          -999,
+          -999
+        ],
+        "boatBoundaryAt": [
+          -999,
+          -999
+        ]
+      }
+    }
+  },
+  "afterThreeFinger": {
+    "label": "after-three-finger",
+    "message": "Мир создан. Можно ездить одному; ждём второго игрока.",
+    "live": "Мир создан. Можно ездить одному; ждём второго игрока.",
+    "input": {
+      "up": false,
+      "down": false,
+      "left": false,
+      "right": false,
+      "run": false,
+      "pump": false,
+      "repair": false,
+      "action": false,
+      "jump": false
+    },
+    "worldKeys": [
+      "version",
+      "time",
+      "boats",
+      "players",
+      "inputs",
+      "previousInputs",
+      "tow",
+      "events",
+      "operationInputs",
+      "operationPreviousInputs",
+      "steeringPrevious",
+      "freeRun",
+      "freeMeta"
+    ],
+    "relevant": [],
+    "world": {
+      "version": 5,
+      "time": 2.521899999999994,
+      "boats": [
+        {
+          "id": 0,
+          "owner": 0,
+          "driver": 0,
+          "x": 199,
+          "y": 158,
+          "heading": 0,
+          "speed": 0,
+          "throttle": 0,
+          "rudder": 0,
+          "hull": 100,
+          "armor": 0,
+          "armorMax": 0,
+          "water": 0,
+          "leak": 0,
+          "fuel": 99.91173350000003,
+          "engineTemp": 24.731249088215616,
+          "engineStalled": false,
+          "pumpActive": false,
+          "repairPatches": 3,
+          "hullRepairProgress": 0,
+          "repairQuarter": 0,
+          "emergencyActive": false,
+          "emergencyRemaining": 45,
+          "emergencyWarned15": false,
+          "emergencyWarned5": false,
+          "restartProgress": 0,
+          "sunk": false,
+          "collisionCooldown": 0,
+          "moving": false,
+          "lastTurnCueHeading": 0,
+          "lastTurnCueAt": -999,
+          "lastSteerWarningAt": -999,
+          "floatingBrakeReadyAt": 0,
+          "refuelCanisters": 1,
+          "refuelActive": false,
+          "refuelProgress": 0,
+          "refuelQuarter": 0,
+          "engineServiceActive": false,
+          "engineServiceProgress": 0,
+          "engineServiceQuarter": 0,
+          "fuelEmptyAnnounced": false
+        },
+        {
+          "id": 1,
+          "owner": 1,
+          "driver": 1,
+          "x": 219,
+          "y": 158,
+          "heading": 0,
+          "speed": 0,
+          "throttle": 0,
+          "rudder": 0,
+          "hull": 100,
+          "armor": 0,
+          "armorMax": 0,
+          "water": 0,
+          "leak": 0,
+          "fuel": 99.91173350000003,
+          "engineTemp": 24.731249088215616,
+          "engineStalled": false,
+          "pumpActive": false,
+          "repairPatches": 3,
+          "hullRepairProgress": 0,
+          "repairQuarter": 0,
+          "emergencyActive": false,
+          "emergencyRemaining": 45,
+          "emergencyWarned15": false,
+          "emergencyWarned5": false,
+          "restartProgress": 0,
+          "sunk": false,
+          "collisionCooldown": 0,
+          "moving": false,
+          "lastTurnCueHeading": 180,
+          "lastTurnCueAt": -999,
+          "lastSteerWarningAt": -999,
+          "floatingBrakeReadyAt": 0,
+          "refuelCanisters": 1,
+          "refuelActive": false,
+          "refuelProgress": 0,
+          "refuelQuarter": 0,
+          "engineServiceActive": false,
+          "engineServiceProgress": 0,
+          "engineServiceQuarter": 0,
+          "fuelEmptyAnnounced": false
+        }
+      ],
+      "players": [
+        {
+          "id": 0,
+          "mode": "boat",
+          "activeBoat": 0,
+          "x": 199,
+          "y": 158,
+          "heading": 0,
+          "jumpTimer": 0,
+          "stepTimer": 0,
+          "running": false,
+          "airborne": false,
+          "jumpHeight": 0,
+          "jumpVelocity": 0
+        },
+        {
+          "id": 1,
+          "mode": "boat",
+          "activeBoat": 1,
+          "x": 219,
+          "y": 158,
+          "heading": 0,
+          "jumpTimer": 0,
+          "stepTimer": 0,
+          "running": false,
+          "airborne": false,
+          "jumpHeight": 0,
+          "jumpVelocity": 0
+        }
+      ],
+      "inputs": [
+        {
+          "up": false,
+          "down": false,
+          "left": false,
+          "right": false,
+          "pump": false,
+          "repair": false,
+          "action": false,
+          "jump": false
+        },
+        {
+          "up": false,
+          "down": false,
+          "left": false,
+          "right": false,
+          "pump": false,
+          "repair": false,
+          "action": false,
+          "jump": false
+        }
+      ],
+      "previousInputs": [
+        {
+          "up": false,
+          "down": false,
+          "left": false,
+          "right": false,
+          "pump": false,
+          "repair": false,
+          "action": false,
+          "jump": false
+        },
+        {
+          "up": false,
+          "down": false,
+          "left": false,
+          "right": false,
+          "pump": false,
+          "repair": false,
+          "action": false,
+          "jump": false
+        }
+      ],
+      "tow": null,
+      "events": [],
+      "operationInputs": [
+        {
+          "up": false,
+          "down": false,
+          "left": false,
+          "right": false,
+          "pump": false,
+          "repair": false,
+          "action": false,
+          "jump": false
+        },
+        {
+          "up": false,
+          "down": false,
+          "left": false,
+          "right": false,
+          "pump": false,
+          "repair": false,
+          "action": false,
+          "jump": false
+        }
+      ],
+      "operationPreviousInputs": [
+        {
+          "up": false,
+          "down": false,
+          "left": false,
+          "right": false,
+          "pump": false,
+          "repair": false,
+          "action": false,
+          "jump": false
+        },
+        {
+          "up": false,
+          "down": false,
+          "left": false,
+          "right": false,
+          "pump": false,
+          "repair": false,
+          "action": false,
+          "jump": false
+        }
+      ],
+      "steeringPrevious": [
+        0,
+        0
+      ],
+      "freeRun": [
+        false,
+        false
+      ],
+      "freeMeta": {
+        "boundaryAt": [
+          -999,
+          -999
+        ],
+        "waterBoundaryAt": [
+          -999,
+          -999
+        ],
+        "boatBoundaryAt": [
+          -999,
+          -999
+        ]
+      }
+    }
+  },
+  "scripts": [
+    {
+      "url": "https://archipelago.k69ysrndm7.workers.dev/src/free-roam-v3.js?v=6",
+      "bytes": 21901,
+      "matches": []
+    },
+    {
+      "url": "https://archipelago.k69ysrndm7.workers.dev/src/free-roam-accessibility.js?v=1",
+      "bytes": 861,
+      "matches": []
+    },
+    {
+      "url": "https://archipelago.k69ysrndm7.workers.dev/src/free-roam-speech-fix.js?v=1",
+      "bytes": 3008,
+      "matches": []
+    }
+  ],
+  "responseUrls": [
+    "https://archipelago.k69ysrndm7.workers.dev/free-roam.html?cargoRuntimeAudit=1784644484406",
+    "https://archipelago.k69ysrndm7.workers.dev/src/free-roam-speech-fix.js?v=1",
+    "https://archipelago.k69ysrndm7.workers.dev/src/free-roam-accessibility.js?v=1",
+    "https://archipelago.k69ysrndm7.workers.dev/src/free-roam-v3.js?v=6",
+    "https://archipelago.k69ysrndm7.workers.dev/src/free-roam-gesture-model.js",
+    "https://archipelago.k69ysrndm7.workers.dev/src/free-roam-core-v5.js",
+    "https://archipelago.k69ysrndm7.workers.dev/src/free-roam-audio-v4.js",
+    "https://archipelago.k69ysrndm7.workers.dev/src/free-roam-audio-v3.js",
+    "https://archipelago.k69ysrndm7.workers.dev/src/free-roam-core-v4.js",
+    "https://archipelago.k69ysrndm7.workers.dev/src/free-roam-audio-v2.js",
+    "https://archipelago.k69ysrndm7.workers.dev/src/free-roam-steering-model.js",
+    "https://archipelago.k69ysrndm7.workers.dev/src/free-roam-core-v3.js",
+    "https://archipelago.k69ysrndm7.workers.dev/src/free-roam-audio.js",
+    "https://archipelago.k69ysrndm7.workers.dev/src/game-core-v18.js?free=3",
+    "https://archipelago.k69ysrndm7.workers.dev/src/free-roam-core-v2.js",
+    "https://archipelago.k69ysrndm7.workers.dev/src/game-core-v18.js?free=2",
+    "https://archipelago.k69ysrndm7.workers.dev/src/game-core-v17.js?base=11",
+    "https://archipelago.k69ysrndm7.workers.dev/src/collision-model.js",
+    "https://archipelago.k69ysrndm7.workers.dev/src/audio-engine-v13.js?free=2",
+    "https://archipelago.k69ysrndm7.workers.dev/src/game-core-v16.js?base=11",
+    "https://archipelago.k69ysrndm7.workers.dev/src/audio-engine-v12.js?base=8",
+    "https://archipelago.k69ysrndm7.workers.dev/src/game-core-v15.js?base=6",
+    "https://archipelago.k69ysrndm7.workers.dev/src/audio-engine-v11.js?base=7",
+    "https://archipelago.k69ysrndm7.workers.dev/src/hunter-brain.js?v=25.0",
+    "https://archipelago.k69ysrndm7.workers.dev/src/game-core-v14.js?base=6",
+    "https://archipelago.k69ysrndm7.workers.dev/src/audio-engine-v10.js?base=6",
+    "https://archipelago.k69ysrndm7.workers.dev/src/hunter-brain-weights.js?v=27.0",
+    "https://archipelago.k69ysrndm7.workers.dev/src/audio-engine-v9.js?base=5",
+    "https://archipelago.k69ysrndm7.workers.dev/src/game-core-v13.js?base=6",
+    "https://archipelago.k69ysrndm7.workers.dev/src/game-core-v12.js?base=6",
+    "https://archipelago.k69ysrndm7.workers.dev/src/audio-engine-v8.js?base=5",
+    "https://archipelago.k69ysrndm7.workers.dev/src/game-core-v11.js?base=6",
+    "https://archipelago.k69ysrndm7.workers.dev/src/audio-engine-v7-1.js?base=5",
+    "https://archipelago.k69ysrndm7.workers.dev/src/game-core-v10.js?base=5",
+    "https://archipelago.k69ysrndm7.workers.dev/src/audio-engine-v7.js?base=5",
+    "https://archipelago.k69ysrndm7.workers.dev/src/audio-engine-v6.js?base=5",
+    "https://archipelago.k69ysrndm7.workers.dev/src/game-core-v9-1.js?base=5",
+    "https://archipelago.k69ysrndm7.workers.dev/src/game-core-v9.js?base=5",
+    "https://archipelago.k69ysrndm7.workers.dev/src/audio-engine-v5.js?base=5",
+    "https://archipelago.k69ysrndm7.workers.dev/src/audio-engine-v4.js?base=5",
+    "https://archipelago.k69ysrndm7.workers.dev/src/game-core-v8.js?base=5",
+    "https://archipelago.k69ysrndm7.workers.dev/src/audio-engine.js?base=5",
+    "https://archipelago.k69ysrndm7.workers.dev/src/game-core-v7-1.js?base=5",
+    "https://archipelago.k69ysrndm7.workers.dev/src/game-core-v7.js?base=5",
+    "https://archipelago.k69ysrndm7.workers.dev/src/game-core-v6.js?base=5",
+    "https://archipelago.k69ysrndm7.workers.dev/src/game-core-v5.js?base=5",
+    "https://archipelago.k69ysrndm7.workers.dev/src/game-core-v4.js?base=5",
+    "https://archipelago.k69ysrndm7.workers.dev/src/game-core.js?base=5"
+  ],
+  "consoleLines": [],
+  "pageErrors": [
+    "NotFoundError: Failed to execute 'setPointerCapture' on 'Element': No active pointer with the given id is found.",
+    "NotFoundError: Failed to execute 'setPointerCapture' on 'Element': No active pointer with the given id is found.",
+    "NotFoundError: Failed to execute 'setPointerCapture' on 'Element': No active pointer with the given id is found."
+  ]
+}
