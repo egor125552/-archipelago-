@@ -11,7 +11,7 @@ export const DOCK_FOOT_MAX_Y = 82;
 export const DOCK_BOAT_MIN_X = 148;
 export const DOCK_BOAT_MAX_X = 272;
 export const DOCK_BOAT_MAX_Y = 98;
-export const DOCK_BOAT_MAX_SPEED = 2;
+export const DOCK_BOAT_MAX_SPEED = 6;
 
 export const clampCargoCoordinate = (value, min, max) => Math.max(min, Math.min(max, value));
 
