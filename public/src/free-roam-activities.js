@@ -1,14 +1,14 @@
 "use strict";
 
 import {placeJoiningPlayer} from "./free-roam-player-spawn.js";
-import {deliverCarriedCargoAtDock, updateCargoActionPrompts} from "./free-roam-cargo-actions.js?v=32";
+import {deliverCarriedCargoAtDock, updateCargoActionPrompts} from "./free-roam-cargo-actions.js?v=38";
 import {
   CARGO_ACTION_RANGE,
   LANDING_MAX_X,
   LANDING_MIN_X,
   isBoatDockZone,
 } from "./free-roam-cargo-rules.js?v=32";
-import {updateFootDockDelivery} from "./free-roam-foot-dock.js?v=32";
+import {updateFootDockDelivery} from "./free-roam-foot-dock.js?v=38";
 import {grantWeaponFromCrate} from "./free-roam-weapon-crates.js?v=32";
 
 const WORLD_CRATES = Object.freeze([
@@ -24,15 +24,24 @@ const WORLD_CRATES = Object.freeze([
 const LABELS = Object.freeze({
   plates: "ремонтные пластины",
   fuel: "топливо",
-  pump: "детали усиленного насоса",
+  pump: "усилитель насоса",
   valuable: "ценный груз",
   knife: "нож",
   automatic: "автомат",
   ammo: "патроны",
 });
 
+const STATUS_DETAILS = Object.freeze({
+  pump: "После доставки он ускорит откачку воды на этой лодке.",
+});
+
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));
+const pumpRateText = value => {
+  const rate = Number(value) || 0;
+  const formatted = rate.toFixed(1).replace(/\.0$/, "").replace(".", ",");
+  return `${formatted} ${Number.isInteger(rate) ? "процентов" : "процента"}`;
+};
 
 function copyCrate(crate) {
   return {
@@ -206,7 +215,7 @@ function stow(world, crate, boat, playerIndex) {
   const player = world.players[playerIndex];
   if (player?.combat) player.combat.carriedCrate = null;
   grantWeaponFromCrate(world, crate, playerIndex, emit);
-  emit(world, "cargo-stowed", `${LABELS[crate.kind] || "Груз"} закреплён на лодке.`, [playerIndex], {
+  emit(world, "cargo-stowed", `Ящик погружён на лодку: ${LABELS[crate.kind] || "груз"}.`, [playerIndex], {
     sourcePlayer: playerIndex,
     crateId: crate.id,
     kind: crate.kind,
@@ -304,27 +313,34 @@ export function handleActivityAction(world, playerIndex) {
 function rewardPlayer(world, playerIndex, boat, crate) {
   const state = world.freeActivities;
   const combat = world.players[playerIndex]?.combat;
+  let effect = "Ценный груз принят.";
   switch (crate.kind) {
     case "plates":
       boat.repairPatches += 2;
+      effect = "Получено две ремонтные пластины.";
       break;
     case "fuel":
       boat.fuel = clamp(boat.fuel + 35, 0, 100);
+      effect = `Топливо пополнено до ${Math.round(boat.fuel)} процентов.`;
       break;
     case "pump":
       boat.cargoPumpBonus = clamp(boat.cargoPumpBonus + 2.5, 0, 7.5);
+      effect = `Усилитель установлен. Насос этой лодки откачивает на ${pumpRateText(boat.cargoPumpBonus)} воды в секунду быстрее.`;
       break;
     case "knife":
       if (combat) {
         combat.weapons.knife = true;
         combat.equipped = "knife";
       }
+      effect = "Нож добавлен в оружие.";
       break;
     case "automatic":
       grantWeaponFromCrate(world, crate, playerIndex);
+      effect = "Ящик с автоматом принят.";
       break;
     case "ammo":
       if (combat) combat.ammo += 30;
+      effect = "Получено 30 патронов.";
       break;
     default:
       break;
@@ -332,16 +348,18 @@ function rewardPlayer(world, playerIndex, boat, crate) {
   const points = crate.rarity === "rare" ? 5 : crate.rarity === "uncommon" ? 3 : 2;
   state.score[playerIndex] += points;
   state.delivered[playerIndex] += 1;
+  return effect;
 }
 
 function deliverBoatCargo(world, boat) {
   const state = world.freeActivities;
   const playerIndex = state.presence[boat.driver] ? boat.driver : boat.owner;
   const delivered = [];
+  const effects = [];
   for (const id of boat.cargo.splice(0)) {
     const crate = state.crates.find(candidate => candidate.id === id);
     if (!crate) continue;
-    rewardPlayer(world, playerIndex, boat, crate);
+    effects.push(rewardPlayer(world, playerIndex, boat, crate));
     crate.state = crate.singleUse ? "consumed" : "delivered";
     crate.carriedBy = null;
     crate.stowedBoat = null;
@@ -349,7 +367,7 @@ function deliverBoatCargo(world, boat) {
     delivered.push(crate);
   }
   if (!delivered.length) return;
-  emit(world, "cargo-delivered", `Груз доставлен: ${delivered.length}. Счёт ${state.score[playerIndex]}.`, [0, 1], {
+  emit(world, "cargo-delivered", `Груз доставлен: ${delivered.length}. ${effects.join(" ")} Очки за доставку: ${state.score[playerIndex]}.`, [0, 1], {
     sourcePlayer: playerIndex,
     count: delivered.length,
     score: state.score[playerIndex],
@@ -457,10 +475,19 @@ export function activityStatus(world, playerIndex) {
   const player = world.players[playerIndex];
   const carried = state.crates.find(crate => crate.id === player?.combat?.carriedCrate);
   const nearest = nearestAvailableCrate(state, player);
+  const boat = Number.isInteger(player?.activeBoat)
+    ? world.boats[player.activeBoat]
+    : world.boats.find(candidate => candidate.owner === playerIndex);
   const parts = [];
   if (carried) parts.push(`В руках ${LABELS[carried.kind] || "груз"}.`);
-  if (nearest.crate) parts.push(`Ближайший груз в ${Math.round(nearest.distance)} метрах: ${LABELS[nearest.crate.kind] || "ящик"}.`);
-  parts.push(`Счёт доставки ${state.score[playerIndex] || 0}.`);
+  if (nearest.crate) {
+    const detail = STATUS_DETAILS[nearest.crate.kind];
+    parts.push(`Ближайший груз в ${Math.round(nearest.distance)} метрах: ${LABELS[nearest.crate.kind] || "ящик"}.${detail ? ` ${detail}` : ""}`);
+  }
+  if ((Number(boat?.cargoPumpBonus) || 0) > 0) {
+    parts.push(`Усиление насоса: плюс ${pumpRateText(boat.cargoPumpBonus)} откачки в секунду.`);
+  }
+  parts.push(`Очки за доставку: ${state.score[playerIndex] || 0}.`);
   if (!state.presence[1 - playerIndex]) parts.push("Пока ждём второго игрока.");
   return parts.join(" ");
 }

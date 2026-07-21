@@ -20,7 +20,7 @@ function tapAction(world) {
   run(world, 0.05);
 }
 
-test("a pursuer trophy loads, unloads at the dock, and stops pointing to the dock afterward", () => {
+test("a pursuer trophy unloads at the dock and sonar returns to ordinary cargo afterward", () => {
   const world = createFreeWorld();
   const player = world.players[0];
   const boat = world.boats[player.activeBoat];
@@ -41,7 +41,10 @@ test("a pursuer trophy loads, unloads at the dock, and stops pointing to the doc
   assert.equal(boat.cargo.length, 0);
   assert.equal(trophy.state, "consumed");
   assert.equal(world.players[0].combat.ammo, 30);
-  assert.equal(scenarioTarget(world, 0), null);
+  const nextTarget = scenarioTarget(world, 0);
+  assert.ok(nextTarget);
+  assert.notEqual(nextTarget.kind, "dock");
+  assert.match(nextTarget.id, /crate|landing/);
 });
 
 test("victory does not invent a dock target when no trophy is being carried", () => {

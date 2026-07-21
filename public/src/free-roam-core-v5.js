@@ -1,6 +1,6 @@
 "use strict";
 
-import * as base from "./free-roam-core-v4.js?v=35";
+import * as base from "./free-roam-core-v4.js?v=38";
 
 export const WORLD = Object.freeze({
   ...base.WORLD,

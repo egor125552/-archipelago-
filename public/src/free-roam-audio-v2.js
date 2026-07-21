@@ -1,6 +1,6 @@
 "use strict";
 
-import {FreeRoamAudio as BaseFreeRoamAudio} from "./free-roam-audio.js";
+import {FreeRoamAudio as BaseFreeRoamAudio} from "./free-roam-audio.js?v=38";
 
 export class FreeRoamAudio extends BaseFreeRoamAudio {
   handleFreeEvent(event, playerIndex) {

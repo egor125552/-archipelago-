@@ -10,13 +10,13 @@ export function deliverCarriedCargoAtDock(world, playerIndex, crate, rewardPlaye
   const atDock = isFootDockZone(player);
   if (!atDock || !crate) return false;
   const boat = world.boats.find(candidate => candidate.owner === playerIndex) || world.boats[0];
-  rewardPlayer(world, playerIndex, boat, crate);
+  const effect = rewardPlayer(world, playerIndex, boat, crate);
   player.combat.carriedCrate = null;
   crate.state = crate.singleUse ? "consumed" : "delivered";
   crate.carriedBy = null;
   crate.stowedBoat = null;
   crate.respawnAt = world.time + 12;
-  emit(world, "cargo-delivered", "Ящик принят причалом автоматически.", [0, 1], {
+  emit(world, "cargo-delivered", `Ящик принят причалом автоматически. ${effect} Очки за доставку: ${world.freeActivities.score[playerIndex]}.`, [0, 1], {
     sourcePlayer: playerIndex,
     count: 1,
     score: world.freeActivities.score[playerIndex],

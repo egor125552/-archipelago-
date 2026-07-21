@@ -17,9 +17,12 @@ function ensurePhysicalState(world) {
     nearPlayers: Array.from({length: world.players.length}, () => false),
     playerContactAt: -999,
     boatContactAt: Array.from({length: world.players.length}, () => -999),
+    boatBlocked: Array.from({length: world.players.length}, () => false),
   };
   while (world.freePhysical.nearPlayers.length < world.players.length) world.freePhysical.nearPlayers.push(false);
   while (world.freePhysical.boatContactAt.length < world.players.length) world.freePhysical.boatContactAt.push(-999);
+  world.freePhysical.boatBlocked ||= Array.from({length: world.players.length}, () => false);
+  while (world.freePhysical.boatBlocked.length < world.players.length) world.freePhysical.boatBlocked.push(false);
   return world.freePhysical;
 }
 
@@ -102,10 +105,11 @@ function resolvePlayersAgainstBoats(world, state) {
     for (const boat of world.boats || []) {
       if (!boat || boat.sunk) continue;
       if (!separatePointFromBody(player, boat, PLAYER_RADIUS + BOAT_RADIUS, index ? 1 : -1)) continue;
+      state.boatBlocked[index] = true;
       boat.speed *= 0.35;
       if (world.time - state.boatContactAt[index] >= 0.9) {
         state.boatContactAt[index] = world.time;
-        emit(world, "boat-body-contact", "Перед тобой катер. Это большой физический объект; обойди его.", [index], {
+        emit(world, "boat-body-contact", "Ты дошёл до борта катера. Дальше корпус; шаги остановлены.", [index], {
           sourcePlayer: boat.driver ?? boat.owner,
           x: boat.x,
           y: boat.y,
@@ -125,8 +129,10 @@ function resolvePlayersAgainstBoats(world, state) {
 
 export function updatePhysicalActors(world) {
   const state = ensurePhysicalState(world);
+  state.boatBlocked.fill(false);
   resolvePlayerPair(world, state);
   resolvePlayersAgainstBoats(world, state);
+  return state;
 }
 
 export function suppressIncapacitatedMovement(world) {

@@ -1,6 +1,6 @@
 "use strict";
 
-import {FreeRoamAudio as BaseFreeRoamAudio, relativeMovementPan} from "./free-roam-audio-v3.js?v=32";
+import {FreeRoamAudio as BaseFreeRoamAudio, relativeMovementPan} from "./free-roam-audio-v3.js?v=38";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));

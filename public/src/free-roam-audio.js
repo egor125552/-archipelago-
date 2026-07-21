@@ -109,9 +109,11 @@ export class FreeRoamAudio extends AudioEngine {
   updateRemote(world, playerIndex) {
     if (!this.ctx || !world) return;
     const me = world.players?.[playerIndex];
-    const other = world.players?.[1 - playerIndex];
+    const otherIndex = 1 - playerIndex;
+    const other = world.players?.[otherIndex];
     const otherBoat = other && ["boat", "roof"].includes(other.mode) ? world.boats?.[other.activeBoat] : null;
-    const audible = Boolean(me && otherBoat && !otherBoat.sunk && distance(me, otherBoat) < 150);
+    const present = world.freeActivities?.presence?.[otherIndex] !== false;
+    const audible = Boolean(present && me && otherBoat && !otherBoat.sunk && distance(me, otherBoat) < 150);
     if (!audible) {
       if (this.remote) this.remote.gain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.12);
       if (this.remoteWake) this.remoteWake.gain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.12);

@@ -1,6 +1,6 @@
 "use strict";
 
-import * as base from "./free-roam-core-v3.js?v=35";
+import * as base from "./free-roam-core-v3.js?v=38";
 import {operationSteeringDelta, shouldCenterRudder} from "./free-roam-steering-model.js";
 
 export const WORLD = base.WORLD;

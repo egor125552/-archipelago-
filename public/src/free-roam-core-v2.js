@@ -8,6 +8,8 @@ export const WORLD = Object.freeze({
   width: 420,
   height: 320,
   shoreY: 72,
+  shoreAccessMinX: 118,
+  shoreAccessMaxX: 302,
   dockMinX: 154,
   dockMaxX: 266,
   boatRadius: 6,
@@ -109,10 +111,10 @@ function targetsForBoat(boatState) {
   return [boatState.driver ?? boatState.owner];
 }
 
-function nearDock(boatState) {
+function nearShoreLanding(boatState) {
   return boatState.y <= WORLD.shoreY + 18
-    && boatState.x >= WORLD.dockMinX
-    && boatState.x <= WORLD.dockMaxX;
+    && boatState.x >= WORLD.shoreAccessMinX
+    && boatState.x <= WORLD.shoreAccessMaxX;
 }
 
 function nearestBoat(world, point, excluded = -1) {
@@ -131,13 +133,14 @@ function nearestBoat(world, point, excluded = -1) {
 
 function exitBoat(world, playerIndex, boatState) {
   const p = world.players[playerIndex];
+  const landsOnShore = nearShoreLanding(boatState);
   boatState.driver = null;
   boatState.throttle = 0;
   boatState.rudder = 0;
   p.activeBoat = null;
-  p.mode = nearDock(boatState) ? "foot" : "swim";
+  p.mode = landsOnShore ? "foot" : "swim";
   p.x = boatState.x;
-  p.y = nearDock(boatState) ? WORLD.shoreY - 7 : boatState.y + 8;
+  p.y = landsOnShore ? WORLD.shoreY - 7 : boatState.y + 8;
   p.heading = boatState.heading;
   emit(world, "exit", p.mode === "foot" ? "Ты вышел на берег." : "Ты спрыгнул в воду.", [playerIndex]);
 }
@@ -185,7 +188,7 @@ function processAction(world, playerIndex) {
   if (p.mode === "boat") {
     const ownBoat = world.boats[p.activeBoat];
     if (!ownBoat) return;
-    if (nearDock(ownBoat) && Math.abs(ownBoat.speed) < 1.6) {
+    if (nearShoreLanding(ownBoat) && Math.abs(ownBoat.speed) < 1.6) {
       exitBoat(world, playerIndex, ownBoat);
       return;
     }
@@ -198,7 +201,7 @@ function processAction(world, playerIndex) {
       attachTow(world, ownBoat, nearest.boat, playerIndex);
       return;
     }
-    emit(world, "action-denied", "Для действия F подойди к берегу или к другой лодке и сбрось скорость.", [playerIndex]);
+    emit(world, "action-denied", "Для высадки подойди к береговой площадке и полностью сбрось скорость.", [playerIndex]);
     return;
   }
 
@@ -393,6 +396,9 @@ function processHullRepair(world, boatState, input, dt) {
 function updateBoat(world, boatState, dt) {
   boatState.collisionCooldown = Math.max(0, boatState.collisionCooldown - dt);
   if (boatState.sunk) return;
+  if (boatState.boundaryContact === "shore" && boatState.y > WORLD.shoreY + 7.2) {
+    boatState.boundaryContact = null;
+  }
   const driver = boatState.driver;
   const input = driver == null ? copyInput() : world.inputs[driver];
   const previous = driver == null ? copyInput() : world.previousInputs[driver];
@@ -421,8 +427,10 @@ function updateBoat(world, boatState, dt) {
   boatState.x = clamp(boatState.x, WORLD.boatRadius, WORLD.width - WORLD.boatRadius);
   boatState.y = clamp(boatState.y, WORLD.shoreY + 4, WORLD.height - WORLD.boatRadius);
 
-  if (boatState.y <= WORLD.shoreY + 5 && !nearDock(boatState)) {
+  if (boatState.y <= WORLD.shoreY + 5) {
     const impactSpeed = Math.abs(boatState.speed);
+    const firstContact = boatState.boundaryContact !== "shore";
+    boatState.boundaryContact = "shore";
     boatState.y = WORLD.shoreY + 6;
     if (impactSpeed > (CONFIG.shoreScrapeSpeed || 1.25) && boatState.collisionCooldown <= 0) {
       const severity = collisionSeverity(impactSpeed);
@@ -433,6 +441,13 @@ function updateBoat(world, boatState, dt) {
       boatState.leak = clamp(boatState.leak + impact.damage * 0.08, 0, 16);
       boatState.collisionCooldown = CONFIG.shoreImpactCooldown || 1.35;
       emit(world, "collision", hard ? "Сильный удар о берег." : "Удар о берег.", targets, {strength: impactSpeed, damage: impact.damage, shore: true});
+    } else if (firstContact) {
+      emit(world, "collision", "Лодка упёрлась в берег и остановилась.", targets, {
+        strength: impactSpeed,
+        damage: 0,
+        shore: true,
+        scrape: true,
+      });
     }
     boatState.speed = impactSpeed <= (CONFIG.shoreScrapeSpeed || 1.25) ? 0 : -Math.sign(boatState.speed || 1) * Math.min(impactSpeed, Math.max(0.35, impactSpeed * 0.35));
     boatState.throttle = 0;
@@ -493,7 +508,8 @@ function boundaryBlocksThrust(boatState, thrust) {
   };
   return (side === "left" && requested.x < -0.03)
     || (side === "right" && requested.x > 0.03)
-    || (side === "open-water" && requested.y > 0.03);
+    || (side === "open-water" && requested.y > 0.03)
+    || (side === "shore" && requested.y < -0.03);
 }
 
 function resolveBoatCollision(world) {
@@ -605,7 +621,8 @@ export function stepFreeWorld(world, dt) {
 
 export function playerStatus(world, playerIndex) {
   const p = world.players[playerIndex];
-  const other = world.players[1 - playerIndex];
+  const otherIndex = 1 - playerIndex;
+  const other = world.players[otherIndex];
   const modeLabel = p.mode === "boat" ? "в лодке" : p.mode === "foot" ? "на берегу" : p.mode === "roof" ? "на крыше лодки" : "в воде";
   const parts = [`Ты ${modeLabel}.`];
   if (["boat", "roof"].includes(p.mode)) {
@@ -615,7 +632,10 @@ export function playerStatus(world, playerIndex) {
     if (world.tow?.towerBoat === b.id) parts.push("Ты буксируешь вторую лодку.");
     if (world.tow?.towedBoat === b.id) parts.push("Тебя буксируют; насос и пластина работают на ходу.");
   }
-  parts.push(`Другой игрок в ${Math.round(distance(p, other))} метрах.`);
+  const presence = world.freeActivities?.presence;
+  if (!presence || presence[otherIndex]) {
+    parts.push(`Другой игрок в ${Math.round(distance(p, other))} метрах.`);
+  }
   return parts.join(" ");
 }
 

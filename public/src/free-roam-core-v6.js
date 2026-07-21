@@ -1,6 +1,6 @@
 "use strict";
 
-import * as base from "./free-roam-core-v5.js?v=35";
+import * as base from "./free-roam-core-v5.js?v=38";
 import {
   activityStatus,
   dropCarriedCrate,
@@ -11,11 +11,11 @@ import {
   spawnRareCrate,
   storeActivityInput,
   updateActivities,
-} from "./free-roam-activities.js?v=35";
+} from "./free-roam-activities.js?v=38";
 import {applyCombatDamage, combatStatus, ensureCombat, updateCombat} from "./free-roam-combat.js?v=32";
 import {ensureMarauder, releaseStolenCargo, updateMarauder} from "./free-roam-marauder.js?v=32";
-import {ensureFreeScenario, scenarioStatus, updateFreeScenario} from "./free-roam-scenario.js?v=35";
-import {suppressIncapacitatedMovement, updatePhysicalActors} from "./free-roam-physical-actors.js?v=32";
+import {ensureFreeScenario, scenarioStatus, updateFreeScenario} from "./free-roam-scenario.js?v=38";
+import {suppressIncapacitatedMovement, updatePhysicalActors} from "./free-roam-physical-actors.js?v=38";
 import {handleAssistedBoarding} from "./free-roam-boarding-assist.js?v=29";
 import {ensurePursuerSquad, updatePursuerSquad} from "./free-roam-pursuer-squad.js?v=32";
 import {ensureHostileGunners, updateHostileGunners} from "./free-roam-hostile-gunners.js?v=32";
@@ -78,9 +78,19 @@ function consumeActivityActions(world) {
   }
 }
 
+function discardBlockedFootsteps(world, eventStart, physicalState) {
+  for (let index = world.events.length - 1; index >= eventStart; index -= 1) {
+    const event = world.events[index];
+    if (!event || !["footstep", "swim-step"].includes(event.type)) continue;
+    const sourcePlayer = Number(event.sourcePlayer ?? event.targets?.[0]);
+    if (physicalState?.boatBlocked?.[sourcePlayer]) world.events.splice(index, 1);
+  }
+}
+
 export function stepFreeWorld(world, dt) {
   ensureState(world);
   const safeDt = clamp(Number(dt) || 0, 0, 0.1);
+  const eventStart = world.events?.length || 0;
   consumeActivityActions(world);
   const restoreMovement = suppressIncapacitatedMovement(world);
   base.stepFreeWorld(world, safeDt);
@@ -99,7 +109,8 @@ export function stepFreeWorld(world, dt) {
       return applyCombatDamage(targetWorld, targetIndex, amount, -1, details, combatHelpers);
     },
   });
-  updatePhysicalActors(world);
+  const physicalState = updatePhysicalActors(world);
+  discardBlockedFootsteps(world, eventStart, physicalState);
   updateActivities(world, safeDt);
   updateFreeScenario(world, safeDt);
   finishActivityFrame(world);

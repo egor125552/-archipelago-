@@ -1,7 +1,7 @@
 "use strict";
 
-import {FreeRoamAudio as BaseFreeRoamAudio, spatialGainForDistance} from "./free-roam-audio-v4.js?v=32";
-import {relativeMovementPan} from "./free-roam-audio-v3.js?v=32";
+import {FreeRoamAudio as BaseFreeRoamAudio, spatialGainForDistance} from "./free-roam-audio-v4.js?v=38";
+import {relativeMovementPan} from "./free-roam-audio-v3.js?v=38";
 import {injuryLowpassFrequency} from "./free-roam-combat-recovery.js?v=32";
 import {COMBAT_TUNING} from "./free-roam-combat-tuning.js?v=32";
 
@@ -33,6 +33,7 @@ const COMBAT_SOUNDS = Object.freeze({
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));
+const SONAR_AUDIBLE_RANGE = 560;
 
 export class FreeRoamAudio extends BaseFreeRoamAudio {
   constructor() {
@@ -151,13 +152,13 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
     if (!target || (Number(scenario?.beaconUntil?.[playerIndex]) || 0) <= (Number(world?.time) || 0)) return;
     const now = this.ctx.currentTime;
     const metres = distance(this.listenerPoint, target);
-    if (metres > 190) return;
+    if (metres > SONAR_AUDIBLE_RANGE) return;
     const previous = this.cargoBeaconAt.get(target.id) || 0;
     const interval = clamp(0.16 + metres / 42, 0.16, 2.7);
     if (now < previous) return;
     this.cargoBeaconAt.set(target.id, now + interval);
     const pan = relativeMovementPan(this.listenerPoint, target);
-    const proximity = clamp(1 - metres / 190, 0, 1);
+    const proximity = clamp(1 - metres / SONAR_AUDIBLE_RANGE, 0, 1);
     const frequency = target.kind === "pursuer" ? 330 : target.kind === "automatic" ? 880 : 620;
     this.playSynthPip({pan, frequency, gain: 0.035 + proximity * 0.09, duration: 0.11});
   }

@@ -1,6 +1,6 @@
 "use strict";
 
-import {cargoNavigationTarget, updateCargoArrivalGuidance} from "./free-roam-cargo-guidance.js?v=32";
+import {cargoNavigationTarget, updateCargoArrivalGuidance} from "./free-roam-cargo-guidance.js?v=38";
 import {
   activatePursuerSquad,
   activePursuerById,
@@ -16,7 +16,7 @@ import {ensureSonarGuide, updateSonarGuide} from "./free-roam-sonar-guide.js?v=3
 const TARGET_LABELS = Object.freeze({
   plates: "ящик с пластинами",
   fuel: "ящик с топливом",
-  pump: "ящик с насосом",
+  pump: "ящик с усилителем насоса",
   valuable: "ящик с припасами",
   automatic: "ящик с автоматом",
   ammo: "ящик с патронами",
@@ -167,6 +167,13 @@ export function scenarioTarget(world, playerIndex) {
       x: prize.x,
       y: prize.y,
     };
+    const cargo = lockedWorldCrate(world, playerIndex, () => true)
+      || nearestWorldCrate(world, playerIndex, () => true);
+    if (cargo) return cargoNavigationTarget(
+      world.players[playerIndex],
+      cargo,
+      TARGET_LABELS[cargo.kind] || "ящик с припасами",
+    );
     return null;
   }
   return dockTarget(world.players[playerIndex]);
@@ -224,10 +231,14 @@ function handleSonar(world, dt) {
     scenario.sonarCooldown[index] = Math.max(0, scenario.sonarCooldown[index] - dt);
     if (!inputs[index]?.sonar || previous[index]?.sonar || scenario.sonarCooldown[index] > 0) continue;
     const target = scenario.targets[index];
-    if (!target) continue;
+    if (!target) {
+      scenario.sonarCooldown[index] = 1.1;
+      emit(world, "scenario-sonar-empty", "Сонар: доступных целей сейчас нет.", [index], {sourcePlayer: index});
+      continue;
+    }
     const metres = distance(world.players[index], target);
     scenario.sonarCooldown[index] = 1.1;
-    scenario.beaconUntil[index] = world.time + 45;
+    scenario.beaconUntil[index] = Number.MAX_SAFE_INTEGER;
     emit(
       world,
       "scenario-sonar",
