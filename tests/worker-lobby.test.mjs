@@ -135,3 +135,24 @@ test("join button can create a crew room that later accepts a captain", async ()
   assert.equal(captainMessages[0].room, crewMessages[0].room);
   assert.equal(captainMessages[0].matched, true);
 });
+
+test("a slow client drops stale world snapshots but still receives controls and events", async () => {
+  const lobby = new Lobby({});
+  const captainResponse = await lobby.fetch(connectRequest("captain"));
+  const captainMessages = collect(captainResponse.webSocket);
+  const crewResponse = await lobby.fetch(connectRequest("crew"));
+  const crewMessages = collect(crewResponse.webSocket);
+  await flush();
+
+  const crewServerSocket = crewResponse.webSocket.peer;
+  crewServerSocket.bufferedAmount = 80 * 1024;
+  const before = crewMessages.length;
+  captainResponse.webSocket.send(JSON.stringify({type: "free-snapshot", sequence: 8, world: {time: 4}}));
+  captainResponse.webSocket.send(JSON.stringify({type: "free-events", events: [{type: "collision"}]}));
+  await flush();
+
+  assert.equal(crewMessages.some(message => message.type === "free-snapshot" && message.sequence === 8), false);
+  assert.equal(crewMessages.length, before + 1);
+  assert.equal(crewMessages.at(-1).type, "free-events");
+  assert.ok(captainMessages.some(message => message.type === "peer-connected"));
+});

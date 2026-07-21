@@ -27,10 +27,12 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
 
   updateRemote(world, playerIndex) {
     const me = world?.players?.[playerIndex];
-    const other = world?.players?.[1 - playerIndex];
+    const otherIndex = 1 - playerIndex;
+    const other = world?.players?.[otherIndex];
     const otherBoat = other && ["boat", "roof"].includes(other.mode) ? world.boats?.[other.activeBoat] : null;
-    const metres = me && otherBoat ? distance(me, otherBoat) : Infinity;
-    const pan = me && otherBoat ? relativeMovementPan(me, otherBoat) : 0;
+    const present = Boolean(world?.freeActivities?.presence?.[otherIndex]);
+    const metres = present && me && otherBoat ? distance(me, otherBoat) : Infinity;
+    const pan = present && me && otherBoat ? relativeMovementPan(me, otherBoat) : 0;
     const proximity = clamp(1 - metres / 175, 0, 1);
     const shaped = proximity * proximity;
     const speed = Math.abs(Number(otherBoat?.speed) || 0);

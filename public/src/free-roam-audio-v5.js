@@ -1,6 +1,6 @@
 "use strict";
 
-import {FreeRoamAudio as BaseFreeRoamAudio, spatialGainForDistance} from "./free-roam-audio-v4.js?v=38";
+import {FreeRoamAudio as BaseFreeRoamAudio, spatialGainForDistance} from "./free-roam-audio-v4.js?v=39";
 import {relativeMovementPan} from "./free-roam-audio-v3.js?v=38";
 import {injuryLowpassFrequency} from "./free-roam-combat-recovery.js?v=32";
 import {COMBAT_TUNING} from "./free-roam-combat-tuning.js?v=32";

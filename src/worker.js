@@ -7,6 +7,7 @@ const SOUND_PROXY = Object.freeze({
 });
 
 const ROOM_HEARTBEAT_TIMEOUT_MS = 18_000;
+const SNAPSHOT_BACKPRESSURE_BYTES = 64 * 1024;
 const ROOM_ROLES = Object.freeze(["captain", "crew"]);
 
 function json(data, status = 200) {
@@ -38,10 +39,13 @@ async function proxySound(request, source) {
   return response;
 }
 
-function safeSend(socket, payload) {
+function safeSend(socket, payload, {rawData = null, dropIfBusy = false} = {}) {
   try {
-    if (socket?.readyState === 1) socket.send(JSON.stringify(payload));
-  } catch (_) {}
+    if (socket?.readyState !== 1) return false;
+    if (dropIfBusy && Number(socket.bufferedAmount) > SNAPSHOT_BACKPRESSURE_BYTES) return false;
+    socket.send(rawData ?? JSON.stringify(payload));
+    return true;
+  } catch (_) { return false; }
 }
 
 function parseMessage(data) {
@@ -216,7 +220,13 @@ export class Lobby {
     const otherRole = oppositeRole(client.role);
     const other = room[otherRole];
     if (other) {
-      safeSend(other, message);
+      // Forward the original frame instead of parsing and serializing the full
+      // world a second time. If a browser falls behind, discard stale snapshots
+      // while preserving controls and game events.
+      safeSend(other, message, {
+        rawData,
+        dropIfBusy: message.type === "free-snapshot",
+      });
       return;
     }
 

@@ -194,7 +194,7 @@ test("the production combat module chain uses explicit cache generations", async
 
   assert.match(html, /free-roam-v4\.js\?v=\d+/);
   assert.match(entry, /free-roam-core-v6\.js\?v=\d+/);
-  assert.match(entry, /free-roam-audio-v5\.js\?v=\d+/);
+  assert.match(entry, /free-roam-audio-v6\.js\?v=\d+/);
   assert.match(core, /free-roam-boarding-assist\.js\?v=\d+/);
   assert.match(core, /free-roam-combat\.js\?v=\d+/);
   assert.match(combat, /free-roam-combat-recovery\.js\?v=\d+/);
