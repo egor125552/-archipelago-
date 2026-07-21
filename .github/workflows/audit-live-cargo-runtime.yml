@@ -1,0 +1,174 @@
+name: Audit live cargo combat runtime
+
+on:
+  push:
+    branches:
+      - recovery/cloudflare-live
+    paths:
+      - .github/workflows/audit-live-cargo-runtime.yml
+
+permissions:
+  contents: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery/cloudflare-live
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install browser
+        run: |
+          npm install --no-save --package-lock=false playwright@1.52.0
+          npx playwright install --with-deps chromium
+
+      - name: Probe live game behavior
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import {chromium} from 'playwright';
+          import {writeFile} from 'node:fs/promises';
+
+          const URL = 'https://archipelago.k69ysrndm7.workers.dev/free-roam.html';
+          const browser = await chromium.launch({headless: true});
+          const context = await browser.newContext({
+            viewport: {width: 390, height: 844},
+            isMobile: true,
+            hasTouch: true,
+            locale: 'ru-RU',
+          });
+          const page = await context.newPage();
+          const consoleLines = [];
+          const pageErrors = [];
+          const responses = [];
+          page.on('console', msg => consoleLines.push(`${msg.type()}: ${msg.text()}`));
+          page.on('pageerror', error => pageErrors.push(String(error)));
+          page.on('response', response => {
+            const url = response.url();
+            if (/\.(?:js|mjs|html)(?:\?|$)/i.test(url)) responses.push(url);
+          });
+
+          await page.goto(`${URL}?cargoRuntimeAudit=${Date.now()}`, {waitUntil: 'domcontentloaded', timeout: 60000});
+          await page.locator('#hostButton').click();
+          await page.waitForFunction(() => window.__freeRoam?.getWorld?.(), null, {timeout: 60000});
+          await page.waitForTimeout(1200);
+
+          const snapshot = async label => page.evaluate(label => {
+            const api = window.__freeRoam;
+            const world = api?.getWorld?.();
+            const clone = value => {
+              try { return JSON.parse(JSON.stringify(value)); } catch { return String(value); }
+            };
+            const findRelevant = (value, path = 'root', out = [], depth = 0) => {
+              if (depth > 8 || value == null) return out;
+              if (typeof value === 'string') {
+                if (/cargo|груз|автомат|weapon|ammo|патрон|fire|shoot|target|цель|attack|удар|hit/i.test(value)) out.push({path, value});
+                return out;
+              }
+              if (typeof value !== 'object') return out;
+              for (const [key, child] of Object.entries(value)) {
+                if (/cargo|груз|weapon|ammo|fire|shoot|target|attack|hit|power|impact/i.test(key)) out.push({path: `${path}.${key}`, value: clone(child)});
+                findRelevant(child, `${path}.${key}`, out, depth + 1);
+              }
+              return out;
+            };
+            return {
+              label,
+              message: document.querySelector('#message')?.textContent || '',
+              live: document.querySelector('#live')?.textContent || '',
+              input: clone(api?.input),
+              worldKeys: world ? Object.keys(world) : [],
+              relevant: findRelevant(world),
+              world: clone(world),
+            };
+          }, label);
+
+          const before = await snapshot('before');
+
+          await page.keyboard.press('KeyM');
+          await page.waitForTimeout(500);
+          const afterM = await snapshot('after-KeyM');
+
+          const surface = page.locator('#playSurface');
+          const box = await surface.boundingBox();
+          if (box) {
+            for (let id = 701; id <= 703; id += 1) {
+              await surface.dispatchEvent('pointerdown', {
+                pointerId: id,
+                pointerType: 'touch',
+                isPrimary: id === 701,
+                clientX: box.x + box.width * (0.35 + (id - 701) * 0.15),
+                clientY: box.y + box.height * 0.55,
+                button: 0,
+                buttons: 1,
+              });
+            }
+            await page.waitForTimeout(90);
+            for (let id = 701; id <= 703; id += 1) {
+              await surface.dispatchEvent('pointerup', {
+                pointerId: id,
+                pointerType: 'touch',
+                isPrimary: id === 701,
+                clientX: box.x + box.width * (0.35 + (id - 701) * 0.15),
+                clientY: box.y + box.height * 0.55,
+                button: 0,
+                buttons: 0,
+              });
+            }
+          }
+          await page.waitForTimeout(700);
+          const afterThreeFinger = await snapshot('after-three-finger');
+
+          const scripts = await page.evaluate(async () => {
+            const urls = [...new Set([...document.scripts].map(script => script.src).filter(Boolean))];
+            const result = [];
+            for (const url of urls) {
+              try {
+                const text = await fetch(url, {cache: 'no-store'}).then(response => response.text());
+                const lines = text.split(/\r?\n/);
+                const matches = [];
+                lines.forEach((line, index) => {
+                  if (/KeyM|cargo|груз|three.?finger|три.{0,10}пальц|автомат|weapon|ammo|патрон|shoot|fire|targetIndex|cycleTarget|цель.{0,30}из|power.?hit|мощн.{0,20}удар/i.test(line)) {
+                    matches.push({line: index + 1, text: line.trim()});
+                  }
+                });
+                result.push({url, bytes: text.length, matches});
+              } catch (error) {
+                result.push({url, error: String(error)});
+              }
+            }
+            return result;
+          });
+
+          const report = {
+            url: page.url(),
+            title: await page.title(),
+            before,
+            afterM,
+            afterThreeFinger,
+            scripts,
+            responseUrls: [...new Set(responses)],
+            consoleLines,
+            pageErrors,
+          };
+          await writeFile('cloudflare-snapshot/live-cargo-runtime.json', JSON.stringify(report, null, 2), 'utf8');
+          await context.close();
+          await browser.close();
+          NODE
+
+      - name: Commit runtime report
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add cloudflare-snapshot/live-cargo-runtime.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Record live cargo combat runtime audit"
+          git push origin HEAD:recovery/cloudflare-live
