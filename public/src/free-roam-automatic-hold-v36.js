@@ -1,5 +1,7 @@
 "use strict";
 
+const ARM_DELAY_MS = 90;
+
 export function shouldHoldAutomaticFire({pointers, weaponText, targetMenuOpen = false}) {
   return Number(pointers) === 3
     && /^автомат(?:\b|,)/i.test(String(weaponText || "").trim())
@@ -17,6 +19,8 @@ export function installAutomaticHoldFire(doc = document) {
   const syntheticPointerId = 9036;
   let firing = false;
   let consumedAutomaticGesture = false;
+  let blockedByExtraFinger = false;
+  let armTimer = 0;
 
   const targetMenuOpen = () => targetButton.getAttribute("aria-pressed") === "true";
   const automaticReady = () => shouldHoldAutomaticFire({
@@ -37,15 +41,31 @@ export function installAutomaticHoldFire(doc = document) {
     }));
   }
 
+  function cancelArm() {
+    if (!armTimer) return;
+    clearTimeout(armTimer);
+    armTimer = 0;
+  }
+
   function startFiring() {
-    if (firing || !automaticReady()) return false;
+    if (firing || blockedByExtraFinger || !automaticReady()) return false;
     firing = true;
     consumedAutomaticGesture = true;
     dispatchAttack("pointerdown");
     return true;
   }
 
+  function scheduleFiring() {
+    cancelArm();
+    if (blockedByExtraFinger || !automaticReady()) return;
+    armTimer = setTimeout(() => {
+      armTimer = 0;
+      startFiring();
+    }, ARM_DELAY_MS);
+  }
+
   function stopFiring() {
+    cancelArm();
     if (!firing) return false;
     firing = false;
     dispatchAttack("pointerup");
@@ -62,17 +82,24 @@ export function installAutomaticHoldFire(doc = document) {
   function pointerDown(event) {
     if (event.pointerType !== "touch" || event.target.closest("button, a, summary, input, textarea, select")) return;
     activeTouches.add(event.pointerId);
-    if (activeTouches.size === 3) startFiring();
-    else if (activeTouches.size > 3) stopFiring();
+    if (activeTouches.size > 3) {
+      blockedByExtraFinger = true;
+      stopFiring();
+      return;
+    }
+    if (activeTouches.size === 3) scheduleFiring();
   }
 
   function pointerFinished(event) {
     if (event.pointerType !== "touch" || !activeTouches.has(event.pointerId)) return;
     activeTouches.delete(event.pointerId);
     if (activeTouches.size !== 3) stopFiring();
-    if (activeTouches.size === 0 && consumedAutomaticGesture) {
-      consumedAutomaticGesture = false;
-      forceAttackReleasedAfterGesture();
+    if (activeTouches.size === 0) {
+      blockedByExtraFinger = false;
+      if (consumedAutomaticGesture) {
+        consumedAutomaticGesture = false;
+        forceAttackReleasedAfterGesture();
+      }
     }
   }
 
@@ -81,7 +108,7 @@ export function installAutomaticHoldFire(doc = document) {
   game.addEventListener("pointercancel", pointerFinished, true);
 
   const observer = new MutationObserver(() => {
-    if (firing && !automaticReady()) stopFiring();
+    if (!automaticReady()) stopFiring();
   });
   observer.observe(weaponValue, {childList: true, subtree: true, characterData: true});
   observer.observe(targetButton, {attributes: true, attributeFilter: ["aria-pressed"]});
