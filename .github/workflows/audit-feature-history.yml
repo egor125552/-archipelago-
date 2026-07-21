@@ -1,0 +1,69 @@
+name: Audit full history for cargo combat feature
+
+on:
+  push:
+    branches:
+      - recovery/cloudflare-live
+    paths:
+      - .github/workflows/audit-feature-history.yml
+
+permissions:
+  contents: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: recovery/cloudflare-live
+          fetch-depth: 0
+
+      - name: Fetch every visible ref
+        run: git fetch --all --tags --prune
+
+      - name: Search complete Git history
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+
+          queries = {
+            'KeyM': r'KeyM|event\.(key|code).{0,60}["\x27]m["\x27]',
+            'cargo_pickup': r'cargo|груз|pickup|pick.?up|collect|подобр|ящик|crate|loot',
+            'three_finger': r'three.?finger|three.?touch|3.?finger|три.{0,10}пальц|touches\.length.{0,20}3|maxPointers.{0,20}3|activeTouches\.size.{0,20}3',
+            'power_hit': r'power.?hit|heavy.?hit|strong.?hit|мощн.{0,20}удар|сильн.{0,20}удар|melee|bash',
+            'target_cycle': r'select.{0,20}target|target.{0,20}select|cycle.{0,20}target|targetIndex|lockedTarget|цель.{0,30}из',
+            'firing': r'automatic.?gun|machine.?gun|weapon|ammo|bullet|projectile|shoot|fire|автомат|патрон|стрел|очеред',
+          }
+
+          report = ['# Full Git history audit for cargo combat feature', '']
+          for label, regex in queries.items():
+            report += [f'## {label}', '']
+            proc = subprocess.run(
+              ['git', 'log', '--all', '--date=iso', '--pretty=format:COMMIT %H %ad %s', '-G', regex, '--', 'public', 'src', 'tests', 'tools'],
+              text=True, capture_output=True
+            )
+            text = proc.stdout.strip()
+            report.append(text or 'NO MATCHING COMMITS')
+            report.append('')
+
+          report += ['## All visible refs', '']
+          refs = subprocess.run(['git', 'show-ref'], text=True, capture_output=True).stdout.strip()
+          report.append(refs or 'NO REFS')
+          report.append('')
+
+          Path('cloudflare-snapshot/history-feature-audit.txt').write_text('\n'.join(report) + '\n', encoding='utf-8')
+          PY
+
+      - name: Commit history audit
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add cloudflare-snapshot/history-feature-audit.txt
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Record full history audit for cargo combat"
+          git push origin HEAD:recovery/cloudflare-live
