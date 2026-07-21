@@ -2,15 +2,12 @@
 
 import {
   WORLD,
-  createFreeWorld,
-  drainEvents,
   playerStatus,
-  setPlayerInput,
-  setPlayerPresence,
-  snapshotWorld,
-  stepFreeWorld,
 } from "./free-roam-core-v6.js?v=38";
 import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=38";
+import {predictLocalWorld, reconcileLocalPrediction} from "./free-roam-client-prediction.js?v=40";
+import {applyReplicatedWorldDelta} from "./free-roam-replication.js?v=40";
+import {createSpeechController} from "./free-roam-speech.js?v=40";
 import {directionFromDelta} from "./free-roam-gesture-model.js";
 import {classifyActionGesture, gestureMetrics} from "./free-roam-action-gestures.js";
 import {resolveCombatTarget} from "./free-roam-targeting.js?v=32";
@@ -50,56 +47,53 @@ let leavingGame = false;
 let preferredRoomId = "";
 let socket = null;
 let world = null;
+let authoritativeWorld = null;
 let playerIndex = 0;
 let isHost = false;
 let roomId = "";
 let previousFrame = 0;
-let lastSnapshotAt = 0;
 let lastInputSent = "";
+let lastStateSequence = 0;
+let receivedStateCount = 0;
+let lastStateAt = 0;
+let lastRenderAt = -Infinity;
+let inputSequence = 0;
+let networkRttMs = null;
+let inputReceiptMs = null;
+let controlLatencyMs = null;
+let latencyNonce = 0;
+let latencyTimer = 0;
+const latencySentAt = new Map();
+const inputSentAt = new Map();
 let messageVersion = 0;
-let readerInputDetected = false;
-let selectedVoice = null;
 
 function distance(a, b) {
   return Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));
-}
-
-function normalize(value) {
-  return String(value || "").toLowerCase().replace(/ё/g, "е");
-}
-
-function voiceScore(voice) {
-  if (!normalize(voice?.lang).startsWith("ru")) return -10000;
-  const name = normalize(`${voice.name} ${voice.voiceURI}`);
-  let score = 10;
-  if (/milena|милена/.test(name)) score += 1000;
-  if (/enhanced|premium|improved|natural|neural|улучш/.test(name)) score += 500;
-  if (/compact|компакт/.test(name)) score -= 200;
-  return score;
-}
-
-function refreshVoice() {
-  if (!("speechSynthesis" in window)) return null;
-  selectedVoice = [...window.speechSynthesis.getVoices()].sort((a, b) => voiceScore(b) - voiceScore(a))[0] || null;
-  return selectedVoice;
 }
 
 function resumeGameAudio() {
   if (audio?.ctx?.state === "suspended") audio.ctx.resume().catch(() => {});
 }
 
-function speak(text) {
-  if (!text || readerInputDetected || !("speechSynthesis" in window)) return;
-  refreshVoice();
-  window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = "ru-RU";
-  utterance.rate = SPEECH_RATE;
-  utterance.pitch = 1;
-  if (selectedVoice) utterance.voice = selectedVoice;
-  utterance.onend = resumeGameAudio;
-  utterance.onerror = resumeGameAudio;
-  window.speechSynthesis.speak(utterance);
+const speech = createSpeechController({rate: SPEECH_RATE, onIdle: resumeGameAudio});
+
+function readSpeechPreference() {
+  try { return localStorage.getItem("echo-free-roam-speech") !== "off"; }
+  catch (_) { return true; }
+}
+
+function syncSpeechButton() {
+  const button = $("speechButton");
+  if (!button) return;
+  button.setAttribute("aria-pressed", String(speech.enabled));
+  button.textContent = `Озвучка игры: ${speech.enabled ? "включена" : "выключена"}`;
+}
+
+function setSpeechEnabled(enabled, report = true) {
+  speech.setEnabled(enabled);
+  try { localStorage.setItem("echo-free-roam-speech", speech.enabled ? "on" : "off"); } catch (_) {}
+  syncSpeechButton();
+  if (report) announce(`Озвучка игры ${speech.enabled ? "включена" : "выключена"}.`, true, speech.enabled);
 }
 
 function announce(text, assertive = false, spoken = true) {
@@ -112,15 +106,16 @@ function announce(text, assertive = false, spoken = true) {
   requestAnimationFrame(() => {
     if (version === messageVersion) live.textContent = text;
   });
-  if (spoken) speak(text);
+  if (spoken) speech.speak(text, {interrupt: assertive});
 }
 
-function socketUrl(role) {
+function socketUrl(role, targetRoom = "") {
   const protocol = location.protocol === "https:" ? "wss:" : "ws:";
   const url = new URL(`${protocol}//${location.host}/api/connect`);
   url.searchParams.set("role", role);
   url.searchParams.set("mode", "free");
-  if (role === "auto" && preferredRoomId) url.searchParams.set("room", preferredRoomId);
+  const requestedRoom = targetRoom || (role === "auto" ? preferredRoomId : "");
+  if (requestedRoom) url.searchParams.set("room", requestedRoom);
   return url.toString();
 }
 
@@ -136,6 +131,25 @@ function stopHeartbeat() {
 function stopReconnect() {
   clearTimeout(reconnectTimer);
   reconnectTimer = 0;
+}
+
+function stopLatencyProbe() {
+  clearInterval(latencyTimer);
+  latencyTimer = 0;
+  latencySentAt.clear();
+}
+
+function sendLatencyProbe() {
+  const nonce = ++latencyNonce;
+  latencySentAt.set(nonce, performance.now());
+  while (latencySentAt.size > 8) latencySentAt.delete(latencySentAt.keys().next().value);
+  send({type: "free-ping", nonce});
+}
+
+function startLatencyProbe() {
+  stopLatencyProbe();
+  sendLatencyProbe();
+  latencyTimer = setInterval(sendLatencyProbe, 2_000);
 }
 
 function startHeartbeat() {
@@ -158,20 +172,20 @@ function openGame(text) {
   requestAnimationFrame(frame);
 }
 
-function reconnectSoloWorld(savedWorld) {
+function reconnectToRoom(role, targetRoom) {
   if (leavingGame || reconnectTimer || $("game").hidden) return;
-  announce("Связь с комнатой обновляется. Твой мир и лодка сохранены.", true);
+  announce("Связь с Cloudflare обновляется. Сервер сохраняет мир и лодки.", true);
   reconnectTimer = setTimeout(() => {
     reconnectTimer = 0;
-    if (!leavingGame && !$("game").hidden) connect("captain", savedWorld);
+    if (!leavingGame && !$("game").hidden) connect(role, {reconnecting: true, targetRoom});
   }, 900);
 }
 
-function connect(role, savedWorld = null) {
+function connect(role, {reconnecting = false, targetRoom = ""} = {}) {
   audio.init().catch(() => {});
+  speech.prime();
   stopReconnect();
   const requestedRole = role;
-  const reconnecting = Boolean(savedWorld);
   isHost = requestedRole === "captain";
   playerIndex = isHost ? 0 : 1;
   $("hostButton").disabled = true;
@@ -184,11 +198,14 @@ function connect(role, savedWorld = null) {
         : "Ищу свободный мир…",
   );
 
-  const connection = new WebSocket(socketUrl(role));
+  const connection = new WebSocket(socketUrl(role, targetRoom));
   let lobbyReady = false;
   socket = connection;
   connection.addEventListener("open", () => {
-    if (socket === connection) startHeartbeat();
+    if (socket === connection) {
+      startHeartbeat();
+      startLatencyProbe();
+    }
   });
   connection.addEventListener("message", event => {
     if (socket !== connection) return;
@@ -202,76 +219,89 @@ function connect(role, savedWorld = null) {
       const actualRole = message.role || requestedRole;
       isHost = actualRole === "captain";
       playerIndex = isHost ? 0 : 1;
+      lastStateSequence = 0;
+      authoritativeWorld = null;
+      inputSentAt.clear();
       $("roomLabel").textContent = `Свободный мир ${roomId}`;
-      if (isHost) {
-        const resumed = Boolean(message.resumeWorld);
-        world = message.resumeWorld || savedWorld || createFreeWorld();
-        setPlayerPresence(world, 0, true);
-        setPlayerPresence(world, 1, Boolean(message.matched));
-        const openedText = resumed
-          ? "Мир восстановлен. Ты принял управление без сброса грузов, катеров и сценария."
-          : message.matched
-          ? "Свободный мир найден. Ты принял управление миром; второй игрок уже рядом."
-          : requestedRole === "auto"
-            ? message.replacedStale
-              ? "Ожидавший мир уже закрылся до подключения. Создан новый мир; ждём второго игрока."
-              : "Свободных миров не было. Создан новый мир; ждём второго игрока."
-            : "Мир создан. Можно ездить одному; ждём второго игрока.";
-        if ($("game").hidden) openGame(openedText);
-        else announce("Связь восстановлена. Твой мир продолжает работать.", true);
-        sendSnapshot(true);
-      } else if (!message.matched) {
-        announce("Свободных миров не было. Создано место ожидания первого игрока.");
-      } else {
-        announce("Мир найден. Жду состояние бухты от первого игрока…");
-        send({type: "free-hello"});
-      }
+      announce(message.matched
+        ? "Свободный мир найден. Сервер Cloudflare загружает состояние бухты…"
+        : isHost
+          ? "Свободный мир создан на сервере Cloudflare. Можно играть одному; ждём второго игрока."
+          : "Создано место ожидания первого игрока. Сервер Cloudflare сохранит единое состояние мира.");
+      sendInput(true);
       refreshRooms();
       return;
     }
 
     if (message.type === "peer-connected") {
-      if (isHost) {
-        if (world) setPlayerPresence(world, 1, true);
-        announce("Второй игрок подключён к свободной бухте.", true);
-        sendSnapshot(true);
-      } else {
-        announce("Первый игрок подключён. Загружаю бухту…", true);
-        send({type: "free-hello"});
+      announce(isHost ? "Второй игрок подключён к свободной бухте." : "Первый игрок подключён.", true);
+      return;
+    }
+
+    if (message.type === "free-pong") {
+      const sentAt = latencySentAt.get(Number(message.nonce));
+      if (sentAt != null) {
+        const sample = Math.max(0, performance.now() - sentAt);
+        networkRttMs = networkRttMs == null ? sample : networkRttMs * 0.72 + sample * 0.28;
+        latencySentAt.delete(Number(message.nonce));
       }
       return;
     }
 
-    if (message.type === "free-hello" && isHost) {
-      sendSnapshot(true);
+    if (message.type === "free-input-received") {
+      const sequence = Math.max(0, Number(message.sequence) || 0);
+      const sentAt = inputSentAt.get(sequence);
+      if (sentAt != null) {
+        const sample = Math.max(0, performance.now() - sentAt);
+        inputReceiptMs = inputReceiptMs == null ? sample : inputReceiptMs * 0.68 + sample * 0.32;
+      }
       return;
     }
 
-    if (message.type === "free-input" && isHost && world) {
-      setPlayerPresence(world, 1, true);
-      setPlayerInput(world, 1, message.input || {});
-      return;
-    }
-
-    if (message.type === "free-snapshot" && !isHost) {
-      world = message.world;
-      if ($("game").hidden) openGame("Ты вошёл в свободную бухту. У тебя отдельная лодка.");
-      render();
-      return;
-    }
-
-    if (message.type === "free-events") {
+    if (message.type === "free-state") {
+      receivedStateCount += 1;
+      const sequence = Math.max(0, Number(message.sequence) || 0);
+      if (sequence <= lastStateSequence) {
+        send({type: "free-state-ack", sequence});
+        return;
+      }
+      const nextAuthoritative = message.full === false
+        ? applyReplicatedWorldDelta(authoritativeWorld, message.delta)
+        : message.world;
+      if (!nextAuthoritative) {
+        send({type: "free-resync"});
+        return;
+      }
+      authoritativeWorld = nextAuthoritative;
+      const previousWorld = world;
+      const renderWorld = typeof structuredClone === "function"
+        ? structuredClone(authoritativeWorld)
+        : JSON.parse(JSON.stringify(authoritativeWorld));
+      world = reconcileLocalPrediction(previousWorld, renderWorld, playerIndex);
+      lastStateSequence = sequence;
+      lastStateAt = performance.now();
+      // Acknowledge before speech, audio or rendering. Even if an assistive
+      // technology blocks the main thread afterward, the server will retain
+      // only one newer state instead of building a stale queue.
+      send({type: "free-state-ack", sequence});
+      const acknowledged = Math.max(0, Number(message.ackInput) || 0);
+      const sentAt = inputSentAt.get(acknowledged);
+      if (sentAt != null) {
+        const sample = Math.max(0, performance.now() - sentAt);
+        controlLatencyMs = controlLatencyMs == null ? sample : controlLatencyMs * 0.68 + sample * 0.32;
+      }
+      for (const sequenceNumber of [...inputSentAt.keys()]) {
+        if (sequenceNumber <= acknowledged) inputSentAt.delete(sequenceNumber);
+      }
       for (const gameEvent of message.events || []) handleGameEvent(gameEvent);
+      if ($("game").hidden) openGame("Ты вошёл в свободную бухту. Мир работает на сервере Cloudflare.");
+      else render();
       return;
     }
 
     if (message.type === "network-closed") {
-      if (isHost && world) {
-        setPlayerPresence(world, 1, false);
-        setPlayerInput(world, 1, {});
-      }
       const waiting = message.waitingFor === "captain" ? "создателя мира" : "второго игрока";
-      announce(`Игрок отключился. Комната сохранена и ждёт ${waiting}.`, true);
+      announce(`Игрок отключился. Сервер продолжает мир и ждёт ${waiting}.`, true);
     }
   });
 
@@ -283,11 +313,10 @@ function connect(role, savedWorld = null) {
   connection.addEventListener("close", () => {
     if (socket !== connection) return;
     stopHeartbeat();
-    const playingAlone = lobbyReady
-      && isHost
-      && world
-      && !world.freeActivities?.presence?.[1];
-    if (playingAlone && !leavingGame) reconnectSoloWorld(world);
+    stopLatencyProbe();
+    if (lobbyReady && world && !leavingGame) {
+      reconnectToRoom(isHost ? "captain" : "crew", roomId);
+    }
     else if ($("game").hidden) resetButtons();
   });
 }
@@ -297,28 +326,21 @@ function leaveGame() {
   stopReconnect();
   releaseAllMovement();
   stopHeartbeat();
+  stopLatencyProbe();
+  speech.cancel();
   audio.stopAll();
   socket?.close(1000, "leave");
   location.href = "/free-roam.html";
 }
 
-function sendSnapshot(force = false) {
-  if (!isHost || !world) return;
-  const now = performance.now();
-  if (!force && now - lastSnapshotAt < 90) return;
-  lastSnapshotAt = now;
-  send({type: "free-snapshot", world: snapshotWorld(world)});
-}
-
 function sendInput(force = false) {
-  if (isHost) {
-    if (world) setPlayerInput(world, playerIndex, localInput);
-    return;
-  }
   const serialized = JSON.stringify(localInput);
   if (!force && serialized === lastInputSent) return;
   lastInputSent = serialized;
-  send({type: "free-input", input: localInput});
+  const sequence = ++inputSequence;
+  inputSentAt.set(sequence, performance.now());
+  while (inputSentAt.size > 48) inputSentAt.delete(inputSentAt.keys().next().value);
+  send({type: "free-input", sequence, input: localInput});
 }
 
 function opposite(name) {
@@ -327,13 +349,19 @@ function opposite(name) {
 
 function setControl(name, active) {
   if (!(name in localInput)) return;
+  let changed = localInput[name] !== Boolean(active);
   if (active && movementNames.includes(name)) {
     const other = opposite(name);
-    if (other) localInput[other] = false;
+    if (other && localInput[other]) {
+      localInput[other] = false;
+      changed = true;
+    }
   }
+  if (!changed) return false;
   localInput[name] = Boolean(active);
   sendInput(true);
   syncControlButtons();
+  return true;
 }
 
 function toggleControl(name) {
@@ -405,15 +433,13 @@ function frame(now) {
   if ($("game").hidden) return;
   const dt = Math.min(0.1, Math.max(0, (now - previousFrame) / 1000));
   previousFrame = now;
-  if (isHost && world) {
-    setPlayerInput(world, playerIndex, localInput);
-    stepFreeWorld(world, dt);
-    const events = drainEvents(world);
-    for (const event of events) handleGameEvent(event);
-    if (events.length) send({type: "free-events", events});
-    sendSnapshot();
+  if (world) {
+    predictLocalWorld(world, playerIndex, localInput, dt);
+    if (now - lastRenderAt >= 32) {
+      lastRenderAt = now;
+      render();
+    }
   }
-  render();
   requestAnimationFrame(frame);
 }
 
@@ -462,6 +488,13 @@ function render() {
     : world.freeScenario?.phase === "victory"
       ? "все уничтожены"
       : "ещё не появились";
+  const snapshotAge = lastStateAt ? Math.max(0, performance.now() - lastStateAt) : null;
+  $("networkValue").textContent = [
+    networkRttMs == null ? null : `сеть ${Math.round(networkRttMs)} мс`,
+    inputReceiptMs == null ? null : `приём ${Math.round(inputReceiptMs)} мс`,
+    controlLatencyMs == null ? null : `управление ${Math.round(controlLatencyMs)} мс`,
+    snapshotAge == null ? null : `снимок ${Math.round(snapshotAge)} мс`,
+  ].filter(Boolean).join(", ") || "измеряется";
   $("actionButton").textContent = combat.knockedDown
     ? "Сбит с ног — жди"
     : combat.carriedCrate
@@ -858,13 +891,8 @@ const targetMenu = createTargetMenu({
   render,
 });
 
-document.addEventListener("click", event => {
-  if (event.detail === 0 && event.target.closest("button")) readerInputDetected = true;
-}, true);
-if ("speechSynthesis" in window) {
-  refreshVoice();
-  window.speechSynthesis.addEventListener?.("voiceschanged", refreshVoice);
-}
+document.addEventListener("pointerdown", () => speech.prime(), {capture: true});
+document.addEventListener("keydown", () => speech.prime(), {capture: true});
 
 $("hostButton").addEventListener("click", () => connect("captain"));
 $("joinButton").addEventListener("click", () => connect("auto"));
@@ -873,6 +901,7 @@ $("leaveButton").addEventListener("click", leaveGame);
 $("statusButton").addEventListener("click", () => {
   if (world) announce(playerStatus(world, playerIndex), true);
 });
+$("speechButton").addEventListener("click", () => setSpeechEnabled(!speech.enabled));
 $("controlModeButton").addEventListener("click", () => setGestureMode(!gestureMode));
 bindHold($("upButton"), "up");
 bindHold($("downButton"), "down");
@@ -895,6 +924,7 @@ $("pumpButton").addEventListener("click", () => toggleControl("pump"));
 $("repairButton").addEventListener("click", () => toggleControl("repair"));
 bindGestures();
 bindKeyboard();
+setSpeechEnabled(readSpeechPreference(), false);
 setGestureMode(gestureMode, false);
 syncControlButtons();
 refreshRooms();
@@ -908,12 +938,28 @@ window.__freeRoam = {
   setPlayerIndex: value => { playerIndex = Number(value) || 0; render(); },
   input: localInput,
   setControl,
-  step: seconds => { if (world) { stepFreeWorld(world, seconds); render(); } },
+  step: seconds => { if (world) { predictLocalWorld(world, playerIndex, localInput, seconds); render(); } },
   status: () => world && playerStatus(world, playerIndex),
   gestureDirection: () => gestureDirection,
   isHost: () => isHost,
   playerIndex: () => playerIndex,
   audioDiagnostics: () => globalThis.__freeRoamAudioDiagnostics || null,
+  speechDiagnostics: () => ({
+    available: speech.available,
+    enabled: speech.enabled,
+    activeText: speech.activeText,
+    pendingText: speech.pendingText,
+    voice: speech.voice?.name || null,
+  }),
+  networkDiagnostics: () => ({
+    stateSequence: lastStateSequence,
+    receivedStateCount,
+    stateAgeMs: lastStateAt ? performance.now() - lastStateAt : null,
+    networkRttMs,
+    inputReceiptMs,
+    controlLatencyMs,
+  }),
+  disconnectForTest: () => socket?.close(4100, "browser-test"),
   roomId: () => roomId,
   preferredRoom: () => preferredRoomId,
   handleEvent: event => handleGameEvent(event),

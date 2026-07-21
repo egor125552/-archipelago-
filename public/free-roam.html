@@ -41,6 +41,7 @@
         <div class="header-actions">
           <button id="controlModeButton" class="small" aria-pressed="false">Управление: кнопки</button>
           <button id="statusButton" class="small">Где я?</button>
+          <button id="speechButton" class="small" aria-pressed="true">Озвучка игры: включена</button>
           <button id="leaveButton" class="small">Выйти</button>
         </div>
       </header>
@@ -62,6 +63,7 @@
         <div><span>Доставка</span><strong id="scoreValue">0</strong></div>
         <div><span>Сценарий</span><strong id="scenarioValue">доставка</strong></div>
         <div><span>Преследователи</span><strong id="marauderValue">ещё не появились</strong></div>
+        <div><span>Сеть</span><strong id="networkValue">измеряется</strong></div>
       </section>
 
       <section id="playSurface" class="play-surface" aria-label="Игровая поверхность. Свайп с удержанием управляет лодкой или движением игрока">
@@ -98,9 +100,8 @@
       </details>
     </section>
   </main>
-  <script type="module" src="src/free-roam-v4.js?v=38"></script>
+  <script type="module" src="src/free-roam-v4.js?v=40"></script>
   <script type="module" src="src/free-roam-automatic-hold-v36.js?v=2"></script>
   <script type="module" src="src/free-roam-accessibility.js?v=1"></script>
-  <script type="module" src="src/free-roam-speech-fix.js?v=1"></script>
 </body>
 </html>

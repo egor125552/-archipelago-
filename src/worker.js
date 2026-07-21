@@ -1,4 +1,14 @@
 import {chooseAnyWaitingRoom, chooseWaitingRoom, createRoomCode, missingRole, oppositeRole, publicRoomList} from "./lobby-core.js";
+import {
+  FREE_TICK_MS,
+  applyServerFreeInput,
+  createServerFreeRoom,
+  freePlayerIndex,
+  setServerFreePresence,
+  snapshotServerFreeRoom,
+  tickServerFreeRoom,
+} from "./free-roam-server.js";
+import {diffReplicatedWorld} from "../public/src/free-roam-replication.js";
 
 const SOUND_PROXY = Object.freeze({
   "/api/sound/footstep-1.ogg": "https://opengameart.org/sites/default/files/01-footstep_0.ogg",
@@ -7,7 +17,24 @@ const SOUND_PROXY = Object.freeze({
 });
 
 const ROOM_HEARTBEAT_TIMEOUT_MS = 18_000;
+const FREE_RECONNECT_GRACE_MS = 120_000;
 const ROOM_ROLES = Object.freeze(["captain", "crew"]);
+const MAX_PENDING_FREE_EVENTS = 128;
+
+function compactPendingFreeEvents(events) {
+  if (events.length <= MAX_PENDING_FREE_EVENTS) return events;
+  const described = events
+    .map((event, index) => ({event, index}))
+    .filter(({event}) => Boolean(event?.text))
+    .slice(-96);
+  const ambient = events
+    .map((event, index) => ({event, index}))
+    .filter(({event}) => !event?.text)
+    .slice(-32);
+  return [...described, ...ambient]
+    .sort((left, right) => left.index - right.index)
+    .map(({event}) => event);
+}
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -40,8 +67,10 @@ async function proxySound(request, source) {
 
 function safeSend(socket, payload) {
   try {
-    if (socket?.readyState === 1) socket.send(JSON.stringify(payload));
-  } catch (_) {}
+    if (socket?.readyState !== 1) return false;
+    socket.send(JSON.stringify(payload));
+    return true;
+  } catch (_) { return false; }
 }
 
 function parseMessage(data) {
@@ -62,6 +91,77 @@ export class Lobby {
     this.state = state;
     this.rooms = new Map();
     this.clients = new Map();
+    this.freeTickTimer = null;
+  }
+
+  ensureFreeRoom(room, now = Date.now()) {
+    if (room?.mode !== "free") return null;
+    room.freeServer ||= createServerFreeRoom(now);
+    return room.freeServer;
+  }
+
+  ensureFreeTicker() {
+    if (this.freeTickTimer) return;
+    this.freeTickTimer = setInterval(() => this.tickFreeRooms(Date.now()), FREE_TICK_MS);
+    this.freeTickTimer?.unref?.();
+  }
+
+  stopFreeTickerIfIdle() {
+    const active = [...this.rooms.values()].some(room => (
+      room.mode === "free" && (socketLooksOpen(room.captain) || socketLooksOpen(room.crew))
+    ));
+    if (active || !this.freeTickTimer) return;
+    clearInterval(this.freeTickTimer);
+    this.freeTickTimer = null;
+  }
+
+  offerFreeState(socket, state) {
+    const client = this.clients.get(socket);
+    if (!client || client.mode !== "free" || !state) return;
+    const previousEvents = client.freePending?.events || [];
+    client.freePending = {
+      ...state,
+      events: compactPendingFreeEvents([...previousEvents, ...(state.events || [])]),
+    };
+    this.flushFreeState(socket);
+  }
+
+  flushFreeState(socket) {
+    const client = this.clients.get(socket);
+    if (!client || client.mode !== "free" || client.freeStateInFlight || !client.freePending) return false;
+    const pending = client.freePending;
+    const playerIndex = freePlayerIndex(client.role);
+    const full = !client.freeAckedWorld;
+    const payload = {
+      type: "free-state",
+      sequence: pending.sequence,
+      serverAt: pending.serverAt,
+      ackInput: pending.ackInput?.[playerIndex] || 0,
+      full,
+      events: pending.events || [],
+    };
+    if (full) payload.world = pending.world;
+    else payload.delta = diffReplicatedWorld(client.freeAckedWorld, pending.world);
+    const sent = safeSend(socket, payload);
+    if (!sent) return false;
+    client.freePending = null;
+    client.freeStateInFlight = pending.sequence;
+    client.freeInFlightWorld = pending.world;
+    return true;
+  }
+
+  broadcastFreeState(room, state) {
+    for (const role of ROOM_ROLES) {
+      if (room?.[role]) this.offerFreeState(room[role], state);
+    }
+  }
+
+  tickFreeRooms(now = Date.now()) {
+    for (const room of this.rooms.values()) {
+      if (room.mode !== "free" || (!room.captain && !room.crew)) continue;
+      const serverRoom = this.ensureFreeRoom(room, now);
+      this.broadcastFreeState(room, tickServerFreeRoom(serverRoom, now));
+    }
   }
 
   touch(room, role, now = Date.now()) {
@@ -72,16 +172,22 @@ export class Lobby {
   removeRole(room, role, notify = true) {
     const socket = room?.[role];
     if (!socket) return;
+    if (room.mode === "free") setServerFreePresence(this.ensureFreeRoom(room), role, false);
     this.clients.delete(socket);
     room[role] = null;
     room.pending[role] = [];
     room.lastSeen ||= {captain: 0, crew: 0};
     room.lastSeen[role] = 0;
+    if (!room.captain && !room.crew && room.mode === "free") room.emptySince = Date.now();
     const otherRole = oppositeRole(role);
     const other = room[otherRole];
     if (notify && other) {
       safeSend(other, {type: "network-closed", mode: room.mode || "ops", waitingFor: role});
+      if (room.mode === "free") {
+        this.offerFreeState(other, snapshotServerFreeRoom(room.freeServer, Date.now()));
+      }
     }
+    this.stopFreeTickerIfIdle();
   }
 
   pruneRooms(now = Date.now()) {
@@ -97,8 +203,13 @@ export class Lobby {
           this.removeRole(room, role, true);
         }
       }
-      if (!room.captain && !room.crew) this.rooms.delete(room.id);
+      if (!room.captain && !room.crew) {
+        const keepForReconnect = room.mode === "free"
+          && now - (Number(room.emptySince) || now) < FREE_RECONNECT_GRACE_MS;
+        if (!keepForReconnect) this.rooms.delete(room.id);
+      }
     }
+    this.stopFreeTickerIfIdle();
   }
 
   async fetch(request) {
@@ -135,7 +246,13 @@ export class Lobby {
       if (!room) room = chooseAnyWaitingRoom(this.rooms, mode);
       role = missingRole(room) || "captain";
     } else {
-      room = chooseWaitingRoom(this.rooms, role, mode);
+      const preferred = requestedRoom ? this.rooms.get(requestedRoom) : null;
+      if (preferred && (preferred.mode || "ops") === mode && !preferred[role]) {
+        room = preferred;
+        preferredRoomFound = true;
+      } else {
+        room = chooseWaitingRoom(this.rooms, role, mode);
+      }
     }
 
     const created = !room;
@@ -151,14 +268,28 @@ export class Lobby {
         createdAt: Date.now(),
         pending: {captain: [], crew: []},
         lastSeen: {captain: 0, crew: 0},
-        lastFreeSnapshot: null,
+        emptySince: 0,
+        freeServer: mode === "free" ? createServerFreeRoom(Date.now()) : null,
       };
       this.rooms.set(id, room);
     }
 
     room[role] = server;
+    room.emptySince = 0;
+    if (mode === "free") {
+      setServerFreePresence(this.ensureFreeRoom(room), role, true);
+      this.ensureFreeTicker();
+    }
     this.touch(room, role);
-    this.clients.set(server, {roomId: room.id, role, mode});
+    this.clients.set(server, {
+      roomId: room.id,
+      role,
+      mode,
+      freeStateInFlight: 0,
+      freeInFlightWorld: null,
+      freeAckedWorld: null,
+      freePending: null,
+    });
 
     server.addEventListener("message", event => this.onMessage(server, event.data));
     server.addEventListener("close", () => this.onClose(server));
@@ -177,10 +308,12 @@ export class Lobby {
       mode,
       matched,
       waitingFor: matched ? null : oppositeRole(role),
-      resumeWorld: mode === "free" && role === "captain"
-        ? room.lastFreeSnapshot?.world || null
-        : null,
+      serverAuthoritative: mode === "free",
     });
+
+    if (mode === "free") {
+      this.offerFreeState(server, snapshotServerFreeRoom(room.freeServer, Date.now()));
+    }
 
     if (matched) this.finishMatch(room);
 
@@ -191,6 +324,10 @@ export class Lobby {
     safeSend(room.captain, {type: "peer-connected", room: room.id, mode: room.mode || "ops"});
     safeSend(room.crew, {type: "peer-connected", room: room.id, mode: room.mode || "ops"});
 
+    if (room.mode === "free") {
+      this.broadcastFreeState(room, snapshotServerFreeRoom(this.ensureFreeRoom(room), Date.now()));
+      return;
+    }
     for (const message of room.pending.captain.splice(0)) safeSend(room.crew, message);
     for (const message of room.pending.crew.splice(0)) safeSend(room.captain, message);
   }
@@ -204,13 +341,43 @@ export class Lobby {
     const message = parseMessage(rawData);
     if (!message || typeof message !== "object") return;
     if (message.type === "heartbeat") return;
-    if (
-      client.mode === "free"
-      && client.role === "captain"
-      && message.type === "free-snapshot"
-      && message.world
-    ) {
-      room.lastFreeSnapshot = message;
+
+    if (client.mode === "free") {
+      if (message.type === "free-ping") {
+        safeSend(socket, {type: "free-pong", nonce: message.nonce});
+        return;
+      }
+      if (message.type === "free-input") {
+        const accepted = applyServerFreeInput(room.freeServer, client.role, message.input, message.sequence);
+        safeSend(socket, {
+          type: "free-input-received",
+          sequence: Math.max(0, Number(message.sequence) || 0),
+          accepted,
+          serverAt: Date.now(),
+        });
+        return;
+      }
+      if (message.type === "free-state-ack") {
+        const acknowledged = Math.max(0, Number(message.sequence) || 0);
+        if (acknowledged >= client.freeStateInFlight) {
+          client.freeAckedWorld = client.freeInFlightWorld;
+          client.freeStateInFlight = 0;
+          client.freeInFlightWorld = null;
+          this.flushFreeState(socket);
+        }
+        return;
+      }
+      if (message.type === "free-resync") {
+        client.freeStateInFlight = 0;
+        client.freeInFlightWorld = null;
+        client.freeAckedWorld = null;
+        client.freePending = null;
+        this.offerFreeState(socket, snapshotServerFreeRoom(room.freeServer, Date.now()));
+        return;
+      }
+      // Free-roam clients submit commands only. World snapshots and combat
+      // events are produced exclusively by the Durable Object.
+      return;
     }
 
     const otherRole = oppositeRole(client.role);
@@ -221,7 +388,7 @@ export class Lobby {
     }
 
     const queue = room.pending[client.role];
-    if (message.type === "snapshot" || message.type === "free-snapshot") {
+    if (message.type === "snapshot") {
       const previous = queue.findIndex(item => item?.type === message.type);
       if (previous >= 0) queue.splice(previous, 1);
     }
@@ -239,7 +406,8 @@ export class Lobby {
     }
     if (room[client.role] === socket) this.removeRole(room, client.role, true);
     else this.clients.delete(socket);
-    if (!room.captain && !room.crew) this.rooms.delete(room.id);
+    if (!room.captain && !room.crew && room.mode !== "free") this.rooms.delete(room.id);
+    this.stopFreeTickerIfIdle();
   }
 }
 

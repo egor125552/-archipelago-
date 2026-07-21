@@ -5,13 +5,13 @@ export function grantWeaponFromCrate(world, crate, playerIndex, emit) {
   const combat = world.players[playerIndex]?.combat;
   if (!combat) return false;
   combat.weapons.automatic = true;
-  combat.ammo += 48;
+  combat.ammo += 100;
   combat.equipped = "automatic";
   crate.weaponGrantedTo = playerIndex;
   emit?.(
     world,
     "automatic-ready",
-    "Автомат снят с ящика и готов. Боезапас 48. Сам ящик всё равно доставь к причалу.",
+    "Автомат снят с ящика и готов. Боезапас 100. Сам ящик всё равно доставь к причалу.",
     [playerIndex],
     {
       sourcePlayer: playerIndex,
