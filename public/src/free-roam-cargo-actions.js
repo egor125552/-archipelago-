@@ -59,8 +59,8 @@ export function updateCargoActionPrompts(world, emit) {
         world,
         "cargo-theft-ready",
         best <= 8.5
-          ? "Чужая лодка с грузом рядом. Нажми F, чтобы украсть один ящик."
-          : `Чужая лодка с грузом в ${Math.round(best)} метрах. Подойди к борту и нажми F, чтобы украсть ящик.`,
+          ? "Чужая лодка с грузом рядом. Выполни действие, чтобы украсть один ящик."
+          : `Чужая лодка с грузом в ${Math.round(best)} метрах. Подойди к борту и выполни действие, чтобы украсть ящик.`,
         [index],
         {sourcePlayer: targetBoat.driver ?? targetBoat.owner, x: targetBoat.x, y: targetBoat.y},
       );
