@@ -50,7 +50,7 @@ export function createTargetMenu({
     const target = refresh();
     announce(
       target
-        ? `Выбор цели. ${describeCombatTarget(target, cursor, targets.length)} Стрелки вверх и вниз листают, Enter подтверждает, Escape отменяет.`
+        ? `Выбор цели. ${describeCombatTarget(target, cursor, targets.length)} Листай цели, подтверди нужную или отмени выбор.`
         : "В радиусе стрельбы сейчас нет доступных целей.",
       true,
     );
@@ -88,7 +88,7 @@ export function createTargetMenu({
     targets = [];
     cursor = 0;
     sendInput();
-    announce(`Навожусь на цель: ${target.label}. Выстрела не будет, пока ты не удержишь X.`, true);
+    announce(`Навожусь на цель: ${target.label}. Огонь начнётся только после отдельной команды атаки.`, true);
     render();
   }
 
