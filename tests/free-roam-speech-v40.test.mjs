@@ -29,35 +29,41 @@ function fakeSpeech() {
   return {synth, Utterance, utterances, cancelCount: () => cancelCount};
 }
 
-test("ordinary Windows announcements retain only the latest pending phrase", () => {
+test("ordinary announcements immediately replace speech without a delayed queue", () => {
   const fake = fakeSpeech();
   const speech = createSpeechController(fake);
   speech.speak("Первая фраза");
   speech.speak("Устаревшая позиция");
   speech.speak("Новая позиция");
 
-  assert.equal(fake.utterances.length, 1);
-  assert.equal(speech.pendingText, "Новая позиция");
-  fake.utterances[0].onend();
-  assert.equal(fake.utterances.length, 2);
-  assert.equal(fake.utterances[1].text, "Новая позиция");
-  assert.equal(fake.utterances[1].voice.name, "Milena Enhanced");
+  assert.equal(fake.cancelCount(), 3);
+  assert.equal(fake.utterances.length, 3);
+  assert.equal(fake.utterances.at(-1).text, "Новая позиция");
+  assert.equal(fake.utterances.at(-1).voice.name, "Milena Enhanced");
+  assert.equal(speech.activeText, "Новая позиция");
+  assert.equal(speech.pendingText, "");
   speech.cancel();
 });
 
-test("critical speech interrupts without disabling later speech", async () => {
+test("critical speech replaces immediately without disabling later speech", () => {
   const fake = fakeSpeech();
   const speech = createSpeechController(fake);
   speech.speak("Обычная подсказка");
   speech.speak("Критическая пробоина", {interrupt: true});
-  await new Promise(resolve => setTimeout(resolve, 5));
 
-  assert.equal(fake.cancelCount(), 1);
+  assert.equal(fake.cancelCount(), 2);
   assert.equal(fake.utterances.at(-1).text, "Критическая пробоина");
   fake.utterances.at(-1).onend();
   speech.speak("Озвучка продолжает работать");
   assert.equal(fake.utterances.at(-1).text, "Озвучка продолжает работать");
   speech.cancel();
+});
+
+test("keyboard activation cannot silently disable game speech again", async () => {
+  const source = await import("node:fs/promises")
+    .then(fs => fs.readFile(new URL("../public/src/free-roam-v4.js", import.meta.url), "utf8"));
+  assert.doesNotMatch(source, /readerInputDetected/);
+  assert.doesNotMatch(source, /event\.detail\s*===\s*0[\s\S]{0,160}setEnabled\s*\(\s*false/);
 });
 
 test("enhanced Russian voices outrank compact and non-Russian voices", () => {

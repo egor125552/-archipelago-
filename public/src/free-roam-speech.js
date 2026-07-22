@@ -22,7 +22,6 @@ export function createSpeechController({
   let selectedVoice = null;
   let activeToken = 0;
   let activeText = "";
-  let pendingText = "";
   let watchdog = 0;
   let primed = false;
 
@@ -58,9 +57,6 @@ export function createSpeechController({
       clearWatchdog();
       activeText = "";
       onIdle();
-      const next = pendingText;
-      pendingText = "";
-      if (next) start(next);
     };
     utterance.onend = finish;
     utterance.onerror = finish;
@@ -79,27 +75,21 @@ export function createSpeechController({
   function speak(text, {interrupt = false} = {}) {
     const normalized = String(text || "").replace(/\s+/g, " ").trim();
     if (!enabled || !available || !normalized) return false;
-    if (!activeText) return start(normalized);
-    if (!interrupt) {
-      // Retain only the latest ordinary report, rather than reading obsolete
-      // positions after the game has already moved on.
-      pendingText = normalized;
-      return true;
-    }
 
-    pendingText = "";
+    // Match the original free-roam speech behaviour: there is no application
+    // speech queue. A newer game message immediately replaces the phrase that
+    // is currently being spoken, so an old position or combat report can
+    // never be heard after the situation has already changed. `interrupt`
+    // remains accepted for API compatibility; every announcement is fresh.
+    void interrupt;
     activeText = "";
     clearWatchdog();
     activeToken += 1;
     try { synth.cancel(); } catch (_) {}
-    setTimeout(() => {
-      if (enabled && !activeText) start(normalized);
-    }, 0);
-    return true;
+    return start(normalized);
   }
 
   function cancel() {
-    pendingText = "";
     activeText = "";
     clearWatchdog();
     activeToken += 1;
@@ -138,7 +128,8 @@ export function createSpeechController({
     setEnabled,
     get enabled() { return enabled; },
     get activeText() { return activeText; },
-    get pendingText() { return pendingText; },
+    // Kept for diagnostics compatibility. The queue itself no longer exists.
+    get pendingText() { return ""; },
     get voice() { return selectedVoice; },
   };
 }

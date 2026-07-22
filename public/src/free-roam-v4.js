@@ -7,7 +7,7 @@ import {
 import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=38";
 import {predictLocalWorld, reconcileLocalPrediction} from "./free-roam-client-prediction.js?v=40";
 import {applyReplicatedWorldDelta} from "./free-roam-replication.js?v=40";
-import {createSpeechController} from "./free-roam-speech.js?v=40";
+import {createSpeechController} from "./free-roam-speech.js?v=41";
 import {directionFromDelta} from "./free-roam-gesture-model.js";
 import {classifyActionGesture, gestureMetrics} from "./free-roam-action-gestures.js";
 import {resolveCombatTarget} from "./free-roam-targeting.js?v=32";
