@@ -26,7 +26,7 @@ test("gesture watchdog records and repairs stale pointer state", async () => {
 
 test("startup migration runs before the game and watchdog runs after input bindings", async () => {
   const html = await read("../public/free-roam.html");
-  const startup = html.indexOf("free-roam-startup-v1.js?v=2");
+  const startup = html.indexOf("free-roam-startup-v1.js?v=3");
   const game = html.indexOf("free-roam-v4.js?v=43");
   const accessibility = html.indexOf("free-roam-accessibility.js?v=1");
   const watchdog = html.indexOf("free-roam-gesture-watchdog-v1.js?v=1");
