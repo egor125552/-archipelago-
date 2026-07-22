@@ -2,7 +2,7 @@ import {defineConfig} from "@playwright/test";
 
 export default defineConfig({
   testDir: "./tests",
-  testMatch: "free-roam.e2e.spec.mjs",
+  testMatch: ["free-roam.e2e.spec.mjs", "free-roam-settings.e2e.spec.mjs"],
   timeout: 60_000,
   expect: {timeout: 12_000},
   fullyParallel: false,
