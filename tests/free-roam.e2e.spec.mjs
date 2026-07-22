@@ -219,3 +219,36 @@ test("the same role reconnects to the live server room", async ({browser}, testI
     await crewContext.close();
   }
 });
+
+test("a hard page reload keeps controls working in the same live room", async ({browser}, testInfo) => {
+  const {captainContext, crewContext, captain, crew} = await createPair(browser, testInfo);
+  try {
+    const roomBefore = await crew.evaluate(() => window.__freeRoam.roomId());
+
+    // Raise the server-side high-water mark far above the counter that a new
+    // JavaScript page starts with. Before the fix, the reloaded page's inputs
+    // 1, 2, 3... were all rejected by this surviving room.
+    await crew.evaluate(() => {
+      for (let index = 0; index < 40; index += 1) {
+        window.__freeRoam.setControl("left", true);
+        window.__freeRoam.setControl("left", false);
+      }
+    });
+    await crew.waitForTimeout(700);
+
+    await crew.reload({waitUntil: "domcontentloaded"});
+    await expect(crew.locator("#game")).toBeVisible({timeout: 10_000});
+    await expect.poll(() => crew.evaluate(() => window.__freeRoam.roomId()), {timeout: 10_000}).toBe(roomBefore);
+    await expect.poll(() => captain.evaluate(() => window.__freeRoam.getWorld().freeActivities.presence[1])).toBe(true);
+
+    const beforeMove = await boatPosition(captain, 1);
+    await holdButton(crew.locator("#upButton"), 720, 111);
+    await expect.poll(
+      async () => (await boatPosition(captain, 1)).y,
+      {timeout: 6_000},
+    ).toBeLessThan(beforeMove.y - 0.2);
+  } finally {
+    await captainContext.close();
+    await crewContext.close();
+  }
+});
