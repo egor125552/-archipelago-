@@ -1,0 +1,1 @@
+Verify page-reload input sequence recovery and the full test suite.
