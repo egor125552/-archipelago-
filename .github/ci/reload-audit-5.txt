@@ -1,0 +1,1 @@
+Verify reliable session persistence, reconnect input sequence reset, Chromium, mobile WebKit and Worker bundle.
