@@ -79,7 +79,7 @@ test("three ordinary paced fist hits produce a real stun at critical health", ()
   assert.ok(events.some(event => event.type === "player-knockdown"));
 });
 
-test("a knocked-down player cannot use F until getting back up", () => {
+test("a knocked-down player cannot use the action until getting back up", () => {
   const world = createFreeWorld();
   const player = world.players[0];
   const crate = world.freeActivities.crates.find(candidate => candidate.kind === "plates");
@@ -151,7 +151,7 @@ test("a player cannot walk through a boat or the active pursuer", () => {
   assert.ok(Math.hypot(player.x - pursuer.x, player.y - pursuer.y) >= 8.19);
 });
 
-test("a carried crate is accepted at the dock when F is pressed", () => {
+test("a carried crate is accepted at the dock when the action is pressed", () => {
   const world = createFreeWorld();
   const player = world.players[0];
   const crate = world.freeActivities.crates.find(candidate => candidate.kind === "plates");
@@ -179,7 +179,7 @@ test("approaching a loaded enemy boat clearly explains how to steal its cargo", 
   const events = run(world, 0.2);
 
   assert.ok(events.some(event => event.type === "cargo-theft-ready" && event.targets.includes(1)));
-  assert.match(events.find(event => event.type === "cargo-theft-ready").text, /нажми F/i);
+  assert.match(events.find(event => event.type === "cargo-theft-ready").text, /выполни действие/i);
 });
 
 test("the interface explicitly shows that a player is stunned", async () => {
