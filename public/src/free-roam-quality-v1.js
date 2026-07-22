@@ -1,150 +1,161 @@
 "use strict";
 
+import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=38";
+import {predictLocalWorld} from "./free-roam-client-prediction.js?v=40";
 import {
-  LIGHTWEIGHT_ACK_DELAY_MS,
-  LIGHTWEIGHT_FRAME_INTERVAL_MS,
-  isFreeStateAckPayload,
-  resolveLightweightPreference,
-} from "./free-roam-quality-model.js?v=1";
+  AUDIO_INTERVAL_MS,
+  createChangeGate,
+  isPredictionFrame,
+} from "./free-roam-runtime-model.js?v=1";
 
 const $ = id => document.getElementById(id);
-const STORAGE_KEY = "echo-free-roam-lightweight";
 const nativeRequestAnimationFrame = window.requestAnimationFrame.bind(window);
-const nativeWebSocketSend = WebSocket.prototype.send;
-const pendingAcks = new Map();
-let lastGameFrameAt = -Infinity;
+const textContentDescriptor = Object.getOwnPropertyDescriptor(Node.prototype, "textContent");
+const pendingAudioWorlds = new Map();
+const runtimeStats = {
+  predictionSteps: 0,
+  audioUpdates: 0,
+  committedTextWrites: 0,
+  skippedTextWrites: 0,
+  committedAttributeWrites: 0,
+  skippedAttributeWrites: 0,
+};
 
-function readStoredPreference() {
-  try { return localStorage.getItem(STORAGE_KEY) || ""; }
-  catch (_) { return ""; }
+const changeOnlyIds = [
+  "roomLabel", "message",
+  "modeValue", "speedValue", "hullValue", "waterValue", "towValue", "otherValue",
+  "healthValue", "weaponValue", "targetValue", "cargoValue", "scoreValue",
+  "scenarioValue", "marauderValue", "networkValue",
+  "controlModeButton", "speechButton", "actionButton", "jumpButton", "attackButton",
+  "weaponButton", "targetButton", "sonarButton", "guideButton", "pumpButton", "repairButton",
+];
+
+function installChangeOnlyText(node, transform = value => String(value ?? "")) {
+  if (!node || node.dataset.changeOnlyText === "true" || !textContentDescriptor?.get || !textContentDescriptor?.set) return;
+  const gate = createChangeGate(textContentDescriptor.get.call(node));
+  Object.defineProperty(node, "textContent", {
+    configurable: true,
+    enumerable: true,
+    get() {
+      return textContentDescriptor.get.call(this);
+    },
+    set(value) {
+      const next = transform(value);
+      if (!gate.shouldCommit(next)) {
+        runtimeStats.skippedTextWrites += 1;
+        return;
+      }
+      runtimeStats.committedTextWrites += 1;
+      textContentDescriptor.set.call(this, next);
+    },
+  });
+  node.dataset.changeOnlyText = "true";
+
+  const nativeSetAttribute = node.setAttribute.bind(node);
+  node.setAttribute = (name, value) => {
+    const next = String(value);
+    if (node.getAttribute(name) === next) {
+      runtimeStats.skippedAttributeWrites += 1;
+      return;
+    }
+    runtimeStats.committedAttributeWrites += 1;
+    nativeSetAttribute(name, next);
+  };
 }
 
-let lightweightMode = resolveLightweightPreference({
-  storedPreference: readStoredPreference(),
-  hardwareConcurrency: navigator.hardwareConcurrency,
-  deviceMemory: navigator.deviceMemory,
-  reducedMotion: globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches,
-});
-
-function sendPendingAck(socket) {
-  const pending = pendingAcks.get(socket);
-  if (!pending) return;
-  clearTimeout(pending.timer);
-  pendingAcks.delete(socket);
-  try { nativeWebSocketSend.call(socket, pending.payload); } catch (_) {}
+for (const id of changeOnlyIds) {
+  const node = $(id);
+  installChangeOnlyText(
+    node,
+    id === "guideButton" ? () => "Повернуть к сонару" : value => String(value ?? ""),
+  );
 }
 
-function flushPendingAcks() {
-  for (const socket of [...pendingAcks.keys()]) sendPendingAck(socket);
+const guideButton = $("guideButton");
+if (guideButton) {
+  const nativeSetAttribute = guideButton.setAttribute.bind(guideButton);
+  guideButton.setAttribute = (name, value) => {
+    if (name === "aria-pressed") return;
+    if (guideButton.getAttribute(name) === String(value)) {
+      runtimeStats.skippedAttributeWrites += 1;
+      return;
+    }
+    runtimeStats.committedAttributeWrites += 1;
+    nativeSetAttribute(name, String(value));
+  };
+  guideButton.removeAttribute("aria-pressed");
+  guideButton.setAttribute("aria-label", "Один раз повернуть лодку прямо к текущей цели сонара");
+}
+
+const nullCanvasContext = {
+  clearRect() {}, fillRect() {}, save() {}, restore() {}, translate() {}, rotate() {},
+  beginPath() {}, moveTo() {}, lineTo() {}, stroke() {}, arc() {}, fill() {},
+};
+const map = $("map");
+if (map) {
+  map.hidden = true;
+  map.width = 0;
+  map.height = 0;
+  map.dataset.rendering = "disabled";
+  map.getContext = () => nullCanvasContext;
+}
+
+document.body.classList.add("audio-only-map");
+
+const originalAudioUpdateWorld = FreeRoamAudio.prototype.updateWorld;
+FreeRoamAudio.prototype.updateWorld = function queueAudioWorld(world, playerIndex) {
+  pendingAudioWorlds.set(this, {world, playerIndex});
+};
+
+const originalAudioStopAll = FreeRoamAudio.prototype.stopAll;
+if (typeof originalAudioStopAll === "function") {
+  FreeRoamAudio.prototype.stopAll = function stopSeparatedAudio(...args) {
+    pendingAudioWorlds.delete(this);
+    return originalAudioStopAll.apply(this, args);
+  };
+}
+
+setInterval(() => {
+  if (document.hidden || $("game")?.hidden) return;
+  for (const [instance, state] of pendingAudioWorlds) {
+    if (!state.world) continue;
+    originalAudioUpdateWorld.call(instance, state.world, state.playerIndex);
+    runtimeStats.audioUpdates += 1;
+  }
+}, AUDIO_INTERVAL_MS);
+
+let predictionFrameId = 0;
+let previousPredictionAt = 0;
+
+function separatedPredictionFrame(now) {
+  const api = globalThis.__freeRoam;
+  const game = $("game");
+  if (api && game && !game.hidden) {
+    const dt = Math.min(0.1, Math.max(0, (now - previousPredictionAt) / 1000));
+    previousPredictionAt = now;
+    const currentWorld = api.getWorld?.();
+    if (currentWorld) {
+      predictLocalWorld(currentWorld, api.playerIndex(), api.input, dt);
+      runtimeStats.predictionSteps += 1;
+    }
+  } else {
+    previousPredictionAt = now;
+  }
+  predictionFrameId = nativeRequestAnimationFrame(separatedPredictionFrame);
 }
 
 window.requestAnimationFrame = function requestAnimationFrame(callback) {
-  if (!lightweightMode || callback?.name !== "frame") return nativeRequestAnimationFrame(callback);
-  return nativeRequestAnimationFrame(timestamp => {
-    const remaining = LIGHTWEIGHT_FRAME_INTERVAL_MS - (timestamp - lastGameFrameAt);
-    if (remaining <= 0) {
-      lastGameFrameAt = timestamp;
-      callback(timestamp);
-      return;
-    }
-    setTimeout(() => {
-      const now = performance.now();
-      lastGameFrameAt = now;
-      callback(now);
-    }, remaining);
-  });
+  if (!isPredictionFrame(callback)) return nativeRequestAnimationFrame(callback);
+  if (!predictionFrameId) {
+    previousPredictionAt = performance.now();
+    predictionFrameId = nativeRequestAnimationFrame(separatedPredictionFrame);
+  }
+  return predictionFrameId;
 };
 
-WebSocket.prototype.send = function send(data) {
-  if (!lightweightMode || !isFreeStateAckPayload(data)) {
-    return nativeWebSocketSend.call(this, data);
-  }
-
-  const previous = pendingAcks.get(this);
-  if (previous) {
-    previous.payload = data;
-    return;
-  }
-
-  const pending = {payload: data, timer: 0};
-  pending.timer = setTimeout(() => sendPendingAck(this), LIGHTWEIGHT_ACK_DELAY_MS);
-  pendingAcks.set(this, pending);
-};
-
-function syncCanvas() {
-  const canvas = $("map");
-  if (!canvas) return;
-  canvas.dataset.fullWidth ||= String(canvas.width || 840);
-  canvas.dataset.fullHeight ||= String(canvas.height || 640);
-  if (lightweightMode) {
-    canvas.width = 1;
-    canvas.height = 1;
-  } else {
-    canvas.width = Number(canvas.dataset.fullWidth) || 840;
-    canvas.height = Number(canvas.dataset.fullHeight) || 640;
-  }
-}
-
-function syncButton() {
-  const button = $("performanceButton");
-  if (!button) return;
-  button.setAttribute("aria-pressed", String(lightweightMode));
-  button.textContent = `Облегчённый режим: ${lightweightMode ? "включён" : "выключен"}`;
-}
-
-function syncGuideButton() {
-  const button = $("guideButton");
-  if (!button) return;
-  if (!button.dataset.oneShotSemantics) {
-    const nativeSetAttribute = button.setAttribute.bind(button);
-    button.setAttribute = (name, value) => {
-      if (name === "aria-pressed") return;
-      nativeSetAttribute(name, value);
-    };
-    button.dataset.oneShotSemantics = "true";
-  }
-  button.removeAttribute("aria-pressed");
-  button.setAttribute("aria-label", "Один раз повернуть лодку прямо к текущей цели сонара");
-}
-
-function announceMode() {
-  const text = lightweightMode
-    ? "Облегчённый режим включён. Карта отключена, а обновления выполняются реже."
-    : "Облегчённый режим выключен. Карта и плавные обновления восстановлены.";
-  const message = $("message");
-  if (message) message.textContent = text;
-  const live = $("live");
-  if (live) {
-    live.textContent = "";
-    nativeRequestAnimationFrame(() => { live.textContent = text; });
-  }
-}
-
-function setLightweightMode(enabled, {announce = true, persist = true} = {}) {
-  lightweightMode = Boolean(enabled);
-  document.body.classList.toggle("lightweight-mode", lightweightMode);
-  if (!lightweightMode) {
-    lastGameFrameAt = -Infinity;
-    flushPendingAcks();
-  }
-  if (persist) {
-    try { localStorage.setItem(STORAGE_KEY, lightweightMode ? "on" : "off"); } catch (_) {}
-  }
-  syncCanvas();
-  syncButton();
-  syncGuideButton();
-  if (announce) announceMode();
-  return lightweightMode;
-}
-
-$("performanceButton")?.addEventListener("click", () => {
-  setLightweightMode(!lightweightMode);
-});
-
-setLightweightMode(lightweightMode, {announce: false, persist: false});
-
-window.__freeRoamQuality = {
-  get lightweight() { return lightweightMode; },
-  setLightweightMode,
-  pendingAckCount: () => pendingAcks.size,
+globalThis.__freeRoamRuntime = {
+  mapRendering: false,
+  audioIntervalMs: AUDIO_INTERVAL_MS,
+  stats: runtimeStats,
+  pendingAudioCount: () => pendingAudioWorlds.size,
 };
