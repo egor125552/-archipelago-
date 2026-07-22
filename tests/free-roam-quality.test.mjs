@@ -3,26 +3,30 @@ import assert from "node:assert/strict";
 import {readFile} from "node:fs/promises";
 
 import {
-  LIGHTWEIGHT_ACK_DELAY_MS,
-  LIGHTWEIGHT_FRAME_INTERVAL_MS,
-  isFreeStateAckPayload,
-  resolveLightweightPreference,
-} from "../public/src/free-roam-quality-model.js";
+  AUDIO_INTERVAL_MS,
+  createChangeGate,
+  isPredictionFrame,
+} from "../public/src/free-roam-runtime-model.js";
 
-test("lightweight mode defaults on for weak devices and respects a saved override", () => {
-  assert.equal(resolveLightweightPreference({hardwareConcurrency: 4}), true);
-  assert.equal(resolveLightweightPreference({deviceMemory: 4}), true);
-  assert.equal(resolveLightweightPreference({hardwareConcurrency: 8, deviceMemory: 8}), false);
-  assert.equal(resolveLightweightPreference({storedPreference: "off", hardwareConcurrency: 2}), false);
-  assert.equal(resolveLightweightPreference({storedPreference: "on", hardwareConcurrency: 16}), true);
-  assert.ok(LIGHTWEIGHT_FRAME_INTERVAL_MS >= 60);
-  assert.ok(LIGHTWEIGHT_ACK_DELAY_MS >= 70);
+test("audio updates use a separate bounded interval", () => {
+  assert.ok(AUDIO_INTERVAL_MS >= 25);
+  assert.ok(AUDIO_INTERVAL_MS <= 60);
 });
 
-test("only free-state acknowledgements are throttled", () => {
-  assert.equal(isFreeStateAckPayload(JSON.stringify({type: "free-state-ack", sequence: 12})), true);
-  assert.equal(isFreeStateAckPayload(JSON.stringify({type: "free-input", sequence: 12})), false);
-  assert.equal(isFreeStateAckPayload("not json"), false);
+test("change gates commit only real text changes", () => {
+  const gate = createChangeGate("готово");
+  assert.equal(gate.shouldCommit("готово"), false);
+  assert.equal(gate.shouldCommit("в пути"), true);
+  assert.equal(gate.shouldCommit("в пути"), false);
+  assert.equal(gate.current(), "в пути");
+});
+
+test("only the main prediction frame is separated from ordinary animation callbacks", () => {
+  function frame() {}
+  function announceFrame() {}
+  assert.equal(isPredictionFrame(frame), true);
+  assert.equal(isPredictionFrame(announceFrame), false);
+  assert.equal(isPredictionFrame(null), false);
 });
 
 test("dynamic free-roam prompts do not require desktop-only keys", async () => {
@@ -45,12 +49,15 @@ test("free-roam entry describes its actual scenario", async () => {
   assert.match(source, /тремя катерами/i);
 });
 
-test("free-roam page exposes lightweight mode and one-shot sonar wording", async () => {
+test("free-roam page exposes the audio-only runtime and one-shot sonar wording", async () => {
   const html = await readFile(new URL("../public/free-roam.html", import.meta.url), "utf8");
   const css = await readFile(new URL("../public/free-roam.css", import.meta.url), "utf8");
+  const quality = await readFile(new URL("../public/src/free-roam-quality-v1.js", import.meta.url), "utf8");
   assert.match(html, /id="performanceButton"/);
   assert.match(html, /free-roam-quality-v1\.js/);
   assert.match(html, /Один раз повернуть лодку/);
   assert.match(css, /body\.lightweight-mode #map/);
   assert.match(css, /#guideButton::before/);
+  assert.match(quality, /audio-only-map/);
+  assert.match(quality, /free-roam-runtime-model\.js/);
 });
