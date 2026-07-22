@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
   <meta name="theme-color" content="#071217">
   <title>Свободная бухта — Эхо-Архипелаг</title>
-  <link rel="stylesheet" href="free-roam.css?v=5">
+  <link rel="stylesheet" href="free-roam.css?v=6">
 </head>
 <body>
   <a class="skip" href="#main">К игре</a>
@@ -42,7 +42,6 @@
           <button id="controlModeButton" class="small" aria-pressed="false">Управление: кнопки</button>
           <button id="statusButton" class="small">Где я?</button>
           <button id="speechButton" class="small" aria-pressed="true">Озвучка игры: включена</button>
-          <button id="performanceButton" class="small" aria-pressed="false">Облегчённый режим: определяется</button>
           <button id="leaveButton" class="small">Выйти</button>
         </div>
       </header>
@@ -68,7 +67,7 @@
       </section>
 
       <section id="playSurface" class="play-surface" aria-label="Игровая поверхность. Свайп с удержанием управляет лодкой или движением игрока">
-        <canvas id="map" width="840" height="640" aria-hidden="true"></canvas>
+        <canvas id="map" width="0" height="0" hidden aria-hidden="true"></canvas>
         <p id="gestureGuide" class="gesture-hint">Жесты: свайп с удержанием — движение; касание — действие; двойное касание — прыжок; удержание одним пальцем — сильный удар; касание двумя — сонар; двойное касание двумя — состояние; удержание двумя — пластина; взмах двумя вбок — переключить оружие; вверх — насос. Свайп двумя вниз ничего не отключает. Четыре пальца — мгновенно повернуть лодку к цели сонара. Кулаки или нож: три пальца — быстрый удар. Автомат: держи три пальца для непрерывного огня, отпусти любой палец для остановки.</p>
 
         <section id="controls" class="controls" aria-label="Управление">
@@ -101,8 +100,8 @@
       </details>
     </section>
   </main>
-  <script type="module" src="src/free-roam-quality-v1.js?v=1"></script>
-  <script type="module" src="src/free-roam-v4.js?v=42"></script>
+  <script type="module" src="src/free-roam-quality-v1.js?v=2"></script>
+  <script type="module" src="src/free-roam-v4.js?v=43"></script>
   <script type="module" src="src/free-roam-automatic-hold-v36.js?v=2"></script>
   <script type="module" src="src/free-roam-accessibility.js?v=1"></script>
 </body>
