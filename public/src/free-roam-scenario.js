@@ -24,6 +24,7 @@ const TARGET_LABELS = Object.freeze({
 });
 
 const SALVAGE_KINDS = new Set(["plates", "fuel", "pump", "valuable"]);
+const OPTIONAL_PURSUIT_KINDS = Object.freeze(["knife", "ammo"]);
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));
 const wrapDeg = value => ((value + 180) % 360 + 360) % 360 - 180;
@@ -45,6 +46,8 @@ export function createFreeScenario(playerCount = 2) {
     sonarCooldown: Array.from({length: playerCount}, () => 0),
     lockedPursuerIds: Array.from({length: playerCount}, () => null),
     guideEnabled: Array.from({length: playerCount}, () => false),
+    sonarTargetModes: Array.from({length: playerCount}, () => "primary"),
+    sonarHasReportedPursuit: Array.from({length: playerCount}, () => false),
   };
 }
 
@@ -58,11 +61,15 @@ export function ensureFreeScenario(world) {
   scenario.beaconUntil ||= [0, 0];
   scenario.sonarCooldown ||= [0, 0];
   scenario.lockedPursuerIds ||= [null, null];
+  scenario.sonarTargetModes ||= Array.from({length: world.players.length}, () => "primary");
+  scenario.sonarHasReportedPursuit ||= Array.from({length: world.players.length}, () => false);
   while (scenario.targets.length < world.players.length) scenario.targets.push(null);
   while (scenario.lockedTargetIds.length < world.players.length) scenario.lockedTargetIds.push(null);
   while (scenario.beaconUntil.length < world.players.length) scenario.beaconUntil.push(0);
   while (scenario.sonarCooldown.length < world.players.length) scenario.sonarCooldown.push(0);
   while (scenario.lockedPursuerIds.length < world.players.length) scenario.lockedPursuerIds.push(null);
+  while (scenario.sonarTargetModes.length < world.players.length) scenario.sonarTargetModes.push("primary");
+  while (scenario.sonarHasReportedPursuit.length < world.players.length) scenario.sonarHasReportedPursuit.push(false);
   ensureSonarGuide(world);
   if (created && scenario.phase === "salvage" && world.freeActivities?.marauder) {
     world.freeActivities.marauder.active = false;
@@ -119,9 +126,48 @@ function dockTarget(player) {
   };
 }
 
+function optionalCrateAvailable(world, playerIndex, kind) {
+  if (cargoNeedsDock(world, playerIndex, kind)) return true;
+  if (kind === "knife" && world.players[playerIndex]?.combat?.weapons?.knife) return false;
+  return Boolean(nearestWorldCrate(world, playerIndex, crate => crate.kind === kind));
+}
+
+function optionalPursuitModes(world, playerIndex) {
+  return [
+    "primary",
+    ...OPTIONAL_PURSUIT_KINDS.filter(kind => optionalCrateAvailable(world, playerIndex, kind)),
+  ];
+}
+
+function optionalPursuitTarget(world, playerIndex, kind) {
+  if (!OPTIONAL_PURSUIT_KINDS.includes(kind)) return null;
+  if (cargoNeedsDock(world, playerIndex, kind)) return dockTarget(world.players[playerIndex]);
+  const crate = lockedWorldCrate(world, playerIndex, candidate => candidate.kind === kind)
+    || nearestWorldCrate(world, playerIndex, candidate => candidate.kind === kind);
+  return crate
+    ? cargoNavigationTarget(world.players[playerIndex], crate, TARGET_LABELS[kind])
+    : null;
+}
+
+function cyclePursuitSonarMode(world, playerIndex) {
+  const scenario = world.freeScenario;
+  const modes = optionalPursuitModes(world, playerIndex);
+  const current = scenario.sonarTargetModes[playerIndex] || "primary";
+  const currentIndex = Math.max(0, modes.indexOf(current));
+  const next = modes[(currentIndex + 1) % modes.length] || "primary";
+  scenario.sonarTargetModes[playerIndex] = next;
+  return next;
+}
+
 export function scenarioTarget(world, playerIndex) {
   const scenario = ensureFreeScenario(world);
   if (scenario.phase === "pursuit") {
+    const selectedMode = scenario.sonarTargetModes[playerIndex] || "primary";
+    if (selectedMode !== "primary") {
+      const optional = optionalPursuitTarget(world, playerIndex, selectedMode);
+      if (optional) return optional;
+      scenario.sonarTargetModes[playerIndex] = "primary";
+    }
     const assigned = assignedPursuerForPlayer(world, playerIndex);
     const pursuer = assigned
       || activePursuerById(world, scenario.lockedPursuerIds[playerIndex])
@@ -230,6 +276,16 @@ function handleSonar(world, dt) {
   for (let index = 0; index < world.players.length; index += 1) {
     scenario.sonarCooldown[index] = Math.max(0, scenario.sonarCooldown[index] - dt);
     if (!inputs[index]?.sonar || previous[index]?.sonar || scenario.sonarCooldown[index] > 0) continue;
+
+    if (scenario.phase === "pursuit") {
+      if (scenario.sonarHasReportedPursuit[index]) cyclePursuitSonarMode(world, index);
+      else scenario.sonarHasReportedPursuit[index] = true;
+      scenario.targets[index] = scenarioTarget(world, index);
+      if (scenario.targets[index]?.id?.startsWith("crate-")) {
+        scenario.lockedTargetIds[index] = scenario.targets[index].id;
+      }
+    }
+
     const target = scenario.targets[index];
     if (!target) {
       scenario.sonarCooldown[index] = 1.1;
@@ -239,12 +295,24 @@ function handleSonar(world, dt) {
     const metres = distance(world.players[index], target);
     scenario.sonarCooldown[index] = 1.1;
     scenario.beaconUntil[index] = Number.MAX_SAFE_INTEGER;
+    const selectedMode = scenario.phase === "pursuit"
+      ? scenario.sonarTargetModes[index] || "primary"
+      : "primary";
+    const objectiveLabel = selectedMode === "primary" ? "основная цель" : "дополнительная цель";
     emit(
       world,
       "scenario-sonar",
-      `Сонар: цель — ${target.label}, ${Math.round(metres)} метров, ${directionText(world.players[index], target)}.`,
+      `Сонар: ${objectiveLabel} — ${target.label}, ${Math.round(metres)} метров, ${directionText(world.players[index], target)}.`,
       [index],
-      {sourcePlayer: index, targetId: target.id, targetKind: target.kind, x: target.x, y: target.y, distance: metres},
+      {
+        sourcePlayer: index,
+        targetId: target.id,
+        targetKind: target.kind,
+        sonarTargetMode: selectedMode,
+        x: target.x,
+        y: target.y,
+        distance: metres,
+      },
     );
   }
 }
@@ -263,7 +331,9 @@ function activatePursuer(world) {
   pursuer.recoveryRemaining = 0;
   pursuer.respawnAt = 0;
   activatePursuerSquad(world);
-  emit(world, "pursuer-arrival", "В бухту вошли три катера-преследователя. Сонар держит одну цель. Уклоняйся от физических пуль и уничтожь все три.", [0, 1], {
+  world.freeScenario.sonarTargetModes.fill("primary");
+  world.freeScenario.sonarHasReportedPursuit.fill(false);
+  emit(world, "pursuer-arrival", "В бухту вошли три катера-преследователя. Сонар сначала ведёт к назначенному преследователю. Нажимай сонар повторно, чтобы переключаться на дополнительные цели: нож и патроны.", [0, 1], {
     x: pursuer.x,
     y: pursuer.y,
   });
@@ -326,5 +396,8 @@ export function scenarioStatus(world, playerIndex) {
   };
   if (!target) return phases[scenario.phase] || "";
   const guide = scenario.guideEnabled?.[playerIndex] ? " Мягкий курс включён." : "";
-  return `${phases[scenario.phase] || ""} Цель сонара: ${target.label}, ${Math.round(distance(world.players[playerIndex], target))} метров.${guide}`;
+  const objective = scenario.phase === "pursuit" && scenario.sonarTargetModes[playerIndex] !== "primary"
+    ? " Дополнительная цель выбрана."
+    : "";
+  return `${phases[scenario.phase] || ""}${objective} Цель сонара: ${target.label}, ${Math.round(distance(world.players[playerIndex], target))} метров.${guide}`;
 }
