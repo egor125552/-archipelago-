@@ -1,0 +1,1 @@
+Verify session persistence, startup readiness, per-connection input reset, Chromium, mobile WebKit and Worker bundle.
