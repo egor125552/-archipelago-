@@ -126,6 +126,7 @@ setInterval(() => {
 
 let predictionFrameId = 0;
 let previousPredictionAt = 0;
+let initialRenderPending = false;
 
 function separatedPredictionFrame(now) {
   const api = globalThis.__freeRoam;
@@ -135,7 +136,12 @@ function separatedPredictionFrame(now) {
     previousPredictionAt = now;
     const currentWorld = api.getWorld?.();
     if (currentWorld) {
-      predictLocalWorld(currentWorld, api.playerIndex(), api.input, dt);
+      if (initialRenderPending) {
+        initialRenderPending = false;
+        api.step(0);
+      } else {
+        predictLocalWorld(currentWorld, api.playerIndex(), api.input, dt);
+      }
       runtimeStats.predictionSteps += 1;
     }
   } else {
@@ -148,6 +154,7 @@ window.requestAnimationFrame = function requestAnimationFrame(callback) {
   if (!isPredictionFrame(callback)) return nativeRequestAnimationFrame(callback);
   if (!predictionFrameId) {
     previousPredictionAt = performance.now();
+    initialRenderPending = true;
     predictionFrameId = nativeRequestAnimationFrame(separatedPredictionFrame);
   }
   return predictionFrameId;
