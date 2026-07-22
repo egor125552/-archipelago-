@@ -44,6 +44,15 @@ export function createServerFreeRoom(now = Date.now()) {
 export function setServerFreePresence(serverRoom, role, present) {
   const playerIndex = freePlayerIndex(role);
   if (!serverRoom?.world || playerIndex < 0) return false;
+  serverRoom.inputSequence ||= [0, 0];
+  while (serverRoom.inputSequence.length < serverRoom.world.players.length) serverRoom.inputSequence.push(0);
+  if (present) {
+    // Input sequence numbers are scoped to one WebSocket connection, not to
+    // the lifetime of the room. A page reload creates a new JavaScript
+    // context whose counter starts at one; keeping the previous connection's
+    // high-water mark would reject every command until the new page caught up.
+    serverRoom.inputSequence[playerIndex] = 0;
+  }
   setPlayerPresence(serverRoom.world, playerIndex, present);
   if (!present) setPlayerInput(serverRoom.world, playerIndex, {});
   return true;
