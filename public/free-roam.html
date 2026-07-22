@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
   <meta name="theme-color" content="#071217">
   <title>Свободная бухта — Эхо-Архипелаг</title>
-  <link rel="stylesheet" href="free-roam.css?v=4">
+  <link rel="stylesheet" href="free-roam.css?v=5">
 </head>
 <body>
   <a class="skip" href="#main">К игре</a>
@@ -42,6 +42,7 @@
           <button id="controlModeButton" class="small" aria-pressed="false">Управление: кнопки</button>
           <button id="statusButton" class="small">Где я?</button>
           <button id="speechButton" class="small" aria-pressed="true">Озвучка игры: включена</button>
+          <button id="performanceButton" class="small" aria-pressed="false">Облегчённый режим: определяется</button>
           <button id="leaveButton" class="small">Выйти</button>
         </div>
       </header>
@@ -81,16 +82,16 @@
           <button id="weaponButton" data-key="Z" aria-keyshortcuts="Z">Оружие: кулаки</button>
           <button id="targetButton" data-key="M" aria-keyshortcuts="M" aria-pressed="false">Выбрать цель</button>
           <button id="sonarButton" class="primary" data-key="Q" aria-keyshortcuts="Q">Сонар: текущая цель</button>
-          <button id="guideButton" data-key="Y" aria-keyshortcuts="Y" aria-pressed="false">Повернуть к сонару</button>
+          <button id="guideButton" data-key="Y" aria-keyshortcuts="Y" aria-label="Один раз повернуть лодку прямо к текущей цели сонара">Повернуть к сонару</button>
           <button id="pumpButton" aria-pressed="false" data-key="C" aria-keyshortcuts="C">Насос: выключен</button>
           <button id="repairButton" aria-pressed="false" data-key="V" aria-keyshortcuts="V">Пластина: готова</button>
         </section>
       </section>
 
       <details class="help">
-        <summary>Что умеет действие F</summary>
-        <p>Рядом с ящиком — поднять его или закрепить на лодке. Если ты принёс ящик пешком к причалу, причал сам примет его без точной позиции и без F. У берега и на малой скорости — выйти из лодки. Рядом с чужой лодкой с грузом — украсть один ящик; игра заранее скажет, когда это возможно. Рядом с другой лодкой без возможности кражи — закрепить или снять буксир. В воде или на берегу F автоматически подтягивает тебя к свободной лодке в радиусе 13 метров и сажает в неё; своя лодка выбирается первой. На крыше — занять свободное место водителя.</p>
-        <p>При пустом баке F запускает аварийную заправку, а после перегрева — обслуживание мотора. Если тебя буксируют, насос и пластина работают на ходу. Газ по направлению буксира помогает; тяга в сторону повышает натяжение и может порвать трос.</p>
+        <summary>Что умеет действие</summary>
+        <p>Рядом с ящиком действие поднимает его или закрепляет на лодке. Если ты принёс ящик пешком к причалу, причал примет его автоматически. У берега и на малой скорости действие позволяет выйти из лодки. Рядом с чужой лодкой с грузом оно крадёт один ящик; игра заранее скажет, когда это возможно. Рядом с другой лодкой без возможности кражи действие закрепляет или снимает буксир. В воде или на берегу оно автоматически подтягивает тебя к свободной лодке в радиусе 13 метров и сажает в неё; своя лодка выбирается первой. На крыше действие занимает свободное место водителя.</p>
+        <p>При пустом баке действие запускает аварийную заправку, а после перегрева — обслуживание мотора. Если тебя буксируют, насос и пластина работают на ходу. Газ по направлению буксира помогает; тяга в сторону повышает натяжение и может порвать трос.</p>
       </details>
       <details class="help">
         <summary>Груз и бой</summary>
@@ -100,7 +101,8 @@
       </details>
     </section>
   </main>
-  <script type="module" src="src/free-roam-v4.js?v=41"></script>
+  <script type="module" src="src/free-roam-quality-v1.js?v=1"></script>
+  <script type="module" src="src/free-roam-v4.js?v=42"></script>
   <script type="module" src="src/free-roam-automatic-hold-v36.js?v=2"></script>
   <script type="module" src="src/free-roam-accessibility.js?v=1"></script>
 </body>
