@@ -45,6 +45,16 @@ try {
     resumePending = false;
   }
 
+  function syncSessionFromGame() {
+    const api = globalThis.__freeRoam;
+    const game = document.getElementById("game");
+    if (!api || !game || game.hidden) return false;
+    const room = String(api.roomId?.() || "").trim();
+    if (!room) return false;
+    saveSession(room, api.isHost?.() ? "captain" : "crew");
+    return true;
+  }
+
   function guardedSocketUrl(input) {
     if (!resumePending || !resumeSession) return input;
     try {
@@ -143,8 +153,20 @@ try {
 
   if (resumeSession) setTimeout(resumeWorld, 0);
 
+  // WebSocket messages are still the fastest way to save the room, but the
+  // browser is allowed to reload or suspend a page at awkward moments. Keep a
+  // second independent copy path and perform one final synchronous save on
+  // pagehide so a hard refresh can always return to the same role and world.
+  setInterval(syncSessionFromGame, 500);
+  window.addEventListener("pagehide", syncSessionFromGame);
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) syncSessionFromGame();
+  });
+
   globalThis.__freeRoamSessionGuard = {
     active: () => readSession(),
     clear: clearSession,
+    save: saveSession,
+    sync: syncSessionFromGame,
   };
 })();
