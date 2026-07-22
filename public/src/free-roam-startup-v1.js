@@ -144,7 +144,11 @@ try {
     if (!resumeSession) return;
     const lobby = document.getElementById("lobby");
     const button = document.getElementById(resumeSession.role === "captain" ? "hostButton" : "joinButton");
-    if (!button || button.disabled || lobby?.hidden) {
+    // The button exists as soon as HTML is parsed, but its click handler is
+    // attached later by the deferred game module. Clicking before
+    // window.__freeRoam exists silently does nothing and used to strand a
+    // reloaded player in the lobby forever. Wait for the real bindings.
+    if (!globalThis.__freeRoam || !button || button.disabled || lobby?.hidden) {
       setTimeout(resumeWorld, 80);
       return;
     }
