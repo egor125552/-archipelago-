@@ -7,6 +7,7 @@ import {retireClaimedKnifeCrates} from "../public/src/free-roam-unique-weapons.j
 const scenarioSource = await readFile(new URL("../public/src/free-roam-scenario.js", import.meta.url), "utf8");
 const coreSource = await readFile(new URL("../public/src/free-roam-core-v6.js", import.meta.url), "utf8");
 const startupSource = await readFile(new URL("../public/src/free-roam-startup-v1.js", import.meta.url), "utf8");
+const freeRoamHtml = await readFile(new URL("../public/free-roam.html", import.meta.url), "utf8");
 
 function occurrences(source, fragment) {
   return source.split(fragment).length - 1;
@@ -53,6 +54,10 @@ test("gesture mode guards accidental exits and page reloads", () => {
   assert.match(startupSource, /echo-free-roam-active-session-v1/);
   assert.match(startupSource, /sessionStorage\.setItem/);
   assert.match(startupSource, /url\.searchParams\.set\("room", resumeSession\.room\)/);
+  assert.match(startupSource, /syncSessionFromGame/);
+  assert.match(startupSource, /pagehide/);
+  assert.match(startupSource, /visibilitychange/);
+  assert.match(freeRoamHtml, /free-roam-startup-v1\.js\?v=2/);
   assert.match(startupSource, /gestureMode && directPointerClick/);
   assert.match(startupSource, /leaveConfirmUntil = now \+ 2800/);
   assert.match(startupSource, /touchmove/);
