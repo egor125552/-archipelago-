@@ -53,11 +53,11 @@ test("free-roam page exposes the audio-only runtime and one-shot sonar wording",
   const html = await readFile(new URL("../public/free-roam.html", import.meta.url), "utf8");
   const css = await readFile(new URL("../public/free-roam.css", import.meta.url), "utf8");
   const quality = await readFile(new URL("../public/src/free-roam-quality-v1.js", import.meta.url), "utf8");
-  assert.match(html, /id="performanceButton"/);
   assert.match(html, /free-roam-quality-v1\.js/);
   assert.match(html, /Один раз повернуть лодку/);
-  assert.match(css, /body\.lightweight-mode #map/);
+  assert.match(html, /<canvas id="map" width="0" height="0" hidden/);
   assert.match(css, /#guideButton::before/);
   assert.match(quality, /audio-only-map/);
   assert.match(quality, /free-roam-runtime-model\.js/);
+  assert.match(quality, /map\.getContext = \(\) => nullCanvasContext/);
 });
