@@ -24,7 +24,7 @@ const TARGET_LABELS = Object.freeze({
 });
 
 const SALVAGE_KINDS = new Set(["plates", "fuel", "pump", "valuable"]);
-const OPTIONAL_PURSUIT_KINDS = Object.freeze(["knife", "ammo"]);
+const ARM_TARGET_MODES = Object.freeze(["automatic", "knife"]);
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));
 const wrapDeg = value => ((value + 180) % 360 + 360) % 360 - 180;
@@ -46,8 +46,8 @@ export function createFreeScenario(playerCount = 2) {
     sonarCooldown: Array.from({length: playerCount}, () => 0),
     lockedPursuerIds: Array.from({length: playerCount}, () => null),
     guideEnabled: Array.from({length: playerCount}, () => false),
-    sonarTargetModes: Array.from({length: playerCount}, () => "primary"),
-    sonarHasReportedPursuit: Array.from({length: playerCount}, () => false),
+    armTargetModes: Array.from({length: playerCount}, () => "automatic"),
+    armSonarReported: Array.from({length: playerCount}, () => false),
   };
 }
 
@@ -55,21 +55,28 @@ export function ensureFreeScenario(world) {
   const created = !world.freeScenario;
   world.freeScenario ||= createFreeScenario(world.players?.length || 2);
   const scenario = world.freeScenario;
+  const playerCount = world.players?.length || 2;
   scenario.phase ||= "salvage";
-  scenario.targets ||= [null, null];
-  scenario.lockedTargetIds ||= [null, null];
-  scenario.beaconUntil ||= [0, 0];
-  scenario.sonarCooldown ||= [0, 0];
-  scenario.lockedPursuerIds ||= [null, null];
-  scenario.sonarTargetModes ||= Array.from({length: world.players.length}, () => "primary");
-  scenario.sonarHasReportedPursuit ||= Array.from({length: world.players.length}, () => false);
-  while (scenario.targets.length < world.players.length) scenario.targets.push(null);
-  while (scenario.lockedTargetIds.length < world.players.length) scenario.lockedTargetIds.push(null);
-  while (scenario.beaconUntil.length < world.players.length) scenario.beaconUntil.push(0);
-  while (scenario.sonarCooldown.length < world.players.length) scenario.sonarCooldown.push(0);
-  while (scenario.lockedPursuerIds.length < world.players.length) scenario.lockedPursuerIds.push(null);
-  while (scenario.sonarTargetModes.length < world.players.length) scenario.sonarTargetModes.push("primary");
-  while (scenario.sonarHasReportedPursuit.length < world.players.length) scenario.sonarHasReportedPursuit.push(false);
+  scenario.targets ||= Array.from({length: playerCount}, () => null);
+  scenario.lockedTargetIds ||= Array.from({length: playerCount}, () => null);
+  scenario.beaconUntil ||= Array.from({length: playerCount}, () => 0);
+  scenario.sonarCooldown ||= Array.from({length: playerCount}, () => 0);
+  scenario.lockedPursuerIds ||= Array.from({length: playerCount}, () => null);
+  scenario.armTargetModes ||= Array.from({length: playerCount}, () => "automatic");
+  scenario.armSonarReported ||= Array.from({length: playerCount}, () => false);
+  while (scenario.targets.length < playerCount) scenario.targets.push(null);
+  while (scenario.lockedTargetIds.length < playerCount) scenario.lockedTargetIds.push(null);
+  while (scenario.beaconUntil.length < playerCount) scenario.beaconUntil.push(0);
+  while (scenario.sonarCooldown.length < playerCount) scenario.sonarCooldown.push(0);
+  while (scenario.lockedPursuerIds.length < playerCount) scenario.lockedPursuerIds.push(null);
+  while (scenario.armTargetModes.length < playerCount) scenario.armTargetModes.push("automatic");
+  while (scenario.armSonarReported.length < playerCount) scenario.armSonarReported.push(false);
+
+  // Remove the temporary pursuit-choice state from older saved worlds. During
+  // combat the sonar now has exactly one job: track the assigned pursuer.
+  scenario.sonarTargetModes?.fill("primary");
+  scenario.sonarHasReportedPursuit?.fill(false);
+
   ensureSonarGuide(world);
   if (created && scenario.phase === "salvage" && world.freeActivities?.marauder) {
     world.freeActivities.marauder.active = false;
@@ -126,48 +133,46 @@ function dockTarget(player) {
   };
 }
 
-function optionalCrateAvailable(world, playerIndex, kind) {
-  if (cargoNeedsDock(world, playerIndex, kind)) return true;
-  if (kind === "knife" && world.players[playerIndex]?.combat?.weapons?.knife) return false;
-  return Boolean(nearestWorldCrate(world, playerIndex, crate => crate.kind === kind));
+function knifeAvailable(world, playerIndex) {
+  if (world.players[playerIndex]?.combat?.weapons?.knife) return false;
+  if (cargoNeedsDock(world, playerIndex, "knife")) return true;
+  return Boolean(nearestWorldCrate(world, playerIndex, crate => crate.kind === "knife"));
 }
 
-function optionalPursuitModes(world, playerIndex) {
-  return [
-    "primary",
-    ...OPTIONAL_PURSUIT_KINDS.filter(kind => optionalCrateAvailable(world, playerIndex, kind)),
-  ];
+function availableArmModes(world, playerIndex) {
+  return knifeAvailable(world, playerIndex) ? ARM_TARGET_MODES : ["automatic"];
 }
 
-function optionalPursuitTarget(world, playerIndex, kind) {
-  if (!OPTIONAL_PURSUIT_KINDS.includes(kind)) return null;
-  if (cargoNeedsDock(world, playerIndex, kind)) return dockTarget(world.players[playerIndex]);
-  const crate = lockedWorldCrate(world, playerIndex, candidate => candidate.kind === kind)
-    || nearestWorldCrate(world, playerIndex, candidate => candidate.kind === kind);
-  return crate
-    ? cargoNavigationTarget(world.players[playerIndex], crate, TARGET_LABELS[kind])
-    : null;
-}
-
-function cyclePursuitSonarMode(world, playerIndex) {
+function cycleArmTargetMode(world, playerIndex) {
   const scenario = world.freeScenario;
-  const modes = optionalPursuitModes(world, playerIndex);
-  const current = scenario.sonarTargetModes[playerIndex] || "primary";
+  const modes = availableArmModes(world, playerIndex);
+  const current = scenario.armTargetModes[playerIndex] || "automatic";
   const currentIndex = Math.max(0, modes.indexOf(current));
-  const next = modes[(currentIndex + 1) % modes.length] || "primary";
-  scenario.sonarTargetModes[playerIndex] = next;
-  return next;
+  scenario.armTargetModes[playerIndex] = modes[(currentIndex + 1) % modes.length] || "automatic";
+}
+
+function armTarget(world, playerIndex) {
+  const scenario = world.freeScenario;
+  let mode = scenario.armTargetModes[playerIndex] || "automatic";
+  if (mode === "knife" && !knifeAvailable(world, playerIndex)) mode = "automatic";
+  scenario.armTargetModes[playerIndex] = mode;
+
+  if (cargoNeedsDock(world, playerIndex, mode)) return dockTarget(world.players[playerIndex]);
+
+  const crate = lockedWorldCrate(world, playerIndex, candidate => candidate.kind === mode)
+    || nearestWorldCrate(world, playerIndex, candidate => candidate.kind === mode);
+  if (crate) return cargoNavigationTarget(world.players[playerIndex], crate, TARGET_LABELS[mode]);
+
+  if (mode !== "automatic") {
+    scenario.armTargetModes[playerIndex] = "automatic";
+    return armTarget(world, playerIndex);
+  }
+  return null;
 }
 
 export function scenarioTarget(world, playerIndex) {
   const scenario = ensureFreeScenario(world);
   if (scenario.phase === "pursuit") {
-    const selectedMode = scenario.sonarTargetModes[playerIndex] || "primary";
-    if (selectedMode !== "primary") {
-      const optional = optionalPursuitTarget(world, playerIndex, selectedMode);
-      if (optional) return optional;
-      scenario.sonarTargetModes[playerIndex] = "primary";
-    }
     const assigned = assignedPursuerForPlayer(world, playerIndex);
     const pursuer = assigned
       || activePursuerById(world, scenario.lockedPursuerIds[playerIndex])
@@ -186,12 +191,7 @@ export function scenarioTarget(world, playerIndex) {
   if (scenario.phase === "warning") {
     return {id: "open-water", kind: "warning", label: "выход из бухты", x: 210, y: 255};
   }
-  if (scenario.phase === "arm") {
-    if (cargoNeedsDock(world, playerIndex, "automatic")) return dockTarget(world.players[playerIndex]);
-    const automatic = lockedWorldCrate(world, playerIndex, crate => crate.kind === "automatic")
-      || nearestWorldCrate(world, playerIndex, crate => crate.kind === "automatic");
-    if (automatic) return cargoNavigationTarget(world.players[playerIndex], automatic, TARGET_LABELS[automatic.kind]);
-  }
+  if (scenario.phase === "arm") return armTarget(world, playerIndex);
   if (scenario.phase === "salvage") {
     if (cargoNeedsDock(world, playerIndex)) return dockTarget(world.players[playerIndex]);
     const crate = lockedWorldCrate(world, playerIndex, candidate => SALVAGE_KINDS.has(candidate.kind))
@@ -245,14 +245,18 @@ function directionText(player, target) {
   return side;
 }
 
+function updateLockedTarget(scenario, playerIndex, target) {
+  if (target?.id?.startsWith("crate-")) scenario.lockedTargetIds[playerIndex] = target.id;
+  else if (target?.kind === "landing" && target.crateId) scenario.lockedTargetIds[playerIndex] = target.crateId;
+}
+
 function updateTargets(world) {
   const scenario = world.freeScenario;
   for (let index = 0; index < world.players.length; index += 1) {
     const previous = scenario.targets[index];
     const target = scenarioTarget(world, index);
     scenario.targets[index] = target;
-    if (target?.id?.startsWith("crate-")) scenario.lockedTargetIds[index] = target.id;
-    else if (target?.kind === "landing" && target.crateId) scenario.lockedTargetIds[index] = target.crateId;
+    updateLockedTarget(scenario, index, target);
     if (
       scenario.phase === "pursuit"
       && previous?.kind === "pursuer"
@@ -277,13 +281,11 @@ function handleSonar(world, dt) {
     scenario.sonarCooldown[index] = Math.max(0, scenario.sonarCooldown[index] - dt);
     if (!inputs[index]?.sonar || previous[index]?.sonar || scenario.sonarCooldown[index] > 0) continue;
 
-    if (scenario.phase === "pursuit") {
-      if (scenario.sonarHasReportedPursuit[index]) cyclePursuitSonarMode(world, index);
-      else scenario.sonarHasReportedPursuit[index] = true;
+    if (scenario.phase === "arm") {
+      if (scenario.armSonarReported[index]) cycleArmTargetMode(world, index);
+      else scenario.armSonarReported[index] = true;
       scenario.targets[index] = scenarioTarget(world, index);
-      if (scenario.targets[index]?.id?.startsWith("crate-")) {
-        scenario.lockedTargetIds[index] = scenario.targets[index].id;
-      }
+      updateLockedTarget(scenario, index, scenario.targets[index]);
     }
 
     const target = scenario.targets[index];
@@ -295,20 +297,16 @@ function handleSonar(world, dt) {
     const metres = distance(world.players[index], target);
     scenario.sonarCooldown[index] = 1.1;
     scenario.beaconUntil[index] = Number.MAX_SAFE_INTEGER;
-    const selectedMode = scenario.phase === "pursuit"
-      ? scenario.sonarTargetModes[index] || "primary"
-      : "primary";
-    const objectiveLabel = selectedMode === "primary" ? "основная цель" : "дополнительная цель";
     emit(
       world,
       "scenario-sonar",
-      `Сонар: ${objectiveLabel} — ${target.label}, ${Math.round(metres)} метров, ${directionText(world.players[index], target)}.`,
+      `Сонар: цель — ${target.label}, ${Math.round(metres)} метров, ${directionText(world.players[index], target)}.`,
       [index],
       {
         sourcePlayer: index,
         targetId: target.id,
         targetKind: target.kind,
-        sonarTargetMode: selectedMode,
+        sonarTargetMode: scenario.phase === "arm" ? scenario.armTargetModes[index] : "primary",
         x: target.x,
         y: target.y,
         distance: metres,
@@ -331,9 +329,9 @@ function activatePursuer(world) {
   pursuer.recoveryRemaining = 0;
   pursuer.respawnAt = 0;
   activatePursuerSquad(world);
-  world.freeScenario.sonarTargetModes.fill("primary");
-  world.freeScenario.sonarHasReportedPursuit.fill(false);
-  emit(world, "pursuer-arrival", "В бухту вошли три катера-преследователя. Сонар сначала ведёт к назначенному преследователю. Нажимай сонар повторно, чтобы переключаться на дополнительные цели: нож и патроны.", [0, 1], {
+  world.freeScenario.armTargetModes.fill("automatic");
+  world.freeScenario.armSonarReported.fill(false);
+  emit(world, "pursuer-arrival", "В бухту вошли три катера-преследователя. Сонар держит назначенную боевую цель. Уклоняйся от физических пуль и уничтожь все три.", [0, 1], {
     x: pursuer.x,
     y: pursuer.y,
   });
@@ -346,12 +344,14 @@ function updatePhase(world) {
 
   if (scenario.phase === "salvage" && delivered >= 2) {
     scenario.phase = "arm";
-    emit(world, "scenario-objective", "Первая задача выполнена. Теперь найди и доставь ящик с автоматом. Сонар ведёт к нему.", [0, 1]);
+    scenario.armTargetModes.fill("automatic");
+    scenario.armSonarReported.fill(false);
+    emit(world, "scenario-objective", "Первая задача выполнена. Теперь доставь ящик с автоматом. До начала погони можно забрать нож: повторное нажатие сонара переключает между автоматом и ножом.", [0, 1]);
   }
   if (scenario.phase === "arm" && automaticDelivered) {
     scenario.phase = "warning";
     scenario.warningUntil = world.time + 8;
-    emit(world, "pursuer-warning", "Автомат получен. Через восемь секунд появится катер-преследователь. Выходи на открытую воду.", [0, 1]);
+    emit(world, "pursuer-warning", "Автомат получен. Через восемь секунд появятся катера-преследователи. Выходи на открытую воду.", [0, 1]);
   }
   if (scenario.phase === "warning" && world.time >= scenario.warningUntil) {
     scenario.phase = "pursuit";
@@ -377,9 +377,9 @@ export function updateFreeScenario(world, dt) {
   }
   updatePhase(world);
   updateTargets(world);
+  handleSonar(world, dt);
   updateSonarGuide(world, emit);
   updateCargoArrivalGuidance(world, emit);
-  handleSonar(world, dt);
 }
 
 export function scenarioStatus(world, playerIndex) {
@@ -389,15 +389,12 @@ export function scenarioStatus(world, playerIndex) {
   const remainingSalvage = Math.max(0, 2 - delivered);
   const phases = {
     salvage: `Задача: доставь ещё ${remainingSalvage === 1 ? "один обычный ящик" : "два обычных ящика"}.`,
-    arm: "Задача: найди и доставь автомат.",
-    warning: `Преследователь появится через ${Math.max(0, Math.ceil(scenario.warningUntil - world.time))} секунд.`,
+    arm: "Задача: доставь автомат. До погони можно забрать нож; повторное нажатие сонара переключает цель.",
+    warning: `Преследователи появятся через ${Math.max(0, Math.ceil(scenario.warningUntil - world.time))} секунд.`,
     pursuit: `Задача: уничтожь все катера и высадившихся стрелков. Катеров осталось ${activePursuers(world).length}, стрелков ${activeHostileGunners(world).length}.`,
     victory: "Сценарий пройден.",
   };
   if (!target) return phases[scenario.phase] || "";
   const guide = scenario.guideEnabled?.[playerIndex] ? " Мягкий курс включён." : "";
-  const objective = scenario.phase === "pursuit" && scenario.sonarTargetModes[playerIndex] !== "primary"
-    ? " Дополнительная цель выбрана."
-    : "";
-  return `${phases[scenario.phase] || ""}${objective} Цель сонара: ${target.label}, ${Math.round(distance(world.players[playerIndex], target))} метров.${guide}`;
+  return `${phases[scenario.phase] || ""} Цель сонара: ${target.label}, ${Math.round(distance(world.players[playerIndex], target))} метров.${guide}`;
 }
