@@ -95,6 +95,15 @@ function syncButton() {
 function syncGuideButton() {
   const button = $("guideButton");
   if (!button) return;
+  if (!button.dataset.oneShotSemantics) {
+    const nativeSetAttribute = button.setAttribute.bind(button);
+    button.setAttribute = (name, value) => {
+      if (name === "aria-pressed") return;
+      nativeSetAttribute(name, value);
+    };
+    button.dataset.oneShotSemantics = "true";
+  }
+  button.removeAttribute("aria-pressed");
   button.setAttribute("aria-label", "Один раз повернуть лодку прямо к текущей цели сонара");
 }
 
