@@ -57,7 +57,8 @@ test("gesture mode guards accidental exits and page reloads", () => {
   assert.match(startupSource, /syncSessionFromGame/);
   assert.match(startupSource, /pagehide/);
   assert.match(startupSource, /visibilitychange/);
-  assert.match(freeRoamHtml, /free-roam-startup-v1\.js\?v=2/);
+  assert.match(startupSource, /!globalThis\.__freeRoam/);
+  assert.match(freeRoamHtml, /free-roam-startup-v1\.js\?v=3/);
   assert.match(startupSource, /gestureMode && directPointerClick/);
   assert.match(startupSource, /leaveConfirmUntil = now \+ 2800/);
   assert.match(startupSource, /touchmove/);
