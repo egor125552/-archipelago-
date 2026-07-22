@@ -205,6 +205,11 @@ export function scenarioTarget(world, playerIndex) {
   }
   if (scenario.phase === "victory") {
     if (cargoNeedsDock(world, playerIndex)) return dockTarget(world.players[playerIndex]);
+    if (!world.players[playerIndex]?.combat?.weapons?.knife) {
+      const knife = lockedWorldCrate(world, playerIndex, crate => crate.kind === "knife")
+        || nearestWorldCrate(world, playerIndex, crate => crate.kind === "knife");
+      if (knife) return cargoNavigationTarget(world.players[playerIndex], knife, TARGET_LABELS.knife);
+    }
     const prize = nearestWorldCrate(world, playerIndex, crate => crate.source === "pursuer" || crate.source === "marauder");
     if (prize) return {
       id: prize.id,
