@@ -19,6 +19,7 @@ import {suppressIncapacitatedMovement, updatePhysicalActors} from "./free-roam-p
 import {handleAssistedBoarding} from "./free-roam-boarding-assist.js?v=29";
 import {ensurePursuerSquad, updatePursuerSquad} from "./free-roam-pursuer-squad.js?v=32";
 import {ensureHostileGunners, updateHostileGunners} from "./free-roam-hostile-gunners.js?v=32";
+import {retireClaimedKnifeCrates} from "./free-roam-unique-weapons.js?v=1";
 
 export const WORLD = Object.freeze({...base.WORLD});
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -32,6 +33,7 @@ function ensureState(world) {
   ensurePursuerSquad(world);
   ensureHostileGunners(world);
   ensureFreeScenario(world);
+  retireClaimedKnifeCrates(world);
   return world;
 }
 
@@ -112,6 +114,7 @@ export function stepFreeWorld(world, dt) {
   const physicalState = updatePhysicalActors(world);
   discardBlockedFootsteps(world, eventStart, physicalState);
   updateActivities(world, safeDt);
+  retireClaimedKnifeCrates(world);
   updateFreeScenario(world, safeDt);
   finishActivityFrame(world);
   return world;
