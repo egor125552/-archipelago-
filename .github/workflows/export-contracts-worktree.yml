@@ -1,0 +1,22 @@
+name: Export contracts worktree
+
+on:
+  push:
+    branches:
+      - agent/contracts-board-1.3.0
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pack repository
+        run: tar --exclude=.git -czf archipelago-worktree.tar.gz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: archipelago-contracts-worktree
+          path: archipelago-worktree.tar.gz
+          retention-days: 1
