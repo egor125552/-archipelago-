@@ -103,7 +103,9 @@ test("the production page loads the pistol sound and pistol integration modules"
   assert.match(html, /free-roam-pistol-ui\.js\?v=1/);
   assert.match(html, /36 отдельных пистолетных патронов/);
   assert.match(targetMenu, /combat\?\.weapons\?\.pistol/);
-  assert.match(audioPatch, /createPistolBuffer/);
+  assert.match(audioPatch, /PISTOL_RECORDING_URL/);
+  assert.match(audioPatch, /163456__lemudcrab__pistol-shot\.wav/);
+  assert.match(audioPatch, /createFallbackPistolBuffer/);
   assert.match(audioPatch, /buffers\.set\("pistolShot"/);
   assert.match(uiPatch, /pistol: "пистолет"/);
   assert.match(uiPatch, /Оружие: \${label}/);
