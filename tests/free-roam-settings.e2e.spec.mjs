@@ -45,7 +45,7 @@ async function prepareContext(context) {
   });
 }
 
-test("interface and speech settings persist from the main menu into the game", async ({browser}, testInfo) => {
+test("interface, speech, and reload settings persist from the main menu into the game", async ({browser}, testInfo) => {
   const mobile = testInfo.project.name.includes("webkit");
   const context = await browser.newContext(mobile
     ? {viewport: {width: 390, height: 844}, hasTouch: true, isMobile: true}
@@ -61,6 +61,12 @@ test("interface and speech settings persist from the main menu into the game", a
     await expect(page.getByRole("dialog", {name: "Настройки"})).toBeVisible();
     await expect(page.getByRole("heading", {name: "Внешний вид"})).toBeVisible();
     await expect(page.getByRole("heading", {name: "Озвучка"})).toBeVisible();
+    await expect(page.getByRole("heading", {name: "После обновления страницы"})).toBeVisible();
+    await expect(page.getByText(/вариант «вернуться в тот же мир»/)).toBeVisible();
+
+    const autoResume = page.locator("#settingsAutoResumeButton");
+    await expect(autoResume).toHaveAttribute("aria-pressed", "false");
+    await expect(autoResume).toContainText("остаться в меню");
 
     const gameButtons = page.locator("#settingsGameButtonsButton");
     const initiallyEnabled = await gameButtons.getAttribute("aria-pressed") === "true";
@@ -81,17 +87,30 @@ test("interface and speech settings persist from the main menu into the game", a
     if (expectedEnabled) await expect(page.locator("#controls")).toBeVisible();
     else await expect(page.locator("#controls")).toBeHidden();
 
-    await page.locator("#gameSettingsButton").click();
+    const roomBefore = await page.evaluate(() => window.__freeRoam.roomId());
+    await page.reload({waitUntil: "domcontentloaded"});
+    await page.waitForFunction(() => Boolean(window.__freeRoam && window.__freeRoamSettings));
+    await expect(page.locator("#lobby")).toBeVisible();
+    await expect(page.locator("#game")).toBeHidden();
+
+    await page.getByRole("button", {name: "Настройки"}).click();
     await expect(page.locator("#settingsGameButtonsButton")).toHaveAttribute("aria-pressed", String(expectedEnabled));
+    await expect(page.locator("#settingsQuickSpeechButton")).toHaveAttribute("aria-pressed", "true");
+    await expect(autoResume).toHaveAttribute("aria-pressed", "false");
+    await autoResume.click();
+    await expect(autoResume).toHaveAttribute("aria-pressed", "true");
+    await expect(autoResume).toContainText("вернуться в тот же мир");
     await page.locator("#settingsCloseButton").click();
 
-    const roomBefore = await page.evaluate(() => window.__freeRoam.roomId());
     await page.reload({waitUntil: "domcontentloaded"});
     await expect(page.locator("#game")).toBeVisible({timeout: 10_000});
     await expect.poll(() => page.evaluate(() => window.__freeRoam.roomId()), {timeout: 10_000}).toBe(roomBefore);
     await expect(page.locator("#speechButton")).toBeVisible();
     if (expectedEnabled) await expect(page.locator("#controls")).toBeVisible();
     else await expect(page.locator("#controls")).toBeHidden();
+
+    await page.locator("#gameSettingsButton").click();
+    await expect(page.locator("#settingsAutoResumeButton")).toHaveAttribute("aria-pressed", "true");
   } finally {
     await context.close();
   }

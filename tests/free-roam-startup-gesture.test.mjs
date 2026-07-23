@@ -13,6 +13,14 @@ test("stale VoiceOver speech preference is migrated back to the enabled default 
   assert.match(source, /localStorage\.setItem\(SPEECH_DEFAULT_MIGRATION_KEY, "done"\)/);
 });
 
+test("automatic session return is opt-in through the saved interface setting", async () => {
+  const source = await read("../public/src/free-roam-startup-v1.js");
+  assert.match(source, /echo-free-roam-interface-settings-v1/);
+  assert.match(source, /settings\?\.autoResume === true/);
+  assert.match(source, /if \(autoResumeEnabled\(\)\)/);
+  assert.match(source, /autoResumeEnabled,/);
+});
+
 test("gesture watchdog records and repairs stale pointer state", async () => {
   const source = await read("../public/src/free-roam-gesture-watchdog-v1.js");
   assert.doesNotThrow(() => new Function(source));
@@ -24,13 +32,15 @@ test("gesture watchdog records and repairs stale pointer state", async () => {
   assert.match(source, /Скопировать сбой жестов/);
 });
 
-test("startup migration runs before the game and watchdog runs after input bindings", async () => {
+test("startup preference guard runs before the game and watchdog runs after input bindings", async () => {
   const html = await read("../public/free-roam.html");
-  const startup = html.indexOf("free-roam-startup-v1.js?v=3");
+  const startup = html.indexOf("free-roam-startup-v1.js?v=4");
+  const settings = html.indexOf("free-roam-settings-v1.js?v=2");
   const game = html.indexOf("free-roam-v4.js?v=43");
   const accessibility = html.indexOf("free-roam-accessibility.js?v=1");
   const watchdog = html.indexOf("free-roam-gesture-watchdog-v1.js?v=1");
 
-  assert.ok(startup >= 0 && startup < game);
+  assert.ok(startup >= 0 && startup < settings);
+  assert.ok(settings >= 0 && settings < game);
   assert.ok(accessibility >= 0 && accessibility < watchdog);
 });

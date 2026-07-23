@@ -58,9 +58,17 @@ test("gesture mode guards accidental exits and page reloads", () => {
   assert.match(startupSource, /pagehide/);
   assert.match(startupSource, /visibilitychange/);
   assert.match(startupSource, /!globalThis\.__freeRoam/);
-  assert.match(freeRoamHtml, /free-roam-startup-v1\.js\?v=3/);
+  assert.match(freeRoamHtml, /free-roam-startup-v1\.js\?v=4/);
   assert.match(startupSource, /gestureMode && directPointerClick/);
   assert.match(startupSource, /leaveConfirmUntil = now \+ 2800/);
   assert.match(startupSource, /touchmove/);
   assert.match(startupSource, /passive: false/);
+});
+
+test("page reload stays in the menu unless automatic return is explicitly enabled", () => {
+  assert.match(startupSource, /echo-free-roam-interface-settings-v1/);
+  assert.match(startupSource, /settings\?\.autoResume === true/);
+  assert.match(startupSource, /if \(autoResumeEnabled\(\)\)/);
+  assert.match(freeRoamHtml, /id="settingsAutoResumeButton"/);
+  assert.match(freeRoamHtml, /После обновления: остаться в меню/);
 });
