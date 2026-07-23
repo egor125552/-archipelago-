@@ -34,3 +34,7 @@ The following effects were supplied by the user from the local `fighter-game` an
 - `ATOMIC HEART EDITION/Resources/Audio/`: automatic shot, enemy hit and four footsteps.
 
 Those source projects do not state an audio redistribution license in their readmes. Before publishing this repository or distributing a build, confirm that these recordings may be redistributed. The implementation intentionally records their provenance here instead of claiming a license that is not present in the source folders.
+
+## Version 1.1 pistol shot
+
+The starting pistol uses a deterministic Web Audio buffer generated in `public/src/free-roam-pistol-audio.js`. Its short dry envelope, low/mid body, high-frequency crack and two restrained reflections were tuned after comparing several short pistol-shot references. No third-party pistol recording is embedded in the repository, and the sound is recreated locally by the browser before play.

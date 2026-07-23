@@ -97,7 +97,7 @@ const PLAYER_FIELDS = Object.freeze([
 ]);
 const COMBAT_FIELDS = Object.freeze([
   "health", "alive", "respawnRemaining", "knockedDown", "knockdownRemaining", "stun",
-  "stamina", "carriedCrate", "weapons", "equipped", "ammo", "injuryMix", "lockedTargetId",
+  "stamina", "carriedCrate", "weapons", "equipped", "ammo", "pistolAmmo", "injuryMix", "lockedTargetId",
 ]);
 const PURSUER_FIELDS = Object.freeze([
   "id", "x", "y", "heading", "speed", "hull", "maxHull", "active", "destroyed", "targetPlayer",

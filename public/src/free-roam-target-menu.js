@@ -37,8 +37,10 @@ export function createTargetMenu({
     const world = getWorld();
     const playerIndex = getPlayerIndex();
     const combat = world?.players?.[playerIndex]?.combat;
-    if (!combat?.weapons?.automatic || combat.ammo <= 0) {
-      announce("Для выбора цели сначала нужен автомат с патронами.", true);
+    const pistolReady = Boolean(combat?.weapons?.pistol && combat.pistolAmmo > 0);
+    const automaticReady = Boolean(combat?.weapons?.automatic && combat.ammo > 0);
+    if (!pistolReady && !automaticReady) {
+      announce("Для выбора цели нужен пистолет или автомат с патронами.", true);
       return;
     }
     releaseMovement();

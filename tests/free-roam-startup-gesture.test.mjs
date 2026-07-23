@@ -36,7 +36,7 @@ test("startup preference guard runs before the game and watchdog runs after inpu
   const html = await read("../public/free-roam.html");
   const startup = html.indexOf("free-roam-startup-v1.js?v=4");
   const settings = html.indexOf("free-roam-settings-v1.js?v=2");
-  const game = html.indexOf("free-roam-v4.js?v=43");
+  const game = html.search(/free-roam-v4\.js\?v=\d+/);
   const accessibility = html.indexOf("free-roam-accessibility.js?v=1");
   const watchdog = html.indexOf("free-roam-gesture-watchdog-v1.js?v=1");
 
