@@ -123,7 +123,15 @@ export function stepFreeWorld(world, dt) {
 
 export function playerStatus(world, playerIndex) {
   ensureState(world);
-  return [base.playerStatus(world, playerIndex), activityStatus(world, playerIndex), combatStatus(world, playerIndex), scenarioStatus(world, playerIndex)]
-    .filter(Boolean)
-    .join(" ");
+  return [
+    base.playerStatus(world, playerIndex),
+    scenarioStatus(world, playerIndex),
+    combatStatus(world, playerIndex),
+    activityStatus(world, playerIndex),
+  ].filter(Boolean).join(" ");
+}
+
+export function snapshotWorld(world) {
+  ensureState(world);
+  return base.snapshotWorld(world);
 }
