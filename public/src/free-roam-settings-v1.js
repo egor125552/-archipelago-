@@ -6,6 +6,7 @@
     gameButtons: null,
     quickControl: false,
     quickSpeech: false,
+    autoResume: false,
   });
   const $ = id => document.getElementById(id);
   let returnFocus = null;
@@ -17,6 +18,7 @@
         gameButtons: typeof stored?.gameButtons === "boolean" ? stored.gameButtons : null,
         quickControl: stored?.quickControl === true,
         quickSpeech: stored?.quickSpeech === true,
+        autoResume: stored?.autoResume === true,
       };
     } catch (_) {
       return {...DEFAULTS};
@@ -80,6 +82,11 @@
       $("settingsQuickSpeechButton"),
       preferences.quickSpeech,
       `Быстрая кнопка озвучки: ${preferences.quickSpeech ? "показана" : "скрыта"}`,
+    );
+    setPressed(
+      $("settingsAutoResumeButton"),
+      preferences.autoResume,
+      `После обновления: ${preferences.autoResume ? "вернуться в тот же мир" : "остаться в меню"}`,
     );
   }
 
@@ -167,6 +174,12 @@
     syncSettingsControls();
   }
 
+  function toggleAutoResume() {
+    preferences.autoResume = !preferences.autoResume;
+    savePreferences();
+    syncSettingsControls();
+  }
+
   $("lobbySettingsButton")?.addEventListener("click", openSettings);
   $("gameSettingsButton")?.addEventListener("click", openSettings);
   $("settingsCloseButton")?.addEventListener("click", closeSettings);
@@ -174,6 +187,7 @@
   $("settingsQuickControlButton")?.addEventListener("click", toggleQuickControl);
   $("settingsSpeechButton")?.addEventListener("click", toggleSpeech);
   $("settingsQuickSpeechButton")?.addEventListener("click", toggleQuickSpeech);
+  $("settingsAutoResumeButton")?.addEventListener("click", toggleAutoResume);
 
   $("controlModeButton")?.addEventListener("click", () => {
     setTimeout(() => {
