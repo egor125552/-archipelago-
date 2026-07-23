@@ -3,10 +3,18 @@
 import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=38";
 import {COMBAT_TUNING} from "./free-roam-combat-tuning.js?v=33";
 
-const PISTOL_URL = "/assets/audio/free-roam-v25/pistol-shot.mp3";
+const PISTOL_URL = "/assets/audio/free-roam-v25/pistol-shot.mp3.base64";
 const originalPreload = FreeRoamAudio.prototype.preload;
 const originalImpact = FreeRoamAudio.prototype.playCombatImpact;
 const originalHandle = FreeRoamAudio.prototype.handleFreeEvent;
+
+function base64AudioBuffer(text) {
+  const clean = String(text || "").replace(/\s+/g, "");
+  const binary = atob(clean);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes.buffer;
+}
 
 FreeRoamAudio.prototype.preload = async function preloadWithPistol() {
   const inherited = originalPreload.call(this);
@@ -15,7 +23,8 @@ FreeRoamAudio.prototype.preload = async function preloadWithPistol() {
     this.pistolPreloadPromise = (async () => {
       const response = await fetch(PISTOL_URL, {cache: "force-cache"});
       if (!response.ok) throw new Error(`pistolShot: ${response.status}`);
-      this.buffers.set("pistolShot", await this.ctx.decodeAudioData(await response.arrayBuffer()));
+      const encoded = await response.text();
+      this.buffers.set("pistolShot", await this.ctx.decodeAudioData(base64AudioBuffer(encoded)));
     })();
   }
   await Promise.allSettled([inherited, this.pistolPreloadPromise]);
