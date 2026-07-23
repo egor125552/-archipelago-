@@ -1,10 +1,12 @@
 "use strict";
 
 import {describeCombatTarget, listCombatTargets} from "./free-roam-targeting.js?v=32";
+import {encounterActive} from "./free-roam-contracts.js?v=1";
 
 const NAVIGATION_ENTRIES = Object.freeze([
   Object.freeze({id: "navigation-objective", menuKind: "navigation", navigationTargetId: "objective", label: "текущая задача"}),
   Object.freeze({id: "navigation-merchant", menuKind: "navigation", navigationTargetId: "merchant", label: "торговый причал"}),
+  Object.freeze({id: "navigation-board", menuKind: "navigation", navigationTargetId: "board", label: "доска заказов"}),
 ]);
 
 export function createTargetMenu({
@@ -34,6 +36,7 @@ export function createTargetMenu({
     const combatTargets = rangedReady
       ? listCombatTargets(world, playerIndex, 420).map(target => ({...target, menuKind: "combat"}))
       : [];
+    if (encounterActive(world)) return combatTargets;
     return [...NAVIGATION_ENTRIES.map(entry => ({...entry})), ...combatTargets];
   }
 

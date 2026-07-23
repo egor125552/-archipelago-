@@ -106,7 +106,9 @@ const GUNNER_FIELDS = Object.freeze([
   "id", "pursuerId", "targetPlayer", "x", "y", "heading", "health", "active", "destroyed", "returning",
 ]);
 const CRATE_FIELDS = Object.freeze([
-  "id", "kind", "rarity", "weight", "x", "y", "state", "carriedBy", "stowedBoat", "source",
+  "id", "kind", "label", "rarity", "weight", "slots", "traits", "x", "y", "state", "carriedBy", "stowedBoat", "source",
+  "contractId", "contractDefinitionId", "contractCategory", "contractDamage", "waterExposure",
+  "extractionSeconds", "extractionProgress", "extracted",
 ]);
 
 // Browsers render this view but never own the authoritative simulation. Host
@@ -139,6 +141,21 @@ export function replicatedFreeWorld(world) {
     freeScenario: select(scenario, [
       "phase", "warningUntil", "targets", "lockedTargetIds", "beaconUntil", "guideEnabled", "navigationModes",
     ]),
+    freeContracts: world?.freeContracts ? {
+      offerIds: (world.freeContracts.offers || []).map(offer => offer.definitionId),
+      activeContract: select(world.freeContracts.activeContract, [
+        "id", "definitionId", "category", "label", "phase", "creditReward", "scrapReward", "bonus",
+        "threat", "maximumThreat", "crateId", "rewardIssued",
+      ]),
+      completedContracts: world.freeContracts.completedContracts,
+      abandonedContracts: world.freeContracts.abandonedContracts,
+      scrap: world.freeContracts.scrap,
+      boardOpen: world.freeContracts.boardOpen,
+      boardSelection: world.freeContracts.boardSelection,
+      encounterActive: world.freeContracts.encounterActive,
+      encounterLevel: world.freeContracts.encounterLevel,
+      encounterDefeated: world.freeContracts.encounterDefeated,
+    } : null,
     freePursuerSquad: {
       activated: pursuers.activated,
       assignments: pursuers.assignments,
