@@ -1,6 +1,7 @@
 "use strict";
 
 const ARM_DELAY_MS = 90;
+const RANGED_WEAPONS = new Set(["pistol", "automatic"]);
 
 export function shouldHoldRangedFire({pointers, weaponText, targetMenuOpen = false}) {
   return Number(pointers) === 3
@@ -12,35 +13,34 @@ export const shouldHoldAutomaticFire = shouldHoldRangedFire;
 
 export function installAutomaticHoldFire(doc = document) {
   const game = doc.getElementById("game");
-  const attackButton = doc.getElementById("attackButton");
   const weaponValue = doc.getElementById("weaponValue");
   const targetButton = doc.getElementById("targetButton");
-  if (!game || !attackButton || !weaponValue || !targetButton) return null;
+  if (!game || !weaponValue || !targetButton) return null;
 
   const activeTouches = new Set();
-  const syntheticPointerId = 9036;
   let firing = false;
   let consumedRangedGesture = false;
   let blockedByExtraFinger = false;
   let armTimer = 0;
 
   const targetMenuOpen = () => targetButton.getAttribute("aria-pressed") === "true";
-  const rangedReady = () => shouldHoldRangedFire({
-    pointers: activeTouches.size,
-    weaponText: weaponValue.textContent,
-    targetMenuOpen: targetMenuOpen(),
-  });
 
-  function dispatchAttack(type) {
-    attackButton.dispatchEvent(new PointerEvent(type, {
-      bubbles: true,
-      cancelable: true,
-      pointerId: syntheticPointerId,
-      pointerType: "mouse",
-      isPrimary: true,
-      button: 0,
-      buttons: type === "pointerdown" ? 1 : 0,
-    }));
+  function currentWeapon() {
+    const api = globalThis.__freeRoam;
+    const world = api?.getWorld?.();
+    const playerIndex = api?.playerIndex?.() ?? 0;
+    return world?.players?.[playerIndex]?.combat?.equipped || "";
+  }
+
+  function rangedReady() {
+    return activeTouches.size === 3
+      && RANGED_WEAPONS.has(currentWeapon())
+      && !targetMenuOpen();
+  }
+
+  function setAttack(active) {
+    const api = globalThis.__freeRoam;
+    return api?.setControl?.("attack", Boolean(active)) ?? false;
   }
 
   function cancelArm() {
@@ -53,7 +53,7 @@ export function installAutomaticHoldFire(doc = document) {
     if (firing || blockedByExtraFinger || !rangedReady()) return false;
     firing = true;
     consumedRangedGesture = true;
-    dispatchAttack("pointerdown");
+    setAttack(true);
     return true;
   }
 
@@ -70,15 +70,28 @@ export function installAutomaticHoldFire(doc = document) {
     cancelArm();
     if (!firing) return false;
     firing = false;
-    dispatchAttack("pointerup");
+    setAttack(false);
     return true;
   }
 
-  function forceAttackReleasedAfterGesture() {
-    queueMicrotask(() => {
-      dispatchAttack("pointerdown");
-      dispatchAttack("pointerup");
+  function cancelConsumedGestureRelease(event) {
+    // The main gesture recognizer classifies a completed three-finger hold on
+    // release. Feed it a cancellation instead, otherwise it starts a delayed
+    // 680 ms attack pulse after the real held fire has already stopped.
+    const cancellation = new PointerEvent("pointercancel", {
+      bubbles: true,
+      cancelable: true,
+      pointerId: event.pointerId,
+      pointerType: "touch",
+      isPrimary: event.isPrimary,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      button: 0,
+      buttons: 0,
     });
+    game.dispatchEvent(cancellation);
+    event.preventDefault();
+    event.stopImmediatePropagation();
   }
 
   function pointerDown(event) {
@@ -94,15 +107,15 @@ export function installAutomaticHoldFire(doc = document) {
 
   function pointerFinished(event) {
     if (event.pointerType !== "touch" || !activeTouches.has(event.pointerId)) return;
+    const finalPointer = activeTouches.size === 1;
     activeTouches.delete(event.pointerId);
     if (activeTouches.size !== 3) stopFiring();
-    if (activeTouches.size === 0) {
-      blockedByExtraFinger = false;
-      if (consumedRangedGesture) {
-        consumedRangedGesture = false;
-        forceAttackReleasedAfterGesture();
-      }
-    }
+    if (!finalPointer) return;
+
+    const consumed = consumedRangedGesture;
+    blockedByExtraFinger = false;
+    consumedRangedGesture = false;
+    if (consumed && event.type === "pointerup") cancelConsumedGestureRelease(event);
   }
 
   game.addEventListener("pointerdown", pointerDown, true);
@@ -110,7 +123,7 @@ export function installAutomaticHoldFire(doc = document) {
   game.addEventListener("pointercancel", pointerFinished, true);
 
   const observer = new MutationObserver(() => {
-    if (!rangedReady()) stopFiring();
+    if (firing && (!RANGED_WEAPONS.has(currentWeapon()) || targetMenuOpen())) stopFiring();
   });
   observer.observe(weaponValue, {childList: true, subtree: true, characterData: true});
   observer.observe(targetButton, {attributes: true, attributeFilter: ["aria-pressed"]});
@@ -124,6 +137,7 @@ export function installAutomaticHoldFire(doc = document) {
       game.removeEventListener("pointercancel", pointerFinished, true);
     },
     activeTouches,
+    currentWeapon,
     isFiring: () => firing,
   };
 }
