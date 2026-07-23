@@ -24,6 +24,8 @@ jobs:
         run: |
           set -euo pipefail
           exec > >(tee /tmp/contracts-apply.log) 2>&1
+          sha256sum .contract-release/*.b64 | tee /tmp/contracts-chunks.txt
+          wc -c .contract-release/*.b64 | tee -a /tmp/contracts-chunks.txt
           cat \
             .contract-release/v130-00.b64 \
             .contract-release/v130-01.b64 \
@@ -60,4 +62,5 @@ jobs:
           path: |
             /tmp/contracts-apply.log
             /tmp/contracts-diagnostic.txt
+            /tmp/contracts-chunks.txt
           retention-days: 1
