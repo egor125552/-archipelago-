@@ -225,6 +225,14 @@ test("a hard page reload keeps controls working in the same live room", async ({
   try {
     const roomBefore = await crew.evaluate(() => window.__freeRoam.roomId());
 
+    // This test exercises the optional automatic-return path. Normal users now
+    // stay in the menu by default, so enable the saved preference explicitly.
+    await crew.evaluate(() => {
+      const key = "echo-free-roam-interface-settings-v1";
+      const settings = JSON.parse(localStorage.getItem(key) || "{}");
+      localStorage.setItem(key, JSON.stringify({...settings, autoResume: true}));
+    });
+
     // Raise the server-side high-water mark far above the counter that a new
     // JavaScript page starts with. Before the fix, the reloaded page's inputs
     // 1, 2, 3... were all rejected by this surviving room.
