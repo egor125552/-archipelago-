@@ -36,6 +36,11 @@ jobs:
             echo "27a473ae0bdad90f7de677ab66be46436612a5141ec4004879103f470ba476e7  /tmp/merchant-changes.tgz" | sha256sum --check
             tar -tzf /tmp/merchant-changes.tgz
             tar -xzf /tmp/merchant-changes.tgz -C .
+            python - <<'PY'
+          from pathlib import Path
+          path = Path('tests/free-roam-shop.test.mjs')
+          path.write_text(path.read_text().rstrip() + '\n')
+          PY
             rm -rf .merchant-parts
             rm -f .github/workflows/export-merchant-workspace.yml
             npm ci
