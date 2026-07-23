@@ -1,6 +1,6 @@
 {
   "name": "echo-archipelago",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -12,3 +12,4 @@
     "wrangler": "^4.0.0"
   }
 }
+
