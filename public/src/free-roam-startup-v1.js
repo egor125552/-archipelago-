@@ -22,6 +22,7 @@ try {
 (() => {
   const SESSION_KEY = "echo-free-roam-active-session-v1";
   const NativeWebSocket = globalThis.WebSocket;
+  const MOBILE_SALVAGE_OBJECTIVE = "Задача: доставь два обычных ящика. Коснись двумя пальцами — сонар назовёт одну цель. Подойди к ящику ближе 12 метров и коснись экрана одним пальцем. После погрузки снова коснись двумя пальцами, доедь до причала и остановись — разгрузка автоматическая.";
   let resumeSession = null;
   let resumePending = false;
   let leaveConfirmUntil = 0;
@@ -32,6 +33,32 @@ try {
       return settings?.autoResume === true;
     } catch (_) {
       return false;
+    }
+  }
+
+  function touchGameplay() {
+    return Number(navigator.maxTouchPoints || 0) > 0
+      && Boolean(globalThis.matchMedia?.("(pointer: coarse)")?.matches);
+  }
+
+  function localizeMessageData(data) {
+    if (!touchGameplay()) return data;
+    try {
+      const message = JSON.parse(String(data));
+      if (message.type !== "free-state" || !Array.isArray(message.events)) return data;
+      let changed = false;
+      message.events = message.events.map(event => {
+        const desktopObjective = event?.type === "scenario-objective"
+          && typeof event.text === "string"
+          && event.text.includes("Сонар Q")
+          && event.text.includes("нажми F");
+        if (!desktopObjective) return event;
+        changed = true;
+        return {...event, text: MOBILE_SALVAGE_OBJECTIVE};
+      });
+      return changed ? JSON.stringify(message) : data;
+    } catch (_) {
+      return data;
     }
   }
 
@@ -79,16 +106,113 @@ try {
     }
   }
 
+  function messageEventWithData(event, data) {
+    if (data === event.data) return event;
+    try {
+      return new MessageEvent("message", {
+        data,
+        origin: event.origin,
+        lastEventId: event.lastEventId,
+        source: event.source,
+        ports: event.ports,
+      });
+    } catch (_) {
+      return {data, origin: event.origin, lastEventId: event.lastEventId};
+    }
+  }
+
   function GuardedWebSocket(url, protocols) {
+    const finalUrl = guardedSocketUrl(url);
     const socket = protocols === undefined
-      ? new NativeWebSocket(guardedSocketUrl(url))
-      : new NativeWebSocket(guardedSocketUrl(url), protocols);
-    socket.addEventListener("message", event => {
+      ? new NativeWebSocket(finalUrl)
+      : new NativeWebSocket(finalUrl, protocols);
+    const nativeAddEventListener = socket.addEventListener.bind(socket);
+    const nativeRemoveEventListener = socket.removeEventListener.bind(socket);
+    const wrappedMessageListeners = new WeakMap();
+    let retryingPreferredRoom = false;
+    let requestedRoom = "";
+    let requestedRole = "";
+
+    try {
+      const parsedUrl = new URL(String(finalUrl), location.href);
+      if (parsedUrl.pathname === "/api/connect" && parsedUrl.searchParams.get("mode") === "free") {
+        requestedRoom = String(parsedUrl.searchParams.get("room") || "").trim();
+        requestedRole = String(parsedUrl.searchParams.get("role") || "").trim();
+      }
+    } catch (_) {}
+
+    const targetedReconnect = Boolean(
+      requestedRoom && ["captain", "crew"].includes(requestedRole),
+    );
+
+    function parseLobbyMessage(data) {
       try {
-        const message = JSON.parse(String(event.data));
-        if (message.type === "lobby-ready") saveSession(message.room, message.role);
-      } catch (_) {}
+        const message = JSON.parse(String(data));
+        return message?.type === "lobby-ready" ? message : null;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function isWrongReconnectRoom(message) {
+      return targetedReconnect && Boolean(message) && (
+        message.room !== requestedRoom
+        || message.role !== requestedRole
+        || message.preferredRoomFound !== true
+      );
+    }
+
+    function transformMessageData(data) {
+      const lobbyMessage = parseLobbyMessage(data);
+      if (isWrongReconnectRoom(lobbyMessage)) {
+        retryingPreferredRoom = true;
+        // Let the game mark this connection as opened, but keep its old room id.
+        // The immediate close then goes through the normal reconnect path instead
+        // of accepting a freshly created world and restarting the scenario.
+        return JSON.stringify({
+          ...lobbyMessage,
+          room: requestedRoom,
+          role: requestedRole,
+          requestedRoom,
+          preferredRoomFound: true,
+          created: false,
+          matched: true,
+          reconnectRetry: true,
+        });
+      }
+      if (retryingPreferredRoom) return null;
+      return localizeMessageData(data);
+    }
+
+    nativeAddEventListener("message", event => {
+      const message = parseLobbyMessage(event.data);
+      if (isWrongReconnectRoom(message)) {
+        retryingPreferredRoom = true;
+        setTimeout(() => {
+          try { socket.close(4101, "retry-preferred-room"); } catch (_) {}
+        }, 0);
+        return;
+      }
+      if (message) saveSession(message.room, message.role);
     });
+
+    socket.addEventListener = function addGuardedListener(type, listener, options) {
+      if (type !== "message" || !listener) return nativeAddEventListener(type, listener, options);
+      const wrapped = event => {
+        const data = transformMessageData(event.data);
+        if (data == null) return;
+        const transformed = messageEventWithData(event, data);
+        if (typeof listener === "function") listener.call(socket, transformed);
+        else listener.handleEvent?.call(listener, transformed);
+      };
+      wrappedMessageListeners.set(listener, wrapped);
+      return nativeAddEventListener(type, wrapped, options);
+    };
+
+    socket.removeEventListener = function removeGuardedListener(type, listener, options) {
+      const wrapped = type === "message" ? wrappedMessageListeners.get(listener) : null;
+      return nativeRemoveEventListener(type, wrapped || listener, options);
+    };
     return socket;
   }
 
@@ -184,7 +308,9 @@ try {
     active: () => readSession(),
     autoResumeEnabled,
     clear: clearSession,
+    localizeMessageData,
     save: saveSession,
     sync: syncSessionFromGame,
+    touchGameplay,
   };
 })();
