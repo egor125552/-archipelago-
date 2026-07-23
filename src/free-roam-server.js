@@ -8,6 +8,7 @@ import {
   stepFreeWorld,
 } from "../public/src/free-roam-core-v6.js";
 import {replicatedFreeWorld} from "../public/src/free-roam-replication.js";
+import {reserveUnconnectedBoats} from "../public/src/free-roam-reserve-boats.js";
 
 export const FREE_TICK_MS = 40;
 const MAX_ELAPSED_SECONDS = 0.2;
@@ -32,6 +33,7 @@ export function createServerFreeRoom(now = Date.now()) {
   const world = createFreeWorld();
   setPlayerPresence(world, 0, false);
   setPlayerPresence(world, 1, false);
+  reserveUnconnectedBoats(world);
   drainEvents(world);
   return {
     world,
