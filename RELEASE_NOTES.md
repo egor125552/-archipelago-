@@ -1,3 +1,24 @@
+# Echo Archipelago 1.1.2
+
+Release date: 2026-07-23
+
+## Reserve boat visibility
+
+- A solo server room no longer leaves the absent second player's boat beside the starting boat.
+- Boats for players who have never connected remain dormant, sunk and outside the playable world, so they cannot be heard, boarded, collided with or attached to a tow line.
+- A player's boat is activated and placed near the existing player only when that player actually joins the room.
+- Reconnecting players keep their existing boat position, cargo, hull state and other progress instead of having the boat placed again.
+
+## Verification
+
+- Added regression coverage for an empty room, solo start, second-player activation and reconnect preservation.
+- Node mechanics and regression tests passed.
+- Two-client browser scenarios passed.
+- The Cloudflare Worker bundle validation passed.
+- A physical iPhone still requires manual confirmation that no unexplained reserve boat is audible or towable at the solo start.
+
+---
+
 # Echo Archipelago 1.1.1
 
 Release date: 2026-07-23
