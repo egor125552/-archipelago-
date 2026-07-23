@@ -2,6 +2,7 @@
 
 const SPEECH_PREFERENCE_KEY = "echo-free-roam-speech";
 const SPEECH_DEFAULT_MIGRATION_KEY = "echo-free-roam-speech-default-v2";
+const INTERFACE_SETTINGS_KEY = "echo-free-roam-interface-settings-v1";
 
 try {
   if (localStorage.getItem(SPEECH_DEFAULT_MIGRATION_KEY) !== "done") {
@@ -24,6 +25,15 @@ try {
   let resumeSession = null;
   let resumePending = false;
   let leaveConfirmUntil = 0;
+
+  function autoResumeEnabled() {
+    try {
+      const settings = JSON.parse(localStorage.getItem(INTERFACE_SETTINGS_KEY) || "null");
+      return settings?.autoResume === true;
+    } catch (_) {
+      return false;
+    }
+  }
 
   function readSession() {
     try {
@@ -137,8 +147,10 @@ try {
   new MutationObserver(removeReleaseDebugButton).observe(document.documentElement, {childList: true, subtree: true});
   removeReleaseDebugButton();
 
-  resumeSession = readSession();
-  resumePending = Boolean(resumeSession);
+  if (autoResumeEnabled()) {
+    resumeSession = readSession();
+    resumePending = Boolean(resumeSession);
+  }
 
   function resumeWorld() {
     if (!resumeSession) return;
@@ -160,7 +172,8 @@ try {
   // WebSocket messages are still the fastest way to save the room, but the
   // browser is allowed to reload or suspend a page at awkward moments. Keep a
   // second independent copy path and perform one final synchronous save on
-  // pagehide so a hard refresh can always return to the same role and world.
+  // pagehide so a hard refresh can always return to the same role and world
+  // when automatic return is enabled in settings.
   setInterval(syncSessionFromGame, 500);
   window.addEventListener("pagehide", syncSessionFromGame);
   document.addEventListener("visibilitychange", () => {
@@ -169,6 +182,7 @@ try {
 
   globalThis.__freeRoamSessionGuard = {
     active: () => readSession(),
+    autoResumeEnabled,
     clear: clearSession,
     save: saveSession,
     sync: syncSessionFromGame,
