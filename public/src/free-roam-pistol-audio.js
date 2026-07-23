@@ -3,11 +3,12 @@
 import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=38";
 import {COMBAT_TUNING} from "./free-roam-combat-tuning.js?v=33";
 
+const PISTOL_RECORDING_URL = "https://raw.githubusercontent.com/Gabrielsgp/hand-shotter/a9e2dac862291cbff1af8e2c3e82922c3aeb726c/songs/163456__lemudcrab__pistol-shot.wav";
 const originalPreload = FreeRoamAudio.prototype.preload;
 const originalImpact = FreeRoamAudio.prototype.playCombatImpact;
 const originalHandle = FreeRoamAudio.prototype.handleFreeEvent;
 
-function createPistolBuffer(ctx) {
+function createFallbackPistolBuffer(ctx) {
   const sampleRate = ctx.sampleRate;
   const duration = 0.58;
   const buffer = ctx.createBuffer(1, Math.ceil(sampleRate * duration), sampleRate);
@@ -44,10 +45,25 @@ function createPistolBuffer(ctx) {
   return buffer;
 }
 
+async function loadRecordedPistol(ctx) {
+  const response = await fetch(PISTOL_RECORDING_URL, {cache: "force-cache", mode: "cors"});
+  if (!response.ok) throw new Error(`pistolShot: ${response.status}`);
+  const bytes = await response.arrayBuffer();
+  if (bytes.byteLength < 1_000) throw new Error("pistolShot: recording is empty");
+  return ctx.decodeAudioData(bytes.slice(0));
+}
+
 FreeRoamAudio.prototype.preload = async function preloadWithPistol() {
   const inherited = originalPreload.call(this);
-  if (this.ctx && !this.buffers.has("pistolShot")) this.buffers.set("pistolShot", createPistolBuffer(this.ctx));
-  await inherited;
+  if (this.ctx && !this.pistolPreloadPromise) {
+    this.pistolPreloadPromise = loadRecordedPistol(this.ctx)
+      .catch(() => createFallbackPistolBuffer(this.ctx))
+      .then(buffer => this.buffers.set("pistolShot", buffer));
+  }
+  await Promise.allSettled([inherited, this.pistolPreloadPromise]);
+  if (this.ctx && !this.buffers.has("pistolShot")) {
+    this.buffers.set("pistolShot", createFallbackPistolBuffer(this.ctx));
+  }
 };
 
 FreeRoamAudio.prototype.playCombatImpact = function playCombatImpactWithPistol(event, playerIndex) {
