@@ -13,6 +13,7 @@ import {automaticCargoDelivered} from "./free-roam-weapon-crates.js?v=32";
 import {activeHostileGunners} from "./free-roam-hostile-gunners.js?v=32";
 import {ensureSonarGuide, updateSonarGuide} from "./free-roam-sonar-guide.js?v=35";
 import {merchantNavigationTarget} from "./free-roam-shop.js?v=1";
+import {contractNavigationTarget, encounterActive, ensureContracts} from "./free-roam-contracts.js?v=1";
 
 const TARGET_LABELS = Object.freeze({
   plates: "ящик с пластинами",
@@ -94,7 +95,7 @@ function syncNavigationModes(world) {
   const inputs = world.freeActivities?.inputs || [];
   for (let index = 0; index < world.players.length; index += 1) {
     const requested = inputs[index]?.navigationTargetId;
-    if (["objective", "merchant"].includes(requested)) scenario.navigationModes[index] = requested;
+    if (["objective", "merchant", "board"].includes(requested)) scenario.navigationModes[index] = requested;
   }
 }
 
@@ -185,7 +186,8 @@ function armTarget(world, playerIndex) {
 
 export function scenarioTarget(world, playerIndex) {
   const scenario = ensureFreeScenario(world);
-  if (scenario.phase === "pursuit") {
+  ensureContracts(world);
+  if (scenario.phase === "pursuit" || encounterActive(world)) {
     const assigned = assignedPursuerForPlayer(world, playerIndex);
     const pursuer = assigned
       || activePursuerById(world, scenario.lockedPursuerIds[playerIndex])
@@ -204,7 +206,9 @@ export function scenarioTarget(world, playerIndex) {
   if (scenario.phase === "warning") {
     return {id: "open-water", kind: "warning", label: "выход из бухты", x: 210, y: 255};
   }
-  if (scenario.navigationModes?.[playerIndex] === "merchant") return merchantNavigationTarget();
+  if (!encounterActive(world) && scenario.navigationModes?.[playerIndex] === "merchant") return merchantNavigationTarget();
+  if (!encounterActive(world) && scenario.navigationModes?.[playerIndex] === "board") return contractNavigationTarget(world, playerIndex);
+  if (!encounterActive(world) && world.freeContracts?.activeContract) return contractNavigationTarget(world, playerIndex);
   if (scenario.phase === "arm") return armTarget(world, playerIndex);
   if (scenario.phase === "salvage") {
     if (cargoNeedsDock(world, playerIndex)) return dockTarget(world.players[playerIndex]);
@@ -412,7 +416,9 @@ export function scenarioStatus(world, playerIndex) {
     arm: "Задача: доставь автомат. До погони можно забрать нож; повторное нажатие сонара переключает цель.",
     warning: `Преследователи появятся через ${Math.max(0, Math.ceil(scenario.warningUntil - world.time))} секунд.`,
     pursuit: `Задача: уничтожь все катера и высадившихся стрелков. Катеров осталось ${activePursuers(world).length}, стрелков ${activeHostileGunners(world).length}.`,
-    victory: "Сценарий пройден.",
+    victory: world.freeContracts?.activeContract
+      ? `Заказ: ${world.freeContracts.activeContract.label}. Этап ${world.freeContracts.activeContract.phase}.`
+      : "Сценарий пройден. Доска заказов доступна у торговца.",
   };
   if (!target) return phases[scenario.phase] || "";
   const guide = scenario.guideEnabled?.[playerIndex] ? " Мягкий курс включён." : "";

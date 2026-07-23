@@ -11,17 +11,23 @@ import {
   spawnRareCrate,
   storeActivityInput,
   updateActivities,
-} from "./free-roam-activities.js?v=40";
+} from "./free-roam-activities.js?v=41";
 // free-roam-combat.js?v=32 remains the stable combat base behind the 1.1 pistol layer.
 import {applyCombatDamage, combatStatus, ensureCombat, updateCombat} from "./free-roam-combat-v2.js?v=1";
 import {ensureMarauder, releaseStolenCargo, updateMarauder} from "./free-roam-marauder.js?v=32";
-import {ensureFreeScenario, scenarioStatus, updateFreeScenario} from "./free-roam-scenario.js?v=41";
+import {ensureFreeScenario, scenarioStatus, updateFreeScenario} from "./free-roam-scenario.js?v=42";
 import {suppressIncapacitatedMovement, updatePhysicalActors} from "./free-roam-physical-actors.js?v=38";
 import {handleAssistedBoarding} from "./free-roam-boarding-assist.js?v=29";
 import {ensurePursuerSquad, updatePursuerSquad} from "./free-roam-pursuer-squad.js?v=32";
 import {ensureHostileGunners, updateHostileGunners} from "./free-roam-hostile-gunners.js?v=32";
 import {retireClaimedKnifeCrates} from "./free-roam-unique-weapons.js?v=1";
 import {suppressGameplayWhileShopping, updateMerchantShop} from "./free-roam-shop.js?v=1";
+import {
+  contractStatus,
+  ensureContracts,
+  suppressGameplayWhileContractBoard,
+  updateContracts,
+} from "./free-roam-contracts.js?v=1";
 
 export const WORLD = Object.freeze({...base.WORLD});
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -35,6 +41,7 @@ function ensureState(world) {
   ensurePursuerSquad(world);
   ensureHostileGunners(world);
   ensureFreeScenario(world);
+  ensureContracts(world);
   retireClaimedKnifeCrates(world);
   return world;
 }
@@ -96,9 +103,12 @@ export function stepFreeWorld(world, dt) {
   const safeDt = clamp(Number(dt) || 0, 0, 0.1);
   const eventStart = world.events?.length || 0;
   updateMerchantShop(world);
+  updateContracts(world, safeDt);
   suppressGameplayWhileShopping(world);
+  suppressGameplayWhileContractBoard(world);
   consumeActivityActions(world);
   suppressGameplayWhileShopping(world);
+  suppressGameplayWhileContractBoard(world);
   const restoreMovement = suppressIncapacitatedMovement(world);
   base.stepFreeWorld(world, safeDt);
   restoreMovement();
@@ -132,6 +142,7 @@ export function playerStatus(world, playerIndex) {
     scenarioStatus(world, playerIndex),
     combatStatus(world, playerIndex),
     activityStatus(world, playerIndex),
+    contractStatus(world, playerIndex),
   ].filter(Boolean).join(" ");
 }
 

@@ -15,6 +15,13 @@ import {
   grantDeliveryCredits,
   handleMerchantAction,
 } from "./free-roam-shop.js?v=1";
+import {
+  completeContractDelivery,
+  ensureContracts,
+  handleContractBoardAction,
+  notifyContractCargoStowed,
+} from "./free-roam-contracts.js?v=1";
+import {cargoSlotCost} from "./free-roam-cargo-traits.js?v=1";
 
 const WORLD_CRATES = Object.freeze([
   {id: "crate-plates", kind: "plates", rarity: "common", weight: 2, x: 180, y: 34},
@@ -96,6 +103,7 @@ export function ensureActivities(world) {
   state.previousInputs ||= [{}, {}];
   state.seed ||= 0x4a61c3;
   ensureShopState(world);
+  ensureContracts(world);
   while (state.presence.length < world.players.length) state.presence.push(false);
   while (state.score.length < world.players.length) state.score.push(0);
   while (state.delivered.length < world.players.length) state.delivered.push(0);
@@ -145,6 +153,10 @@ export function storeActivityInput(world, playerIndex, input) {
     shopNext: Boolean(input?.shopNext),
     shopBuy: Boolean(input?.shopBuy),
     shopClose: Boolean(input?.shopClose),
+    boardPrevious: Boolean(input?.boardPrevious),
+    boardNext: Boolean(input?.boardNext),
+    boardAccept: Boolean(input?.boardAccept),
+    boardClose: Boolean(input?.boardClose),
   };
 }
 
@@ -222,7 +234,11 @@ function stealStowedCargo(world, playerIndex) {
 }
 
 function stow(world, crate, boat, playerIndex) {
-  if (!crate || !boat || boat.cargo.length >= 5) return false;
+  const occupiedSlots = (boat?.cargo || []).reduce((sum, id) => {
+    const existing = world.freeActivities.crates.find(candidate => candidate.id === id);
+    return sum + cargoSlotCost(existing);
+  }, 0);
+  if (!crate || !boat || occupiedSlots + cargoSlotCost(crate) > 5) return false;
   crate.state = "stowed";
   crate.carriedBy = null;
   crate.stowedBoat = boat.id;
@@ -230,7 +246,8 @@ function stow(world, crate, boat, playerIndex) {
   const player = world.players[playerIndex];
   if (player?.combat) player.combat.carriedCrate = null;
   grantWeaponFromCrate(world, crate, playerIndex, emit);
-  emit(world, "cargo-stowed", `Ящик погружён на лодку: ${LABELS[crate.kind] || "груз"}.`, [playerIndex], {
+  notifyContractCargoStowed(world, crate);
+  emit(world, "cargo-stowed", `Ящик погружён на лодку: ${crate.label || LABELS[crate.kind] || "груз"}.`, [playerIndex], {
     sourcePlayer: playerIndex,
     crateId: crate.id,
     kind: crate.kind,
@@ -302,6 +319,7 @@ export function handleActivityAction(world, playerIndex) {
   }
 
   const crateAtFeet = nearestAvailableCrate(state, player, 3.5);
+  if (!crateAtFeet.crate && handleContractBoardAction(world, playerIndex)) return true;
   if (!crateAtFeet.crate && handleMerchantAction(world, playerIndex)) return true;
 
   if (stealStowedCargo(world, playerIndex)) return true;
@@ -312,12 +330,16 @@ export function handleActivityAction(world, playerIndex) {
     const boat = world.boats[player.activeBoat];
     return stow(world, nearest.crate, boat, playerIndex);
   }
+  if (nearest.crate.contractCategory === "salvage" && !nearest.crate.extracted) {
+    emit(world, "salvage-extraction-required", `Сначала отдели ${nearest.crate.label || "деталь"} от обломков: удерживай действие рядом.`, [playerIndex], {crateId: nearest.crate.id, sourcePlayer: playerIndex, x: nearest.crate.x, y: nearest.crate.y});
+    return true;
+  }
   nearest.crate.state = "carried";
   nearest.crate.carriedBy = playerIndex;
   nearest.crate.stowedBoat = null;
   player.combat.carriedCrate = nearest.crate.id;
   grantWeaponFromCrate(world, nearest.crate, playerIndex, emit);
-  emit(world, "cargo-pickup", `Ты поднял: ${LABELS[nearest.crate.kind] || "груз"}.`, [playerIndex], {
+  emit(world, "cargo-pickup", `Ты поднял: ${nearest.crate.label || LABELS[nearest.crate.kind] || "груз"}.`, [playerIndex], {
     sourcePlayer: playerIndex,
     crateId: nearest.crate.id,
     kind: nearest.crate.kind,
@@ -330,6 +352,12 @@ export function handleActivityAction(world, playerIndex) {
 
 function rewardPlayer(world, playerIndex, boat, crate) {
   const state = world.freeActivities;
+  const contractReward = completeContractDelivery(world, playerIndex, boat, crate);
+  if (contractReward) {
+    state.score[playerIndex] += 5;
+    state.delivered[playerIndex] += 1;
+    return contractReward.text;
+  }
   const combat = world.players[playerIndex]?.combat;
   let effect = "Ценный груз принят.";
   switch (crate.kind) {
@@ -502,7 +530,7 @@ export function activityStatus(world, playerIndex) {
   if (carried) parts.push(`В руках ${LABELS[carried.kind] || "груз"}.`);
   if (nearest.crate) {
     const detail = STATUS_DETAILS[nearest.crate.kind];
-    parts.push(`Ближайший груз в ${Math.round(nearest.distance)} метрах: ${LABELS[nearest.crate.kind] || "ящик"}.${detail ? ` ${detail}` : ""}`);
+    parts.push(`Ближайший груз в ${Math.round(nearest.distance)} метрах: ${nearest.crate.label || LABELS[nearest.crate.kind] || "ящик"}.${detail ? ` ${detail}` : ""}`);
   }
   if ((Number(boat?.cargoPumpBonus) || 0) > 0) {
     parts.push(`Усиление насоса: плюс ${pumpRateText(boat.cargoPumpBonus)} откачки в секунду.`);

@@ -17,6 +17,7 @@ const INPUT_KEYS = Object.freeze([
   "up", "down", "left", "right", "run", "pump", "repair", "action",
   "jump", "attack", "weapon", "sonar", "guide",
   "shopPrevious", "shopNext", "shopBuy", "shopClose",
+  "boardPrevious", "boardNext", "boardAccept", "boardClose",
 ]);
 
 export function freePlayerIndex(role) {
@@ -27,7 +28,7 @@ function normalizeInput(input) {
   const result = {};
   for (const key of INPUT_KEYS) result[key] = Boolean(input?.[key]);
   result.targetId = typeof input?.targetId === "string" ? input.targetId.slice(0, 80) : null;
-  result.navigationTargetId = ["objective", "merchant"].includes(input?.navigationTargetId)
+  result.navigationTargetId = ["objective", "merchant", "board"].includes(input?.navigationTargetId)
     ? input.navigationTargetId
     : "objective";
   return result;

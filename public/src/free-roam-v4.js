@@ -3,16 +3,18 @@
 import {
   WORLD,
   playerStatus,
-} from "./free-roam-core-v6.js?v=39";
-import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=39";
+} from "./free-roam-core-v6.js?v=40";
+import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=40";
 import {predictLocalWorld, reconcileLocalPrediction} from "./free-roam-client-prediction.js?v=40";
-import {applyReplicatedWorldDelta} from "./free-roam-replication.js?v=41";
+import {applyReplicatedWorldDelta} from "./free-roam-replication.js?v=42";
 import {createSpeechController} from "./free-roam-speech.js?v=41";
 import {directionFromDelta} from "./free-roam-gesture-model.js";
 import {classifyActionGesture, gestureMetrics} from "./free-roam-action-gestures.js";
 import {resolveCombatTarget} from "./free-roam-targeting.js?v=32";
-import {createTargetMenu} from "./free-roam-target-menu.js?v=33";
+import {createTargetMenu} from "./free-roam-target-menu.js?v=34";
 import {MERCHANT, SHOP_ITEMS} from "./free-roam-shop.js?v=1";
+import {CONTRACT_BOARD} from "./free-roam-contracts.js?v=1";
+import {cargoDefinition} from "./free-roam-contract-catalog.js?v=1";
 
 const $ = id => document.getElementById(id);
 const SPEECH_RATE = 1.18;
@@ -37,6 +39,10 @@ const localInput = {
   shopNext: false,
   shopBuy: false,
   shopClose: false,
+  boardPrevious: false,
+  boardNext: false,
+  boardAccept: false,
+  boardClose: false,
 };
 const activeTouches = new Map();
 const holdTimers = new Map();
@@ -84,6 +90,25 @@ function distance(a, b) {
 
 function shopIsOpen() {
   return Boolean(world?.freeActivities?.shopOpen?.[playerIndex]);
+}
+
+function boardIsOpen() {
+  return Boolean(world?.freeContracts?.boardOpen?.[playerIndex]);
+}
+
+function selectedBoardEntry() {
+  const state = world?.freeContracts;
+  if (!state) return null;
+  const entries = state.activeContract
+    ? [{label: `Текущий заказ: ${state.activeContract.label}`}, {label: "Отказаться от заказа"}]
+    : (state.offerIds || []).map(id => cargoDefinition(id)).filter(Boolean);
+  const raw = Number(state.boardSelection?.[playerIndex]) || 0;
+  return entries[((raw % entries.length) + entries.length) % entries.length] || null;
+}
+
+function nearContractBoard() {
+  const player = world?.players?.[playerIndex];
+  return Boolean(player?.mode === "foot" && distance(player, CONTRACT_BOARD) <= 8.5);
 }
 
 function selectedShopItem() {
@@ -462,6 +487,10 @@ function releaseAllMovement() {
   localInput.shopNext = false;
   localInput.shopBuy = false;
   localInput.shopClose = false;
+  localInput.boardPrevious = false;
+  localInput.boardNext = false;
+  localInput.boardAccept = false;
+  localInput.boardClose = false;
   for (const timer of holdTimers.values()) clearTimeout(timer);
   holdTimers.clear();
   activeTouches.clear();
@@ -486,7 +515,7 @@ function syncControlButtons() {
 function handleGameEvent(event) {
   audio.handleFreeEvent(event, playerIndex);
   if (!event?.targets?.includes(playerIndex)) return;
-  if (event.type === "shop-open") {
+  if (["shop-open", "contract-board-open"].includes(event.type)) {
     if (targetMenu.isOpen()) targetMenu.close(false);
     releaseAllMovement();
   }
@@ -535,7 +564,10 @@ function render() {
   const activities = world.freeActivities || {};
   const combat = me.combat || {};
   const merchantOpen = shopIsOpen();
+  const boardOpen = boardIsOpen();
+  const menuOpen = merchantOpen || boardOpen;
   const shopItem = selectedShopItem();
+  const boardEntry = selectedBoardEntry();
   const marauder = activities.marauder || {};
   const pursuerSquad = world.freePursuerSquad || {};
   const activeEscorts = (pursuerSquad.escorts || []).filter(escort => escort.active && !escort.destroyed);
@@ -560,14 +592,16 @@ function render() {
   $("weaponValue").textContent = combat.equipped === "automatic" ? `автомат, ${combat.ammo || 0}` : weaponLabels[combat.equipped] || "кулаки";
   $("targetValue").textContent = lockedCombatTarget?.label || "не выбрана";
   $("cargoValue").textContent = combat.carriedCrate ? "в руках" : myBoat?.cargo?.length ? `${myBoat.cargo.length}, вес ${Math.round(myBoat.cargoWeight || 0)}` : "нет";
-  $("scoreValue").textContent = String(activities.credits || 0);
-  $("scenarioValue").textContent = {
-    salvage: "доставка",
-    arm: "поиск автомата",
-    warning: "предупреждение",
-    pursuit: "погоня",
-    victory: "пройден",
-  }[world.freeScenario?.phase] || "доставка";
+  $("scoreValue").textContent = `${activities.credits || 0}; металл ${world.freeContracts?.scrap || 0}`;
+  $("scenarioValue").textContent = world.freeContracts?.activeContract
+    ? `${world.freeContracts.activeContract.category}: ${world.freeContracts.activeContract.phase}`
+    : {
+      salvage: "доставка",
+      arm: "поиск автомата",
+      warning: "предупреждение",
+      pursuit: "погоня",
+      victory: "доска заказов",
+    }[world.freeScenario?.phase] || "доставка";
   $("marauderValue").textContent = activePursuerCount
     ? `${activePursuerCount} катера; стрелков ${activeGunners.length}; цель ${Math.round(sonarPursuer?.hull ?? marauder.hull ?? 0)}%; пуль ${(pursuerSquad.projectiles || []).length + (world.freeHostileGunners?.projectiles || []).length}`
     : world.freeScenario?.phase === "victory"
@@ -582,11 +616,15 @@ function render() {
   ].filter(Boolean).join(", ") || "измеряется";
   $("actionButton").textContent = merchantOpen
     ? `Купить: ${shopItem.label}`
+    : boardOpen
+      ? `Подтвердить: ${boardEntry?.label || "заказ"}`
     : combat.knockedDown
       ? "Сбит с ног — жди"
       : combat.carriedCrate
         ? "Положить / передать / погрузить"
-        : nearMerchant()
+        : nearContractBoard()
+          ? "Открыть доску заказов"
+          : nearMerchant()
           ? "Открыть магазин"
           : me.mode === "boat"
             ? "Груз / выйти / буксир"
@@ -598,11 +636,11 @@ function render() {
   $("weaponButton").textContent = `Оружие: ${weaponLabels[combat.equipped] || "кулаки"}`;
   $("targetButton").setAttribute("aria-pressed", String(targetMenu.isOpen()));
   $("targetButton").textContent = targetMenu.isOpen() ? "Выбор цели открыт" : "Выбрать цель";
-  $("upButton").textContent = merchantOpen ? "Предыдущий товар" : "Вперёд";
-  $("downButton").textContent = merchantOpen ? "Следующий товар" : "Назад / тормоз";
-  $("sonarButton").textContent = merchantOpen ? "Закрыть магазин" : "Сонар: текущая цель";
+  $("upButton").textContent = merchantOpen ? "Предыдущий товар" : boardOpen ? "Предыдущий заказ" : "Вперёд";
+  $("downButton").textContent = merchantOpen ? "Следующий товар" : boardOpen ? "Следующий заказ" : "Назад / тормоз";
+  $("sonarButton").textContent = merchantOpen ? "Закрыть магазин" : boardOpen ? "Закрыть доску" : "Сонар: текущая цель";
   for (const id of ["leftButton", "rightButton", "jumpButton", "attackButton", "weaponButton", "targetButton", "guideButton", "pumpButton", "repairButton"]) {
-    $(id).disabled = merchantOpen;
+    $(id).disabled = menuOpen;
   }
   syncControlButtons();
   audio.updateWorld(world, playerIndex);
@@ -719,6 +757,11 @@ function bindHold(button, name, minimumDuration = 0) {
     if (event.pointerType === "touch") showButtonsForAssistiveInput();
     event.preventDefault();
     audio.init().catch(() => {});
+    if (boardIsOpen()) {
+      if (name === "up") actionPulse("boardPrevious");
+      else if (name === "down") actionPulse("boardNext");
+      return;
+    }
     if (shopIsOpen()) {
       if (name === "up") actionPulse("shopPrevious");
       else if (name === "down") actionPulse("shopNext");
@@ -782,7 +825,7 @@ function moveTouch(event) {
   event.preventDefault();
   point.lastX = event.clientX;
   point.lastY = event.clientY;
-  if (targetMenu.isOpen() || shopIsOpen()) return;
+  if (targetMenu.isOpen() || shopIsOpen() || boardIsOpen()) return;
   if (!touchGroup || touchGroup.maxPointers !== 1 || activeTouches.size !== 1) return;
   const deltaX = point.lastX - point.x;
   const deltaY = point.lastY - point.y;
@@ -853,6 +896,16 @@ function finishTouch(event, cancelled = false) {
   if (localInput.run) setControl("run", false);
   if (cancelled || !group) return;
   const metrics = gestureMetrics(group);
+  if (boardIsOpen()) {
+    if (metrics.pointers === 1 && metrics.movement > 24) {
+      actionPulse(metrics.dy < 0 ? "boardPrevious" : "boardNext");
+    } else if (metrics.pointers === 1) {
+      actionPulse("boardAccept");
+    } else {
+      actionPulse("boardClose");
+    }
+    return;
+  }
   if (shopIsOpen()) {
     if (metrics.pointers === 1 && metrics.movement > 24) {
       actionPulse(metrics.dy < 0 ? "shopPrevious" : "shopNext");
@@ -889,6 +942,16 @@ function bindKeyboard() {
   const map = {ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right"};
   window.addEventListener("keydown", event => {
     if ($("game").hidden || event.altKey || event.ctrlKey || event.metaKey || event.isComposing || event.target.matches("input, textarea, select, [contenteditable='true']")) return;
+    if (boardIsOpen()) {
+      if (!event.repeat && event.code === "ArrowUp") actionPulse("boardPrevious");
+      else if (!event.repeat && event.code === "ArrowDown") actionPulse("boardNext");
+      else if (!event.repeat && ["Enter", "KeyF"].includes(event.code)) actionPulse("boardAccept");
+      else if (!event.repeat && ["Escape", "KeyQ"].includes(event.code)) actionPulse("boardClose");
+      else if (!["ArrowLeft", "ArrowRight"].includes(event.code)) return;
+      event.preventDefault();
+      audio.init().catch(() => {});
+      return;
+    }
     if (shopIsOpen()) {
       if (!event.repeat && event.code === "ArrowUp") actionPulse("shopPrevious");
       else if (!event.repeat && event.code === "ArrowDown") actionPulse("shopNext");
@@ -953,7 +1016,7 @@ function bindKeyboard() {
   }, true);
 
   window.addEventListener("keyup", event => {
-    if (shopIsOpen()) {
+    if (shopIsOpen() || boardIsOpen()) {
       if (["KeyX", "ShiftLeft", "ShiftRight", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.code)) {
         event.preventDefault();
       }
@@ -1044,7 +1107,7 @@ bindHold($("upButton"), "up");
 bindHold($("downButton"), "down");
 bindHold($("leftButton"), "left");
 bindHold($("rightButton"), "right");
-$("actionButton").addEventListener("click", () => actionPulse(shopIsOpen() ? "shopBuy" : "action"));
+$("actionButton").addEventListener("click", () => actionPulse(boardIsOpen() ? "boardAccept" : shopIsOpen() ? "shopBuy" : "action"));
 $("jumpButton").addEventListener("click", () => actionPulse("jump"));
 bindHold($("attackButton"), "attack", 90);
 $("attackButton").addEventListener("click", event => {
@@ -1052,11 +1115,11 @@ $("attackButton").addEventListener("click", event => {
 });
 $("weaponButton").addEventListener("click", () => actionPulse("weapon"));
 $("targetButton").addEventListener("click", () => {
-  if (shopIsOpen()) return;
+  if (shopIsOpen() || boardIsOpen()) return;
   if (targetMenu.isOpen()) targetMenu.close(true);
   else targetMenu.open();
 });
-$("sonarButton").addEventListener("click", () => actionPulse(shopIsOpen() ? "shopClose" : "sonar"));
+$("sonarButton").addEventListener("click", () => actionPulse(boardIsOpen() ? "boardClose" : shopIsOpen() ? "shopClose" : "sonar"));
 $("guideButton").addEventListener("click", () => actionPulse("guide"));
 $("pumpButton").addEventListener("click", () => toggleControl("pump"));
 $("repairButton").addEventListener("click", () => toggleControl("repair"));
@@ -1104,6 +1167,14 @@ window.__freeRoam = {
   preferredRoom: () => preferredRoomId,
   handleEvent: event => handleGameEvent(event),
   targeting: targetMenu.snapshot,
+  contracts: () => ({
+    boardOpen: boardIsOpen(),
+    selection: world?.freeContracts?.boardSelection?.[playerIndex] ?? 0,
+    active: world?.freeContracts?.activeContract || null,
+    offerIds: world?.freeContracts?.offerIds || [],
+    scrap: world?.freeContracts?.scrap || 0,
+    encounterActive: Boolean(world?.freeContracts?.encounterActive),
+  }),
   shop: () => ({
     open: shopIsOpen(),
     selection: world?.freeActivities?.shopSelection?.[playerIndex] ?? 0,
