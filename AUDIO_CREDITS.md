@@ -37,4 +37,4 @@ Those source projects do not state an audio redistribution license in their read
 
 ## Version 1.1 pistol shot
 
-The starting pistol uses a deterministic Web Audio buffer generated in `public/src/free-roam-pistol-audio.js`. Its short dry envelope, low/mid body, high-frequency crack and two restrained reflections were tuned after comparing several short pistol-shot references. No third-party pistol recording is embedded in the repository, and the sound is recreated locally by the browser before play.
+The starting pistol loads `163456__lemudcrab__pistol-shot.wav`, a short Colt .45 recording by LeMudCrab, from the mirrored `Gabrielsgp/hand-shotter` repository. `public/src/free-roam-pistol-audio.js` retains a deterministic Web Audio fallback so the weapon still sounds if the remote recording cannot be reached or decoded.
