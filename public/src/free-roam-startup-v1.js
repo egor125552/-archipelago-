@@ -22,9 +22,61 @@ try {
 (() => {
   const SESSION_KEY = "echo-free-roam-active-session-v1";
   const NativeWebSocket = globalThis.WebSocket;
+  const MOBILE_SALVAGE_OBJECTIVE = "Задача: доставь два обычных ящика. Коснись двумя пальцами — сонар назовёт одну цель. Подойди к ящику ближе 12 метров и коснись экрана одним пальцем. После погрузки снова коснись двумя пальцами, доедь до причала и остановись — разгрузка автоматическая.";
   let resumeSession = null;
   let resumePending = false;
   let leaveConfirmUntil = 0;
+
+  function autoResumeEnabled() {
+    try {
+      const settings = JSON.parse(localStorage.getItem(INTERFACE_SETTINGS_KEY) || "null");
+      return settings?.autoResume === true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function touchGameplay() {
+    return Number(navigator.maxTouchPoints || 0) > 0
+      && Boolean(globalThis.matchMedia?.("(pointer: coarse)")?.matches);
+  }
+
+  function localizeMessageData(data) {
+    if (!touchGameplay()) return data;
+    try {
+      const message = JSON.parse(String(data));
+      if (message.type !== "free-state" || !Array.isArray(message.events)) return data;
+      let changed = false;
+      message.events = message.events.map(event => {
+        const desktopObjective = event?.type === "scenario-objective"
+          && typeof event.text === "string"
+          && event.text.includes("Сонар Q")
+          && event.text.includes("нажми F");
+        if (!desktopObjective) return event;
+        changed = true;
+        return {...event, text: MOBILE_SALVAGE_OBJECTIVE};
+      });
+      return changed ? JSON.stringify(message) : data;
+    } catch (_) {
+      return data;
+    }
+  }
+
+  function localizedMessageEvent(event) {
+    const data = localizeMessageData(event.data);
+    if (data === event.data) return event;
+    try {
+      return new MessageEvent("message", {
+        data,
+        origin: event.origin,
+        lastEventId: event.lastEventId,
+        source: event.source,
+        ports: event.ports,
+      });
+    } catch (_) {
+      return {data, origin: event.origin, lastEventId: event.lastEventId};
+    }
+  }
 
   function autoResumeEnabled() {
     try {
@@ -83,12 +135,32 @@ try {
     const socket = protocols === undefined
       ? new NativeWebSocket(guardedSocketUrl(url))
       : new NativeWebSocket(guardedSocketUrl(url), protocols);
-    socket.addEventListener("message", event => {
+    const nativeAddEventListener = socket.addEventListener.bind(socket);
+    const nativeRemoveEventListener = socket.removeEventListener.bind(socket);
+    const wrappedMessageListeners = new WeakMap();
+
+    nativeAddEventListener("message", event => {
       try {
         const message = JSON.parse(String(event.data));
         if (message.type === "lobby-ready") saveSession(message.room, message.role);
       } catch (_) {}
     });
+
+    socket.addEventListener = function addLocalizedListener(type, listener, options) {
+      if (type !== "message" || !listener) return nativeAddEventListener(type, listener, options);
+      const wrapped = event => {
+        const localized = localizedMessageEvent(event);
+        if (typeof listener === "function") listener.call(socket, localized);
+        else listener.handleEvent?.call(listener, localized);
+      };
+      wrappedMessageListeners.set(listener, wrapped);
+      return nativeAddEventListener(type, wrapped, options);
+    };
+
+    socket.removeEventListener = function removeLocalizedListener(type, listener, options) {
+      const wrapped = type === "message" ? wrappedMessageListeners.get(listener) : null;
+      return nativeRemoveEventListener(type, wrapped || listener, options);
+    };
     return socket;
   }
 
@@ -184,7 +256,9 @@ try {
     active: () => readSession(),
     autoResumeEnabled,
     clear: clearSession,
+    localizeMessageData,
     save: saveSession,
     sync: syncSessionFromGame,
+    touchGameplay,
   };
 })();
