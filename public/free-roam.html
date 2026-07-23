@@ -106,7 +106,7 @@
       <div class="settings-card">
         <p class="eyebrow">Свободная бухта</p>
         <h2 id="settingsTitle" tabindex="-1">Настройки</h2>
-        <p class="settings-intro">Изменения сохраняются на этом устройстве и применяются сразу.</p>
+        <p class="settings-intro">Изменения сохраняются в этом браузере и применяются сразу.</p>
 
         <section class="settings-group" aria-labelledby="appearanceSettingsTitle">
           <h3 id="appearanceSettingsTitle">Внешний вид</h3>
@@ -126,12 +126,20 @@
           <p class="settings-note">Скрытая быстрая кнопка не может случайно отключить речь во время игры.</p>
         </section>
 
+        <section class="settings-group" aria-labelledby="reloadSettingsTitle">
+          <h3 id="reloadSettingsTitle">После обновления страницы</h3>
+          <div class="settings-grid">
+            <button id="settingsAutoResumeButton" aria-pressed="false">После обновления: остаться в меню</button>
+          </div>
+          <p class="settings-note"><strong>Пример:</strong> вариант «вернуться в тот же мир» сам подключит тебя к прежней комнате и роли. Вариант «остаться в меню» ничего не нажимает: после обновления сам выбери «Создать свободный мир» или «Войти в ближайший мир».</p>
+        </section>
+
         <button id="settingsCloseButton" class="primary settings-close">Готово</button>
       </div>
     </section>
   </main>
-  <script src="src/free-roam-startup-v1.js?v=3"></script>
-  <script src="src/free-roam-settings-v1.js?v=1"></script>
+  <script src="src/free-roam-startup-v1.js?v=4"></script>
+  <script src="src/free-roam-settings-v1.js?v=2"></script>
   <script type="module" src="src/free-roam-quality-v1.js?v=2"></script>
   <script type="module" src="src/free-roam-v4.js?v=43"></script>
   <script type="module" src="src/free-roam-automatic-hold-v36.js?v=2"></script>
