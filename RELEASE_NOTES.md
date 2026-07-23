@@ -12,7 +12,9 @@ Release date: 2026-07-23
 ## Verification
 
 - Added regression coverage for an empty room, solo start, second-player activation and reconnect preservation.
-- Full Node, two-client browser and Cloudflare Worker checks run before merge.
+- Node mechanics and regression tests passed.
+- Two-client browser scenarios passed.
+- The Cloudflare Worker bundle validation passed.
 - A physical iPhone still requires manual confirmation that no unexplained reserve boat is audible or towable at the solo start.
 
 ---
