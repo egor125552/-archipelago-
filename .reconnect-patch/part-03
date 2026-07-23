@@ -1,0 +1,108 @@
++    // A mobile network hand-off can leave Cloudflare believing the old socket
++    // is still open after the browser has already lost it. An exact room/role
++    // reconnect is the player's proof of intent to resume that slot, so retire
++    // the stale transport without clearing presence or notifying the teammate.
++    this.clients.delete(previousSocket);
++    room[role] = null;
++    room.pending[role] = [];
++    room.lastSeen ||= {captain: 0, crew: 0};
++    room.lastSeen[role] = 0;
++    try { previousSocket.close(4102, "replaced-by-reconnect"); } catch (_) {}
++    return true;
++  }
++
+   removeRole(room, role, notify = true) {
+     const socket = room?.[role];
+     if (!socket) return;
+@@ -235,6 +251,7 @@ export class Lobby {
+ 
+     let room = null;
+     let preferredRoomFound = false;
++    let replacedConnection = false;
+     if (role === "auto") {
+       if (requestedRoom) {
+         const preferred = this.rooms.get(requestedRoom);
+@@ -247,12 +264,17 @@ export class Lobby {
+       role = missingRole(room) || "captain";
+     } else {
+       const preferred = requestedRoom ? this.rooms.get(requestedRoom) : null;
+-      if (preferred && (preferred.mode || "ops") === mode && !preferred[role]) {
+-        room = preferred;
+-        preferredRoomFound = true;
+-      } else {
+-        room = chooseWaitingRoom(this.rooms, role, mode);
++      if (preferred && (preferred.mode || "ops") === mode) {
++        if (!preferred[role]) {
++          room = preferred;
++          preferredRoomFound = true;
++        } else if (mode === "free") {
++          room = preferred;
++          preferredRoomFound = true;
++          replacedConnection = this.replaceFreeRoleConnection(room, role);
++        }
+       }
++      if (!room) room = chooseWaitingRoom(this.rooms, role, mode);
+     }
+ 
+     const created = !room;
+@@ -303,6 +325,7 @@ export class Lobby {
+       requestedRole: requestedRole || "crew",
+       requestedRoom: requestedRoom || null,
+       preferredRoomFound,
++      replacedConnection,
+       replacedStale: Boolean(requestedRoom && !preferredRoomFound && created),
+       created,
+       mode,
+diff --git a/tests/free-roam-release-regressions.test.mjs b/tests/free-roam-release-regressions.test.mjs
+index d162c8e..fd2b5e9 100644
+--- a/tests/free-roam-release-regressions.test.mjs
++++ b/tests/free-roam-release-regressions.test.mjs
+@@ -58,11 +58,12 @@ test("gesture mode guards accidental exits and page reloads", () => {
+   assert.match(startupSource, /pagehide/);
+   assert.match(startupSource, /visibilitychange/);
+   assert.match(startupSource, /!globalThis\.__freeRoam/);
+-  assert.match(freeRoamHtml, /free-roam-startup-v1\.js\?v=5/);
++  assert.match(freeRoamHtml, /free-roam-startup-v1\.js\?v=6/);
+   assert.match(startupSource, /gestureMode && directPointerClick/);
+   assert.match(startupSource, /leaveConfirmUntil = now \+ 2800/);
+   assert.match(startupSource, /touchmove/);
+   assert.match(startupSource, /passive: false/);
++  assert.doesNotMatch(startupSource, /retryingPreferredRoom|retry-preferred-room|reconnectRetry/);
+ });
+ 
+ test("page reload stays in the menu unless automatic return is explicitly enabled", () => {
+diff --git a/tests/free-roam.e2e.spec.mjs b/tests/free-roam.e2e.spec.mjs
+index 62c3a19..24d2120 100644
+--- a/tests/free-roam.e2e.spec.mjs
++++ b/tests/free-roam.e2e.spec.mjs
+@@ -203,6 +203,7 @@ test("the same role reconnects to the live server room", async ({browser}, testI
+     const roomBefore = await crew.evaluate(() => window.__freeRoam.roomId());
+     const captainWorldTime = await captain.evaluate(() => window.__freeRoam.getWorld().time);
+     const stateCountBefore = await crew.evaluate(() => window.__freeRoam.networkDiagnostics().receivedStateCount);
++    await crew.evaluate(() => { window.__spoken.length = 0; });
+     await crew.evaluate(() => window.__freeRoam.disconnectForTest());
+     await expect.poll(
+       () => crew.evaluate(() => window.__freeRoam.networkDiagnostics().receivedStateCount),
+@@ -214,6 +215,11 @@ test("the same role reconnects to the live server room", async ({browser}, testI
+       {timeout: 6_000},
+     ).toBeGreaterThan(captainWorldTime);
+     await expect.poll(() => captain.evaluate(() => window.__freeRoam.getWorld().freeActivities.presence[1])).toBe(true);
++    const reconnectSpeech = await crew.evaluate(() => window.__spoken.slice());
++    expect(reconnectSpeech.filter(text => text.includes("Связь с Cloudflare прервалась"))).toHaveLength(1);
++    expect(reconnectSpeech.filter(text => text.includes("Связь восстановлена"))).toHaveLength(1);
++    expect(reconnectSpeech.some(text => text.includes("Связь с Cloudflare обновляется"))).toBe(false);
++    expect(await crew.evaluate(() => window.__freeRoam.networkDiagnostics().reconnecting)).toBe(false);
+   } finally {
+     await captainContext.close();
+     await crewContext.close();
+diff --git a/tests/worker-lobby.test.mjs b/tests/worker-lobby.test.mjs
+index e0cf78e..ad6ff89 100644
+--- a/tests/worker-lobby.test.mjs
++++ b/tests/worker-lobby.test.mjs
+@@ -264,3 +264,42 @@ test("a reconnect claims the same free-roam room and role", async () => {
+   assert.equal(reconnectedMessages.find(message => message.type === "lobby-ready").role, "captain");
+   reconnected.webSocket.close();
+ });
++
++test("an exact reconnect replaces a stale open free-roam socket without losing the world", async () => {
++  const lobby = new Lobby({});
