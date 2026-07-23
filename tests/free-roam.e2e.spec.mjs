@@ -260,3 +260,23 @@ test("a hard page reload keeps controls working in the same live room", async ({
     await crewContext.close();
   }
 });
+
+test("the existing target menu selects the merchant as a sonar destination", async ({browser}, testInfo) => {
+  const {captainContext, crewContext, captain, crew} = await createPair(browser, testInfo);
+  try {
+    await captain.keyboard.press("KeyM");
+    await expect.poll(() => captain.evaluate(() => window.__freeRoam.targeting().open)).toBe(true);
+    const entries = await captain.evaluate(() => window.__freeRoam.targeting().targets);
+    expect(entries).toContain("navigation-objective");
+    expect(entries).toContain("navigation-merchant");
+
+    await captain.keyboard.press("ArrowDown");
+    await captain.keyboard.press("Enter");
+    await expect.poll(() => captain.evaluate(() => window.__freeRoam.input.navigationTargetId)).toBe("merchant");
+    await expect.poll(() => captain.evaluate(() => window.__freeRoam.getWorld()?.freeScenario?.targets?.[0]?.kind)).toBe("merchant");
+    await expect.poll(() => crew.evaluate(() => window.__freeRoam.getWorld()?.freeScenario?.navigationModes?.[0])).toBe("merchant");
+  } finally {
+    await captainContext.close();
+    await crewContext.close();
+  }
+});

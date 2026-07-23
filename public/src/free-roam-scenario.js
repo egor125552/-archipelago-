@@ -12,6 +12,7 @@ import {
 import {automaticCargoDelivered} from "./free-roam-weapon-crates.js?v=32";
 import {activeHostileGunners} from "./free-roam-hostile-gunners.js?v=32";
 import {ensureSonarGuide, updateSonarGuide} from "./free-roam-sonar-guide.js?v=35";
+import {merchantNavigationTarget} from "./free-roam-shop.js?v=1";
 
 const TARGET_LABELS = Object.freeze({
   plates: "ящик с пластинами",
@@ -48,6 +49,7 @@ export function createFreeScenario(playerCount = 2) {
     guideEnabled: Array.from({length: playerCount}, () => false),
     armTargetModes: Array.from({length: playerCount}, () => "automatic"),
     armSonarReported: Array.from({length: playerCount}, () => false),
+    navigationModes: Array.from({length: playerCount}, () => "objective"),
   };
 }
 
@@ -64,6 +66,7 @@ export function ensureFreeScenario(world) {
   scenario.lockedPursuerIds ||= Array.from({length: playerCount}, () => null);
   scenario.armTargetModes ||= Array.from({length: playerCount}, () => "automatic");
   scenario.armSonarReported ||= Array.from({length: playerCount}, () => false);
+  scenario.navigationModes ||= Array.from({length: playerCount}, () => "objective");
   while (scenario.targets.length < playerCount) scenario.targets.push(null);
   while (scenario.lockedTargetIds.length < playerCount) scenario.lockedTargetIds.push(null);
   while (scenario.beaconUntil.length < playerCount) scenario.beaconUntil.push(0);
@@ -71,6 +74,7 @@ export function ensureFreeScenario(world) {
   while (scenario.lockedPursuerIds.length < playerCount) scenario.lockedPursuerIds.push(null);
   while (scenario.armTargetModes.length < playerCount) scenario.armTargetModes.push("automatic");
   while (scenario.armSonarReported.length < playerCount) scenario.armSonarReported.push(false);
+  while (scenario.navigationModes.length < playerCount) scenario.navigationModes.push("objective");
 
   // Remove the temporary pursuit-choice state from older saved worlds. During
   // combat the sonar now has exactly one job: track the assigned pursuer.
@@ -83,6 +87,15 @@ export function ensureFreeScenario(world) {
     world.freeActivities.marauder.speed = 0;
   }
   return scenario;
+}
+
+function syncNavigationModes(world) {
+  const scenario = world.freeScenario;
+  const inputs = world.freeActivities?.inputs || [];
+  for (let index = 0; index < world.players.length; index += 1) {
+    const requested = inputs[index]?.navigationTargetId;
+    if (["objective", "merchant"].includes(requested)) scenario.navigationModes[index] = requested;
+  }
 }
 
 function playerBoat(world, playerIndex) {
@@ -191,6 +204,7 @@ export function scenarioTarget(world, playerIndex) {
   if (scenario.phase === "warning") {
     return {id: "open-water", kind: "warning", label: "выход из бухты", x: 210, y: 255};
   }
+  if (scenario.navigationModes?.[playerIndex] === "merchant") return merchantNavigationTarget();
   if (scenario.phase === "arm") return armTarget(world, playerIndex);
   if (scenario.phase === "salvage") {
     if (cargoNeedsDock(world, playerIndex)) return dockTarget(world.players[playerIndex]);
@@ -381,6 +395,7 @@ export function updateFreeScenario(world, dt) {
     emit(world, "scenario-objective", "Задача: доставь два обычных ящика. Сонар Q называет одну цель. Подойди к ящику ближе 12 метров и нажми F. После погрузки снова нажми Q, доедь до причала и остановись — разгрузка автоматическая.", [0, 1]);
   }
   updatePhase(world);
+  syncNavigationModes(world);
   updateTargets(world);
   handleSonar(world, dt);
   updateSonarGuide(world, emit);

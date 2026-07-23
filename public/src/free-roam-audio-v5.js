@@ -4,6 +4,7 @@ import {FreeRoamAudio as BaseFreeRoamAudio, spatialGainForDistance} from "./free
 import {relativeMovementPan} from "./free-roam-audio-v3.js?v=38";
 import {injuryLowpassFrequency} from "./free-roam-combat-recovery.js?v=32";
 import {COMBAT_TUNING} from "./free-roam-combat-tuning.js?v=32";
+import {MERCHANT, MERCHANT_AUDIO_RANGE} from "./free-roam-shop.js?v=1";
 
 const ROOT = "/assets/audio/free-roam-v25/";
 const COMBAT_SOUNDS = Object.freeze({
@@ -48,6 +49,7 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
     this.deathSource = null;
     this.marauderEngine = null;
     this.cargoBeaconAt = new Map();
+    this.merchantChimeAt = 0;
   }
 
   async init() {
@@ -159,8 +161,23 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
     this.cargoBeaconAt.set(target.id, now + interval);
     const pan = relativeMovementPan(this.listenerPoint, target);
     const proximity = clamp(1 - metres / SONAR_AUDIBLE_RANGE, 0, 1);
-    const frequency = target.kind === "pursuer" ? 330 : target.kind === "automatic" ? 880 : 620;
+    const frequency = target.kind === "pursuer" ? 330 : target.kind === "automatic" ? 880 : target.kind === "merchant" ? 520 : 620;
     this.playSynthPip({pan, frequency, gain: 0.035 + proximity * 0.09, duration: 0.11});
+  }
+
+  updateMerchantAmbient(world, playerIndex) {
+    if (!this.ctx || !this.listenerPoint) return;
+    const player = world?.players?.[playerIndex];
+    if (!player?.combat?.alive) return;
+    const metres = distance(this.listenerPoint, MERCHANT);
+    if (metres > MERCHANT_AUDIO_RANGE) return;
+    const now = this.ctx.currentTime;
+    if (now < this.merchantChimeAt) return;
+    this.merchantChimeAt = now + 2.6;
+    const pan = relativeMovementPan(this.listenerPoint, MERCHANT);
+    const proximity = clamp(1 - metres / MERCHANT_AUDIO_RANGE, 0, 1);
+    this.playSynthPip({pan, frequency: 440, gain: 0.025 + proximity * 0.07, duration: 0.08});
+    this.playSynthPip({pan, frequency: 660, gain: 0.018 + proximity * 0.045, duration: 0.05});
   }
 
   startMarauderEngine() {
@@ -212,6 +229,7 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
     const combat = world?.players?.[playerIndex]?.combat;
     this.smoothInjuryMix(combat?.alive === false ? 1 : combat?.injuryMix || 0);
     this.updateCargoBeacons(world, playerIndex);
+    this.updateMerchantAmbient(world, playerIndex);
     this.updateMarauderEngine(world);
   }
 

@@ -130,11 +130,14 @@ export function replicatedFreeWorld(world) {
       presence: activities.presence,
       score: activities.score,
       delivered: activities.delivered,
+      credits: activities.credits,
+      shopOpen: activities.shopOpen,
+      shopSelection: activities.shopSelection,
       crates: (activities.crates || []).map(crate => select(crate, CRATE_FIELDS)),
       marauder: select(activities.marauder, PURSUER_FIELDS),
     },
     freeScenario: select(scenario, [
-      "phase", "warningUntil", "targets", "lockedTargetIds", "beaconUntil", "guideEnabled",
+      "phase", "warningUntil", "targets", "lockedTargetIds", "beaconUntil", "guideEnabled", "navigationModes",
     ]),
     freePursuerSquad: {
       activated: pursuers.activated,
