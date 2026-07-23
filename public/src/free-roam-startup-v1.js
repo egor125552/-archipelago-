@@ -62,31 +62,6 @@ try {
     }
   }
 
-  function localizedMessageEvent(event) {
-    const data = localizeMessageData(event.data);
-    if (data === event.data) return event;
-    try {
-      return new MessageEvent("message", {
-        data,
-        origin: event.origin,
-        lastEventId: event.lastEventId,
-        source: event.source,
-        ports: event.ports,
-      });
-    } catch (_) {
-      return {data, origin: event.origin, lastEventId: event.lastEventId};
-    }
-  }
-
-  function autoResumeEnabled() {
-    try {
-      const settings = JSON.parse(localStorage.getItem(INTERFACE_SETTINGS_KEY) || "null");
-      return settings?.autoResume === true;
-    } catch (_) {
-      return false;
-    }
-  }
-
   function readSession() {
     try {
       const parsed = JSON.parse(sessionStorage.getItem(SESSION_KEY) || "null");
@@ -131,33 +106,110 @@ try {
     }
   }
 
+  function messageEventWithData(event, data) {
+    if (data === event.data) return event;
+    try {
+      return new MessageEvent("message", {
+        data,
+        origin: event.origin,
+        lastEventId: event.lastEventId,
+        source: event.source,
+        ports: event.ports,
+      });
+    } catch (_) {
+      return {data, origin: event.origin, lastEventId: event.lastEventId};
+    }
+  }
+
   function GuardedWebSocket(url, protocols) {
+    const finalUrl = guardedSocketUrl(url);
     const socket = protocols === undefined
-      ? new NativeWebSocket(guardedSocketUrl(url))
-      : new NativeWebSocket(guardedSocketUrl(url), protocols);
+      ? new NativeWebSocket(finalUrl)
+      : new NativeWebSocket(finalUrl, protocols);
     const nativeAddEventListener = socket.addEventListener.bind(socket);
     const nativeRemoveEventListener = socket.removeEventListener.bind(socket);
     const wrappedMessageListeners = new WeakMap();
+    let retryingPreferredRoom = false;
+    let requestedRoom = "";
+    let requestedRole = "";
+
+    try {
+      const parsedUrl = new URL(String(finalUrl), location.href);
+      if (parsedUrl.pathname === "/api/connect" && parsedUrl.searchParams.get("mode") === "free") {
+        requestedRoom = String(parsedUrl.searchParams.get("room") || "").trim();
+        requestedRole = String(parsedUrl.searchParams.get("role") || "").trim();
+      }
+    } catch (_) {}
+
+    const targetedReconnect = Boolean(
+      requestedRoom && ["captain", "crew"].includes(requestedRole),
+    );
+
+    function parseLobbyMessage(data) {
+      try {
+        const message = JSON.parse(String(data));
+        return message?.type === "lobby-ready" ? message : null;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function isWrongReconnectRoom(message) {
+      return targetedReconnect && Boolean(message) && (
+        message.room !== requestedRoom
+        || message.role !== requestedRole
+        || message.preferredRoomFound !== true
+      );
+    }
+
+    function transformMessageData(data) {
+      const lobbyMessage = parseLobbyMessage(data);
+      if (isWrongReconnectRoom(lobbyMessage)) {
+        retryingPreferredRoom = true;
+        // Let the game mark this connection as opened, but keep its old room id.
+        // The immediate close then goes through the normal reconnect path instead
+        // of accepting a freshly created world and restarting the scenario.
+        return JSON.stringify({
+          ...lobbyMessage,
+          room: requestedRoom,
+          role: requestedRole,
+          requestedRoom,
+          preferredRoomFound: true,
+          created: false,
+          matched: true,
+          reconnectRetry: true,
+        });
+      }
+      if (retryingPreferredRoom) return null;
+      return localizeMessageData(data);
+    }
 
     nativeAddEventListener("message", event => {
-      try {
-        const message = JSON.parse(String(event.data));
-        if (message.type === "lobby-ready") saveSession(message.room, message.role);
-      } catch (_) {}
+      const message = parseLobbyMessage(event.data);
+      if (isWrongReconnectRoom(message)) {
+        retryingPreferredRoom = true;
+        setTimeout(() => {
+          try { socket.close(4101, "retry-preferred-room"); } catch (_) {}
+        }, 0);
+        return;
+      }
+      if (message) saveSession(message.room, message.role);
     });
 
-    socket.addEventListener = function addLocalizedListener(type, listener, options) {
+    socket.addEventListener = function addGuardedListener(type, listener, options) {
       if (type !== "message" || !listener) return nativeAddEventListener(type, listener, options);
       const wrapped = event => {
-        const localized = localizedMessageEvent(event);
-        if (typeof listener === "function") listener.call(socket, localized);
-        else listener.handleEvent?.call(listener, localized);
+        const data = transformMessageData(event.data);
+        if (data == null) return;
+        const transformed = messageEventWithData(event, data);
+        if (typeof listener === "function") listener.call(socket, transformed);
+        else listener.handleEvent?.call(listener, transformed);
       };
       wrappedMessageListeners.set(listener, wrapped);
       return nativeAddEventListener(type, wrapped, options);
     };
 
-    socket.removeEventListener = function removeLocalizedListener(type, listener, options) {
+    socket.removeEventListener = function removeGuardedListener(type, listener, options) {
       const wrapped = type === "message" ? wrappedMessageListeners.get(listener) : null;
       return nativeRemoveEventListener(type, wrapped || listener, options);
     };
