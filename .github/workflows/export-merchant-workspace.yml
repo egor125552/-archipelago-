@@ -1,0 +1,20 @@
+name: Export merchant workspace
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pack repository workspace
+        run: |
+          mkdir -p /tmp/merchant-workspace
+          rsync -a --exclude='.git' --exclude='node_modules' ./ /tmp/merchant-workspace/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: merchant-workspace
+          path: /tmp/merchant-workspace
+          retention-days: 1
