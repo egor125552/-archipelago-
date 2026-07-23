@@ -10,7 +10,7 @@ Release date: 2026-07-23
 - The pistol uses the same target selection and attack input as the automatic weapon.
 - Holding three fingers fires either ranged weapon and releasing any finger stops firing immediately.
 - The pistol deals 6 damage every 0.34 seconds. The automatic remains the stronger objective weapon at 11 damage every 0.13 seconds.
-- The pistol has a dedicated dry spatial Web Audio shot instead of reusing the automatic recording.
+- The pistol uses a short recorded Colt .45 shot with a locally generated Web Audio fallback if the recording cannot be loaded.
 - Target selection is available whenever either the pistol or automatic has ammunition.
 
 ## Compatibility
