@@ -1,3 +1,34 @@
+# Echo Archipelago 1.1.1
+
+Release date: 2026-07-23
+
+## iPhone guidance
+
+- The opening salvage objective now uses touch instructions on iPhone: touch with two fingers for sonar and touch once with one finger for the contextual action.
+- Desktop players continue to receive the existing `Q` and `F` keyboard instructions.
+
+## Held ranged fire
+
+- Holding three fingers now directly holds the attack input for both the pistol and the automatic weapon.
+- Firing begins while the fingers remain on the screen instead of being delayed until release.
+- Releasing any finger stops fire immediately and no longer triggers a second delayed heavy-attack pulse.
+
+## Connection recovery
+
+- Automatic WebSocket recovery now refuses an accidentally created replacement world when the previous socket still occupies the player's role for a brief moment.
+- The client retries the original room and role instead of restarting the scenario at “deliver two ordinary crates”.
+- Existing cargo, scenario progress and authoritative world state remain in the original room.
+
+## Verification
+
+- Node mechanics and regression tests passed.
+- Two-client browser scenarios passed.
+- The mobile WebKit scenario passed.
+- The Cloudflare Worker bundle validation passed.
+- A physical iPhone and a real unstable mobile connection still require manual confirmation.
+
+---
+
 # Echo Archipelago 1.1.0
 
 Release date: 2026-07-23
