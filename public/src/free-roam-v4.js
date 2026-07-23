@@ -3,15 +3,16 @@
 import {
   WORLD,
   playerStatus,
-} from "./free-roam-core-v6.js?v=38";
-import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=38";
+} from "./free-roam-core-v6.js?v=39";
+import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=39";
 import {predictLocalWorld, reconcileLocalPrediction} from "./free-roam-client-prediction.js?v=40";
-import {applyReplicatedWorldDelta} from "./free-roam-replication.js?v=40";
+import {applyReplicatedWorldDelta} from "./free-roam-replication.js?v=41";
 import {createSpeechController} from "./free-roam-speech.js?v=41";
 import {directionFromDelta} from "./free-roam-gesture-model.js";
 import {classifyActionGesture, gestureMetrics} from "./free-roam-action-gestures.js";
 import {resolveCombatTarget} from "./free-roam-targeting.js?v=32";
-import {createTargetMenu} from "./free-roam-target-menu.js?v=32";
+import {createTargetMenu} from "./free-roam-target-menu.js?v=33";
+import {MERCHANT, SHOP_ITEMS} from "./free-roam-shop.js?v=1";
 
 const $ = id => document.getElementById(id);
 const SPEECH_RATE = 1.18;
@@ -31,6 +32,11 @@ const localInput = {
   sonar: false,
   guide: false,
   targetId: null,
+  navigationTargetId: "objective",
+  shopPrevious: false,
+  shopNext: false,
+  shopBuy: false,
+  shopClose: false,
 };
 const activeTouches = new Map();
 const holdTimers = new Map();
@@ -69,6 +75,20 @@ let messageVersion = 0;
 
 function distance(a, b) {
   return Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));
+}
+
+function shopIsOpen() {
+  return Boolean(world?.freeActivities?.shopOpen?.[playerIndex]);
+}
+
+function selectedShopItem() {
+  const index = Number(world?.freeActivities?.shopSelection?.[playerIndex]) || 0;
+  return SHOP_ITEMS[((index % SHOP_ITEMS.length) + SHOP_ITEMS.length) % SHOP_ITEMS.length] || SHOP_ITEMS[0];
+}
+
+function nearMerchant() {
+  const player = world?.players?.[playerIndex];
+  return Boolean(player?.mode === "foot" && distance(player, MERCHANT) <= 9);
 }
 
 function resumeGameAudio() {
@@ -383,6 +403,10 @@ function releaseAllMovement() {
   localInput.weapon = false;
   localInput.sonar = false;
   localInput.guide = false;
+  localInput.shopPrevious = false;
+  localInput.shopNext = false;
+  localInput.shopBuy = false;
+  localInput.shopClose = false;
   for (const timer of holdTimers.values()) clearTimeout(timer);
   holdTimers.clear();
   activeTouches.clear();
@@ -407,6 +431,10 @@ function syncControlButtons() {
 function handleGameEvent(event) {
   audio.handleFreeEvent(event, playerIndex);
   if (!event?.targets?.includes(playerIndex)) return;
+  if (event.type === "shop-open") {
+    if (targetMenu.isOpen()) targetMenu.close(false);
+    releaseAllMovement();
+  }
   if (
     targetMenu.isOpen()
     && ["player-knockdown", "player-death"].includes(event.type)
@@ -451,6 +479,8 @@ function render() {
   const labels = {boat: "в лодке", foot: "на берегу", swim: "в воде", roof: "на крыше", dead: "погиб"};
   const activities = world.freeActivities || {};
   const combat = me.combat || {};
+  const merchantOpen = shopIsOpen();
+  const shopItem = selectedShopItem();
   const marauder = activities.marauder || {};
   const pursuerSquad = world.freePursuerSquad || {};
   const activeEscorts = (pursuerSquad.escorts || []).filter(escort => escort.active && !escort.destroyed);
@@ -475,7 +505,7 @@ function render() {
   $("weaponValue").textContent = combat.equipped === "automatic" ? `автомат, ${combat.ammo || 0}` : weaponLabels[combat.equipped] || "кулаки";
   $("targetValue").textContent = lockedCombatTarget?.label || "не выбрана";
   $("cargoValue").textContent = combat.carriedCrate ? "в руках" : myBoat?.cargo?.length ? `${myBoat.cargo.length}, вес ${Math.round(myBoat.cargoWeight || 0)}` : "нет";
-  $("scoreValue").textContent = String(activities.score?.[playerIndex] || 0);
+  $("scoreValue").textContent = String(activities.credits || 0);
   $("scenarioValue").textContent = {
     salvage: "доставка",
     arm: "поиск автомата",
@@ -495,20 +525,30 @@ function render() {
     controlLatencyMs == null ? null : `управление ${Math.round(controlLatencyMs)} мс`,
     snapshotAge == null ? null : `снимок ${Math.round(snapshotAge)} мс`,
   ].filter(Boolean).join(", ") || "измеряется";
-  $("actionButton").textContent = combat.knockedDown
-    ? "Сбит с ног — жди"
-    : combat.carriedCrate
-      ? "Положить / передать / погрузить"
-      : me.mode === "boat"
-        ? "Груз / выйти / буксир"
-        : me.mode === "roof"
-          ? "Груз / сесть за руль"
-          : "Взять груз / сесть в лодку";
+  $("actionButton").textContent = merchantOpen
+    ? `Купить: ${shopItem.label}`
+    : combat.knockedDown
+      ? "Сбит с ног — жди"
+      : combat.carriedCrate
+        ? "Положить / передать / погрузить"
+        : nearMerchant()
+          ? "Открыть магазин"
+          : me.mode === "boat"
+            ? "Груз / выйти / буксир"
+            : me.mode === "roof"
+              ? "Груз / сесть за руль"
+              : "Взять груз / сесть в лодку";
   $("jumpButton").textContent = me.mode === "boat" ? "Плавучий тормоз" : me.mode === "roof" ? "Спрыгнуть" : "Прыжок / крыша";
   $("attackButton").textContent = combat.equipped === "automatic" ? "Огонь" : combat.equipped === "knife" ? "Удар ножом" : "Удар";
   $("weaponButton").textContent = `Оружие: ${weaponLabels[combat.equipped] || "кулаки"}`;
   $("targetButton").setAttribute("aria-pressed", String(targetMenu.isOpen()));
   $("targetButton").textContent = targetMenu.isOpen() ? "Выбор цели открыт" : "Выбрать цель";
+  $("upButton").textContent = merchantOpen ? "Предыдущий товар" : "Вперёд";
+  $("downButton").textContent = merchantOpen ? "Следующий товар" : "Назад / тормоз";
+  $("sonarButton").textContent = merchantOpen ? "Закрыть магазин" : "Сонар: текущая цель";
+  for (const id of ["leftButton", "rightButton", "jumpButton", "attackButton", "weaponButton", "targetButton", "guideButton", "pumpButton", "repairButton"]) {
+    $(id).disabled = merchantOpen;
+  }
   syncControlButtons();
   audio.updateWorld(world, playerIndex);
   drawMap(world);
@@ -624,6 +664,11 @@ function bindHold(button, name, minimumDuration = 0) {
     if (event.pointerType === "touch") showButtonsForAssistiveInput();
     event.preventDefault();
     audio.init().catch(() => {});
+    if (shopIsOpen()) {
+      if (name === "up") actionPulse("shopPrevious");
+      else if (name === "down") actionPulse("shopNext");
+      return;
+    }
     clearTimeout(releaseTimer);
     releaseTimer = 0;
     startedAt.set(event.pointerId, performance.now());
@@ -682,7 +727,7 @@ function moveTouch(event) {
   event.preventDefault();
   point.lastX = event.clientX;
   point.lastY = event.clientY;
-  if (targetMenu.isOpen()) return;
+  if (targetMenu.isOpen() || shopIsOpen()) return;
   if (!touchGroup || touchGroup.maxPointers !== 1 || activeTouches.size !== 1) return;
   const deltaX = point.lastX - point.x;
   const deltaY = point.lastY - point.y;
@@ -753,6 +798,16 @@ function finishTouch(event, cancelled = false) {
   if (localInput.run) setControl("run", false);
   if (cancelled || !group) return;
   const metrics = gestureMetrics(group);
+  if (shopIsOpen()) {
+    if (metrics.pointers === 1 && metrics.movement > 24) {
+      actionPulse(metrics.dy < 0 ? "shopPrevious" : "shopNext");
+    } else if (metrics.pointers === 1) {
+      actionPulse("shopBuy");
+    } else {
+      actionPulse("shopClose");
+    }
+    return;
+  }
   if (targetMenu.isOpen()) {
     if (metrics.pointers === 1 && metrics.movement > 24) {
       targetMenu.cycle(metrics.dy < 0 ? -1 : 1);
@@ -779,6 +834,16 @@ function bindKeyboard() {
   const map = {ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right"};
   window.addEventListener("keydown", event => {
     if ($("game").hidden || event.altKey || event.ctrlKey || event.metaKey || event.isComposing || event.target.matches("input, textarea, select, [contenteditable='true']")) return;
+    if (shopIsOpen()) {
+      if (!event.repeat && event.code === "ArrowUp") actionPulse("shopPrevious");
+      else if (!event.repeat && event.code === "ArrowDown") actionPulse("shopNext");
+      else if (!event.repeat && ["Enter", "KeyF"].includes(event.code)) actionPulse("shopBuy");
+      else if (!event.repeat && ["Escape", "KeyQ"].includes(event.code)) actionPulse("shopClose");
+      else if (!["ArrowLeft", "ArrowRight"].includes(event.code)) return;
+      event.preventDefault();
+      audio.init().catch(() => {});
+      return;
+    }
     if (!event.repeat && event.code === "KeyM") {
       event.preventDefault();
       if (targetMenu.isOpen()) targetMenu.close(true);
@@ -833,6 +898,12 @@ function bindKeyboard() {
   }, true);
 
   window.addEventListener("keyup", event => {
+    if (shopIsOpen()) {
+      if (["KeyX", "ShiftLeft", "ShiftRight", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.code)) {
+        event.preventDefault();
+      }
+      return;
+    }
     if (event.code === "KeyX") {
       event.preventDefault();
       setControl("attack", false);
@@ -885,6 +956,8 @@ const targetMenu = createTargetMenu({
   getPlayerIndex: () => playerIndex,
   getTargetId: () => localInput.targetId,
   setTargetId: value => { localInput.targetId = value; },
+  getNavigationTargetId: () => localInput.navigationTargetId,
+  setNavigationTargetId: value => { localInput.navigationTargetId = value; },
   releaseMovement: releaseAllMovement,
   sendInput: () => sendInput(true),
   announce,
@@ -907,7 +980,7 @@ bindHold($("upButton"), "up");
 bindHold($("downButton"), "down");
 bindHold($("leftButton"), "left");
 bindHold($("rightButton"), "right");
-$("actionButton").addEventListener("click", () => actionPulse("action"));
+$("actionButton").addEventListener("click", () => actionPulse(shopIsOpen() ? "shopBuy" : "action"));
 $("jumpButton").addEventListener("click", () => actionPulse("jump"));
 bindHold($("attackButton"), "attack", 90);
 $("attackButton").addEventListener("click", event => {
@@ -915,10 +988,11 @@ $("attackButton").addEventListener("click", event => {
 });
 $("weaponButton").addEventListener("click", () => actionPulse("weapon"));
 $("targetButton").addEventListener("click", () => {
+  if (shopIsOpen()) return;
   if (targetMenu.isOpen()) targetMenu.close(true);
   else targetMenu.open();
 });
-$("sonarButton").addEventListener("click", () => actionPulse("sonar"));
+$("sonarButton").addEventListener("click", () => actionPulse(shopIsOpen() ? "shopClose" : "sonar"));
 $("guideButton").addEventListener("click", () => actionPulse("guide"));
 $("pumpButton").addEventListener("click", () => toggleControl("pump"));
 $("repairButton").addEventListener("click", () => toggleControl("repair"));
@@ -964,4 +1038,10 @@ window.__freeRoam = {
   preferredRoom: () => preferredRoomId,
   handleEvent: event => handleGameEvent(event),
   targeting: targetMenu.snapshot,
+  shop: () => ({
+    open: shopIsOpen(),
+    selection: world?.freeActivities?.shopSelection?.[playerIndex] ?? 0,
+    credits: world?.freeActivities?.credits ?? 0,
+    itemId: selectedShopItem()?.id || null,
+  }),
 };

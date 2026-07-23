@@ -11,16 +11,17 @@ import {
   spawnRareCrate,
   storeActivityInput,
   updateActivities,
-} from "./free-roam-activities.js?v=39";
+} from "./free-roam-activities.js?v=40";
 // free-roam-combat.js?v=32 remains the stable combat base behind the 1.1 pistol layer.
 import {applyCombatDamage, combatStatus, ensureCombat, updateCombat} from "./free-roam-combat-v2.js?v=1";
 import {ensureMarauder, releaseStolenCargo, updateMarauder} from "./free-roam-marauder.js?v=32";
-import {ensureFreeScenario, scenarioStatus, updateFreeScenario} from "./free-roam-scenario.js?v=40";
+import {ensureFreeScenario, scenarioStatus, updateFreeScenario} from "./free-roam-scenario.js?v=41";
 import {suppressIncapacitatedMovement, updatePhysicalActors} from "./free-roam-physical-actors.js?v=38";
 import {handleAssistedBoarding} from "./free-roam-boarding-assist.js?v=29";
 import {ensurePursuerSquad, updatePursuerSquad} from "./free-roam-pursuer-squad.js?v=32";
 import {ensureHostileGunners, updateHostileGunners} from "./free-roam-hostile-gunners.js?v=32";
 import {retireClaimedKnifeCrates} from "./free-roam-unique-weapons.js?v=1";
+import {suppressGameplayWhileShopping, updateMerchantShop} from "./free-roam-shop.js?v=1";
 
 export const WORLD = Object.freeze({...base.WORLD});
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -94,7 +95,10 @@ export function stepFreeWorld(world, dt) {
   ensureState(world);
   const safeDt = clamp(Number(dt) || 0, 0, 0.1);
   const eventStart = world.events?.length || 0;
+  updateMerchantShop(world);
+  suppressGameplayWhileShopping(world);
   consumeActivityActions(world);
+  suppressGameplayWhileShopping(world);
   const restoreMovement = suppressIncapacitatedMovement(world);
   base.stepFreeWorld(world, safeDt);
   restoreMovement();

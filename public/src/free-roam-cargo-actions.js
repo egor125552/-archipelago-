@@ -16,10 +16,11 @@ export function deliverCarriedCargoAtDock(world, playerIndex, crate, rewardPlaye
   crate.carriedBy = null;
   crate.stowedBoat = null;
   crate.respawnAt = world.time + 12;
-  emit(world, "cargo-delivered", `Ящик принят причалом автоматически. ${effect} Очки за доставку: ${world.freeActivities.score[playerIndex]}.`, [0, 1], {
+  emit(world, "cargo-delivered", `Ящик принят причалом автоматически. ${effect}`, [0, 1], {
     sourcePlayer: playerIndex,
     count: 1,
     score: world.freeActivities.score[playerIndex],
+    credits: world.freeActivities.credits,
     kinds: [crate.kind],
     x: player.x,
     y: player.y,

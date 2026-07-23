@@ -10,6 +10,11 @@ import {
 } from "./free-roam-cargo-rules.js?v=32";
 import {updateFootDockDelivery} from "./free-roam-foot-dock.js?v=38";
 import {grantWeaponFromCrate} from "./free-roam-weapon-crates.js?v=32";
+import {
+  ensureShopState,
+  grantDeliveryCredits,
+  handleMerchantAction,
+} from "./free-roam-shop.js?v=1";
 
 const WORLD_CRATES = Object.freeze([
   {id: "crate-plates", kind: "plates", rarity: "common", weight: 2, x: 180, y: 34},
@@ -72,6 +77,10 @@ export function createActivitiesState(playerCount = 2) {
     previousInputs: Array.from({length: playerCount}, () => ({})),
     seed: 0x4a61c3,
     marauder: null,
+    credits: 0,
+    shopOpen: Array.from({length: playerCount}, () => false),
+    shopSelection: Array.from({length: playerCount}, () => 0),
+    merchantPrompted: Array.from({length: playerCount}, () => false),
   };
 }
 
@@ -86,6 +95,7 @@ export function ensureActivities(world) {
   state.inputs ||= [{}, {}];
   state.previousInputs ||= [{}, {}];
   state.seed ||= 0x4a61c3;
+  ensureShopState(world);
   while (state.presence.length < world.players.length) state.presence.push(false);
   while (state.score.length < world.players.length) state.score.push(0);
   while (state.delivered.length < world.players.length) state.delivered.push(0);
@@ -130,6 +140,11 @@ export function storeActivityInput(world, playerIndex, input) {
     sonar: Boolean(input?.sonar),
     guide: Boolean(input?.guide),
     targetId: typeof input?.targetId === "string" ? input.targetId : null,
+    navigationTargetId: ["objective", "merchant"].includes(input?.navigationTargetId) ? input.navigationTargetId : "objective",
+    shopPrevious: Boolean(input?.shopPrevious),
+    shopNext: Boolean(input?.shopNext),
+    shopBuy: Boolean(input?.shopBuy),
+    shopClose: Boolean(input?.shopClose),
   };
 }
 
@@ -286,6 +301,9 @@ export function handleActivityAction(world, playerIndex) {
     return true;
   }
 
+  const crateAtFeet = nearestAvailableCrate(state, player, 3.5);
+  if (!crateAtFeet.crate && handleMerchantAction(world, playerIndex)) return true;
+
   if (stealStowedCargo(world, playerIndex)) return true;
 
   const nearest = nearestAvailableCrate(state, player, CARGO_ACTION_RANGE);
@@ -348,7 +366,8 @@ function rewardPlayer(world, playerIndex, boat, crate) {
   const points = crate.rarity === "rare" ? 5 : crate.rarity === "uncommon" ? 3 : 2;
   state.score[playerIndex] += points;
   state.delivered[playerIndex] += 1;
-  return effect;
+  const credits = grantDeliveryCredits(world, crate);
+  return `${effect} Получено ${credits} кредитов. Баланс команды: ${state.credits}.`;
 }
 
 function deliverBoatCargo(world, boat) {
@@ -367,10 +386,11 @@ function deliverBoatCargo(world, boat) {
     delivered.push(crate);
   }
   if (!delivered.length) return;
-  emit(world, "cargo-delivered", `Груз доставлен: ${delivered.length}. ${effects.join(" ")} Очки за доставку: ${state.score[playerIndex]}.`, [0, 1], {
+  emit(world, "cargo-delivered", `Груз доставлен: ${delivered.length}. ${effects.join(" ")}`, [0, 1], {
     sourcePlayer: playerIndex,
     count: delivered.length,
     score: state.score[playerIndex],
+    credits: state.credits,
     kinds: delivered.map(crate => crate.kind),
     x: boat.x,
     y: boat.y,
@@ -487,7 +507,7 @@ export function activityStatus(world, playerIndex) {
   if ((Number(boat?.cargoPumpBonus) || 0) > 0) {
     parts.push(`Усиление насоса: плюс ${pumpRateText(boat.cargoPumpBonus)} откачки в секунду.`);
   }
-  parts.push(`Очки за доставку: ${state.score[playerIndex] || 0}.`);
+  parts.push(`Командные кредиты: ${state.credits || 0}.`);
   if (!state.presence[1 - playerIndex]) parts.push("Пока ждём второго игрока.");
   return parts.join(" ");
 }

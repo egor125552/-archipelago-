@@ -1,6 +1,6 @@
 "use strict";
 
-import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=38";
+import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=39";
 import {COMBAT_TUNING} from "./free-roam-combat-tuning.js?v=33";
 
 const PISTOL_RECORDING_URL = "https://raw.githubusercontent.com/Gabrielsgp/hand-shotter/a9e2dac862291cbff1af8e2c3e82922c3aeb726c/songs/163456__lemudcrab__pistol-shot.wav";
