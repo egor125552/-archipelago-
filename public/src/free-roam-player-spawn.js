@@ -23,9 +23,13 @@ export function placeJoiningPlayer(world, playerIndex) {
   const boat = world.boats.find(candidate => candidate.owner === playerIndex);
   if (!player || !boat) return;
 
-  // An existing non-reserved boat belongs to a player who is reconnecting.
-  // Keep its exact position, cargo and damage instead of moving it again.
-  if (!activateReservedBoat(boat, playerIndex)) return;
+  const activatedReserve = activateReservedBoat(boat, playerIndex);
+  if (!activatedReserve && boat.connectionActivated) {
+    // This boat already entered the room before. A reconnect must preserve its
+    // exact position, cargo, damage and whether the player left it on shore.
+    return;
+  }
+  if (!activatedReserve) boat.connectionActivated = true;
 
   const anchorIndex = world.players.findIndex((candidate, index) => (
     index !== playerIndex && world.freeActivities.presence[index]
