@@ -9,6 +9,7 @@ export function reserveUnconnectedBoats(world) {
   for (const boat of world.boats || []) {
     if (!boat) continue;
     boat.reserved = true;
+    boat.connectionActivated = false;
     boat.driver = null;
     boat.sunk = true;
     boat.speed = 0;
@@ -34,6 +35,7 @@ export function reserveUnconnectedBoats(world) {
 export function activateReservedBoat(boat, playerIndex) {
   if (!boat?.reserved) return false;
   boat.reserved = false;
+  boat.connectionActivated = true;
   boat.sunk = false;
   boat.driver = playerIndex;
   boat.speed = 0;
