@@ -1,3 +1,28 @@
+# Echo Archipelago 1.1.3
+
+Release date: 2026-07-23
+
+## Test-suite cleanup
+
+- Removed 24 obsolete test files that duplicated newer coverage or inspected cache-busting versions, import wiring, exact source strings and retired operation generations instead of current player-visible behaviour.
+- Reduced the executed Node suite from 348 tests to 169 focused mechanics and regression tests.
+- Kept current Free Roam coverage for server authority, two-player rooms, reconnect recovery, reserve boats, cargo, scenario progression, combat, towing, steering, spatial audio and iPhone gesture regressions.
+- Kept the two-client browser scenarios, mobile WebKit coverage and Cloudflare Worker bundle validation.
+- No gameplay, balance, network protocol, gestures, speech or audio behaviour changed in this release.
+
+## Test policy
+
+- New automated tests should protect an important player-visible rule, architectural guarantee or confirmed regression.
+- Tests must not be added only to check cache-generation numbers, module filenames, exact import strings or implementation details already covered by behaviour and browser scenarios.
+- Browser and physical-device checks remain necessary for gesture feel, speech timing, spatial audio and real network latency.
+
+## Verification
+
+- All 169 retained Node mechanics and regression tests passed.
+- Two-client browser and Cloudflare Worker verification runs before merge.
+
+---
+
 # Echo Archipelago 1.1.2
 
 Release date: 2026-07-23
