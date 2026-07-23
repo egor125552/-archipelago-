@@ -1,3 +1,24 @@
+# Echo Archipelago 1.1.0
+
+Release date: 2026-07-23
+
+## Starting pistol
+
+- Every free-roam player now starts with a pistol and 36 pistol rounds.
+- Pistol ammunition is separate from automatic ammunition and is replicated by the authoritative Cloudflare world.
+- `Z` and the existing two-finger sideways gesture include the pistol in the normal weapon cycle.
+- The pistol uses the same target selection and attack input as the automatic weapon.
+- Holding three fingers fires either ranged weapon and releasing any finger stops firing immediately.
+- The pistol deals 6 damage every 0.34 seconds. The automatic remains the stronger objective weapon at 11 damage every 0.13 seconds.
+- The pistol has a dedicated dry spatial Web Audio shot instead of reusing the automatic recording.
+- Target selection is available whenever either the pistol or automatic has ammunition.
+
+## Compatibility
+
+The 1.0 scenario, cargo loop, automatic crate, server-authoritative simulation, custom gestures and saved interface settings remain compatible. Version 1.1 adds one weapon type without replacing the existing progression.
+
+---
+
 # Echo Archipelago 1.0.0
 
 Release date: 2026-07-22
