@@ -12,7 +12,7 @@ import {
   storeActivityInput,
   updateActivities,
 } from "./free-roam-activities.js?v=39";
-import {applyCombatDamage, combatStatus, ensureCombat, updateCombat} from "./free-roam-combat.js?v=32";
+import {applyCombatDamage, combatStatus, ensureCombat, updateCombat} from "./free-roam-combat-v2.js?v=1";
 import {ensureMarauder, releaseStolenCargo, updateMarauder} from "./free-roam-marauder.js?v=32";
 import {ensureFreeScenario, scenarioStatus, updateFreeScenario} from "./free-roam-scenario.js?v=40";
 import {suppressIncapacitatedMovement, updatePhysicalActors} from "./free-roam-physical-actors.js?v=38";
@@ -122,15 +122,7 @@ export function stepFreeWorld(world, dt) {
 
 export function playerStatus(world, playerIndex) {
   ensureState(world);
-  return [
-    base.playerStatus(world, playerIndex),
-    scenarioStatus(world, playerIndex),
-    combatStatus(world, playerIndex),
-    activityStatus(world, playerIndex),
-  ].filter(Boolean).join(" ");
-}
-
-export function snapshotWorld(world) {
-  ensureState(world);
-  return base.snapshotWorld(world);
+  return [base.playerStatus(world, playerIndex), activityStatus(world, playerIndex), combatStatus(world, playerIndex), scenarioStatus(world, playerIndex)]
+    .filter(Boolean)
+    .join(" ");
 }
