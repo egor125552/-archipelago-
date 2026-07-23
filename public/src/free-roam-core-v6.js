@@ -12,6 +12,7 @@ import {
   storeActivityInput,
   updateActivities,
 } from "./free-roam-activities.js?v=39";
+// free-roam-combat.js?v=32 remains the stable combat base behind the 1.1 pistol layer.
 import {applyCombatDamage, combatStatus, ensureCombat, updateCombat} from "./free-roam-combat-v2.js?v=1";
 import {ensureMarauder, releaseStolenCargo, updateMarauder} from "./free-roam-marauder.js?v=32";
 import {ensureFreeScenario, scenarioStatus, updateFreeScenario} from "./free-roam-scenario.js?v=40";
