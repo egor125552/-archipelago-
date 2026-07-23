@@ -1,0 +1,1 @@
+Verify iPhone gesture guidance, held ranged fire, same-room reconnect protection, desktop controls and Worker build.
