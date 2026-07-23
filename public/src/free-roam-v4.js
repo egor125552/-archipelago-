@@ -49,6 +49,11 @@ const lastTapAt = new Map();
 let roomRefreshTimer = 0;
 let heartbeatTimer = 0;
 let reconnectTimer = 0;
+let reconnectAttempt = 0;
+let reconnectInProgress = false;
+let reconnectLongNoticeSpoken = false;
+let reconnectRole = "";
+let reconnectRoom = "";
 let leavingGame = false;
 let preferredRoomId = "";
 let socket = null;
@@ -148,9 +153,20 @@ function stopHeartbeat() {
   heartbeatTimer = 0;
 }
 
-function stopReconnect() {
+const RECONNECT_DELAYS_MS = Object.freeze([400, 900, 1_600, 2_800, 4_500, 7_000, 10_000]);
+
+function stopReconnectTimer() {
   clearTimeout(reconnectTimer);
   reconnectTimer = 0;
+}
+
+function resetReconnectState() {
+  stopReconnectTimer();
+  reconnectAttempt = 0;
+  reconnectInProgress = false;
+  reconnectLongNoticeSpoken = false;
+  reconnectRole = "";
+  reconnectRoom = "";
 }
 
 function stopLatencyProbe() {
@@ -193,33 +209,50 @@ function openGame(text) {
 }
 
 function reconnectToRoom(role, targetRoom) {
-  if (leavingGame || reconnectTimer || $("game").hidden) return;
-  announce("Связь с Cloudflare обновляется. Сервер сохраняет мир и лодки.", true);
+  if (leavingGame || reconnectTimer || $("game").hidden || !targetRoom) return;
+  reconnectRole = role;
+  reconnectRoom = targetRoom;
+  if (!reconnectInProgress) {
+    reconnectInProgress = true;
+    reconnectAttempt = 0;
+    reconnectLongNoticeSpoken = false;
+    releaseAllMovement();
+    announce("Связь с Cloudflare прервалась. Восстанавливаю тот же мир.", true);
+  } else if (reconnectAttempt >= 6 && !reconnectLongNoticeSpoken) {
+    reconnectLongNoticeSpoken = true;
+    announce("Связь пока не восстановлена. Продолжаю попытки без повторных сообщений.", true);
+  }
+  const delay = RECONNECT_DELAYS_MS[Math.min(reconnectAttempt, RECONNECT_DELAYS_MS.length - 1)];
   reconnectTimer = setTimeout(() => {
     reconnectTimer = 0;
-    if (!leavingGame && !$("game").hidden) connect(role, {reconnecting: true, targetRoom});
-  }, 900);
+    if (leavingGame || $("game").hidden) return;
+    reconnectAttempt += 1;
+    connect(reconnectRole, {reconnecting: true, targetRoom: reconnectRoom});
+  }, delay);
 }
 
 function connect(role, {reconnecting = false, targetRoom = ""} = {}) {
   audio.init().catch(() => {});
   speech.prime();
-  stopReconnect();
+  stopReconnectTimer();
   const requestedRole = role;
   isHost = requestedRole === "captain";
   playerIndex = isHost ? 0 : 1;
   $("hostButton").disabled = true;
   $("joinButton").disabled = true;
-  announce(
-    reconnecting
-      ? "Восстанавливаю связь со свободным миром…"
-      : requestedRole === "captain"
-        ? "Создаю свободный мир…"
-        : "Ищу свободный мир…",
-  );
+  if (reconnecting) {
+    $("message").textContent = `Восстанавливаю связь, попытка ${reconnectAttempt}.`;
+  } else {
+    announce(requestedRole === "captain" ? "Создаю свободный мир…" : "Ищу свободный мир…");
+  }
 
   const connection = new WebSocket(socketUrl(role, targetRoom));
   let lobbyReady = false;
+  let connectionDeadline = setTimeout(() => {
+    if (socket === connection && !lobbyReady) {
+      try { connection.close(4103, "connection-timeout"); } catch (_) {}
+    }
+  }, reconnecting ? 6_000 : 10_000);
   socket = connection;
   connection.addEventListener("open", () => {
     if (socket === connection) {
@@ -234,20 +267,36 @@ function connect(role, {reconnecting = false, targetRoom = ""} = {}) {
     catch (_) { return; }
 
     if (message.type === "lobby-ready") {
+      const actualRole = message.role || requestedRole;
+      const wrongReconnectRoom = reconnecting && targetRoom && (
+        message.room !== targetRoom
+        || actualRole !== requestedRole
+        || message.preferredRoomFound !== true
+      );
+      if (wrongReconnectRoom) {
+        try { connection.close(4101, "wrong-reconnect-room"); } catch (_) {}
+        return;
+      }
+      clearTimeout(connectionDeadline);
+      connectionDeadline = 0;
       lobbyReady = true;
       roomId = message.room || "";
-      const actualRole = message.role || requestedRole;
       isHost = actualRole === "captain";
       playerIndex = isHost ? 0 : 1;
       lastStateSequence = 0;
       authoritativeWorld = null;
       inputSentAt.clear();
       $("roomLabel").textContent = `Свободный мир ${roomId}`;
-      announce(message.matched
-        ? "Свободный мир найден. Сервер Cloudflare загружает состояние бухты…"
-        : isHost
-          ? "Свободный мир создан на сервере Cloudflare. Можно играть одному; ждём второго игрока."
-          : "Создано место ожидания первого игрока. Сервер Cloudflare сохранит единое состояние мира.");
+      if (reconnecting) {
+        resetReconnectState();
+        announce("Связь восстановлена. Ты снова в прежнем мире.", true);
+      } else {
+        announce(message.matched
+          ? "Свободный мир найден. Сервер Cloudflare загружает состояние бухты…"
+          : isHost
+            ? "Свободный мир создан на сервере Cloudflare. Можно играть одному; ждём второго игрока."
+            : "Создано место ожидания первого игрока. Сервер Cloudflare сохранит единое состояние мира.");
+      }
       sendInput(true);
       refreshRooms();
       return;
@@ -326,24 +375,30 @@ function connect(role, {reconnecting = false, targetRoom = ""} = {}) {
   });
 
   connection.addEventListener("error", () => {
-    if (socket !== connection || lobbyReady || !$("game").hidden) return;
-    announce("Cloudflare Worker не открыл свободный мир. Обнови страницу и попробуй ещё раз.", true);
-    resetButtons();
+    if (socket !== connection) return;
+    if (!reconnecting && !lobbyReady && $("game").hidden) {
+      announce("Cloudflare Worker не открыл свободный мир. Обнови страницу и попробуй ещё раз.", true);
+      resetButtons();
+    }
   });
   connection.addEventListener("close", () => {
+    clearTimeout(connectionDeadline);
+    connectionDeadline = 0;
     if (socket !== connection) return;
+    socket = null;
     stopHeartbeat();
     stopLatencyProbe();
-    if (lobbyReady && world && !leavingGame) {
-      reconnectToRoom(isHost ? "captain" : "crew", roomId);
+    if (!leavingGame && world && !$("game").hidden) {
+      reconnectToRoom(reconnectRole || (isHost ? "captain" : "crew"), reconnectRoom || roomId);
+    } else if ($("game").hidden) {
+      resetButtons();
     }
-    else if ($("game").hidden) resetButtons();
   });
 }
 
 function leaveGame() {
   leavingGame = true;
-  stopReconnect();
+  resetReconnectState();
   releaseAllMovement();
   stopHeartbeat();
   stopLatencyProbe();
@@ -966,6 +1021,15 @@ const targetMenu = createTargetMenu({
 
 document.addEventListener("pointerdown", () => speech.prime(), {capture: true});
 document.addEventListener("keydown", () => speech.prime(), {capture: true});
+window.addEventListener("online", () => {
+  if (!reconnectInProgress || leavingGame || $("game").hidden || socket) return;
+  stopReconnectTimer();
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = 0;
+    reconnectAttempt += 1;
+    connect(reconnectRole, {reconnecting: true, targetRoom: reconnectRoom});
+  }, 100);
+});
 
 $("hostButton").addEventListener("click", () => connect("captain"));
 $("joinButton").addEventListener("click", () => connect("auto"));
@@ -1032,6 +1096,8 @@ window.__freeRoam = {
     networkRttMs,
     inputReceiptMs,
     controlLatencyMs,
+    reconnecting: reconnectInProgress,
+    reconnectAttempt,
   }),
   disconnectForTest: () => socket?.close(4100, "browser-test"),
   roomId: () => roomId,

@@ -129,7 +129,6 @@ try {
     const nativeAddEventListener = socket.addEventListener.bind(socket);
     const nativeRemoveEventListener = socket.removeEventListener.bind(socket);
     const wrappedMessageListeners = new WeakMap();
-    let retryingPreferredRoom = false;
     let requestedRoom = "";
     let requestedRole = "";
 
@@ -141,10 +140,6 @@ try {
       }
     } catch (_) {}
 
-    const targetedReconnect = Boolean(
-      requestedRoom && ["captain", "crew"].includes(requestedRole),
-    );
-
     function parseLobbyMessage(data) {
       try {
         const message = JSON.parse(String(data));
@@ -154,53 +149,25 @@ try {
       }
     }
 
-    function isWrongReconnectRoom(message) {
-      return targetedReconnect && Boolean(message) && (
-        message.room !== requestedRoom
-        || message.role !== requestedRole
-        || message.preferredRoomFound !== true
-      );
-    }
-
-    function transformMessageData(data) {
-      const lobbyMessage = parseLobbyMessage(data);
-      if (isWrongReconnectRoom(lobbyMessage)) {
-        retryingPreferredRoom = true;
-        // Let the game mark this connection as opened, but keep its old room id.
-        // The immediate close then goes through the normal reconnect path instead
-        // of accepting a freshly created world and restarting the scenario.
-        return JSON.stringify({
-          ...lobbyMessage,
-          room: requestedRoom,
-          role: requestedRole,
-          requestedRoom,
-          preferredRoomFound: true,
-          created: false,
-          matched: true,
-          reconnectRetry: true,
-        });
-      }
-      if (retryingPreferredRoom) return null;
-      return localizeMessageData(data);
-    }
-
+    // Reconnect ownership is decided by the authoritative Worker. This wrapper
+    // only keeps the optional saved session and mobile wording in sync; it must
+    // never fabricate a successful lobby message or repeatedly close sockets.
     nativeAddEventListener("message", event => {
       const message = parseLobbyMessage(event.data);
-      if (isWrongReconnectRoom(message)) {
-        retryingPreferredRoom = true;
-        setTimeout(() => {
-          try { socket.close(4101, "retry-preferred-room"); } catch (_) {}
-        }, 0);
-        return;
-      }
-      if (message) saveSession(message.room, message.role);
+      if (!message) return;
+      const targetedReconnect = requestedRoom && ["captain", "crew"].includes(requestedRole);
+      const acceptedSession = !targetedReconnect || (
+        message.room === requestedRoom
+        && message.role === requestedRole
+        && message.preferredRoomFound === true
+      );
+      if (acceptedSession) saveSession(message.room, message.role);
     });
 
     socket.addEventListener = function addGuardedListener(type, listener, options) {
       if (type !== "message" || !listener) return nativeAddEventListener(type, listener, options);
       const wrapped = event => {
-        const data = transformMessageData(event.data);
-        if (data == null) return;
+        const data = localizeMessageData(event.data);
         const transformed = messageEventWithData(event, data);
         if (typeof listener === "function") listener.call(socket, transformed);
         else listener.handleEvent?.call(listener, transformed);

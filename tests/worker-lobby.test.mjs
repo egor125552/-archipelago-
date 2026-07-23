@@ -264,3 +264,42 @@ test("a reconnect claims the same free-roam room and role", async () => {
   assert.equal(reconnectedMessages.find(message => message.type === "lobby-ready").role, "captain");
   reconnected.webSocket.close();
 });
+
+test("an exact reconnect replaces a stale open free-roam socket without losing the world", async () => {
+  const lobby = new Lobby({});
+  const firstCaptain = await lobby.fetch(connectRequest("captain", "free"));
+  const firstCaptainMessages = collect(firstCaptain.webSocket);
+  await flush();
+  const roomId = firstCaptainMessages.find(message => message.type === "lobby-ready").room;
+
+  const crew = await lobby.fetch(connectRequest("crew", "free", roomId));
+  const crewMessages = collect(crew.webSocket);
+  await flush();
+  const room = lobby.rooms.get(roomId);
+  const originalWorld = room.freeServer;
+  const crewMessageCount = crewMessages.length;
+
+  // Deliberately leave the first client socket open. This reproduces a mobile
+  // network hand-off where Cloudflare has not observed the dead transport yet.
+  const replacement = await lobby.fetch(connectRequest("captain", "free", roomId));
+  const replacementMessages = collect(replacement.webSocket);
+  await flush();
+
+  const ready = replacementMessages.find(message => message.type === "lobby-ready");
+  assert.equal(ready.room, roomId);
+  assert.equal(ready.role, "captain");
+  assert.equal(ready.preferredRoomFound, true);
+  assert.equal(ready.replacedConnection, true);
+  assert.equal(firstCaptain.webSocket.readyState, 3);
+  assert.equal(lobby.rooms.get(roomId).freeServer, originalWorld);
+  assert.equal(
+    crewMessages.slice(crewMessageCount).some(message => message.type === "network-closed"),
+    false,
+    "the teammate must not hear a false disconnect during transport replacement",
+  );
+
+  clearInterval(lobby.freeTickTimer);
+  lobby.freeTickTimer = null;
+  replacement.webSocket.close();
+  crew.webSocket.close();
+});

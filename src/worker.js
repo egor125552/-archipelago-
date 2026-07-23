@@ -169,6 +169,22 @@ export class Lobby {
     room.lastSeen[role] = now;
   }
 
+  replaceFreeRoleConnection(room, role) {
+    const previousSocket = room?.[role];
+    if (!previousSocket || room?.mode !== "free") return false;
+    // A mobile network hand-off can leave Cloudflare believing the old socket
+    // is still open after the browser has already lost it. An exact room/role
+    // reconnect is the player's proof of intent to resume that slot, so retire
+    // the stale transport without clearing presence or notifying the teammate.
+    this.clients.delete(previousSocket);
+    room[role] = null;
+    room.pending[role] = [];
+    room.lastSeen ||= {captain: 0, crew: 0};
+    room.lastSeen[role] = 0;
+    try { previousSocket.close(4102, "replaced-by-reconnect"); } catch (_) {}
+    return true;
+  }
+
   removeRole(room, role, notify = true) {
     const socket = room?.[role];
     if (!socket) return;
@@ -235,6 +251,7 @@ export class Lobby {
 
     let room = null;
     let preferredRoomFound = false;
+    let replacedConnection = false;
     if (role === "auto") {
       if (requestedRoom) {
         const preferred = this.rooms.get(requestedRoom);
@@ -247,12 +264,17 @@ export class Lobby {
       role = missingRole(room) || "captain";
     } else {
       const preferred = requestedRoom ? this.rooms.get(requestedRoom) : null;
-      if (preferred && (preferred.mode || "ops") === mode && !preferred[role]) {
-        room = preferred;
-        preferredRoomFound = true;
-      } else {
-        room = chooseWaitingRoom(this.rooms, role, mode);
+      if (preferred && (preferred.mode || "ops") === mode) {
+        if (!preferred[role]) {
+          room = preferred;
+          preferredRoomFound = true;
+        } else if (mode === "free") {
+          room = preferred;
+          preferredRoomFound = true;
+          replacedConnection = this.replaceFreeRoleConnection(room, role);
+        }
       }
+      if (!room) room = chooseWaitingRoom(this.rooms, role, mode);
     }
 
     const created = !room;
@@ -303,6 +325,7 @@ export class Lobby {
       requestedRole: requestedRole || "crew",
       requestedRoom: requestedRoom || null,
       preferredRoomFound,
+      replacedConnection,
       replacedStale: Boolean(requestedRoom && !preferredRoomFound && created),
       created,
       mode,
