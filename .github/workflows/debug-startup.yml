@@ -16,24 +16,48 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Run focused test and capture output
+      - name: Verify exact null-source fix
         shell: bash
         run: |
-          set +e
-          node --test tests/free-roam-startup-v160.test.mjs > diagnostic-output.txt 2>&1
-          code=$?
-          printf '\nEXIT_CODE=%s\n' "$code" >> diagnostic-output.txt
-          exit 0
-      - name: Publish diagnostic output to branch
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('public/src/free-roam-threat-intelligence.js')
+          text = path.read_text()
+          old = '].filter(source => source?.active !== false && !source?.destroyed);'
+          new = '].filter(source => Boolean(source) && source.active !== false && !source.destroyed);'
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one null-unsafe filter, found {text.count(old)}')
+          path.write_text(text.replace(old, new))
+          PY
+          node --test tests/free-roam-startup-v160.test.mjs
+          cp tests/free-roam-startup-v160.test.mjs /tmp/free-roam-startup-v160.test.mjs
+      - name: Publish clean hotfix branch
         shell: bash
         run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add diagnostic-output.txt
-          git commit -m "Record focused startup diagnostic" || exit 0
-          git push
+          git fetch origin main
+          git checkout -B hotfix/free-roam-startup-null-source origin/main
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('public/src/free-roam-threat-intelligence.js')
+          text = path.read_text()
+          old = '].filter(source => source?.active !== false && !source?.destroyed);'
+          new = '].filter(source => Boolean(source) && source.active !== false && !source.destroyed);'
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one null-unsafe filter, found {text.count(old)}')
+          path.write_text(text.replace(old, new))
+          PY
+          cp /tmp/free-roam-startup-v160.test.mjs tests/__startup-hotfix.test.mjs
+          node --test tests/__startup-hotfix.test.mjs
+          rm tests/__startup-hotfix.test.mjs
+          git add public/src/free-roam-threat-intelligence.js
+          git commit -m "Fix free-roam startup null source"
+          git push --force-with-lease origin HEAD:hotfix/free-roam-startup-null-source
