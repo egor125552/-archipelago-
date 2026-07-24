@@ -1,4 +1,4 @@
-name: Update heavy threat browser expectation
+name: Finalize Archipelago 1.5.1 browser assets
 
 on:
   pull_request:
@@ -12,7 +12,7 @@ permissions:
   contents: write
 
 jobs:
-  update-test:
+  finalize-assets:
     if: github.head_ref == 'agent/fix-contract-board-salvage-heavy-shop'
     runs-on: ubuntu-latest
     steps:
@@ -20,21 +20,57 @@ jobs:
         with:
           ref: agent/fix-contract-board-salvage-heavy-shop
           fetch-depth: 0
-      - name: Update cooperative heavy hull expectation
+      - name: Bump browser module versions and release notes
         shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
-          path = Path('tests/free-roam.e2e.spec.mjs')
-          source = path.read_text()
-          old = 'expect(result.heavy).toEqual({hull: 340, maxHull: 340, role: "heavy"});'
-          new = 'expect(result.heavy).toEqual({hull: 1000, maxHull: 1000, role: "heavy"});'
-          if old not in source:
-              raise SystemExit('old heavy expectation not found')
-          path.write_text(source.replace(old, new, 1))
+
+          def replace(path, old, new):
+              file = Path(path)
+              source = file.read_text()
+              if old in source:
+                  file.write_text(source.replace(old, new))
+
+          replace('public/free-roam.html', 'free-roam-pistol-audio.js?v=1', 'free-roam-pistol-audio.js?v=2')
+          replace('public/free-roam.html', 'free-roam-v4.js?v=49', 'free-roam-v4.js?v=50')
+          replace('public/src/free-roam-v4.js', 'free-roam-core-v6.js?v=42', 'free-roam-core-v6.js?v=43')
+          replace('public/src/free-roam-v4.js', 'free-roam-replication.js?v=44', 'free-roam-replication.js?v=45')
+          replace('public/src/free-roam-v4.js', 'free-roam-target-menu.js?v=34', 'free-roam-target-menu.js?v=35')
+          replace('public/src/free-roam-v4.js', 'free-roam-shop.js?v=1', 'free-roam-shop.js?v=2')
+          replace('public/src/free-roam-core-v6.js', 'free-roam-heavy-pursuer.js?v=1', 'free-roam-heavy-pursuer.js?v=2')
+          replace('public/src/free-roam-core-v6.js', 'free-roam-shop.js?v=1', 'free-roam-shop.js?v=2')
+
+          notes = Path('RELEASE_NOTES.md')
+          source = notes.read_text()
+          heading = '# Echo Archipelago 1.5.1'
+          if heading not in source:
+              entry = '''# Echo Archipelago 1.5.1
+
+Release date: 2026-07-24
+
+## Исправления сценария
+
+- Возвращён прежний записанный звук стартового пистолета.
+- Навигационная цель «доска заказов» теперь сохраняется на клиенте и сервере.
+- Неразобранный металлолом больше нельзя мгновенно погрузить из лодки.
+- На iPhone одно действие запускает физический демонтаж ломом; прогресс озвучивается, при отходе ставится на паузу, а погрузка требует отдельного действия после завершения.
+- Боевые цели остаются доступны во время угрозы даже при пустом магазине оружия.
+- Тяжёлый катер усилен до 700 корпуса в одиночной игре и 1000 в кооперативе; установка выпускает длинную конечную очередь.
+- У торговца добавлены полный сервис лодки и постоянные улучшения за металлолом.
+- Версии браузерных модулей повышены, чтобы Safari не использовал старую механику из кэша.
+
+---
+
+'''
+              notes.write_text(entry + source)
           PY
+          if git diff --quiet; then
+            echo "Browser assets are already finalized."
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add tests/free-roam.e2e.spec.mjs
-          git commit -m "Update heavy threat browser expectation"
+          git add RELEASE_NOTES.md public/free-roam.html public/src/free-roam-v4.js public/src/free-roam-core-v6.js
+          git commit -m "Finalize Archipelago 1.5.1 browser assets"
           git push origin HEAD:agent/fix-contract-board-salvage-heavy-shop
