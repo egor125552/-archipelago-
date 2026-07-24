@@ -1,7 +1,7 @@
 "use strict";
 
 import {activePursuers, activePursuerById} from "./free-roam-pursuer-squad.js?v=33";
-import {activeEnemyBoats, enemyBoatById} from "./free-roam-enemy-boats.js?v=1";
+import {activeEnemyBoats, enemyBoatById} from "./free-roam-enemy-boats.js?v=2";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const distance = (a, b) => Math.hypot((Number(a?.x) || 0) - (Number(b?.x) || 0), (Number(a?.y) || 0) - (Number(b?.y) || 0));
@@ -65,7 +65,10 @@ function createActor(id, boat, weapon, targetPlayer, elite = false) {
 }
 
 function sourceBoats(world) {
-  return [...activePursuers(world), ...activeEnemyBoats(world)];
+  const boats = [...activePursuers(world), ...activeEnemyBoats(world)];
+  const heavy = world.freeHeavyPursuer?.boat;
+  if (heavy?.active && !heavy.destroyed) boats.push(heavy);
+  return boats;
 }
 
 export function startHostileActors(world, level, encounterId, assignments = {}) {
@@ -77,7 +80,8 @@ export function startHostileActors(world, level, encounterId, assignments = {}) 
   state.actors = [];
   if (!state.active) return state;
   let serial = 1;
-  const maximumActors = level >= 4 ? 6 : 4;
+  const coop = (world.freeActivities?.presence || []).filter(Boolean).length > 1;
+  const maximumActors = level >= 5 ? (coop ? 6 : 4) : level >= 4 ? 6 : 4;
   for (const boat of sourceBoats(world)) {
     if (state.actors.length >= maximumActors) break;
     const targetPlayer = Number.isInteger(assignments[boat.id]) ? assignments[boat.id] : serial % 2;
@@ -149,6 +153,8 @@ function nearestBoardingBoat(world, actor) {
     const metres = distance(actor, boat);
     if (metres < best) { best = metres; result = boat; }
   }
+  const heavy = world.freeHeavyPursuer?.boat;
+  if (heavy?.active && !heavy.destroyed && distance(actor, heavy) < best) result = heavy;
   return result;
 }
 

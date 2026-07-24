@@ -286,3 +286,41 @@ test("the existing target menu selects the merchant as a sonar destination", asy
     await crewContext.close();
   }
 });
+
+test("threat five exposes the heavy boat systems and elite actor in the browser", async ({browser}, testInfo) => {
+  const mobile = testInfo.project.name.includes("webkit");
+  const context = await browser.newContext(mobile
+    ? {viewport: {width: 390, height: 844}, hasTouch: true, isMobile: true}
+    : {viewport: {width: 1280, height: 900}});
+  await prepareContext(context);
+  const page = await context.newPage();
+  try {
+    await page.goto("/free-roam.html", {waitUntil: "domcontentloaded"});
+    const result = await page.evaluate(async () => {
+      const core = await import("/src/free-roam-core-v6.js?v=42");
+      const threats = await import("/src/free-roam-threat-director.js?v=2");
+      const targeting = await import("/src/free-roam-targeting.js?v=34");
+      const actors = await import("/src/free-roam-hostile-actors.js?v=2");
+      const heavyModule = await import("/src/free-roam-heavy-pursuer.js?v=1");
+      const world = core.createFreeWorld();
+      world.freeScenario.phase = "victory";
+      core.setPlayerPresence(world, 1, true);
+      threats.startThreatEncounter(world, 5, "browser-red-contract");
+      const heavy = heavyModule.activeHeavyPursuer(world);
+      return {
+        heavy: heavy && {hull: heavy.hull, maxHull: heavy.maxHull, role: heavy.role},
+        heavyTargets: targeting.listCombatTargets(world, 0)
+          .filter(target => ["heavyHull", "heavyTurret", "heavyEngine"].includes(target.kind))
+          .map(target => target.id),
+        elites: actors.activeHostileActors(world)
+          .filter(actor => actor.elite)
+          .map(actor => ({health: actor.health, state: actor.state, boatId: actor.boatId})),
+      };
+    });
+    expect(result.heavy).toEqual({hull: 340, maxHull: 340, role: "heavy"});
+    expect(result.heavyTargets).toEqual(["heavy-pursuer", "heavy-turret", "heavy-engine"]);
+    expect(result.elites).toEqual([{health: 120, state: "aboard", boatId: "heavy-pursuer"}]);
+  } finally {
+    await context.close();
+  }
+});

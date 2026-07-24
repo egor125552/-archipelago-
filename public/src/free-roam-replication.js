@@ -108,6 +108,10 @@ const GUNNER_FIELDS = Object.freeze([
 const ENEMY_BOAT_FIELDS = Object.freeze([
   "id", "role", "x", "y", "heading", "speed", "hull", "maxHull", "active", "destroyed", "targetPlayer", "crewSeats",
 ]);
+const HEAVY_FIELDS = Object.freeze([
+  "id", "role", "x", "y", "heading", "turretHeading", "speed", "hull", "maxHull", "engineHealth", "turretHealth",
+  "engineDisabled", "turretDisabled", "active", "destroyed", "targetPlayer",
+]);
 const HOSTILE_ACTOR_FIELDS = Object.freeze([
   "id", "boatId", "targetPlayer", "x", "y", "heading", "state", "weapon", "health", "maxHealth", "active", "destroyed", "elite",
 ]);
@@ -128,6 +132,7 @@ export function replicatedFreeWorld(world) {
   const enemyBoats = world?.freeEnemyBoats || {};
   const hostileActors = world?.freeHostileActors || {};
   const threat = world?.freeThreatDirector || {};
+  const heavy = world?.freeHeavyPursuer || {};
   return compact({
     version: world?.version,
     time: world?.time,
@@ -190,5 +195,11 @@ export function replicatedFreeWorld(world) {
     freeThreatDirector: threat.active || threat.level ? select(threat, [
       "active", "level", "encounterId", "contractId", "assignments", "graceUntil", "rewardIssued", "cleared",
     ]) : null,
+    ...(heavy.active || heavy.boat ? {freeHeavyPursuer: {
+      active: heavy.active,
+      encounterId: heavy.encounterId,
+      boat: select(heavy.boat, HEAVY_FIELDS),
+      projectiles: (heavy.projectiles || []).map(projectile => select(projectile, ["id", "x", "y"])),
+    }} : {}),
   });
 }
