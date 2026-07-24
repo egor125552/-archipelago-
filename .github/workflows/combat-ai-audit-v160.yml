@@ -1,0 +1,39 @@
+name: Focused combat AI audit
+
+on:
+  push:
+    branches:
+      - audit/combat-ai-v160
+    paths-ignore:
+      - combat-ai-audit-output.txt
+
+permissions:
+  contents: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Run only combat AI audit
+        shell: bash
+        run: |
+          set +e
+          node --test tests/combat-ai-audit-v160.test.mjs > combat-ai-audit-output.txt 2>&1
+          code=$?
+          printf '\nEXIT_CODE=%s\n' "$code" >> combat-ai-audit-output.txt
+          exit 0
+      - name: Publish audit output
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add combat-ai-audit-output.txt
+          git commit -m "Record focused combat AI audit" || exit 0
+          git push
