@@ -40,7 +40,7 @@ test("two present players produce one shared all-dead notice", () => {
   assert.deepEqual(threatNotices(world)[0].targets, [0, 1]);
 });
 
-test("knife enemies leave the shore and pursue a swimming player", () => {
+test("knife enemies leave the shore, catch a swimmer, and strike", () => {
   const world = createFreeWorld();
   world.freeActivities.presence = [true, false];
   Object.assign(world.players[0], {mode: "swim", activeBoat: null, x: 210, y: 128});
@@ -72,22 +72,28 @@ test("knife enemies leave the shore and pursue a swimming player", () => {
   world.freeHostileActors.active = true;
   world.freeHostileActors.actors = [actor];
   const before = Math.hypot(actor.x - world.players[0].x, actor.y - world.players[0].y);
-  for (let index = 0; index < 80; index += 1) {
+  let damage = 0;
+  for (let index = 0; index < 340; index += 1) {
     const frame = prepareThreatIntelligence(world);
-    updateHostileActors(world, 0.05, {damagePlayer() { return true; }});
+    updateHostileActors(world, 0.05, {damagePlayer(_world, targetIndex, amount) {
+      if (targetIndex === 0) damage += amount;
+      return true;
+    }});
     finishThreatIntelligence(world, frame, 0.05);
     world.time += 0.05;
   }
   const after = Math.hypot(actor.x - world.players[0].x, actor.y - world.players[0].y);
   assert.equal(actor.state, "swim");
   assert.ok(actor.y > 70);
-  assert.ok(after < before);
+  assert.ok(after < before - 20);
+  assert.ok(damage > 0);
 });
 
 test("the delayed level-five final phase creates a mixed physical landing once", () => {
   const world = createFreeWorld();
   world.freeActivities.presence = [true, false];
   world.freeThreatDirector = {active: true, level: 5, encounterId: 177};
+  world.freeHeavyPursuer ||= {projectiles: []};
   world.freeHeavyPursuer.boat = {id: "heavy-pursuer", role: "heavy", x: 210, y: 150, heading: 0, active: true, destroyed: false};
   world.freeHostileActors.active = true;
   world.freeHostileActors.actors = [];
@@ -109,6 +115,7 @@ test("cooperative final phase caps at fourteen distributed fighters", () => {
   const world = createFreeWorld();
   world.freeActivities.presence = [true, true];
   world.freeThreatDirector = {active: true, level: 5, encounterId: 188};
+  world.freeHeavyPursuer ||= {projectiles: []};
   world.freeHeavyPursuer.boat = {id: "heavy-pursuer", role: "heavy", x: 210, y: 150, heading: 0, active: true, destroyed: false};
   world.freeHostileActors.active = true;
   world.freeHostileActors.actors = [];
