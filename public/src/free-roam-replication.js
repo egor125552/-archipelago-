@@ -87,119 +87,66 @@ export function applyReplicatedWorldDelta(previous, delta) {
 const BOAT_FIELDS = Object.freeze([
   "id", "owner", "driver", "x", "y", "heading", "speed", "throttle", "rudder",
   "hull", "armor", "armorMax", "water", "leak", "fuel", "engineTemp",
-  "engineStalled", "pumpActive", "repairPatches", "hullRepairProgress",
-  "emergencyActive", "emergencyRemaining", "restartProgress", "sunk", "moving",
-  "floatingBrakeReadyAt", "refuelCanisters", "refuelActive", "refuelProgress",
-  "engineServiceActive", "engineServiceProgress", "cargo", "cargoWeight", "cargoPumpBonus",
-]);
-const PLAYER_FIELDS = Object.freeze([
-  "id", "mode", "activeBoat", "x", "y", "heading", "running", "airborne", "jumpHeight",
-]);
-const COMBAT_FIELDS = Object.freeze([
-  "health", "alive", "respawnRemaining", "knockedDown", "knockdownRemaining", "stun",
-  "stamina", "carriedCrate", "weapons", "equipped", "ammo", "pistolAmmo", "injuryMix", "lockedTargetId",
-]);
-const PURSUER_FIELDS = Object.freeze([
-  "id", "x", "y", "heading", "speed", "hull", "maxHull", "active", "destroyed", "targetPlayer",
-]);
-const GUNNER_FIELDS = Object.freeze([
-  "id", "pursuerId", "targetPlayer", "x", "y", "heading", "health", "active", "destroyed", "returning",
-]);
-const ENEMY_BOAT_FIELDS = Object.freeze([
-  "id", "role", "x", "y", "heading", "speed", "hull", "maxHull", "active", "destroyed", "targetPlayer", "crewSeats",
-]);
-const HEAVY_FIELDS = Object.freeze([
-  "id", "role", "x", "y", "heading", "turretHeading", "speed", "hull", "maxHull", "engineHealth", "turretHealth",
-  "engineDisabled", "turretDisabled", "active", "destroyed", "targetPlayer",
-]);
-const HOSTILE_ACTOR_FIELDS = Object.freeze([
-  "id", "boatId", "targetPlayer", "x", "y", "heading", "state", "weapon", "health", "maxHealth", "active", "destroyed", "elite",
-]);
-const CRATE_FIELDS = Object.freeze([
-  "id", "kind", "label", "rarity", "weight", "slots", "traits", "x", "y", "state", "carriedBy", "stowedBoat", "source",
-  "contractId", "contractDefinitionId", "contractCategory", "contractDamage", "waterExposure",
-  "extractionSeconds", "extractionProgress", "extracted",
-]);
+  "engineStalled", "pumpActive", "repairPatches", "hullRepairProgresstalled"srurn {[REPLACEscyrepairPatcEPLACEscyRemae) d", "t"srtartlled"srurn"thun, "enmov d",  {[Rfloa }
+gBrakeRspeyAt, "t"sgineCanisk",s, "t"sginerepairPatcheginelled"srurn {[REed", "erv(kerepairPatcEed", "erv(kelled"srurn"tcargorn"tcargoWeightrn"tcargoP, "Bonus", "armor"UpgradeLevneTemp", "UpgradeLevneTempEed", UpgradeLevneTempsea"UpgradeLevneTe "arcolliseplDamageMporirld", "fucolliseplLl",Mporirld", "
+cons_FIELD);
+YERObject.freeze([
+  "id", "owner", "dmus,ax", epairBoa ", "heading", "speed", "trun) d", "tstaborn,ax",j, "Heightrn
+cons_FIELDCOMB= Object.freeze([
+  "id", "owne"splth, "tslairPatchespawnRemae) d", "tknockedDriv, "tknockdownRemae) d", "tstunTe "arrtaminarn"tcar ||dCrak", "leeapFIETempEquippActiveammorn"tpiskolAmmorn"tinjuryMiheadilockedTargetId "
+cons_FIELD)URSUERObject.freeze([
+  "id", "owner", "dheading", "speed", "throttle",mor", "amaxHor", "arepairPatcdsrtroyttle", argetPlay", "
+cons_FIELDGUNNERObject.freeze([
+  "id", "owner", "dpursuerItle", argetPlay", ""dheading", "speed", "t"splth, "tsepairPatcdsrtroyttle",lyDelt d",  cons_FIELDENEMY_S = Object.freeze([
+  "id", "owner", "droer",
+ heading", "speed", "throttle",mor", "amaxHor", "arepairPatcdsrtroyttle", argetPlay", ""tcrewSeats,  cons_FIELDHEAVYObject.freeze([
+  "id", "owner", "droer",
+ heading", "speed", "tDellyDHspeed", "throttle",mor", "amaxHor", "aEed", Hsplth, "tmaxEed", Hsplth, "tDellyDHsplth, "tmaxTellyDHsplth,  {[REed", DisabpActiveDellyDDisabpActiverepairPatcdsrtroyttle", argetPlay", ""tburstRemae) d", "taimRemae) d",  cons_FIELDHOSTILE_ACTORObject.freeze([
+  "id", "owner", "dboa Itle", argetPlay", ""dheading", "speed", "trtak", "leeapFI, "t"splth, "tmaxHsplth, "tsepairPatcdsrtroyttle",elik", 
+cons_FIELDCRA
+  bject.freeze([
+  "id", "owner", "dk  :eadilabneTemprarity, "leeightrn"tslotETemptraitETempheading", rtak", "lcar ||dBng", rtow|dBoa ", "];
+  }Te "arcota sepItle",cota sepD
+funiReplItle",cota sepCak"goryle",cota sepDamage, "leak",Etiosur}Te "ar;
+} sepeplSecotdETempE
+} sepepllled"srurn"tE
+} seped "
+cons
+// Brows",sply}
 
-// Browsers render this view but never own the authoritative simulation. Host
-// inputs, collision caches, AI cooldowns and projectile physics stay inside
-// the Durable Object and can no longer flood a slower browser.
-export function replicatedFreeWorld(world) {
-  const activities = world?.freeActivities || {};
-  const scenario = world?.freeScenario || {};
-  const pursuers = world?.freePursuerSquad || {};
-  const gunners = world?.freeHostileGunners || {};
-  const enemyBoats = world?.freeEnemyBoats || {};
-  const hostileActors = world?.freeHostileActors || {};
-  const threat = world?.freeThreatDirector || {};
-  const heavy = world?.freeHeavyPursuer || {};
-  return compact({
-    version: world?.version,
-    time: world?.time,
-    boats: (world?.boats || []).map(boat => select(boat, BOAT_FIELDS)),
-    players: (world?.players || []).map(player => ({
-      ...select(player, PLAYER_FIELDS),
-      combat: select(player?.combat, COMBAT_FIELDS),
-    })),
-    tow: world?.tow ?? null,
-    freeActivities: {
-      presence: activities.presence,
-      score: activities.score,
-      delivered: activities.delivered,
-      credits: activities.credits,
-      shopOpen: activities.shopOpen,
-      shopSelection: activities.shopSelection,
-      crates: (activities.crates || []).map(crate => select(crate, CRATE_FIELDS)),
-      marauder: select(activities.marauder, PURSUER_FIELDS),
-    },
-    freeScenario: select(scenario, [
-      "phase", "warningUntil", "targets", "lockedTargetIds", "beaconUntil", "guideEnabled", "navigationModes",
-    ]),
-    freeContracts: world?.freeContracts ? {
-      offerIds: (world.freeContracts.offers || []).map(offer => offer.definitionId),
-      activeContract: select(world.freeContracts.activeContract, [
-        "id", "definitionId", "category", "label", "phase", "creditReward", "scrapReward", "bonus",
-        "threat", "maximumThreat", "crateId", "rewardIssued",
-      ]),
-      completedContracts: world.freeContracts.completedContracts,
-      abandonedContracts: world.freeContracts.abandonedContracts,
-      scrap: world.freeContracts.scrap,
-      boardOpen: world.freeContracts.boardOpen,
-      boardSelection: world.freeContracts.boardSelection,
-      encounterActive: world.freeContracts.encounterActive,
-      encounterLevel: world.freeContracts.encounterLevel,
-      encounterDefeated: world.freeContracts.encounterDefeated,
-    } : null,
-    freePursuerSquad: {
-      activated: pursuers.activated,
-      assignments: pursuers.assignments,
-      escorts: (pursuers.escorts || []).map(escort => select(escort, PURSUER_FIELDS)),
-      projectiles: (pursuers.projectiles || []).map(projectile => select(projectile, ["id", "x", "y"])),
-    },
-    freeHostileGunners: {
-      gunners: (gunners.gunners || []).map(gunner => select(gunner, GUNNER_FIELDS)),
-      projectiles: (gunners.projectiles || []).map(projectile => select(projectile, ["id", "x", "y"])),
-    },
-    freeEnemyBoats: enemyBoats.active || (enemyBoats.boats || []).length ? {
-      active: enemyBoats.active,
-      level: enemyBoats.level,
-      boats: (enemyBoats.boats || []).map(boat => select(boat, ENEMY_BOAT_FIELDS)),
-      projectiles: (enemyBoats.projectiles || []).map(projectile => select(projectile, ["id", "x", "y"])),
-    } : null,
-    freeHostileActors: hostileActors.active || (hostileActors.actors || []).length ? {
-      active: hostileActors.active,
-      level: hostileActors.level,
-      actors: (hostileActors.actors || []).map(actor => select(actor, HOSTILE_ACTOR_FIELDS)),
-      projectiles: (hostileActors.projectiles || []).map(projectile => select(projectile, ["id", "x", "y"])),
-    } : null,
-    freeThreatDirector: threat.active || threat.level ? select(threat, [
-      "active", "level", "encounterId", "contractId", "assignments", "graceUntil", "rewardIssued", "cleared",
-    ]) : null,
-    ...(heavy.active || heavy.boat ? {freeHeavyPursuer: {
-      active: heavy.active,
-      encounterId: heavy.encounterId,
-      boat: select(heavy.boat, HEAVY_FIELDS),
-      projectiles: (heavy.projectiles || []).map(projectile => select(projectile, ["id", "x", "y"])),
-    }} : {}),
-  });
-}
+r this vi.Obbut{}; "y own the authoritapair simulapepl. Host
+// input| {collisepl callRe, AI{cooldowns andmapoe([
+ile physics rtay inside
+// the DurabpAeeze([
+ andmcareto preg"y flood a slow"y brows",.nction applyReplirorldDeltaF"idious, wous,!previ_FIELDsepaiiReeisArwous,?  "idAepaiiReeisexport vi_FIELDscenariosArwous,?  "idScenariosexport vi_FIELDpursuerisArwous,?  "idPursuerSquadsexport vi_FIELDgun)erisArwous,?  "idHostileGun)erisexport vi_FIELDenemyBoa isArwous,?  "idEnemyBoa isexport vi_FIELDhostileAeporisArwous,?  "idHostileAeporisexport vi_FIELD "reatsArwous,?  "idT"reatDireeporsexport vi_FIELDheavysArwous,?  "idHeavyPursuersexport vineValue(ld);
+   (Arra "ysepl:rwous,?  "ysepl,(Arratime:rwous,? time,(Arraboa s: (wous,? boa isexp[])Valueboa (indrce, keboa ,DS = Object.)),(Arraplay",s: (wous,? play",ssexp[])Valueplay",(ind( (Array....rce, keplay",,D);
+YERObject.),(Arravi_Fmbat: rce, keplay",?._Fmbat,DCOMB= Object.),(Arra})),(Arratow:rwous,? tow  const ,(Arra "idAepaiiReei:f (Array.delsEsce:rsepaiiReei.delsEsce,(Arraviscore:rsepaiiReei.score,(Arravi});, "yed:rsepaiiReei.});, "yed,(Arravi_yedi s: sepaiiReei._yedi s,(ArravishopOpen:rsepaiiReei.shopOpen,(ArravishopSce, kepl:rsepaiiReei.shopSce, kepl,(Arravi_yelts: (sepaiiReei._yeltssexp[])Value_yelt(indrce, ke_yelt,DCRA
+  bject.)),(Arravimarau
+
+r: rce, kesepaiiReei.marau
+
+r,D)URSUERObject.),(Arra},(Arra "idScenario: rce, kescenario, [(Arravi"phase, "lealt d"U  }lle", argetseadilockedTargetIdseadibea_FIU  }lle",guideEnabpActivenavigapeplMus,s", "a  ]),(Arra "idCota seps:rwous,?  "idCota seps ?f (Array.offerIts: (wous,  "idCota seps.offerssexp[])Valueoffer(indoffer.d
+funiReplIt),(ArravisepairCota sep: rce, kewous,  "idCota seps.sepairCota sep, [(Arraviwner", "dd
+funiReplItle",cak"goryle",labneTempphase, "l_yedi Reealtle",s_yepReealtle",bonus", "araviwne "reat, "tmaximumT"reat, "t_yeltItle",lyealtIssued", "aravi]),(Arravi_Fmpt[kedCota seps:rwous,  "idCota seps._Fmpt[kedCota seps,(ArravisbandonedCota seps:rwous,  "idCota seps.sbandonedCota seps,(Arraviscyep:rwous,  "idCota seps.scyep,(ArraviboardOpen:rwous,  "idCota seps.boardOpen,(ArraviboardSce, kepl:rwous,  "idCota seps.boardSce, kepl,(ArraviEscounk",repair:rwous,  "idCota seps.Escounk",repair,(ArraviEscounk",Levne:rwous,  "idCota seps.Escounk",Levne,(ArraviEscounk",D
+feelta:rwous,  "idCota seps.Escounk",D
+feelta,(Arra} :onst ,(Arra "idPursuerSquad:f (Array.sepaielta:rpursueri.sepaielta,(Arravisssign  res:rpursueri.sssign  res,(ArraviEscor s: (pursueri.Escor ssexp[])ValueEscor (indrce, keEscor ,D)URSUERObject.)),(Arraviapoe([
+iles: (pursueri.apoe([
+ilessexp[])Valueppoe([
+ile indrce, keppoe([
+ile, [er", "dheading])),(Arra},(Arra "idHostileGun)eri:f (Array.gun)eri:f(gun)eri.gun)erisexp[])Valuegun)er indrce, kegun)er,DGUNNERObject.)),(Arraviapoe([
+iles: (gun)eri.apoe([
+ilessexp[])Valueppoe([
+ile indrce, keppoe([
+ile, [er", "dheading])),(Arra},(Arra "idEnemyBoa i:DenemyBoa i.sepairsexp(enemyBoa i.boa isexp[])Velta : un (Array.sepaie:DenemyBoa i.sepair,(Arravilevne:renemyBoa i.levne,(Arraviboa s: (enemyBoa i.boa isexp[])Valueboa (indrce, keboa ,DENEMY_S = Object.)),(Arraviapoe([
+iles: (enemyBoa i.apoe([
+ilessexp[])Valueppoe([
+ile indrce, keppoe([
+ile, [er", "dheading])),(Arra} :onst ,(Arra "idHostileAepori:DhostileAepori.sepairsexp(hostileAepori.seporisexp[])Velta : un (Array.sepaie:DhostileAepori.sepair,(Arravilevne:rhostileAepori.levne,(Arraviaepori:D(hostileAepori.seporisexp[])Valuesepor indrce, kesepor,DHOSTILE_ACTORObject.)),(Arraviapoe([
+iles: (hostileAepori.apoe([
+ilessexp[])Valueppoe([
+ile indrce, keppoe([
+ile, [er", "dheading])),(Arra} :onst ,(Arra "idT"reatDireepor:D "reat.sepairsexp "reat.levne unrce, ke "reat, [(Arravi"sepairPatclevneTempEecounk",Itle",cota sepItle",sssign  resle",g seeU  }lle",lyealtIssued",",cleared", "ara]) :onst ,(Arra...(heavy.sepairsexpheavy.boa (un  "idHeavyPursuer:n (Array.sepaie:Dheavy.sepair,(ArraviEscounk",Id:Dheavy.Escounk",Id,(Arraviboa : rce, keheavy.boa ,DHEAVYObject.),(Arraviapoe([
+iles: (heavy.apoe([
+ilessexp[])Valueppoe([
+ile indrce, keppoe([
+ile, [er", "dheading])),(Arra}} :o{}),(Arst BOA

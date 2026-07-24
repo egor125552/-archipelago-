@@ -1,6 +1,7 @@
 "use strict";
 
 import {isBoatDockPosition} from "./free-roam-cargo-rules.js?v=32";
+import {ensureContracts} from "./free-roam-contracts.js?v=2";
 
 export const MERCHANT = Object.freeze({
   id: "merchant",
@@ -17,9 +18,15 @@ export const SHOP_ITEMS = Object.freeze([
   Object.freeze({id: "automatic-ammo", label: "патроны автомата", amount: 30, price: 25, maximum: 240}),
   Object.freeze({id: "repair-plate", label: "ремонтная пластина", amount: 1, price: 30, maximum: 10, boatItem: true}),
   Object.freeze({id: "fuel-canister", label: "аварийная канистра", amount: 1, price: 25, maximum: 5, boatItem: true}),
+  Object.freeze({id: "dock-service", label: "полное восстановление лодки", price: 85, boatItem: true, service: true}),
+  Object.freeze({id: "hull-upgrade", label: "усиление корпуса", scrapPrice: 8, boatItem: true, upgrade: "hullUpgradeLevel", maximum: 3}),
+  Object.freeze({id: "pump-upgrade", label: "усиление насоса", scrapPrice: 7, boatItem: true, upgrade: "pumpUpgradeLevel", maximum: 3}),
+  Object.freeze({id: "engine-upgrade", label: "форсировка двигателя", scrapPrice: 10, boatItem: true, upgrade: "engineUpgradeLevel", maximum: 3}),
+  Object.freeze({id: "seal-upgrade", label: "герметизация корпуса", scrapPrice: 8, boatItem: true, upgrade: "sealUpgradeLevel", maximum: 3}),
 ]);
 
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));
+const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const clampIndex = value => ((Math.floor(Number(value) || 0) % SHOP_ITEMS.length) + SHOP_ITEMS.length) % SHOP_ITEMS.length;
 
 export function deliveryCreditReward(crate) {
@@ -63,11 +70,24 @@ function itemCount(world, playerIndex, item) {
   const boat = ownedDockedBoat(world, playerIndex);
   if (item.id === "repair-plate") return Number(boat?.repairPatches) || 0;
   if (item.id === "fuel-canister") return Number(boat?.refuelCanisters) || 0;
+  if (item.upgrade) return Number(boat?.[item.upgrade]) || 0;
   return 0;
 }
 
 function itemText(world, playerIndex, item) {
   const state = ensureShopState(world);
+  const contracts = ensureContracts(world);
+  const boat = ownedDockedBoat(world, playerIndex);
+  if (item.service) {
+    const condition = boat
+      ? `Корпус ${Math.round(boat.hull)} процентов, вода ${Math.round(boat.water)} процентов, течь ${(Number(boat.leak) || 0).toFixed(1)}.`
+      : "Собственная лодка не стоит у причала.";
+    return `${item.label}. Цена ${item.price} кредитов. ${condition} Баланс команды ${state.credits}.`;
+  }
+  if (item.upgrade) {
+    const level = itemCount(world, playerIndex, item);
+    return `${item.label}. Постоянный уровень ${level} из ${item.maximum}. Цена ${item.scrapPrice} металлолома. Металлолом команды ${contracts.scrap}.`;
+  }
   const count = itemCount(world, playerIndex, item);
   return `${item.label}. За покупку: ${item.amount}. Цена ${item.price} кредитов. У тебя ${count}. Баланс команды ${state.credits}.`;
 }
@@ -92,7 +112,7 @@ export function handleMerchantAction(world, playerIndex) {
   state.shopOpen[playerIndex] = true;
   state.shopSelection[playerIndex] = clampIndex(state.shopSelection[playerIndex]);
   const item = SHOP_ITEMS[state.shopSelection[playerIndex]];
-  emit(world, "shop-open", `Магазин открыт. ${itemText(world, playerIndex, item)} Листай товары и подтверждай покупку.`, [playerIndex], {
+  emit(world, "shop-open", `Магазин открыт. ${itemText(world, playerIndex, item)} Листай товары, сервис и постоянные улучшения.`, [playerIndex], {
     sourcePlayer: playerIndex,
     itemId: item.id,
     x: MERCHANT.x,
@@ -109,20 +129,96 @@ function closeShop(world, playerIndex, text = "Магазин закрыт.") {
   return true;
 }
 
+function applyUpgrade(boat, item, level) {
+  boat[item.upgrade] = level;
+  if (item.id === "hull-upgrade") {
+    boat.collisionDamageMultiplier = clamp(1 - level * 0.14, 0.55, 1);
+    boat.armorMax = Math.max(Number(boat.armorMax) || 0, level * 18);
+    boat.armor = boat.armorMax;
+    boat.repairPatches = Math.min(10, (Number(boat.repairPatches) || 0) + 1);
+    return `Урон от столкновений снижен, броня восстановлена до ${Math.round(boat.armorMax)}.`;
+  }
+  if (item.id === "pump-upgrade") {
+    boat.cargoPumpBonus = Math.max(Number(boat.cargoPumpBonus) || 0, level * 2.5);
+    return `Дополнительная откачка теперь ${boat.cargoPumpBonus.toFixed(1)} процента воды в секунду.`;
+  }
+  if (item.id === "engine-upgrade") {
+    return `Максимальный ход и разгон увеличены примерно на ${level * 12} процентов.`;
+  }
+  boat.collisionLeakMultiplier = clamp(1 - level * 0.14, 0.55, 1);
+  return "При новых повреждениях вода поступает медленнее.";
+}
+
 function purchase(world, playerIndex) {
   const state = ensureShopState(world);
+  const contracts = ensureContracts(world);
   const item = SHOP_ITEMS[state.shopSelection[playerIndex]];
   const player = world.players?.[playerIndex];
   const combat = player?.combat;
   if (!item || !combat) return;
-  if (state.credits < item.price) {
-    emit(world, "shop-denied", `Недостаточно кредитов. Нужно ${item.price}, баланс команды ${state.credits}.`, [playerIndex]);
-    return;
-  }
 
   const boat = item.boatItem ? ownedDockedBoat(world, playerIndex) : null;
   if (item.boatItem && !boat) {
-    emit(world, "shop-denied", "Собственная лодка должна стоять у причала, чтобы купить этот товар.", [playerIndex]);
+    emit(world, "shop-denied", "Собственная лодка должна стоять у причала, чтобы купить сервис или это улучшение.", [playerIndex]);
+    return;
+  }
+
+  if (item.service) {
+    if (state.credits < item.price) {
+      emit(world, "shop-denied", `Недостаточно кредитов. Нужно ${item.price}, баланс команды ${state.credits}.`, [playerIndex]);
+      return;
+    }
+    if (boat.hull >= 99.5 && boat.water <= 0.5 && boat.leak <= 0.05 && boat.engineTemp < 80) {
+      emit(world, "shop-denied", "Лодка уже полностью исправна. Кредиты не списаны.", [playerIndex]);
+      return;
+    }
+    state.credits -= item.price;
+    boat.hull = 100;
+    boat.water = 0;
+    boat.leak = 0;
+    boat.engineTemp = Math.min(Number(boat.engineTemp) || 45, 55);
+    boat.emergencyActive = false;
+    boat.emergencyRemaining = 0;
+    boat.restartProgress = 0;
+    if (boat.fuel > 0.01) boat.engineStalled = false;
+    emit(world, "shop-service-complete", `Лодка полностью восстановлена у торговца. Корпус 100, вода 0, течь устранена. Баланс команды ${state.credits}.`, [0, 1], {
+      sourcePlayer: playerIndex,
+      itemId: item.id,
+      price: item.price,
+      credits: state.credits,
+      x: MERCHANT.x,
+      y: MERCHANT.y,
+    });
+    return;
+  }
+
+  if (item.upgrade) {
+    const current = itemCount(world, playerIndex, item);
+    if (current >= item.maximum) {
+      emit(world, "shop-denied", `${item.label} уже максимального уровня ${item.maximum}.`, [playerIndex]);
+      return;
+    }
+    if (contracts.scrap < item.scrapPrice) {
+      emit(world, "shop-denied", `Недостаточно металлолома. Нужно ${item.scrapPrice}, у команды ${contracts.scrap}.`, [playerIndex]);
+      return;
+    }
+    contracts.scrap -= item.scrapPrice;
+    const level = current + 1;
+    const detail = applyUpgrade(boat, item, level);
+    emit(world, "shop-upgrade-purchased", `Установлено: ${item.label}, уровень ${level} из ${item.maximum}. ${detail} Металлолом команды ${contracts.scrap}.`, [0, 1], {
+      sourcePlayer: playerIndex,
+      itemId: item.id,
+      scrapPrice: item.scrapPrice,
+      scrap: contracts.scrap,
+      level,
+      x: MERCHANT.x,
+      y: MERCHANT.y,
+    });
+    return;
+  }
+
+  if (state.credits < item.price) {
+    emit(world, "shop-denied", `Недостаточно кредитов. Нужно ${item.price}, баланс команды ${state.credits}.`, [playerIndex]);
     return;
   }
 
@@ -161,7 +257,7 @@ export function updateMerchantShop(world) {
     const near = Boolean(state.presence?.[index] && player?.combat?.alive && isPlayerNearMerchant(player));
     if (near && !state.merchantPrompted[index]) {
       state.merchantPrompted[index] = true;
-      emit(world, "merchant-ready", "Торговец рядом. Действие — открыть магазин.", [index], {
+      emit(world, "merchant-ready", "Торговец рядом. Действие — открыть магазин, сервис и улучшения.", [index], {
         sourcePlayer: index,
         x: MERCHANT.x,
         y: MERCHANT.y,

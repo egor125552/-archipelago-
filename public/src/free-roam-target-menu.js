@@ -29,14 +29,18 @@ export function createTargetMenu({
     const world = getWorld();
     const playerIndex = getPlayerIndex();
     const combat = world?.players?.[playerIndex]?.combat;
+    const fighting = encounterActive(world);
     const rangedReady = Boolean(
       (combat?.weapons?.pistol && combat.pistolAmmo > 0)
       || (combat?.weapons?.automatic && combat.ammo > 0)
     );
-    const combatTargets = rangedReady
+    // During a threat encounter the target list must remain usable even when
+    // the selected gun is empty. The player may still switch weapon, ram, use
+    // a knife, or simply inspect which physical enemy remains alive.
+    const combatTargets = (fighting || rangedReady)
       ? listCombatTargets(world, playerIndex, 420).map(target => ({...target, menuKind: "combat"}))
       : [];
-    if (encounterActive(world)) return combatTargets;
+    if (fighting) return combatTargets;
     return [...NAVIGATION_ENTRIES.map(entry => ({...entry})), ...combatTargets];
   }
 
@@ -80,7 +84,9 @@ export function createTargetMenu({
     announce(
       target
         ? `Выбор цели. ${describe(target)} Листай, подтверди нужную или отмени выбор.`
-        : "Доступных целей сейчас нет.",
+        : encounterActive(world)
+          ? "Бой ещё отмечен активным, но живых физических целей сервер сейчас не видит."
+          : "Доступных целей сейчас нет.",
       true,
     );
   }

@@ -33,7 +33,9 @@ export function activeHeavyPursuer(world) {
 export function startHeavyPursuer(world, encounterId, anchor = {x: 210, y: 180}, targetPlayer = 0) {
   const state = ensureHeavyPursuer(world);
   const coop = (world.freeActivities?.presence || []).filter(Boolean).length > 1;
-  const maxHull = coop ? 340 : 285;
+  const maxHull = coop ? 1000 : 700;
+  const maxEngineHealth = 180;
+  const maxTurretHealth = 240;
   state.active = true;
   state.encounterId = encounterId;
   state.projectiles = [];
@@ -47,8 +49,10 @@ export function startHeavyPursuer(world, encounterId, anchor = {x: 210, y: 180},
     speed: 0,
     hull: maxHull,
     maxHull,
-    engineHealth: 100,
-    turretHealth: 120,
+    engineHealth: maxEngineHealth,
+    maxEngineHealth,
+    turretHealth: maxTurretHealth,
+    maxTurretHealth,
     engineDisabled: false,
     turretDisabled: false,
     active: true,
@@ -62,7 +66,7 @@ export function startHeavyPursuer(world, encounterId, anchor = {x: 210, y: 180},
     ramCooldown: 1.5,
     crewSeats: coop ? 2 : 1,
   };
-  emit(world, "heavy-pursuer-arrived", "Угроза пять из пяти. В бухту вошёл тяжёлый катер с отдельной оружейной установкой и бронированным двигателем.", [0, 1], {
+  emit(world, "heavy-pursuer-arrived", `Угроза пять из пяти. В бухту вошёл тяжёлый катер: корпус ${maxHull}, усиленная установка и бронированный двигатель. Это долгий бой.`, [0, 1], {
     x: state.boat.x, y: state.boat.y, hull: maxHull,
   });
   return state.boat;
@@ -89,7 +93,7 @@ function moveHeavy(world, boat, dt) {
   const delta = clamp(wrapDeg(desired - boat.heading), -28 * dt, 28 * dt);
   boat.heading = wrapDeg(boat.heading + delta);
   const metres = distance(boat, target.actor);
-  const engineFactor = boat.engineDisabled ? 0.28 : 0.45 + 0.55 * clamp(boat.engineHealth / 100, 0, 1);
+  const engineFactor = boat.engineDisabled ? 0.28 : 0.45 + 0.55 * clamp(boat.engineHealth / boat.maxEngineHealth, 0, 1);
   const desiredSpeed = (metres > 125 ? 10.5 : metres < 42 ? 4.5 : 7.2) * engineFactor;
   boat.speed += clamp(desiredSpeed - boat.speed, -4.5 * dt, 3.2 * dt);
   const angle = boat.heading * Math.PI / 180;
@@ -99,7 +103,7 @@ function moveHeavy(world, boat, dt) {
 
 function spawnProjectile(world, state, boat) {
   const target = targetActor(world, boat);
-  if (!target || state.projectiles.length >= 18) return false;
+  if (!target || state.projectiles.length >= 48) return false;
   const angle = boat.turretHeading * Math.PI / 180;
   state.projectiles.push({
     id: `heavy-bullet-${state.nextProjectileId++}`,
@@ -128,20 +132,23 @@ function updateTurret(world, state, boat, dt) {
   const metres = distance(boat, target.actor);
   if (boat.aimRemaining > 0) {
     boat.aimRemaining = Math.max(0, boat.aimRemaining - dt);
-    if (boat.aimRemaining <= 0 && error <= 18) boat.burstRemaining = 10;
+    if (boat.aimRemaining <= 0 && error <= 18) boat.burstRemaining = 28;
     return;
   }
   if (boat.burstRemaining > 0) {
     if (boat.burstCooldown > 0) return;
-    if (!spawnProjectile(world, state, boat)) { boat.burstRemaining = 0; return; }
+    if (!spawnProjectile(world, state, boat)) {
+      boat.burstCooldown = 0.08;
+      return;
+    }
     boat.burstRemaining -= 1;
-    boat.burstCooldown = 0.11;
-    if (boat.burstRemaining <= 0) boat.fireCooldown = 4.2;
+    boat.burstCooldown = 0.095;
+    if (boat.burstRemaining <= 0) boat.fireCooldown = 5.4;
     return;
   }
   if (boat.fireCooldown <= 0 && metres <= 245 && error <= 24) {
-    boat.aimRemaining = 1.15;
-    emit(world, "heavy-gun-windup", "Тяжёлая установка наводится. Резко меняй курс или заходи в мёртвый сектор.", [target.index], {
+    boat.aimRemaining = 1.25;
+    emit(world, "heavy-gun-windup", "Тяжёлая установка наводится. После сигнала будет длинная очередь: резко меняй курс или заходи в мёртвый сектор.", [target.index], {
       sourcePlayer: -1, sourcePursuerId: boat.id, targetPlayer: target.index, eta: boat.aimRemaining, x: boat.x, y: boat.y,
     });
   }
@@ -222,7 +229,7 @@ export function damageHeavyPursuer(world, component, amount, sourcePlayer = -1, 
     return false;
   }
   if (component === "turret") {
-    boat.turretHealth = clamp(boat.turretHealth - amount, 0, 120);
+    boat.turretHealth = clamp(boat.turretHealth - amount, 0, boat.maxTurretHealth || 240);
     if (boat.turretHealth <= 0 && !boat.turretDisabled) {
       boat.turretDisabled = true;
       boat.burstRemaining = 0;
@@ -230,7 +237,7 @@ export function damageHeavyPursuer(world, component, amount, sourcePlayer = -1, 
       emit(world, "heavy-turret-destroyed", "Тяжёлая оружейная установка выведена из строя.", [0, 1], {sourcePlayer, x: boat.x, y: boat.y});
     }
   } else if (component === "engine") {
-    boat.engineHealth = clamp(boat.engineHealth - amount, 0, 100);
+    boat.engineHealth = clamp(boat.engineHealth - amount, 0, boat.maxEngineHealth || 180);
     if (boat.engineHealth <= 0 && !boat.engineDisabled) {
       boat.engineDisabled = true;
       emit(world, "heavy-engine-destroyed", "Двигатель тяжёлого катера выведен из строя. Он почти потерял ход.", [0, 1], {sourcePlayer, x: boat.x, y: boat.y});
