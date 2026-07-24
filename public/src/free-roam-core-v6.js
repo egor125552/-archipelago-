@@ -23,9 +23,9 @@ import {ensureHostileGunners, updateHostileGunners} from "./free-roam-hostile-gu
 import {ensureEnemyBoats, updateEnemyBoats} from "./free-roam-enemy-boats.js?v=2";
 import {ensureHostileActors, releaseCrewFromBoat, updateHostileActors} from "./free-roam-hostile-actors.js?v=2";
 import {ensureThreatDirector, notifyThreatBoatDestroyed, threatLevel} from "./free-roam-threat-director.js?v=2";
-import {ensureHeavyPursuer, updateHeavyPursuer} from "./free-roam-heavy-pursuer.js?v=1";
+import {ensureHeavyPursuer, updateHeavyPursuer} from "./free-roam-heavy-pursuer.js?v=2";
 import {retireClaimedKnifeCrates} from "./free-roam-unique-weapons.js?v=1";
-import {suppressGameplayWhileShopping, updateMerchantShop} from "./free-roam-shop.js?v=1";
+import {suppressGameplayWhileShopping, updateMerchantShop} from "./free-roam-shop.js?v=2";
 import {
   contractStatus,
   ensureContracts,
