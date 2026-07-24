@@ -91,8 +91,6 @@ const BOAT_FIELDS = Object.freeze([
   "emergencyActive", "emergencyRemaining", "restartProgress", "sunk", "moving",
   "floatingBrakeReadyAt", "refuelCanisters", "refuelActive", "refuelProgress",
   "engineServiceActive", "engineServiceProgress", "cargo", "cargoWeight", "cargoPumpBonus",
-  "hullUpgradeLevel", "pumpUpgradeLevel", "engineUpgradeLevel", "sealUpgradeLevel",
-  "collisionDamageMultiplier", "collisionLeakMultiplier",
 ]);
 const PLAYER_FIELDS = Object.freeze([
   "id", "mode", "activeBoat", "x", "y", "heading", "running", "airborne", "jumpHeight",
