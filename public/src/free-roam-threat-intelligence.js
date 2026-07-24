@@ -283,7 +283,7 @@ function actorSources(world) {
     ...(world.freeEnemyBoats?.boats || []),
     ...(world.freePursuerSquad?.escorts || []),
     world.freeActivities?.marauder,
-  ].filter(source => source?.active !== false && !source?.destroyed);
+  ].filter(source => Boolean(source) && source.active !== false && !source.destroyed);
 }
 
 function fillActorsToTotal(world, state, phase, desiredTotal) {
