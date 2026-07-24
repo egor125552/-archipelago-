@@ -1,0 +1,28 @@
+name: Apply Archipelago 1.5.1 fixes
+
+on:
+  push:
+    branches:
+      - agent/fix-contract-board-salvage-heavy-shop
+
+permissions:
+  contents: write
+
+jobs:
+  apply-fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply verified fix archive
+        shell: bash
+        run: |
+          cat .patch-v151/part-*.b64 | tr -d '[:space:]' | base64 --decode > /tmp/archipelago-fix.zip
+          unzip -o /tmp/archipelago-fix.zip -d "$GITHUB_WORKSPACE"
+          rm -rf .patch-v151
+          rm -f .github/workflows/apply-archipelago-v151.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Fix contract navigation, salvage, heavy threat, and shop"
+          git push origin HEAD:${GITHUB_REF_NAME}
