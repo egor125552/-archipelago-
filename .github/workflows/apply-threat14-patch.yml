@@ -1,0 +1,45 @@
+name: Apply threat 1.4.0 patch
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.head_ref == 'agent/threat-director-1.4.0'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/threat-director-1.4.0
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Assemble and verify patch
+        run: |
+          cat .release/threat14-patch-*.bin > /tmp/threat14.patch.bz2
+          test "$(wc -c < /tmp/threat14.patch.bz2)" = "19228"
+          echo '1a80373e3a282e0f131b41e29571d849a1229c026b9ef0f67267d1b8f2df66e1  /tmp/threat14.patch.bz2' | sha256sum -c -
+          bzip2 -dc /tmp/threat14.patch.bz2 > /tmp/threat14.patch
+          git apply --check /tmp/threat14.patch
+      - name: Apply release and test
+        run: |
+          git apply /tmp/threat14.patch
+          npm ci
+          npm test
+          git diff --check
+      - name: Commit clean release
+        run: |
+          rm -rf .release/threat14-patch-*.bin
+          rm -f .github/workflows/apply-threat14-patch.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Add tactical threat levels and physical enemy crews in 1.4.0'
+          git push origin HEAD:agent/threat-director-1.4.0
