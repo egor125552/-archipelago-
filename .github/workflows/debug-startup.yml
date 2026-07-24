@@ -4,6 +4,11 @@ on:
   push:
     branches:
       - debug/free-roam-startup-v160
+    paths-ignore:
+      - diagnostic-output.txt
+
+permissions:
+  contents: write
 
 jobs:
   startup:
@@ -16,4 +21,19 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: node --test tests/free-roam-startup-v160.test.mjs
+      - name: Run focused test and capture output
+        shell: bash
+        run: |
+          set +e
+          node --test tests/free-roam-startup-v160.test.mjs > diagnostic-output.txt 2>&1
+          code=$?
+          printf '\nEXIT_CODE=%s\n' "$code" >> diagnostic-output.txt
+          exit 0
+      - name: Publish diagnostic output to branch
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add diagnostic-output.txt
+          git commit -m "Record focused startup diagnostic" || exit 0
+          git push
