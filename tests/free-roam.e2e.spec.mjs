@@ -286,3 +286,34 @@ test("the existing target menu selects the merchant as a sonar destination", asy
     await crewContext.close();
   }
 });
+
+
+test("threat five exposes heavy systems and elite actor in browser", async ({page}) => {
+  await page.goto("/free-roam.html", {waitUntil: "domcontentloaded"});
+  const result = await page.evaluate(async () => {
+    const core = await import("/src/free-roam-core-v6.js?v=42");
+    const director = await import("/src/free-roam-threat-director.js?v=2");
+    const heavyModule = await import("/src/free-roam-heavy-pursuer.js?v=1");
+    const actors = await import("/src/free-roam-hostile-actors.js?v=2");
+    const targeting = await import("/src/free-roam-targeting.js?v=34");
+    const world = core.createFreeWorld();
+    world.freeScenario.phase = "victory";
+    core.setPlayerPresence(world, 1, true);
+    for (let index = 0; index < world.players.length; index += 1) {
+      world.players[index].mode = "boat";
+      world.players[index].activeBoat = index;
+      world.boats[index].driver = index;
+    }
+    director.startThreatEncounter(world, 5, "browser-red-contract");
+    const heavy = heavyModule.activeHeavyPursuer(world);
+    return {
+      heavy: heavy && {hull: heavy.maxHull, turret: heavy.turretHealth, engine: heavy.engineHealth},
+      targets: targeting.listCombatTargets(world, 0).map(target => target.id),
+      elites: actors.activeHostileActors(world).filter(actor => actor.elite).map(actor => ({health: actor.health, boatId: actor.boatId})),
+    };
+  });
+  expect(result.heavy).toEqual({hull: 340, turret: 120, engine: 100});
+  expect(result.targets).toEqual(expect.arrayContaining(["heavy-pursuer", "heavy-turret", "heavy-engine"]));
+  expect(result.elites).toHaveLength(1);
+  expect(result.elites[0].health).toBe(120);
+});

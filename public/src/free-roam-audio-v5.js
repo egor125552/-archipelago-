@@ -223,7 +223,11 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
     const selectedEnemyBoat = world?.freeEnemyBoats?.boats?.find(boat => (
       boat.id === targetId && boat.active && !boat.destroyed
     ));
-    const marauder = selectedEnemyBoat || selectedEscort || primary;
+    const heavy = world?.freeHeavyPursuer?.boat;
+    const selectedHeavy = heavy?.active && !heavy.destroyed && ["heavy-pursuer", "heavy-turret", "heavy-engine"].includes(targetId)
+      ? heavy
+      : null;
+    const marauder = selectedHeavy || selectedEnemyBoat || selectedEscort || primary;
     if (!this.ctx || !this.listenerPoint || !marauder?.active || marauder.destroyed) {
       if (this.ctx && this.marauderEngine) this.marauderEngine.gain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.18);
       return;
@@ -239,8 +243,9 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
     const speed = clamp(Math.abs(marauder.speed) / 16, 0, 1);
     const pan = relativeMovementPan(this.listenerPoint, marauder);
     const now = this.ctx.currentTime;
-    this.marauderEngine.source.playbackRate.setTargetAtTime(0.74 + speed * 0.24, now, 0.15);
-    this.marauderEngine.filter.frequency.setTargetAtTime(650 + proximity * 2900, now, 0.18);
+    const heavyEngine = marauder.role === "heavy";
+    this.marauderEngine.source.playbackRate.setTargetAtTime((heavyEngine ? 0.58 : 0.74) + speed * (heavyEngine ? 0.17 : 0.24), now, 0.15);
+    this.marauderEngine.filter.frequency.setTargetAtTime((heavyEngine ? 420 : 650) + proximity * (heavyEngine ? 1900 : 2900), now, 0.18);
     this.marauderEngine.panner.pan.setTargetAtTime(pan, now, 0.12);
     this.marauderEngine.gain.gain.setTargetAtTime(0.012 + proximity * 0.16, now, 0.18);
   }
@@ -324,6 +329,38 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
       case "elite-knife-windup":
         this.play("knifeDraw", {pan: spatial.pan, gain: (event.type === "elite-knife-windup" ? 0.68 : 0.46) * spatial.gain, rate: event.type === "elite-knife-windup" ? 0.82 : 1});
         this.playSynthPip({pan: spatial.pan, frequency: event.type === "elite-knife-windup" ? 145 : 220, gain: 0.13, duration: 0.16, delay: 0.08});
+        return;
+      case "heavy-gun-windup":
+        this.playSynthPip({pan: spatial.pan, frequency: 125, gain: 0.19, duration: 0.2});
+        this.playSynthPip({pan: spatial.pan, frequency: 170, gain: 0.17, duration: 0.16, delay: 0.28});
+        this.playSynthPip({pan: spatial.pan, frequency: 220, gain: 0.16, duration: 0.12, delay: 0.56});
+        return;
+      case "heavy-gun-shot": {
+        const shotSpatial = this.eventPanAndGain(event, 900);
+        this.play("automaticShot", {pan: shotSpatial.pan, gain: 0.9 * shotSpatial.gain, rate: 0.72, lowpass: 10500});
+        return;
+      }
+      case "heavy-bullet-boat-hit":
+      case "enemy-ram-hit":
+      case "heavy-ram-hit":
+        this.handle([{type: "collision", severity: event.type === "heavy-ram-hit" ? 1.9 : 1.15, impactSpeed: 8.5, hardImpact: true, damage: 10, pan: spatial.pan}]);
+        return;
+      case "enemy-boat-hit":
+      case "hostile-actor-hit":
+      case "heavy-component-hit":
+        this.play("gunHit", {pan: spatial.pan, gain: 0.78 * spatial.gain, lowpass: 8200});
+        return;
+      case "enemy-boat-destroyed":
+      case "hostile-actor-destroyed":
+      case "elite-destroyed":
+      case "heavy-pursuer-destroyed":
+        this.playSynthPip({pan: spatial.pan, frequency: event.type === "heavy-pursuer-destroyed" ? 110 : 310, gain: 0.17, duration: 0.16});
+        this.playSynthPip({pan: spatial.pan, frequency: 145, gain: 0.18, duration: 0.28, delay: 0.18});
+        return;
+      case "heavy-turret-destroyed":
+      case "heavy-engine-destroyed":
+        this.playSynthPip({pan: spatial.pan, frequency: 260, gain: 0.15, duration: 0.12});
+        this.playSynthPip({pan: spatial.pan, frequency: 120, gain: 0.17, duration: 0.25, delay: 0.14});
         return;
       case "pursuer-aim": {
         const aimSpatial = this.eventPanAndGain(event, 520);

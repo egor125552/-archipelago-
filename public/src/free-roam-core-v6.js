@@ -13,16 +13,17 @@ import {
   updateActivities,
 } from "./free-roam-activities.js?v=42";
 // free-roam-combat.js?v=32 remains the stable combat base behind the 1.1 pistol layer.
-import {applyCombatDamage, combatStatus, ensureCombat, updateCombat} from "./free-roam-combat-v2.js?v=2";
+import {applyCombatDamage, combatStatus, ensureCombat, updateCombat} from "./free-roam-combat-v2.js?v=3";
 import {ensureMarauder, releaseStolenCargo, updateMarauder} from "./free-roam-marauder.js?v=33";
 import {ensureFreeScenario, scenarioStatus, updateFreeScenario} from "./free-roam-scenario.js?v=43";
 import {suppressIncapacitatedMovement, updatePhysicalActors} from "./free-roam-physical-actors.js?v=38";
 import {handleAssistedBoarding} from "./free-roam-boarding-assist.js?v=29";
 import {ensurePursuerSquad, updatePursuerSquad} from "./free-roam-pursuer-squad.js?v=33";
 import {ensureHostileGunners, updateHostileGunners} from "./free-roam-hostile-gunners.js?v=32";
-import {ensureEnemyBoats, updateEnemyBoats} from "./free-roam-enemy-boats.js?v=1";
-import {ensureHostileActors, releaseCrewFromBoat, updateHostileActors} from "./free-roam-hostile-actors.js?v=1";
-import {ensureThreatDirector, notifyThreatBoatDestroyed, threatLevel} from "./free-roam-threat-director.js?v=1";
+import {ensureEnemyBoats, updateEnemyBoats} from "./free-roam-enemy-boats.js?v=2";
+import {ensureHostileActors, releaseCrewFromBoat, updateHostileActors} from "./free-roam-hostile-actors.js?v=2";
+import {ensureThreatDirector, notifyThreatBoatDestroyed, threatLevel} from "./free-roam-threat-director.js?v=2";
+import {ensureHeavyPursuer, updateHeavyPursuer} from "./free-roam-heavy-pursuer.js?v=1";
 import {retireClaimedKnifeCrates} from "./free-roam-unique-weapons.js?v=1";
 import {suppressGameplayWhileShopping, updateMerchantShop} from "./free-roam-shop.js?v=1";
 import {
@@ -46,6 +47,7 @@ function ensureState(world) {
   ensureEnemyBoats(world);
   ensureHostileActors(world);
   ensureThreatDirector(world);
+  ensureHeavyPursuer(world);
   ensureFreeScenario(world);
   ensureContracts(world);
   retireClaimedKnifeCrates(world);
@@ -144,6 +146,7 @@ export function stepFreeWorld(world, dt) {
   };
   if (threatLevel(world) < 3) updateHostileGunners(world, safeDt, enemyDamageHelpers);
   updateEnemyBoats(world, safeDt, enemyDamageHelpers);
+  updateHeavyPursuer(world, safeDt, enemyDamageHelpers);
   updateHostileActors(world, safeDt, enemyDamageHelpers);
   const physicalState = updatePhysicalActors(world);
   discardBlockedFootsteps(world, eventStart, physicalState);
