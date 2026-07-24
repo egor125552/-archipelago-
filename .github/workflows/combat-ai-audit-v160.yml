@@ -25,7 +25,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          node --test tests/combat-ai-audit-v160.test.mjs > combat-ai-audit-output.txt 2>&1
+          node --test tests/combat-ai-audit-v160.test.mjs tests/combat-ai-audit-v160-pass2.test.mjs > combat-ai-audit-output.txt 2>&1
           code=$?
           printf '\nEXIT_CODE=%s\n' "$code" >> combat-ai-audit-output.txt
           exit 0
