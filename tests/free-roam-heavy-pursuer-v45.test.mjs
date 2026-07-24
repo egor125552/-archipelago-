@@ -48,7 +48,7 @@ test("threat five creates a scaled heavy boat, four escorts in coop and one elit
   const coop = worldForFive(true);
   const heavy = activeHeavyPursuer(coop);
   assert.ok(heavy);
-  assert.equal(heavy.maxHull, 340);
+  assert.equal(heavy.maxHull, 1000);
   assert.equal(1 + coop.freePursuerSquad.escorts.length + activeEnemyBoats(coop).length, 4);
   const elites = activeHostileActors(coop).filter(actor => actor.elite);
   assert.equal(elites.length, 1);
@@ -56,7 +56,7 @@ test("threat five creates a scaled heavy boat, four escorts in coop and one elit
   assert.equal(elites[0].boatId, heavy.id);
 
   const solo = worldForFive(false);
-  assert.equal(activeHeavyPursuer(solo).maxHull, 285);
+  assert.equal(activeHeavyPursuer(solo).maxHull, 700);
   assert.equal(activeEnemyBoats(solo).length, 0);
 });
 
@@ -80,13 +80,13 @@ test("pistol cannot pierce heavy armour while automatic fire disables systems", 
   assert.equal(heavy.turretHealth, turret);
   assert.equal(heavy.engineHealth, engine);
 
-  damageHeavyPursuer(world, "turret", 120, 0, {}, {weapon: "automatic"});
-  damageHeavyPursuer(world, "engine", 100, 0, {}, {weapon: "automatic"});
+  damageHeavyPursuer(world, "turret", 240, 0, {}, {weapon: "automatic"});
+  damageHeavyPursuer(world, "engine", 180, 0, {}, {weapon: "automatic"});
   assert.equal(heavy.turretDisabled, true);
   assert.equal(heavy.engineDisabled, true);
 });
 
-test("heavy gun announces a windup before producing a finite burst", () => {
+test("heavy gun announces a windup before producing a long finite barrage", () => {
   const world = worldForFive(false);
   const heavy = activeHeavyPursuer(world);
   heavy.x = world.boats[0].x + 80;
@@ -99,9 +99,11 @@ test("heavy gun announces a windup before producing a finite burst", () => {
   const shotIndex = types.indexOf("heavy-gun-shot");
   assert.ok(warningIndex >= 0);
   assert.ok(shotIndex > warningIndex);
-  run(world, 2);
-  assert.ok(world.freeHeavyPursuer.projectiles.length <= 18);
-  assert.ok(world.events.filter(event => event.type === "heavy-gun-shot").length <= 10);
+  run(world, 3.2);
+  const shots = world.events.filter(event => event.type === "heavy-gun-shot").length;
+  assert.ok(world.freeHeavyPursuer.projectiles.length <= 48);
+  assert.ok(shots >= 20, `expected a sustained barrage, got ${shots} shots`);
+  assert.ok(shots <= 28, `a finite barrage must stop at 28 shots, got ${shots}`);
 });
 
 test("elite actor is fast but remains slower than the running player and telegraphs knife attacks", () => {
