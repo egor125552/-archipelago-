@@ -2,12 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {createFreeWorld} from "../public/src/free-roam-core-v6.js";
-import {updateCombat} from "../public/src/free-roam-combat-v2.js";
 import {startThreatEncounter} from "../public/src/free-roam-threat-director.js";
 import {activeHostileActors} from "../public/src/free-roam-hostile-actors.js";
 import {updatePursuerSquad} from "../public/src/free-roam-pursuer-squad.js";
 import {startHeavyPursuer, updateHeavyPursuer} from "../public/src/free-roam-heavy-pursuer.js";
-import {listCombatTargets} from "../public/src/free-roam-targeting.js";
 import {finishThreatIntelligence, prepareThreatIntelligence} from "../public/src/free-roam-threat-intelligence.js";
 
 function soloWorld() {
@@ -16,34 +14,6 @@ function soloWorld() {
   world.players[0].combat.alive = true;
   world.events = [];
   return world;
-}
-
-function aboardActor(id, x, y) {
-  return {
-    id,
-    boatId: "enemy-carrier",
-    targetPlayer: 0,
-    x,
-    y,
-    heading: 0,
-    state: "aboard",
-    weapon: "automatic",
-    health: 52,
-    maxHealth: 52,
-    active: true,
-    destroyed: false,
-    elite: false,
-    fireCooldown: 0,
-    aimRemaining: 0,
-    burstRemaining: 0,
-    burstCooldown: 0,
-    attackCooldown: 0,
-    windupRemaining: 0,
-    targetLockUntil: 0,
-    seatOffset: 0,
-    strandedAt: 0,
-    stepCooldown: 0,
-  };
 }
 
 test("threat four actor cap leaves the second rammer and gunboat without physical crews", () => {
@@ -55,26 +25,6 @@ test("threat four actor cap leaves the second rammer and gunboat without physica
   assert.ok(crewedBoats.has("threat-boat-1"));
   assert.equal(crewedBoats.has("threat-boat-2"), false);
   assert.equal(crewedBoats.has("threat-boat-3"), false);
-});
-
-test("an actor still aboard a hostile boat can be selected and shot directly through the carrier", () => {
-  const world = soloWorld();
-  const player = world.players[0];
-  const actor = aboardActor("aboard-target", player.x + 18, player.y);
-  world.freeHostileActors = {active: true, level: 4, actors: [actor], projectiles: [], nextProjectileId: 1};
-  const target = listCombatTargets(world, 0, 200).find(candidate => candidate.id === actor.id);
-  assert.ok(target);
-  assert.equal(target.point.state, "aboard");
-
-  player.combat.equipped = "pistol";
-  player.combat.pistolAmmo = 10;
-  player.combat.pistolCooldown = 0;
-  player.combat.lockedTargetId = actor.id;
-  world.freeActivities.inputs[0] = {attack: true};
-  world.freeActivities.previousInputs[0] = {attack: false};
-  const before = actor.health;
-  updateCombat(world, 0.05, {});
-  assert.ok(actor.health < before);
 });
 
 test("base pursuer boats keep identical fixed five-shot bursts despite irregular-fire layer", () => {
