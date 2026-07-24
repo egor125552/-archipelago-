@@ -1,0 +1,34 @@
+TAP version 13
+# Subtest: free-roam server continues after first authoritative snapshot and answers sonar
+not ok 1 - free-roam server continues after first authoritative snapshot and answers sonar
+  ---
+  duration_ms: 9.078223
+  type: 'test'
+  location: '/home/runner/work/-archipelago-/-archipelago-/tests/free-roam-startup-v160.test.mjs:11:1'
+  failureType: 'testCodeFailure'
+  error: "Cannot read properties of null (reading 'id')"
+  code: 'ERR_TEST_FAILURE'
+  name: 'TypeError'
+  stack: |-
+    file:///home/runner/work/-archipelago-/-archipelago-/public/src/free-roam-threat-intelligence.js?v=1:383:60
+    Array.map (<anonymous>)
+    forceCrewDeployment (file:///home/runner/work/-archipelago-/-archipelago-/public/src/free-roam-threat-intelligence.js?v=1:383:38)
+    finishThreatIntelligence (file:///home/runner/work/-archipelago-/-archipelago-/public/src/free-roam-threat-intelligence.js?v=1:600:3)
+    stepFreeWorld (file:///home/runner/work/-archipelago-/-archipelago-/public/src/free-roam-core-v6.js:403:3)
+    stepInChunks (file:///home/runner/work/-archipelago-/-archipelago-/src/free-roam-server.js:83:5)
+    tickServerFreeRoom (file:///home/runner/work/-archipelago-/-archipelago-/src/free-roam-server.js:103:3)
+    TestContext.<anonymous> (file:///home/runner/work/-archipelago-/-archipelago-/tests/free-roam-startup-v160.test.mjs:16:17)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 0
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 108.313354
+
+EXIT_CODE=1
