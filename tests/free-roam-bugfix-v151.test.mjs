@@ -34,7 +34,7 @@ function acceptSalvage(world) {
   return world.freeActivities.crates.find(crate => crate.id === world.freeContracts.activeContract.crateId);
 }
 
-test("iPhone-style action cannot stow salvage before physical extraction", () => {
+test("iPhone-style action exits a stopped boat beside salvage without stowing it", () => {
   const world = createFreeWorld();
   const crate = acceptSalvage(world);
   const player = world.players[0];
@@ -52,7 +52,9 @@ test("iPhone-style action cannot stow salvage before physical extraction", () =>
   assert.equal(crate.state, "world");
   assert.equal(crate.extracted, false);
   assert.equal(boat.cargo.includes(crate.id), false);
-  assert.ok(world.events.some(event => event.type === "salvage-extraction-denied"));
+  assert.equal(player.mode, "swim");
+  assert.equal(player.activeBoat, null);
+  assert.ok(world.events.some(event => event.type === "exit"));
 });
 
 test("one accessible action starts timed crowbar work and pickup stays separate", () => {
@@ -162,8 +164,12 @@ test("heavy threat uses 700 solo hull, 1000 coop hull and a long burst", () => {
   assert.ok(coop.events.filter(event => event.type === "heavy-gun-shot").length >= 20);
 });
 
-test("recorded pistol patch targets the same audio class as the live client", async () => {
-  const source = await readFile(new URL("../public/src/free-roam-pistol-audio.js", import.meta.url), "utf8");
-  assert.match(source, /free-roam-audio-v5\.js\?v=42/);
-  assert.match(source, /163456__lemudcrab__pistol-shot\.wav/);
+test("audio wrappers target the same audio class as the live client", async () => {
+  const pistolSource = await readFile(new URL("../public/src/free-roam-pistol-audio.js", import.meta.url), "utf8");
+  const qualitySource = await readFile(new URL("../public/src/free-roam-quality-v1.js", import.meta.url), "utf8");
+  const clientSource = await readFile(new URL("../public/src/free-roam-v4.js", import.meta.url), "utf8");
+  assert.match(pistolSource, /free-roam-audio-v5\.js\?v=43/);
+  assert.match(qualitySource, /free-roam-audio-v5\.js\?v=43/);
+  assert.match(clientSource, /free-roam-audio-v5\.js\?v=43/);
+  assert.match(pistolSource, /163456__lemudcrab__pistol-shot\.wav/);
 });

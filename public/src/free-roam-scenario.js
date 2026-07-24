@@ -3,19 +3,15 @@
 import {cargoNavigationTarget, updateCargoArrivalGuidance} from "./free-roam-cargo-guidance.js?v=38";
 import {
   activatePursuerSquad,
-  activePursuerById,
   activePursuers,
-  assignedPursuerForPlayer,
   isPursuerSquadDefeated,
-  nearestActivePursuer,
 } from "./free-roam-pursuer-squad.js?v=33";
 import {automaticCargoDelivered} from "./free-roam-weapon-crates.js?v=32";
 import {activeHostileGunners} from "./free-roam-hostile-gunners.js?v=32";
 import {ensureSonarGuide, updateSonarGuide} from "./free-roam-sonar-guide.js?v=35";
-import {merchantNavigationTarget} from "./free-roam-shop.js?v=1";
-import {contractNavigationTarget, encounterActive, ensureContracts} from "./free-roam-contracts.js?v=2";
-import {assignedThreatTarget} from "./free-roam-threat-director.js?v=2";
-import {activeEnemyBoats} from "./free-roam-enemy-boats.js?v=2";
+import {merchantNavigationTarget} from "./free-roam-shop.js?v=3";
+import {contractNavigationTarget, encounterActive, ensureContracts} from "./free-roam-contracts.js?v=3";
+import {activeEnemyBoats} from "./free-roam-enemy-boats.js?v=3";
 import {activeHostileActors} from "./free-roam-hostile-actors.js?v=2";
 
 const TARGET_LABELS = Object.freeze({
@@ -190,25 +186,7 @@ function armTarget(world, playerIndex) {
 export function scenarioTarget(world, playerIndex) {
   const scenario = ensureFreeScenario(world);
   ensureContracts(world);
-  if (scenario.phase === "pursuit" || encounterActive(world)) {
-    const assigned = encounterActive(world) ? assignedThreatTarget(world, playerIndex) : assignedPursuerForPlayer(world, playerIndex);
-    const pursuer = assigned
-      || activePursuerById(world, scenario.lockedPursuerIds[playerIndex])
-      || nearestActivePursuer(world, world.players[playerIndex])
-      || activeEnemyBoats(world)[0]
-      || activeHostileActors(world)[0];
-    if (pursuer) {
-      scenario.lockedPursuerIds[playerIndex] = pursuer.id;
-      const person = Boolean(pursuer.health != null && pursuer.hull == null);
-      return {
-        id: pursuer.id,
-        kind: person ? "hostile-person" : "pursuer",
-        label: assigned ? (person ? "назначенный тебе вражеский боец" : "твой назначенный катер-преследователь") : (person ? "ближайший вражеский боец" : "выбранный катер-преследователь"),
-        x: pursuer.x,
-        y: pursuer.y,
-      };
-    }
-  }
+  if (scenario.phase === "pursuit" || encounterActive(world)) return null;
   if (scenario.phase === "warning") {
     return {id: "open-water", kind: "warning", label: "выход из бухты", x: 210, y: 255};
   }
@@ -286,19 +264,6 @@ function updateTargets(world) {
     const target = scenarioTarget(world, index);
     scenario.targets[index] = target;
     updateLockedTarget(scenario, index, target);
-    if (
-      scenario.phase === "pursuit"
-      && previous?.kind === "pursuer"
-      && target?.kind === "pursuer"
-      && previous.id !== target.id
-    ) {
-      emit(world, "scenario-objective", "Предыдущий катер уничтожен. Сонар захватил следующую цель.", [index], {
-        sourcePlayer: index,
-        targetId: target.id,
-        x: target.x,
-        y: target.y,
-      });
-    }
   }
 }
 
@@ -309,6 +274,12 @@ function handleSonar(world, dt) {
   for (let index = 0; index < world.players.length; index += 1) {
     scenario.sonarCooldown[index] = Math.max(0, scenario.sonarCooldown[index] - dt);
     if (!inputs[index]?.sonar || previous[index]?.sonar || scenario.sonarCooldown[index] > 0) continue;
+
+    if (scenario.phase === "pursuit" || encounterActive(world)) {
+      scenario.sonarCooldown[index] = 1.1;
+      emit(world, "scenario-sonar-combat", "Навигационный сонар приостановлен на время боя. Открой выбор боевой цели.", [index], {sourcePlayer: index});
+      continue;
+    }
 
     if (scenario.phase === "arm") {
       if (scenario.armSonarReported[index]) cycleArmTargetMode(world, index);

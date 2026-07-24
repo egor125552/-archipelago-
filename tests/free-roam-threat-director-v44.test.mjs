@@ -46,12 +46,13 @@ function destroyBaseSquad(world) {
   }
 }
 
-test("threat three creates four tactical boats and at most four physical enemies", () => {
+test("threat three creates three distinct tactical boats and physical crews", () => {
   const world = twoPlayerWorld();
   startThreatEncounter(world, 3, "contract-three");
-  assert.equal(world.freePursuerSquad.escorts.length + 1 + activeEnemyBoats(world).length, 4);
+  assert.equal(world.freePursuerSquad.escorts.length + 1 + activeEnemyBoats(world).length, 3);
+  assert.equal(world.freePursuerSquad.escorts.length, 1);
   assert.equal(activeEnemyBoats(world)[0].role, "interceptor");
-  assert.equal(activeHostileActors(world).length, 4);
+  assert.equal(activeHostileActors(world).length, 3);
   assert.ok(activeHostileActors(world).some(actor => actor.weapon === "pistol"));
   assert.ok(activeHostileActors(world).some(actor => actor.weapon === "automatic"));
 });

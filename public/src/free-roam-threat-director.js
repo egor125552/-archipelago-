@@ -2,9 +2,9 @@
 
 import {activatePursuerSquad, activePursuers, assignedPursuerForPlayer, isPursuerSquadDefeated} from "./free-roam-pursuer-squad.js?v=33";
 import {activeHostileGunners} from "./free-roam-hostile-gunners.js?v=32";
-import {activeEnemyBoats, ensureEnemyBoats, startEnemyBoats} from "./free-roam-enemy-boats.js?v=2";
+import {activeEnemyBoats, ensureEnemyBoats, startEnemyBoats} from "./free-roam-enemy-boats.js?v=3";
 import {activeHostileActors, addEliteActor, ensureHostileActors, startHostileActors} from "./free-roam-hostile-actors.js?v=2";
-import {activeHeavyPursuer, ensureHeavyPursuer, startHeavyPursuer} from "./free-roam-heavy-pursuer.js?v=1";
+import {activeHeavyPursuer, ensureHeavyPursuer, startHeavyPursuer} from "./free-roam-heavy-pursuer.js?v=3";
 import {awardEncounter} from "./free-roam-encounter-loot.js?v=1";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -29,6 +29,8 @@ export function ensureThreatDirector(world) {
     rewardIssued: false,
     cleared: false,
     startedAt: 0,
+    heavyStarted: false,
+    heavyStartsAt: 0,
     lastPoint: {x: 210, y: 180},
   };
   const state = world.freeThreatDirector;
@@ -38,6 +40,8 @@ export function ensureThreatDirector(world) {
   while (state.graceUntil.length < world.players.length) state.graceUntil.push(0);
   if (!Number.isFinite(state.encounterId)) state.encounterId = 0;
   if (!Number.isFinite(state.level)) state.level = 0;
+  if (typeof state.heavyStarted !== "boolean") state.heavyStarted = Boolean(activeHeavyPursuer(world));
+  if (!Number.isFinite(state.heavyStartsAt)) state.heavyStartsAt = 0;
   return state;
 }
 
@@ -109,7 +113,7 @@ function anchorForContract(world) {
   return actor || {x: 210, y: 180};
 }
 
-function activateBasePursuers(world, anchor) {
+function activateBasePursuers(world, anchor, escortCount = 2) {
   const pursuer = world.freeActivities?.marauder;
   if (!pursuer) return;
   pursuer.x = clamp((anchor?.x || 210) + 105, 18, 402);
@@ -136,6 +140,9 @@ function activateBasePursuers(world, anchor) {
     legacyGunners.eliminatedPursuers = [];
   }
   activatePursuerSquad(world);
+  if (world.freePursuerSquad) {
+    world.freePursuerSquad.escorts = world.freePursuerSquad.escorts.slice(0, clamp(Math.floor(escortCount), 0, 2));
+  }
 }
 
 export function startThreatEncounter(world, requestedLevel, contractId = null) {
@@ -151,9 +158,12 @@ export function startThreatEncounter(world, requestedLevel, contractId = null) {
   state.assignments = {};
   state.actorAssignments = {};
   state.graceUntil = world.players.map(() => 0);
+  state.heavyStarted = false;
+  state.heavyStartsAt = 0;
   if (level <= 1) {
     state.active = false;
-    emit(world, "contract-threat-observed", "Угроза один из пяти. За грузом наблюдают, но прямой атаки пока нет.", [0, 1], {contractId, level});
+    startEnemyBoats(world, level, state.lastPoint);
+    emit(world, "contract-threat-observed", "Угроза один из пяти. Разведывательный катер ведёт наблюдение и передаёт координаты, но в бой не вступает.", [0, 1], {contractId, level});
     return state;
   }
   state.active = true;
@@ -161,27 +171,24 @@ export function startThreatEncounter(world, requestedLevel, contractId = null) {
     world.freeHostileGunners.gunners = [];
     world.freeHostileGunners.projectiles = [];
   }
-  activateBasePursuers(world, state.lastPoint);
+  const escortCount = level === 2 ? 0 : level === 3 ? 1 : 2;
+  activateBasePursuers(world, state.lastPoint, escortCount);
   startEnemyBoats(world, level, state.lastPoint);
-  if (level >= 5) startHeavyPursuer(world, state.encounterId, state.lastPoint, 0);
   balanceAssignments(world, state);
   if (level >= 3) startHostileActors(world, level, state.encounterId, state.assignments);
-  if (level >= 5) {
-    const heavy = activeHeavyPursuer(world);
-    if (heavy) addEliteActor(world, heavy, heavy.targetPlayer || 0, state.encounterId);
-  }
+  if (level >= 5) state.heavyStartsAt = world.time + 7;
   if (world.freeContracts) {
     world.freeContracts.encounterActive = true;
     world.freeContracts.encounterLevel = level;
     world.freeContracts.encounterDefeated = false;
   }
   const text = level === 2
-    ? "Угроза два из пяти: в бухту вошли катера-преследователи."
+    ? "Угроза два из пяти: один лёгкий катер начал преследование."
     : level === 3
-      ? "Угроза три из пяти: усиленная группа смешивает катера, пистолеты и автоматы."
+      ? "Угроза три из пяти: вооружённая погоня. Два преследователя и катер-перехватчик заходят с разных направлений."
       : level === 4
-        ? "Угроза четыре из пяти: ударная группа распределяется между двумя игроками."
-        : "Угроза пять из пяти: приближается тяжёлый катер.";
+        ? "Угроза четыре из пяти: засада. Таранщики, стрелковый катер и высадка перекрывают отход."
+        : "Угроза пять из пяти: началась первая волна. Тяжёлый катер и элитный стрелок прибудут следом.";
   emit(world, "contract-threat-start", `${text} Во время боя доступны только боевые цели.`, [0, 1], {contractId, level, x: state.lastPoint.x, y: state.lastPoint.y});
   return state;
 }
@@ -193,6 +200,8 @@ export function cancelThreatEncounter(world, reason = "cancelled") {
   state.assignments = {};
   state.actorAssignments = {};
   state.contractId = null;
+  state.heavyStarted = false;
+  state.heavyStartsAt = 0;
   const marauder = world.freeActivities?.marauder;
   if (marauder) { marauder.active = false; marauder.speed = 0; }
   if (world.freePursuerSquad) {
@@ -252,12 +261,12 @@ export function notifyThreatBoatDestroyed(world, boat, sourcePlayer = -1) {
   if (sourcePlayer >= 0) emit(world, "threat-breathing-room", "Твой преследователь уничтожен. У тебя три секунды передышки, прежде чем резерв перераспределится.", [sourcePlayer], {sourcePlayer, x: boat.x, y: boat.y});
 }
 
-function combatStillActive(world, level) {
+function combatStillActive(world, state) {
   if (!isPursuerSquadDefeated(world)) return true;
   if (activeEnemyBoats(world).length) return true;
-  if (level === 2 && activeHostileGunners(world).length) return true;
-  if (level >= 3 && activeHostileActors(world).length) return true;
-  if (level >= 5 && activeHeavyPursuer(world)) return true;
+  if (state.level === 2 && activeHostileGunners(world).length) return true;
+  if (state.level >= 3 && activeHostileActors(world).length) return true;
+  if (state.level >= 5 && (!state.heavyStarted || activeHeavyPursuer(world))) return true;
   return false;
 }
 
@@ -267,6 +276,15 @@ export function updateThreatDirector(world) {
   ensureHostileActors(world);
   ensureHeavyPursuer(world);
   if (!state.active) return state;
+  if (state.level >= 5 && !state.heavyStarted && world.time >= state.heavyStartsAt) {
+    const targetPlayer = contractCarrier(world) ?? presentPlayers(world)[0]?.index ?? 0;
+    const heavy = startHeavyPursuer(world, state.encounterId, anchorForContract(world), targetPlayer);
+    state.heavyStarted = true;
+    state.lastPoint = {x: heavy.x, y: heavy.y};
+    balanceAssignments(world, state);
+    addEliteActor(world, heavy, heavy.targetPlayer ?? targetPlayer, state.encounterId);
+    emit(world, "contract-threat-phase", "Вторая фаза. Тяжёлый катер вошёл в бухту, элитный стрелок готовится к высадке.", [0, 1], {level: state.level, phase: 2, x: heavy.x, y: heavy.y});
+  }
   if (world.time >= state.retargetAt) balanceAssignments(world, state);
   for (const boat of allThreatBoats(world)) {
     const target = state.assignments[boat.id];
@@ -278,7 +296,7 @@ export function updateThreatDirector(world) {
       } else boat.speed = Math.min(boat.speed, 5);
     }
   }
-  if (combatStillActive(world, state.level)) return state;
+  if (combatStillActive(world, state)) return state;
   state.active = false;
   state.cleared = true;
   if (world.freeContracts) {

@@ -1,7 +1,7 @@
 "use strict";
 
 import {activePursuers, activePursuerById} from "./free-roam-pursuer-squad.js?v=33";
-import {activeEnemyBoats, enemyBoatById} from "./free-roam-enemy-boats.js?v=2";
+import {activeEnemyBoats, enemyBoatById} from "./free-roam-enemy-boats.js?v=3";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const distance = (a, b) => Math.hypot((Number(a?.x) || 0) - (Number(b?.x) || 0), (Number(a?.y) || 0) - (Number(b?.y) || 0));

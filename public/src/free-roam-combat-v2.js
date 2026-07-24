@@ -4,10 +4,10 @@ import * as base from "./free-roam-combat.js?v=34";
 import {COMBAT_TUNING} from "./free-roam-combat-tuning.js?v=33";
 import {damageHostileGunner} from "./free-roam-hostile-gunners.js?v=32";
 import {damageEscort} from "./free-roam-pursuer-squad.js?v=33";
-import {damageEnemyBoat} from "./free-roam-enemy-boats.js?v=2";
+import {damageEnemyBoat} from "./free-roam-enemy-boats.js?v=3";
 import {damageHostileActor} from "./free-roam-hostile-actors.js?v=2";
-import {damageHeavyPursuer} from "./free-roam-heavy-pursuer.js?v=1";
-import {listCombatTargets, resolveCombatTarget} from "./free-roam-targeting.js?v=34";
+import {damageHeavyPursuer} from "./free-roam-heavy-pursuer.js?v=3";
+import {listCombatTargets, resolveCombatTarget} from "./free-roam-targeting.js?v=35";
 
 export const PISTOL_START_AMMO = 36;
 
@@ -77,6 +77,16 @@ function cycleWeapon(world, playerIndex) {
     sourcePlayer: playerIndex,
     weapon: combat.equipped,
   });
+}
+
+
+function combatEncounterActive(world) {
+  return Boolean(world?.freeContracts?.encounterActive || world?.freeScenario?.phase === "pursuit");
+}
+
+function nextEnemyTarget(world, attackerIndex) {
+  return listCombatTargets(world, attackerIndex, COMBAT_TUNING.automaticRange)
+    .filter(target => !["player", "boat"].includes(target.kind))[0] || null;
 }
 
 function nearestPistolTarget(world, attackerIndex) {
@@ -278,7 +288,18 @@ export function updateCombat(world, dt, helpers = {}) {
     }
 
     const pistolAttack = combat.equipped === "pistol" && Boolean(input.attack);
-    intercepted.push({input, previous, attack: input.attack, previousAttack: previous.attack, weapon: input.weapon, pistolAttack, equippedBefore: combat.equipped});
+    intercepted.push({
+      input,
+      previous,
+      attack: input.attack,
+      previousAttack: previous.attack,
+      weapon: input.weapon,
+      pistolAttack,
+      equippedBefore: combat.equipped,
+      lockedBefore: combat.lockedTargetId,
+      targetRequestBefore: input.targetId,
+      previousTargetRequest: previous.targetId,
+    });
     input.weapon = false;
     if (combat.equipped === "pistol") {
       input.attack = false;
@@ -300,6 +321,22 @@ export function updateCombat(world, dt, helpers = {}) {
     if (!state.presence[index] || !combat.alive || combat.knockedDown) continue;
     if (saved.pistolAttack && combat.equipped === "pistol" && combat.pistolCooldown <= 0) {
       firePistol(world, index, helpers);
+    }
+    const explicitTargetChange = saved.targetRequestBefore !== saved.previousTargetRequest;
+    if (saved.lockedBefore && !combat.lockedTargetId && !explicitTargetChange && combatEncounterActive(world)) {
+      const replacement = nextEnemyTarget(world, index);
+      if (replacement) {
+        combat.lockedTargetId = replacement.id;
+        emit(world, "target-auto-locked", `Предыдущая цель недоступна. Новая боевая цель: ${replacement.label}.`, [index], {
+          sourcePlayer: index,
+          targetId: replacement.id,
+          targetKind: replacement.kind,
+          x: replacement.point.x,
+          y: replacement.point.y,
+        });
+      } else {
+        emit(world, "target-cleared", "Живых боевых целей не осталось.", [index], {sourcePlayer: index});
+      }
     }
   }
 }

@@ -117,12 +117,13 @@ test("salvage requires physical extraction and a nearby teammate speeds it up", 
     player.y = crateCoop.y;
   }
   setPlayerInput(coop, 0, {action: true});
+  setPlayerInput(coop, 1, {action: true});
   run(coop, 1);
   assert.ok(crateCoop.extractionProgress > soloProgress * 1.4);
   assert.equal(crateCoop.extracted, crateCoop.extractionProgress >= crateCoop.extractionSeconds);
 });
 
-test("loading dangerous contract cargo starts combat and sonar tracks a pursuer", () => {
+test("taking dangerous contract cargo starts combat and suspends navigation sonar", () => {
   const world = createFreeWorld();
   const dangerousIndex = world.freeContracts.offers.findIndex(offer => offer.category === "dangerous");
   const active = openAndAccept(world, dangerousIndex);
@@ -139,5 +140,8 @@ test("loading dangerous contract cargo starts combat and sonar tracks a pursuer"
   tap(world, 0, {action: true});
   assert.equal(world.freeContracts.encounterActive, true);
   assert.equal(world.freeContracts.encounterLevel, 2);
-  assert.equal(scenarioTarget(world, 0)?.kind, "pursuer");
+  assert.equal(world.freeContracts.activeContract.threatTriggered, true);
+  assert.equal(scenarioTarget(world, 0), null);
+  tap(world, 0, {sonar: true});
+  assert.ok(world.events.some(event => event.type === "scenario-sonar-combat"));
 });

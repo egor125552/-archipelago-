@@ -3,17 +3,17 @@
 import {
   WORLD,
   playerStatus,
-} from "./free-roam-core-v6.js?v=43";
-import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=42";
-import {predictLocalWorld, reconcileLocalPrediction} from "./free-roam-client-prediction.js?v=40";
+} from "./free-roam-core-v6.js?v=44";
+import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=43";
+import {predictLocalWorld, reconcileLocalPrediction} from "./free-roam-client-prediction.js?v=41";
 import {applyReplicatedWorldDelta} from "./free-roam-replication.js?v=45";
 import {createSpeechController} from "./free-roam-speech.js?v=41";
 import {directionFromDelta} from "./free-roam-gesture-model.js";
 import {classifyActionGesture, gestureMetrics} from "./free-roam-action-gestures.js";
-import {resolveCombatTarget} from "./free-roam-targeting.js?v=34";
-import {createTargetMenu} from "./free-roam-target-menu.js?v=35";
-import {MERCHANT, SHOP_ITEMS} from "./free-roam-shop.js?v=2";
-import {CONTRACT_BOARD} from "./free-roam-contracts.js?v=2";
+import {resolveCombatTarget} from "./free-roam-targeting.js?v=35";
+import {createTargetMenu} from "./free-roam-target-menu.js?v=36";
+import {MERCHANT, SHOP_ITEMS} from "./free-roam-shop.js?v=3";
+import {CONTRACT_BOARD} from "./free-roam-contracts.js?v=3";
 import {cargoDefinition} from "./free-roam-contract-catalog.js?v=1";
 
 const $ = id => document.getElementById(id);
@@ -530,6 +530,10 @@ function handleGameEvent(event) {
     localInput.targetId = null;
     sendInput(true);
   }
+  if (event.type === "target-auto-locked" && event.targetId) {
+    localInput.targetId = event.targetId;
+    sendInput(true);
+  }
   if (["hull-repair-complete", "repair-blocked"].includes(event.type)) setControl("repair", false);
   if (!event.text) return;
   const critical = [
@@ -565,6 +569,7 @@ function render() {
   const combat = me.combat || {};
   const merchantOpen = shopIsOpen();
   const boardOpen = boardIsOpen();
+  const targetOpen = targetMenu.isOpen();
   const menuOpen = merchantOpen || boardOpen;
   const shopItem = selectedShopItem();
   const boardEntry = selectedBoardEntry();
@@ -618,6 +623,8 @@ function render() {
     ? `Купить: ${shopItem.label}`
     : boardOpen
       ? `Подтвердить: ${boardEntry?.label || "заказ"}`
+      : targetOpen
+        ? "Подтвердить боевую цель"
     : combat.knockedDown
       ? "Сбит с ног — жди"
       : combat.carriedCrate
@@ -634,13 +641,25 @@ function render() {
   $("jumpButton").textContent = me.mode === "boat" ? "Плавучий тормоз" : me.mode === "roof" ? "Спрыгнуть" : "Прыжок / крыша";
   $("attackButton").textContent = combat.equipped === "automatic" ? "Огонь" : combat.equipped === "knife" ? "Удар ножом" : "Удар";
   $("weaponButton").textContent = `Оружие: ${weaponLabels[combat.equipped] || "кулаки"}`;
-  $("targetButton").setAttribute("aria-pressed", String(targetMenu.isOpen()));
-  $("targetButton").textContent = targetMenu.isOpen() ? "Выбор цели открыт" : "Выбрать цель";
-  $("upButton").textContent = merchantOpen ? "Предыдущий товар" : boardOpen ? "Предыдущий заказ" : "Вперёд";
-  $("downButton").textContent = merchantOpen ? "Следующий товар" : boardOpen ? "Следующий заказ" : "Назад / тормоз";
+  $("targetButton").setAttribute("aria-pressed", String(targetOpen));
+  $("targetButton").textContent = targetOpen ? "Отменить выбор цели" : "Выбрать цель";
+  $("upButton").textContent = merchantOpen ? "Предыдущий товар" : boardOpen ? "Предыдущий заказ" : targetOpen ? "Предыдущая боевая цель" : "Вперёд";
+  $("downButton").textContent = merchantOpen ? "Следующий товар" : boardOpen ? "Следующий заказ" : targetOpen ? "Следующая боевая цель" : "Назад / тормоз";
   $("sonarButton").textContent = merchantOpen ? "Закрыть магазин" : boardOpen ? "Закрыть доску" : "Сонар: текущая цель";
   for (const id of ["leftButton", "rightButton", "jumpButton", "attackButton", "weaponButton", "targetButton", "guideButton", "pumpButton", "repairButton"]) {
     $(id).disabled = menuOpen;
+  }
+  if (targetOpen) {
+    for (const id of ["leftButton", "rightButton", "jumpButton", "attackButton", "weaponButton", "guideButton", "pumpButton", "repairButton", "sonarButton"]) $(id).disabled = true;
+    $("upButton").disabled = false;
+    $("downButton").disabled = false;
+    $("actionButton").disabled = false;
+    $("targetButton").disabled = false;
+  } else {
+    $("upButton").disabled = false;
+    $("downButton").disabled = false;
+    $("actionButton").disabled = false;
+    $("sonarButton").disabled = false;
   }
   syncControlButtons();
   audio.updateWorld(world, playerIndex);
@@ -757,6 +776,11 @@ function bindHold(button, name, minimumDuration = 0) {
     if (event.pointerType === "touch") showButtonsForAssistiveInput();
     event.preventDefault();
     audio.init().catch(() => {});
+    if (targetMenu.isOpen()) {
+      if (name === "up") targetMenu.cycle(-1);
+      else if (name === "down") targetMenu.cycle(1);
+      return;
+    }
     if (boardIsOpen()) {
       if (name === "up") actionPulse("boardPrevious");
       else if (name === "down") actionPulse("boardNext");
@@ -1107,7 +1131,10 @@ bindHold($("upButton"), "up");
 bindHold($("downButton"), "down");
 bindHold($("leftButton"), "left");
 bindHold($("rightButton"), "right");
-$("actionButton").addEventListener("click", () => actionPulse(boardIsOpen() ? "boardAccept" : shopIsOpen() ? "shopBuy" : "action"));
+$("actionButton").addEventListener("click", () => {
+  if (targetMenu.isOpen()) targetMenu.confirm();
+  else actionPulse(boardIsOpen() ? "boardAccept" : shopIsOpen() ? "shopBuy" : "action");
+});
 $("jumpButton").addEventListener("click", () => actionPulse("jump"));
 bindHold($("attackButton"), "attack", 90);
 $("attackButton").addEventListener("click", event => {

@@ -3,7 +3,7 @@
 // Keep this import version aligned with free-roam-v4.js. The old v=39 import
 // patched a different cached class after the 1.5.0 audio bump, so the recorded
 // pistol shot silently fell back to the generic weapon sound.
-import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=42";
+import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=43";
 import {COMBAT_TUNING} from "./free-roam-combat-tuning.js?v=33";
 
 const PISTOL_RECORDING_URL = "https://raw.githubusercontent.com/Gabrielsgp/hand-shotter/a9e2dac862291cbff1af8e2c3e82922c3aeb726c/songs/163456__lemudcrab__pistol-shot.wav";

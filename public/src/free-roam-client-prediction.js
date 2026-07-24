@@ -1,7 +1,7 @@
 "use strict";
 
 import {CONFIG} from "./game-core-v18.js?free=prediction";
-import {WORLD} from "./free-roam-core-v6.js?v=39";
+import {WORLD} from "./free-roam-core-v6.js?v=44";
 import {operationSteeringDelta} from "./free-roam-steering-model.js";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));

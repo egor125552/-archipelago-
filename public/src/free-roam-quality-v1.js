@@ -1,7 +1,7 @@
 "use strict";
 
-import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=39";
-import {predictLocalWorld} from "./free-roam-client-prediction.js?v=40";
+import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=43";
+import {predictLocalWorld} from "./free-roam-client-prediction.js?v=41";
 import {
   AUDIO_INTERVAL_MS,
   createChangeGate,

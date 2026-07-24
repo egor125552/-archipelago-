@@ -4,8 +4,8 @@ import {FreeRoamAudio as BaseFreeRoamAudio, spatialGainForDistance} from "./free
 import {relativeMovementPan} from "./free-roam-audio-v3.js?v=38";
 import {injuryLowpassFrequency} from "./free-roam-combat-recovery.js?v=32";
 import {COMBAT_TUNING} from "./free-roam-combat-tuning.js?v=32";
-import {MERCHANT, MERCHANT_AUDIO_RANGE} from "./free-roam-shop.js?v=1";
-import {CONTRACT_BOARD, CONTRACT_BOARD_AUDIO_RANGE, contractsUnlocked} from "./free-roam-contracts.js?v=2";
+import {MERCHANT, MERCHANT_AUDIO_RANGE} from "./free-roam-shop.js?v=3";
+import {CONTRACT_BOARD, CONTRACT_BOARD_AUDIO_RANGE, contractsUnlocked} from "./free-roam-contracts.js?v=3";
 
 const ROOT = "/assets/audio/free-roam-v25/";
 const COMBAT_SOUNDS = Object.freeze({
@@ -215,7 +215,8 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
   }
 
   updateMarauderEngine(world) {
-    const targetId = world?.freeScenario?.targets?.[this.localPlayerIndex]?.id;
+    const targetId = world?.players?.[this.localPlayerIndex]?.combat?.lockedTargetId
+      || world?.freeScenario?.targets?.[this.localPlayerIndex]?.id;
     const primary = world?.freeActivities?.marauder;
     const selectedEscort = world?.freePursuerSquad?.escorts?.find(escort => (
       escort.id === targetId && escort.active && !escort.destroyed
@@ -227,7 +228,11 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
     const selectedHeavy = heavy?.active && !heavy.destroyed && ["heavy-pursuer", "heavy-turret", "heavy-engine"].includes(targetId)
       ? heavy
       : null;
-    const marauder = selectedHeavy || selectedEnemyBoat || selectedEscort || primary;
+    const nearestEnemyBoat = (world?.freeEnemyBoats?.boats || [])
+      .filter(boat => boat.active && !boat.destroyed)
+      .sort((left, right) => distance(this.listenerPoint || {}, left) - distance(this.listenerPoint || {}, right))[0];
+    const nearbyHeavy = heavy?.active && !heavy.destroyed ? heavy : null;
+    const marauder = selectedHeavy || selectedEnemyBoat || selectedEscort || nearestEnemyBoat || nearbyHeavy || primary;
     if (!this.ctx || !this.listenerPoint || !marauder?.active || marauder.destroyed) {
       if (this.ctx && this.marauderEngine) this.marauderEngine.gain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.18);
       return;
