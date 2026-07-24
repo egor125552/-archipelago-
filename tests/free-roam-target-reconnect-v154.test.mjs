@@ -21,8 +21,8 @@ test("combat target gestures tolerate iPhone two-finger vertical swipes", () => 
   assert.equal(targetMenuGestureAction({pointers: 2, movement: 4, dx: 1, dy: 3}), "tap-command");
   assert.equal(targetMenuGestureAction({pointers: 3, movement: 2, dx: 0, dy: 2}), "cancel");
   assert.equal(targetMenuGestureAction({pointers: 2, movement: 70, dx: 70, dy: 5}), "report");
-  assert.equal(contextualSonarAction({combatActive: true, targetMenuOpen: false}), "open-targets");
-  assert.equal(contextualSonarAction({combatActive: true, targetMenuOpen: true}), "report");
+  assert.equal(contextualSonarAction({combatActive: true, targetMenuOpen: false}), "sonar");
+  assert.equal(contextualSonarAction({combatActive: true, targetMenuOpen: true}), "sonar");
   assert.equal(contextualSonarAction({combatActive: false, targetMenuOpen: false}), "sonar");
 });
 
@@ -72,8 +72,8 @@ test("live gesture and reconnect code routes combat sonar and force-expires stal
     readFile(new URL("../public/src/free-roam-startup-v1.js", import.meta.url), "utf8"),
   ]);
   assert.match(client, /command === "sonar"\) useSonarOrCombatTargets\(\)/);
-  assert.match(client, /combatActive: combatTargetingRequired\(\)/);
-  assert.match(client, /action === "open-targets"\) targetMenu\.open\(\)/);
+  assert.match(client, /command === "targets"\) targetMenu\.open\(\)/);
+  assert.match(client, /function useSonarOrCombatTargets\(\) \{[\s\S]*actionPulse\("sonar"\)/);
   assert.match(client, /targetMenu\.reportCurrent\(\)/);
   assert.match(client, /socket = null;[\s\S]*connection\.close\(4104, reason\)/);
   assert.match(client, /state-load-timeout/);

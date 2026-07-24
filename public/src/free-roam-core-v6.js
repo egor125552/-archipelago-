@@ -25,6 +25,7 @@ import {ensureHostileActors, releaseCrewFromBoat, updateHostileActors} from "./f
 import {ensureThreatDirector, notifyThreatBoatDestroyed, threatLevel} from "./free-roam-threat-director.js?v=3";
 import {ensureHeavyPursuer, updateHeavyPursuer} from "./free-roam-heavy-pursuer.js?v=3";
 import {retireClaimedKnifeCrates} from "./free-roam-unique-weapons.js?v=1";
+import {finishThreatIntelligence, prepareThreatIntelligence} from "./free-roam-threat-intelligence.js?v=1";
 import {suppressGameplayWhileShopping, updateMerchantShop} from "./free-roam-shop.js?v=3";
 import {
   contractStatus,
@@ -378,8 +379,9 @@ export function stepFreeWorld(world, dt) {
     },
   };
   updateCombat(world, safeDt, combatHelpers);
+  const threatIntelligence = prepareThreatIntelligence(world);
   updateMarauder(world, safeDt, {spawnRareCrate, onEnemyBoatDestroyed: combatHelpers.onEnemyBoatDestroyed});
-  updatePursuerSquad(world, safeDt, {
+  if (threatIntelligence.hasLivingTargets) updatePursuerSquad(world, safeDt, {
     spawnRareCrate,
     onEnemyBoatDestroyed: combatHelpers.onEnemyBoatDestroyed,
     damagePlayer(targetWorld, targetIndex, amount, details) {
@@ -392,10 +394,13 @@ export function stepFreeWorld(world, dt) {
     },
     onEnemyBoatDestroyed: combatHelpers.onEnemyBoatDestroyed,
   };
-  if (threatLevel(world) < 3) updateHostileGunners(world, safeDt, enemyDamageHelpers);
-  updateEnemyBoats(world, safeDt, enemyDamageHelpers);
-  updateHeavyPursuer(world, safeDt, enemyDamageHelpers);
-  updateHostileActors(world, safeDt, enemyDamageHelpers);
+  if (threatIntelligence.hasLivingTargets) {
+    if (threatLevel(world) < 3) updateHostileGunners(world, safeDt, enemyDamageHelpers);
+    updateEnemyBoats(world, safeDt, enemyDamageHelpers);
+    updateHeavyPursuer(world, safeDt, enemyDamageHelpers);
+    updateHostileActors(world, safeDt, enemyDamageHelpers);
+  }
+  finishThreatIntelligence(world, threatIntelligence, safeDt);
   const physicalState = updatePhysicalActors(world);
   discardBlockedFootsteps(world, eventStart, physicalState);
   updateActivities(world, safeDt);

@@ -1,7 +1,7 @@
 "use strict";
 
 import {describeCombatTarget, listCombatTargets} from "./free-roam-targeting.js?v=35";
-import {encounterActive} from "./free-roam-contracts.js?v=3";
+import {combatMenuActive} from "./free-roam-combat-context.js?v=1";
 
 const NAVIGATION_ENTRIES = Object.freeze([
   Object.freeze({id: "navigation-objective", menuKind: "navigation", navigationTargetId: "objective", label: "текущая задача"}),
@@ -29,7 +29,7 @@ export function createTargetMenu({
     const world = getWorld();
     const playerIndex = getPlayerIndex();
     const combat = world?.players?.[playerIndex]?.combat;
-    const fighting = encounterActive(world) || world?.freeScenario?.phase === "pursuit";
+    const fighting = combatMenuActive(world);
     const rangedReady = Boolean(
       (combat?.weapons?.pistol && combat.pistolAmmo > 0)
       || (combat?.weapons?.automatic && combat.ammo > 0)
@@ -86,7 +86,7 @@ export function createTargetMenu({
     announce(
       target
         ? `Выбор цели. ${describe(target)} Листай, подтверди нужную или отмени выбор.`
-        : (encounterActive(world) || world?.freeScenario?.phase === "pursuit")
+        : combatMenuActive(world)
           ? "Бой ещё отмечен активным, но живых физических целей сервер сейчас не видит."
           : "Доступных целей сейчас нет.",
       true,

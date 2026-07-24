@@ -16,7 +16,6 @@ export function targetMenuGestureAction({pointers, movement, dx, dy}, movementLi
   return "cancel";
 }
 
-export function contextualSonarAction({combatActive, targetMenuOpen}) {
-  if (!combatActive) return "sonar";
-  return targetMenuOpen ? "report" : "open-targets";
+export function contextualSonarAction() {
+  return "sonar";
 }
