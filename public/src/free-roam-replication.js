@@ -109,8 +109,8 @@ const ENEMY_BOAT_FIELDS = Object.freeze([
   "id", "role", "x", "y", "heading", "speed", "hull", "maxHull", "active", "destroyed", "targetPlayer", "crewSeats",
 ]);
 const HEAVY_FIELDS = Object.freeze([
-  "id", "role", "x", "y", "heading", "turretHeading", "speed", "hull", "maxHull", "engineHealth", "turretHealth",
-  "engineDisabled", "turretDisabled", "active", "destroyed", "targetPlayer",
+  "id", "role", "x", "y", "heading", "turretHeading", "speed", "hull", "maxHull", "engineHealth", "maxEngineHealth", "turretHealth", "maxTurretHealth",
+  "engineDisabled", "turretDisabled", "active", "destroyed", "targetPlayer", "burstRemaining", "aimRemaining",
 ]);
 const HOSTILE_ACTOR_FIELDS = Object.freeze([
   "id", "boatId", "targetPlayer", "x", "y", "heading", "state", "weapon", "health", "maxHealth", "active", "destroyed", "elite",

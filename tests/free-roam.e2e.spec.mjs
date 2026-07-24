@@ -317,7 +317,7 @@ test("threat five exposes the heavy boat systems and elite actor in the browser"
           .map(actor => ({health: actor.health, state: actor.state, boatId: actor.boatId})),
       };
     });
-    expect(result.heavy).toEqual({hull: 340, maxHull: 340, role: "heavy"});
+    expect(result.heavy).toEqual({hull: 1000, maxHull: 1000, role: "heavy"});
     expect(result.heavyTargets).toEqual(["heavy-pursuer", "heavy-turret", "heavy-engine"]);
     expect(result.elites).toEqual([{health: 120, state: "aboard", boatId: "heavy-pursuer"}]);
   } finally {

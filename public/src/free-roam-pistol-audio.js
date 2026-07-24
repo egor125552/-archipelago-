@@ -1,6 +1,9 @@
 "use strict";
 
-import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=39";
+// Keep this import version aligned with free-roam-v4.js. The old v=39 import
+// patched a different cached class after the 1.5.0 audio bump, so the recorded
+// pistol shot silently fell back to the generic weapon sound.
+import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=42";
 import {COMBAT_TUNING} from "./free-roam-combat-tuning.js?v=33";
 
 const PISTOL_RECORDING_URL = "https://raw.githubusercontent.com/Gabrielsgp/hand-shotter/a9e2dac862291cbff1af8e2c3e82922c3aeb726c/songs/163456__lemudcrab__pistol-shot.wav";
@@ -90,6 +93,22 @@ FreeRoamAudio.prototype.handleFreeEvent = function handleFreeEventWithPistol(eve
   if (event?.type === "weapon-switch" && event.weapon === "pistol") {
     if (!event.targets?.includes(playerIndex)) return;
     this.playSynthPip({frequency: 620, gain: 0.085, duration: 0.08});
+    return;
+  }
+  if (["salvage-extraction-start", "salvage-extraction-progress", "salvage-extraction-resumed"].includes(event?.type)) {
+    if (!event.targets?.includes(playerIndex)) return;
+    const spatial = this.eventPanAndGain(event, 80);
+    this.play("repair", {
+      pan: spatial.pan,
+      gain: (event.type === "salvage-extraction-start" ? 0.5 : 0.34) * spatial.gain,
+      rate: event.type === "salvage-extraction-progress" ? 0.86 : 0.74,
+      lowpass: 5200,
+    });
+    return;
+  }
+  if (event?.type === "salvage-extraction-paused") {
+    if (!event.targets?.includes(playerIndex)) return;
+    this.playSynthPip({frequency: 210, gain: 0.1, duration: 0.13});
     return;
   }
   return originalHandle.call(this, event, playerIndex);

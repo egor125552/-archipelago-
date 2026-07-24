@@ -99,7 +99,7 @@ test("the production page loads the pistol sound and pistol integration modules"
     readFile(new URL("../public/src/free-roam-pistol-ui.js", import.meta.url), "utf8"),
   ]);
 
-  assert.match(html, /free-roam-pistol-audio\.js\?v=1/);
+  assert.match(html, /free-roam-pistol-audio\.js\?v=2/);
   assert.match(html, /free-roam-pistol-ui\.js\?v=1/);
   assert.match(html, /36 отдельных пистолетных патронов/);
   assert.match(targetMenu, /combat\?\.weapons\?\.pistol/);
