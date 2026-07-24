@@ -15,7 +15,7 @@ function ensureFootDockState(world) {
   return world.freeFootDock;
 }
 
-export function updateFootDockDelivery(world, dt, rewardPlayer, emit) {
+export function updateFootDockDelivery(world, dt, rewardPlayer, emit, canDeliver = () => true) {
   const state = ensureFootDockState(world);
   for (let index = 0; index < world.players.length; index += 1) {
     const player = world.players[index];
@@ -30,6 +30,6 @@ export function updateFootDockDelivery(world, dt, rewardPlayer, emit) {
     state.progress[index] += dt;
     if (state.progress[index] < AUTO_DELIVERY_SECONDS) continue;
     state.progress[index] = 0;
-    deliverCarriedCargoAtDock(world, index, crate, rewardPlayer, emit);
+    deliverCarriedCargoAtDock(world, index, crate, rewardPlayer, emit, canDeliver);
   }
 }

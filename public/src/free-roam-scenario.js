@@ -8,12 +8,15 @@ import {
   assignedPursuerForPlayer,
   isPursuerSquadDefeated,
   nearestActivePursuer,
-} from "./free-roam-pursuer-squad.js?v=32";
+} from "./free-roam-pursuer-squad.js?v=33";
 import {automaticCargoDelivered} from "./free-roam-weapon-crates.js?v=32";
 import {activeHostileGunners} from "./free-roam-hostile-gunners.js?v=32";
 import {ensureSonarGuide, updateSonarGuide} from "./free-roam-sonar-guide.js?v=35";
 import {merchantNavigationTarget} from "./free-roam-shop.js?v=1";
-import {contractNavigationTarget, encounterActive, ensureContracts} from "./free-roam-contracts.js?v=1";
+import {contractNavigationTarget, encounterActive, ensureContracts} from "./free-roam-contracts.js?v=2";
+import {assignedThreatTarget} from "./free-roam-threat-director.js?v=1";
+import {activeEnemyBoats} from "./free-roam-enemy-boats.js?v=1";
+import {activeHostileActors} from "./free-roam-hostile-actors.js?v=1";
 
 const TARGET_LABELS = Object.freeze({
   plates: "ящик с пластинами",
@@ -188,16 +191,19 @@ export function scenarioTarget(world, playerIndex) {
   const scenario = ensureFreeScenario(world);
   ensureContracts(world);
   if (scenario.phase === "pursuit" || encounterActive(world)) {
-    const assigned = assignedPursuerForPlayer(world, playerIndex);
+    const assigned = encounterActive(world) ? assignedThreatTarget(world, playerIndex) : assignedPursuerForPlayer(world, playerIndex);
     const pursuer = assigned
       || activePursuerById(world, scenario.lockedPursuerIds[playerIndex])
-      || nearestActivePursuer(world, world.players[playerIndex]);
+      || nearestActivePursuer(world, world.players[playerIndex])
+      || activeEnemyBoats(world)[0]
+      || activeHostileActors(world)[0];
     if (pursuer) {
       scenario.lockedPursuerIds[playerIndex] = pursuer.id;
+      const person = Boolean(pursuer.health != null && pursuer.hull == null);
       return {
         id: pursuer.id,
-        kind: "pursuer",
-        label: assigned ? "твой назначенный катер-преследователь" : "выбранный катер-преследователь",
+        kind: person ? "hostile-person" : "pursuer",
+        label: assigned ? (person ? "назначенный тебе вражеский боец" : "твой назначенный катер-преследователь") : (person ? "ближайший вражеский боец" : "выбранный катер-преследователь"),
         x: pursuer.x,
         y: pursuer.y,
       };
@@ -415,7 +421,7 @@ export function scenarioStatus(world, playerIndex) {
     salvage: `Задача: доставь ещё ${remainingSalvage === 1 ? "один обычный ящик" : "два обычных ящика"}.`,
     arm: "Задача: доставь автомат. До погони можно забрать нож; повторное нажатие сонара переключает цель.",
     warning: `Преследователи появятся через ${Math.max(0, Math.ceil(scenario.warningUntil - world.time))} секунд.`,
-    pursuit: `Задача: уничтожь все катера и высадившихся стрелков. Катеров осталось ${activePursuers(world).length}, стрелков ${activeHostileGunners(world).length}.`,
+    pursuit: `Задача: уничтожь все катера и высадившихся стрелков. Катеров осталось ${activePursuers(world).length + activeEnemyBoats(world).length}, стрелков ${activeHostileGunners(world).length + activeHostileActors(world).length}.`,
     victory: world.freeContracts?.activeContract
       ? `Заказ: ${world.freeContracts.activeContract.label}. Этап ${world.freeContracts.activeContract.phase}.`
       : "Сценарий пройден. Доска заказов доступна у торговца.",

@@ -3,14 +3,14 @@
 import {
   WORLD,
   playerStatus,
-} from "./free-roam-core-v6.js?v=40";
-import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=40";
+} from "./free-roam-core-v6.js?v=41";
+import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=41";
 import {predictLocalWorld, reconcileLocalPrediction} from "./free-roam-client-prediction.js?v=40";
-import {applyReplicatedWorldDelta} from "./free-roam-replication.js?v=42";
+import {applyReplicatedWorldDelta} from "./free-roam-replication.js?v=43";
 import {createSpeechController} from "./free-roam-speech.js?v=41";
 import {directionFromDelta} from "./free-roam-gesture-model.js";
 import {classifyActionGesture, gestureMetrics} from "./free-roam-action-gestures.js";
-import {resolveCombatTarget} from "./free-roam-targeting.js?v=32";
+import {resolveCombatTarget} from "./free-roam-targeting.js?v=33";
 import {createTargetMenu} from "./free-roam-target-menu.js?v=34";
 import {MERCHANT, SHOP_ITEMS} from "./free-roam-shop.js?v=1";
 import {CONTRACT_BOARD} from "./free-roam-contracts.js?v=1";

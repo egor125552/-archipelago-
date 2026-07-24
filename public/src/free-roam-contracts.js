@@ -3,8 +3,7 @@
 import {catalogForCategory, cargoDefinition} from "./free-roam-contract-catalog.js";
 import {contractBonusMultiplier, waterExposureTick} from "./free-roam-cargo-traits.js";
 import {updateSalvageExtraction} from "./free-roam-salvage.js";
-import {activatePursuerSquad, activePursuers, isPursuerSquadDefeated} from "./free-roam-pursuer-squad.js?v=32";
-import {activeHostileGunners} from "./free-roam-hostile-gunners.js?v=32";
+import {cancelThreatEncounter, startThreatEncounter, threatEncounterActive, updateThreatDirector} from "./free-roam-threat-director.js?v=1";
 
 export const CONTRACT_BOARD = Object.freeze({id: "contract-board", kind: "contract-board", label: "доска заказов", x: 194, y: 58});
 export const CONTRACT_BOARD_ACTION_RANGE = 8.5;
@@ -275,6 +274,7 @@ function abandonContract(world, playerIndex) {
     return true;
   }
   removeContractCrate(world, active);
+  cancelThreatEncounter(world, "contract-abandoned");
   state.activeContract = null;
   state.encounterActive = false;
   state.encounterLevel = 0;
@@ -295,10 +295,23 @@ function applyBonus(world, bonus, playerIndex, boat) {
   return bonus;
 }
 
+export function contractDeliveryBlocked(world, crate) {
+  const state = ensureContracts(world);
+  const active = state.activeContract;
+  return Boolean(
+    active
+    && crate?.contractId === active.id
+    && active.category === "dangerous"
+    && state.encounterActive
+    && !state.encounterDefeated
+  );
+}
+
 export function completeContractDelivery(world, playerIndex, boat, crate) {
   const state = ensureContracts(world);
   const active = state.activeContract;
   if (!active || active.rewardIssued || crate?.contractId !== active.id) return null;
+  if (contractDeliveryBlocked(world, crate)) return null;
   const definition = cargoDefinition(active.definitionId);
   if (!definition) return null;
   active.rewardIssued = true;
@@ -321,33 +334,20 @@ export function completeContractDelivery(world, playerIndex, boat, crate) {
 }
 
 function activateContractPursuit(world, active) {
-  const pursuer = world.freeActivities?.marauder;
-  if (!pursuer || stateAlreadyFighting(world)) return;
-  const carrier = world.players.find(player => player?.combat?.carriedCrate === active.crateId)
-    || world.players.find(player => {
-      const boat = Number.isInteger(player?.activeBoat) ? world.boats[player.activeBoat] : null;
-      return boat?.cargo?.includes(active.crateId);
-    }) || world.players[0];
-  pursuer.x = clamp((carrier?.x || 210) + 105, 18, 402);
-  pursuer.y = clamp((carrier?.y || 180) + 70, 92, 302);
-  pursuer.heading = 315;
-  pursuer.speed = 0;
-  pursuer.hull = 72;
-  pursuer.active = true;
-  pursuer.destroyed = false;
-  pursuer.ramCooldown = 4;
-  pursuer.recoveryRemaining = 0;
-  pursuer.respawnAt = 0;
-  activatePursuerSquad(world);
+  if (!active || threatEncounterActive(world)) return;
+  const level = Math.max(1, Math.min(5, Math.floor(Number(active.threat) || 1)));
+  startThreatEncounter(world, level, active.id);
+  if (level <= 1) {
+    active.phase = "transport";
+    const state = ensureContracts(world);
+    state.encounterActive = false;
+    state.encounterLevel = 1;
+    return;
+  }
+  active.phase = "combat";
   const state = ensureContracts(world);
   state.encounterActive = true;
-  state.encounterLevel = 2;
-  active.phase = "combat";
-  emit(world, "contract-threat-start", "Опасный груз обнаружен. Угроза два из пяти: в бухту вошли катера-преследователи. Во время боя доступны только боевые цели.", [0, 1], {contractId: active.id, threat: 2, x: pursuer.x, y: pursuer.y});
-}
-
-function stateAlreadyFighting(world) {
-  return activePursuers(world).length > 0 || activeHostileGunners(world).length > 0;
+  state.encounterLevel = level;
 }
 
 export function notifyContractCargoStowed(world, crate) {
@@ -355,7 +355,7 @@ export function notifyContractCargoStowed(world, crate) {
   const active = state.activeContract;
   if (!active || crate?.contractId !== active.id) return;
   active.phase = "transport";
-  if (active.category === "dangerous" && !state.encounterActive) activateContractPursuit(world, active);
+  if (active.category === "dangerous" && !state.encounterActive && !state.encounterDefeated) activateContractPursuit(world, active);
 }
 
 function rising(input, previous, key) {
@@ -429,12 +429,7 @@ export function updateContracts(world, dt) {
     const crate = world.freeActivities?.crates?.find(candidate => candidate.id === active.crateId);
     if (crate) waterExposureTick(crate, dt);
   }
-  if (state.encounterActive && isPursuerSquadDefeated(world) && activeHostileGunners(world).length === 0) {
-    state.encounterActive = false;
-    state.encounterDefeated = true;
-    if (active) active.phase = "return";
-    emit(world, "contract-threat-cleared", "Боевая угроза устранена. Навигация к заказу восстановлена. Добыча и контрактный груз остаются в мире.", [0, 1]);
-  }
+  updateThreatDirector(world);
 }
 
 export function contractNavigationTarget(world, playerIndex) {

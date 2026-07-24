@@ -11,15 +11,18 @@ import {
   spawnRareCrate,
   storeActivityInput,
   updateActivities,
-} from "./free-roam-activities.js?v=41";
+} from "./free-roam-activities.js?v=42";
 // free-roam-combat.js?v=32 remains the stable combat base behind the 1.1 pistol layer.
-import {applyCombatDamage, combatStatus, ensureCombat, updateCombat} from "./free-roam-combat-v2.js?v=1";
-import {ensureMarauder, releaseStolenCargo, updateMarauder} from "./free-roam-marauder.js?v=32";
-import {ensureFreeScenario, scenarioStatus, updateFreeScenario} from "./free-roam-scenario.js?v=42";
+import {applyCombatDamage, combatStatus, ensureCombat, updateCombat} from "./free-roam-combat-v2.js?v=2";
+import {ensureMarauder, releaseStolenCargo, updateMarauder} from "./free-roam-marauder.js?v=33";
+import {ensureFreeScenario, scenarioStatus, updateFreeScenario} from "./free-roam-scenario.js?v=43";
 import {suppressIncapacitatedMovement, updatePhysicalActors} from "./free-roam-physical-actors.js?v=38";
 import {handleAssistedBoarding} from "./free-roam-boarding-assist.js?v=29";
-import {ensurePursuerSquad, updatePursuerSquad} from "./free-roam-pursuer-squad.js?v=32";
+import {ensurePursuerSquad, updatePursuerSquad} from "./free-roam-pursuer-squad.js?v=33";
 import {ensureHostileGunners, updateHostileGunners} from "./free-roam-hostile-gunners.js?v=32";
+import {ensureEnemyBoats, updateEnemyBoats} from "./free-roam-enemy-boats.js?v=1";
+import {ensureHostileActors, releaseCrewFromBoat, updateHostileActors} from "./free-roam-hostile-actors.js?v=1";
+import {ensureThreatDirector, notifyThreatBoatDestroyed, threatLevel} from "./free-roam-threat-director.js?v=1";
 import {retireClaimedKnifeCrates} from "./free-roam-unique-weapons.js?v=1";
 import {suppressGameplayWhileShopping, updateMerchantShop} from "./free-roam-shop.js?v=1";
 import {
@@ -27,7 +30,7 @@ import {
   ensureContracts,
   suppressGameplayWhileContractBoard,
   updateContracts,
-} from "./free-roam-contracts.js?v=1";
+} from "./free-roam-contracts.js?v=2";
 
 export const WORLD = Object.freeze({...base.WORLD});
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -40,6 +43,9 @@ function ensureState(world) {
   ensureMarauder(world);
   ensurePursuerSquad(world);
   ensureHostileGunners(world);
+  ensureEnemyBoats(world);
+  ensureHostileActors(world);
+  ensureThreatDirector(world);
   ensureFreeScenario(world);
   ensureContracts(world);
   retireClaimedKnifeCrates(world);
@@ -112,20 +118,33 @@ export function stepFreeWorld(world, dt) {
   const restoreMovement = suppressIncapacitatedMovement(world);
   base.stepFreeWorld(world, safeDt);
   restoreMovement();
-  const combatHelpers = {dropCarriedCrate, releaseStolenCargo, spawnRareCrate};
+  const combatHelpers = {
+    dropCarriedCrate,
+    releaseStolenCargo,
+    spawnRareCrate,
+    onEnemyBoatDestroyed(targetWorld, boat, sourcePlayer) {
+      releaseCrewFromBoat(targetWorld, boat);
+      notifyThreatBoatDestroyed(targetWorld, boat, sourcePlayer);
+    },
+  };
   updateCombat(world, safeDt, combatHelpers);
-  updateMarauder(world, safeDt, {spawnRareCrate});
+  updateMarauder(world, safeDt, {spawnRareCrate, onEnemyBoatDestroyed: combatHelpers.onEnemyBoatDestroyed});
   updatePursuerSquad(world, safeDt, {
     spawnRareCrate,
+    onEnemyBoatDestroyed: combatHelpers.onEnemyBoatDestroyed,
     damagePlayer(targetWorld, targetIndex, amount, details) {
       return applyCombatDamage(targetWorld, targetIndex, amount, -1, details, combatHelpers);
     },
   });
-  updateHostileGunners(world, safeDt, {
+  const enemyDamageHelpers = {
     damagePlayer(targetWorld, targetIndex, amount, details) {
       return applyCombatDamage(targetWorld, targetIndex, amount, -1, details, combatHelpers);
     },
-  });
+    onEnemyBoatDestroyed: combatHelpers.onEnemyBoatDestroyed,
+  };
+  if (threatLevel(world) < 3) updateHostileGunners(world, safeDt, enemyDamageHelpers);
+  updateEnemyBoats(world, safeDt, enemyDamageHelpers);
+  updateHostileActors(world, safeDt, enemyDamageHelpers);
   const physicalState = updatePhysicalActors(world);
   discardBlockedFootsteps(world, eventStart, physicalState);
   updateActivities(world, safeDt);

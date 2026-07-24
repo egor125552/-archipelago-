@@ -1,7 +1,9 @@
 "use strict";
 
-import {activePursuers, assignedPursuerForPlayer} from "./free-roam-pursuer-squad.js?v=32";
+import {activePursuers, assignedPursuerForPlayer} from "./free-roam-pursuer-squad.js?v=33";
 import {activeHostileGunners} from "./free-roam-hostile-gunners.js?v=32";
+import {activeEnemyBoats} from "./free-roam-enemy-boats.js?v=1";
+import {activeHostileActors} from "./free-roam-hostile-actors.js?v=1";
 
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));
 
@@ -69,6 +71,31 @@ export function listCombatTargets(world, attackerIndex, maximumRange = Infinity)
       assigned: gunner.targetPlayer === attackerIndex,
     });
   }
+  for (const boat of activeEnemyBoats(world)) {
+    targets.push({
+      id: boat.id,
+      kind: "enemyBoat",
+      enemyBoatId: boat.id,
+      point: boat,
+      label: boat.role === "rammer" ? "вражеский таранщик"
+        : boat.role === "gunboat" ? "стрелковый катер"
+          : boat.role === "landing" ? "катер высадки"
+            : boat.role === "interceptor" ? "катер-перехватчик" : "резервный катер",
+      assigned: boat.targetPlayer === attackerIndex,
+    });
+  }
+  for (const actor of activeHostileActors(world)) {
+    targets.push({
+      id: actor.id,
+      kind: actor.elite ? "elite" : "hostileActor",
+      actorId: actor.id,
+      point: actor,
+      label: actor.elite ? "элитный стрелок"
+        : actor.weapon === "knife" ? "ножевой противник"
+          : actor.weapon === "pistol" ? "вражеский пистолетчик" : "вражеский автоматчик",
+      assigned: actor.targetPlayer === attackerIndex,
+    });
+  }
 
   return targets
     .map(target => ({...target, distance: distance(attacker, target.point)}))
@@ -88,8 +115,10 @@ export function describeCombatTarget(target, position = 0, total = 1) {
   const metres = Math.round(target.distance);
   const hull = ["boat", "marauder", "escort"].includes(target.kind)
     ? `, корпус ${Math.round(target.point?.hull || 0)}`
-    : target.kind === "gunner"
-      ? `, здоровье ${Math.round(target.point?.health || 0)}`
-    : "";
+    : ["enemyBoat"].includes(target.kind)
+      ? `, корпус ${Math.round(target.point?.hull || 0)}`
+      : ["gunner", "hostileActor", "elite"].includes(target.kind)
+        ? `, здоровье ${Math.round(target.point?.health || 0)}`
+        : "";
   return `Цель ${number} из ${Math.max(1, total)}: ${target.label}, ${metres} метров${hull}.`;
 }

@@ -184,6 +184,7 @@ function destroyFromRam(world, marauder, playerIndex, helpers) {
     y: marauder.y,
   });
   helpers?.spawnRareCrate?.(world, marauder.x, marauder.y, "valuable", "pursuer");
+  helpers?.onEnemyBoatDestroyed?.(world, marauder, playerIndex);
 }
 
 function resolvePlayerRams(world, marauder, helpers) {
