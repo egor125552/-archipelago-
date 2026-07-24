@@ -1,0 +1,76 @@
+name: Apply Archipelago 1.5.2
+
+on:
+  push:
+    branches:
+      - agent/archipelago-v152-threat-salvage
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Reconstruct and verify patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat \
+            .patch-v152/fix-00.b64 \
+            .patch-v152/fix-01.b64 \
+            .patch-v152/fix-02.b64 \
+            .patch-v152/fix-03.b64 \
+            .patch-v152/fix-04a.b64 \
+            .patch-v152/fix-04b.b64 \
+            .patch-v152/fix-04c.b64 > /tmp/v152.patch.gz.b64
+          test "$(wc -c < /tmp/v152.patch.gz.b64)" -eq 28620
+          echo '26e6c1ae62ed3705136544defbd180c718be44926fa38934996fd94cd001327a  /tmp/v152.patch.gz.b64' | sha256sum --check
+          base64 --decode /tmp/v152.patch.gz.b64 > /tmp/v152.patch.gz
+          echo 'e9764c900c8c3468cd73e0b1c1c19269e3b37620d452cd6f87bea082280acc41  /tmp/v152.patch.gz' | sha256sum --check
+          gzip --decompress --stdout /tmp/v152.patch.gz > /tmp/v152.patch
+          echo '34e3216cf034e91528953399650755155da9635b5fcb2c75cee7fefa13380a9a  /tmp/v152.patch' | sha256sum --check
+          git apply --check /tmp/v152.patch
+          git apply /tmp/v152.patch
+
+      - name: Remove temporary transport files
+        run: |
+          rm -rf .patch-v152
+          rm -f .github/workflows/apply-archipelago-v152.yml
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate JavaScript syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' file; do
+            node --check "$file"
+          done < <(find public/src -type f -name '*.js' -print0)
+
+      - name: Run all tests
+        run: npm test
+
+      - name: Validate diff
+        run: git diff --check
+
+      - name: Commit verified release
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Release Echo Archipelago 1.5.2 threat and salvage fixes [skip ci]'
+          git push origin HEAD:agent/archipelago-v152-threat-salvage
