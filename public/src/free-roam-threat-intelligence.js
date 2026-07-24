@@ -337,7 +337,8 @@ function startSecondPhase(world, state) {
 function finalPhaseReady(world, state) {
   if (!state.phase2Spawned || state.finalWaveSpawned) return false;
   const heavy = world.freeHeavyPursuer?.boat;
-  if (!heavy?.active || heavy.destroyed) return false;
+  if (!heavy) return false;
+  if (heavy.destroyed || heavy.active === false) return true;
   const maxHull = Math.max(1, Number(heavy.maxHull) || Number(heavy.hull) || 1);
   const damagedHeavy = Number(heavy.hull) <= maxHull * 0.68 || heavy.turretDisabled || heavy.engineDisabled;
   const activeActors = (world.freeHostileActors?.actors || []).filter(actor => actor?.active && !actor.destroyed).length;
@@ -350,7 +351,7 @@ function finalPhaseReady(world, state) {
 export function spawnFinalThreatWave(world, state = ensureState(world)) {
   const director = world.freeThreatDirector;
   const heavy = world.freeHeavyPursuer?.boat;
-  if (!director?.active || director.level < 5 || !heavy?.active || heavy.destroyed || state.finalWaveSpawned) return 0;
+  if (!director?.active || director.level < 5 || !heavy || state.finalWaveSpawned) return 0;
   const present = presentPlayerIndices(world);
   if (!present.length) return 0;
   const boats = spawnReinforcementBoats(world, state, 3, present.length > 1 ? 3 : 2);
@@ -364,7 +365,7 @@ export function spawnFinalThreatWave(world, state = ensureState(world)) {
     "contract-threat-final-wave",
     `Финальная фаза. Резервные катера вошли с двух сторон. Все экипажи высаживаются: в бою ${totalActors} физических бойцов, часть с ножами, часть ведёт нерегулярный огонь.`,
     present,
-    {phase: 3, level: 5, boats: boats.length, actors, count: totalActors, x: heavy.x, y: heavy.y},
+    {phase: 3, level: 5, boats: boats.length, actors, count: totalActors, x: heavy.x, y: heavy.y, heavyDestroyed: Boolean(heavy.destroyed)},
   );
   return boats.length + actors;
 }
