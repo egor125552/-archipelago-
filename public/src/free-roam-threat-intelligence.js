@@ -356,7 +356,7 @@ function applyWaterPursuit(world, dt) {
     const dy = (Number(destination.y) || 0) - (Number(actor.y) || 0);
     const metres = Math.hypot(dx, dy);
     if (metres < 0.001) continue;
-    const speed = actor.elite ? 5.8 : actor.weapon === "knife" ? 5.15 : 4.45;
+    const speed = actor.elite ? 9.8 : actor.weapon === "knife" ? 9 : 7.2;
     actor.heading = Math.atan2(dx, -dy) * 180 / Math.PI;
     actor.x = clamp(actor.x + dx / metres * speed * dt, 5, 415);
     actor.y = clamp(actor.y + dy / metres * speed * dt, 72, 313);
