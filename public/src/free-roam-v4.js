@@ -10,8 +10,14 @@ import {applyReplicatedWorldDelta} from "./free-roam-replication.js?v=45";
 import {createSpeechController} from "./free-roam-speech.js?v=41";
 import {directionFromDelta} from "./free-roam-gesture-model.js";
 import {classifyActionGesture, gestureMetrics} from "./free-roam-action-gestures.js";
+import {contextualSonarAction, targetMenuGestureAction} from "./free-roam-target-gesture-policy.js?v=1";
+import {
+  reconnectDelay,
+  reconnectLobbyMatches,
+  shouldExpireSilentConnection,
+} from "./free-roam-reconnect-policy.js?v=1";
 import {resolveCombatTarget} from "./free-roam-targeting.js?v=35";
-import {createTargetMenu} from "./free-roam-target-menu.js?v=36";
+import {createTargetMenu} from "./free-roam-target-menu.js?v=37";
 import {MERCHANT, SHOP_ITEMS} from "./free-roam-shop.js?v=3";
 import {CONTRACT_BOARD} from "./free-roam-contracts.js?v=3";
 import {cargoDefinition} from "./free-roam-contract-catalog.js?v=1";
@@ -54,6 +60,7 @@ const tapTimers = new Map();
 const lastTapAt = new Map();
 let roomRefreshTimer = 0;
 let heartbeatTimer = 0;
+let connectionWatchdogTimer = 0;
 let reconnectTimer = 0;
 let reconnectAttempt = 0;
 let reconnectInProgress = false;
@@ -73,6 +80,7 @@ let lastInputSent = "";
 let lastStateSequence = 0;
 let receivedStateCount = 0;
 let lastStateAt = 0;
+let lastServerMessageAt = 0;
 let lastRenderAt = -Infinity;
 let inputSequence = 0;
 let networkRttMs = null;
@@ -94,6 +102,10 @@ function shopIsOpen() {
 
 function boardIsOpen() {
   return Boolean(world?.freeContracts?.boardOpen?.[playerIndex]);
+}
+
+function combatTargetingRequired() {
+  return Boolean(world?.freeContracts?.encounterActive || world?.freeScenario?.phase === "pursuit");
 }
 
 function selectedBoardEntry() {
@@ -178,7 +190,10 @@ function stopHeartbeat() {
   heartbeatTimer = 0;
 }
 
-const RECONNECT_DELAYS_MS = Object.freeze([400, 900, 1_600, 2_800, 4_500, 7_000, 10_000]);
+function stopConnectionWatchdog() {
+  clearInterval(connectionWatchdogTimer);
+  connectionWatchdogTimer = 0;
+}
 
 function stopReconnectTimer() {
   clearTimeout(reconnectTimer);
@@ -219,6 +234,36 @@ function startHeartbeat() {
   heartbeatTimer = setInterval(() => send({type: "heartbeat", at: Date.now()}), 4_000);
 }
 
+function expireConnection(connection, reason = "stalled") {
+  if (socket !== connection) return false;
+  socket = null;
+  stopHeartbeat();
+  stopLatencyProbe();
+  stopConnectionWatchdog();
+  try { connection.close(4104, reason); } catch (_) {}
+  if (!leavingGame && world && !$("game").hidden) {
+    reconnectToRoom(reconnectRole || (isHost ? "captain" : "crew"), reconnectRoom || roomId);
+  } else if ($("game").hidden) {
+    resetButtons();
+  }
+  return true;
+}
+
+function startConnectionWatchdog(connection) {
+  stopConnectionWatchdog();
+  lastServerMessageAt = performance.now();
+  connectionWatchdogTimer = setInterval(() => {
+    if (socket !== connection || leavingGame || $("game").hidden) return;
+    if (!shouldExpireSilentConnection({
+      now: performance.now(),
+      lastServerMessageAt,
+      gameVisible: !$("game").hidden,
+    })) return;
+    announce("Сервер перестал присылать состояние мира. Переподключаюсь автоматически.", true);
+    expireConnection(connection, "state-timeout");
+  }, 3_000);
+}
+
 function resetButtons() {
   $("hostButton").disabled = false;
   $("joinButton").disabled = false;
@@ -247,7 +292,7 @@ function reconnectToRoom(role, targetRoom) {
     reconnectLongNoticeSpoken = true;
     announce("Связь пока не восстановлена. Продолжаю попытки без повторных сообщений.", true);
   }
-  const delay = RECONNECT_DELAYS_MS[Math.min(reconnectAttempt, RECONNECT_DELAYS_MS.length - 1)];
+  const delay = reconnectDelay(reconnectAttempt);
   reconnectTimer = setTimeout(() => {
     reconnectTimer = 0;
     if (leavingGame || $("game").hidden) return;
@@ -273,31 +318,35 @@ function connect(role, {reconnecting = false, targetRoom = ""} = {}) {
 
   const connection = new WebSocket(socketUrl(role, targetRoom));
   let lobbyReady = false;
+  let waitingForReconnectState = false;
+  let recreatedReconnectRoom = false;
   let connectionDeadline = setTimeout(() => {
     if (socket === connection && !lobbyReady) {
-      try { connection.close(4103, "connection-timeout"); } catch (_) {}
+      expireConnection(connection, "connection-timeout");
     }
   }, reconnecting ? 6_000 : 10_000);
   socket = connection;
   connection.addEventListener("open", () => {
     if (socket === connection) {
+      startConnectionWatchdog(connection);
       startHeartbeat();
       startLatencyProbe();
     }
   });
   connection.addEventListener("message", event => {
     if (socket !== connection) return;
+    lastServerMessageAt = performance.now();
     let message;
     try { message = JSON.parse(String(event.data)); }
     catch (_) { return; }
 
     if (message.type === "lobby-ready") {
       const actualRole = message.role || requestedRole;
-      const wrongReconnectRoom = reconnecting && targetRoom && (
-        message.room !== targetRoom
-        || actualRole !== requestedRole
-        || message.preferredRoomFound !== true
-      );
+      const wrongReconnectRoom = reconnecting && !reconnectLobbyMatches({
+        targetRoom,
+        requestedRole,
+        message: {...message, role: actualRole},
+      });
       if (wrongReconnectRoom) {
         try { connection.close(4101, "wrong-reconnect-room"); } catch (_) {}
         return;
@@ -313,8 +362,12 @@ function connect(role, {reconnecting = false, targetRoom = ""} = {}) {
       inputSentAt.clear();
       $("roomLabel").textContent = `Свободный мир ${roomId}`;
       if (reconnecting) {
-        resetReconnectState();
-        announce("Связь восстановлена. Ты снова в прежнем мире.", true);
+        waitingForReconnectState = true;
+        recreatedReconnectRoom = message.recreatedRoom === true;
+        connectionDeadline = setTimeout(() => {
+          if (socket === connection && waitingForReconnectState) expireConnection(connection, "state-load-timeout");
+        }, 8_000);
+        announce("Соединение с Cloudflare открыто. Загружаю состояние мира.", true);
       } else {
         announce(message.matched
           ? "Свободный мир найден. Сервер Cloudflare загружает состояние бухты…"
@@ -388,6 +441,18 @@ function connect(role, {reconnecting = false, targetRoom = ""} = {}) {
         if (sequenceNumber <= acknowledged) inputSentAt.delete(sequenceNumber);
       }
       for (const gameEvent of message.events || []) handleGameEvent(gameEvent);
+      if (waitingForReconnectState) {
+        waitingForReconnectState = false;
+        clearTimeout(connectionDeadline);
+        connectionDeadline = 0;
+        resetReconnectState();
+        announce(
+          recreatedReconnectRoom
+            ? "Связь восстановлена. Cloudflare пересоздал недоступный мир автоматически."
+            : "Связь восстановлена. Ты снова в прежнем мире.",
+          true,
+        );
+      }
       if ($("game").hidden) openGame("Ты вошёл в свободную бухту. Мир работает на сервере Cloudflare.");
       else render();
       return;
@@ -401,7 +466,9 @@ function connect(role, {reconnecting = false, targetRoom = ""} = {}) {
 
   connection.addEventListener("error", () => {
     if (socket !== connection) return;
-    if (!reconnecting && !lobbyReady && $("game").hidden) {
+    if (reconnecting || (lobbyReady && world && !$("game").hidden)) {
+      setTimeout(() => expireConnection(connection, "socket-error"), 120);
+    } else if (!lobbyReady && $("game").hidden) {
       announce("Cloudflare Worker не открыл свободный мир. Обнови страницу и попробуй ещё раз.", true);
       resetButtons();
     }
@@ -413,6 +480,7 @@ function connect(role, {reconnecting = false, targetRoom = ""} = {}) {
     socket = null;
     stopHeartbeat();
     stopLatencyProbe();
+    stopConnectionWatchdog();
     if (!leavingGame && world && !$("game").hidden) {
       reconnectToRoom(reconnectRole || (isHost ? "captain" : "crew"), reconnectRoom || roomId);
     } else if ($("game").hidden) {
@@ -426,6 +494,7 @@ function leaveGame() {
   resetReconnectState();
   releaseAllMovement();
   stopHeartbeat();
+  stopConnectionWatchdog();
   stopLatencyProbe();
   speech.cancel();
   audio.stopAll();
@@ -645,7 +714,13 @@ function render() {
   $("targetButton").textContent = targetOpen ? "Отменить выбор цели" : "Выбрать цель";
   $("upButton").textContent = merchantOpen ? "Предыдущий товар" : boardOpen ? "Предыдущий заказ" : targetOpen ? "Предыдущая боевая цель" : "Вперёд";
   $("downButton").textContent = merchantOpen ? "Следующий товар" : boardOpen ? "Следующий заказ" : targetOpen ? "Следующая боевая цель" : "Назад / тормоз";
-  $("sonarButton").textContent = merchantOpen ? "Закрыть магазин" : boardOpen ? "Закрыть доску" : "Сонар: текущая цель";
+  $("sonarButton").textContent = merchantOpen
+    ? "Закрыть магазин"
+    : boardOpen
+      ? "Закрыть доску"
+      : combatTargetingRequired()
+        ? "Боевые цели"
+        : "Сонар: текущая цель";
   for (const id of ["leftButton", "rightButton", "jumpButton", "attackButton", "weaponButton", "targetButton", "guideButton", "pumpButton", "repairButton"]) {
     $(id).disabled = menuOpen;
   }
@@ -869,7 +944,7 @@ function runGestureCommand(command) {
   else if (command === "attack-light") actionPulse("attack", 140);
   else if (command === "attack-heavy") actionPulse("attack", 680);
   else if (command === "weapon") actionPulse("weapon");
-  else if (command === "sonar") actionPulse("sonar");
+  else if (command === "sonar") useSonarOrCombatTargets();
   else if (command === "guide") actionPulse("guide");
   else if (command === "targets") targetMenu.open();
   else if (command === "pump") {
@@ -883,6 +958,16 @@ function runGestureCommand(command) {
   } else if (command === "buttons") {
     setGestureMode(false);
   }
+}
+
+function useSonarOrCombatTargets() {
+  const action = contextualSonarAction({
+    combatActive: combatTargetingRequired(),
+    targetMenuOpen: targetMenu.isOpen(),
+  });
+  if (action === "open-targets") targetMenu.open();
+  else if (action === "report") targetMenu.reportCurrent();
+  else actionPulse("sonar");
 }
 
 function runTapGesture(metrics) {
@@ -941,13 +1026,17 @@ function finishTouch(event, cancelled = false) {
     return;
   }
   if (targetMenu.isOpen()) {
-    if (metrics.pointers === 1 && metrics.movement > 24) {
-      targetMenu.cycle(metrics.dy < 0 ? -1 : 1);
-    } else if (metrics.pointers === 1) {
-      targetMenu.confirm();
-    } else {
-      targetMenu.close(true);
-    }
+    const action = targetMenuGestureAction(metrics);
+    if (action === "previous") targetMenu.cycle(-1);
+    else if (action === "next") targetMenu.cycle(1);
+    else if (action === "report") targetMenu.reportCurrent();
+    else if (action === "confirm") targetMenu.confirm();
+    else if (action === "tap-command") {
+      // Keep the ordinary sonar/status gestures alive while the target menu
+      // is open. One two-finger tap repeats the current target; a double tap
+      // reads the player status without cancelling the selection.
+      runTapGesture(metrics);
+    } else targetMenu.close(true);
     return;
   }
   if (metrics.pointers <= 3 && metrics.movement <= 24 && metrics.duration < 520) runTapGesture(metrics);
@@ -1146,7 +1235,11 @@ $("targetButton").addEventListener("click", () => {
   if (targetMenu.isOpen()) targetMenu.close(true);
   else targetMenu.open();
 });
-$("sonarButton").addEventListener("click", () => actionPulse(boardIsOpen() ? "boardClose" : shopIsOpen() ? "shopClose" : "sonar"));
+$("sonarButton").addEventListener("click", () => {
+  if (boardIsOpen()) actionPulse("boardClose");
+  else if (shopIsOpen()) actionPulse("shopClose");
+  else useSonarOrCombatTargets();
+});
 $("guideButton").addEventListener("click", () => actionPulse("guide"));
 $("pumpButton").addEventListener("click", () => toggleControl("pump"));
 $("repairButton").addEventListener("click", () => toggleControl("repair"));

@@ -122,7 +122,9 @@ test("a stopped boat can be left into open water without changing gesture contro
   assert.equal(boat.driver, null);
 
   const source = await readFile(new URL("../public/src/free-roam-v4.js", import.meta.url), "utf8");
-  assert.match(source, /targetMenu\.cycle\(metrics\.dy < 0 \? -1 : 1\)/);
+  assert.match(source, /targetMenuGestureAction\(metrics\)/);
+  assert.match(source, /action === "previous"\) targetMenu\.cycle\(-1\)/);
+  assert.match(source, /action === "next"\) targetMenu\.cycle\(1\)/);
   assert.match(source, /targetMenu\.confirm\(\)/);
   assert.match(source, /targetMenu\.close\(true\)/);
 });

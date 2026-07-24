@@ -108,6 +108,18 @@ export function createTargetMenu({
     announce(describe(target), true);
   }
 
+  function reportCurrent() {
+    if (!open) return false;
+    const target = refresh();
+    announce(
+      target
+        ? describe(target)
+        : "Живых боевых целей сервер сейчас не видит.",
+      true,
+    );
+    return Boolean(target);
+  }
+
   function confirm() {
     if (!open) return;
     const target = refresh();
@@ -138,6 +150,7 @@ export function createTargetMenu({
     open: openMenu,
     close,
     cycle,
+    reportCurrent,
     confirm,
     isOpen: () => open,
     snapshot: () => ({

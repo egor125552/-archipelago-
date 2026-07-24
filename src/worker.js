@@ -252,6 +252,8 @@ export class Lobby {
     let room = null;
     let preferredRoomFound = false;
     let replacedConnection = false;
+    let recreateRequestedFreeRoom = false;
+    let recreatedRoom = false;
     if (role === "auto") {
       if (requestedRoom) {
         const preferred = this.rooms.get(requestedRoom);
@@ -274,14 +276,20 @@ export class Lobby {
           replacedConnection = this.replaceFreeRoleConnection(room, role);
         }
       }
-      if (!room) room = chooseWaitingRoom(this.rooms, role, mode);
+      if (!room && mode === "free" && requestedRoom) recreateRequestedFreeRoom = true;
+      if (!room && !recreateRequestedFreeRoom) room = chooseWaitingRoom(this.rooms, role, mode);
     }
 
     const created = !room;
     if (!room) {
       let id;
-      const prefix = mode === "free" ? "FREE" : "SEA";
-      do { id = createRoomCode(null, prefix); } while (this.rooms.has(id));
+      if (recreateRequestedFreeRoom) {
+        id = requestedRoom;
+        recreatedRoom = true;
+      } else {
+        const prefix = mode === "free" ? "FREE" : "SEA";
+        do { id = createRoomCode(null, prefix); } while (this.rooms.has(id));
+      }
       room = {
         id,
         mode,
@@ -326,6 +334,7 @@ export class Lobby {
       requestedRoom: requestedRoom || null,
       preferredRoomFound,
       replacedConnection,
+      recreatedRoom,
       replacedStale: Boolean(requestedRoom && !preferredRoomFound && created),
       created,
       mode,

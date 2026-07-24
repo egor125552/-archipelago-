@@ -159,7 +159,7 @@ try {
       const acceptedSession = !targetedReconnect || (
         message.room === requestedRoom
         && message.role === requestedRole
-        && message.preferredRoomFound === true
+        && (message.preferredRoomFound === true || message.recreatedRoom === true)
       );
       if (acceptedSession) saveSession(message.room, message.role);
     });

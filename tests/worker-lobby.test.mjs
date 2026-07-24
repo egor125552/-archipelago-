@@ -265,6 +265,23 @@ test("a reconnect claims the same free-roam room and role", async () => {
   reconnected.webSocket.close();
 });
 
+test("a missing free-roam reconnect room is recreated with the same code", async () => {
+  const lobby = new Lobby({});
+  const replacement = await lobby.fetch(connectRequest("captain", "free", "FREE-LOST"));
+  const messages = collect(replacement.webSocket);
+  await flush();
+
+  const ready = messages.find(message => message.type === "lobby-ready");
+  assert.equal(ready.room, "FREE-LOST");
+  assert.equal(ready.role, "captain");
+  assert.equal(ready.recreatedRoom, true);
+  assert.equal(messages.some(message => message.type === "free-state"), true);
+
+  clearInterval(lobby.freeTickTimer);
+  lobby.freeTickTimer = null;
+  replacement.webSocket.close();
+});
+
 test("an exact reconnect replaces a stale open free-roam socket without losing the world", async () => {
   const lobby = new Lobby({});
   const firstCaptain = await lobby.fetch(connectRequest("captain", "free"));
