@@ -1,0 +1,54 @@
+TAP version 13
+# Subtest: solo threat five opens with fewer combatants than threat four
+ok 1 - solo threat five opens with fewer combatants than threat four
+  ---
+  duration_ms: 5.67882
+  type: 'test'
+  ...
+# Subtest: solo threat four leaves two of three base pursuers as non-attacking reserves
+ok 2 - solo threat four leaves two of three base pursuers as non-attacking reserves
+  ---
+  duration_ms: 2.537559
+  type: 'test'
+  ...
+# Subtest: a player on the roof is shielded by the boat from every enemy bullet system
+ok 3 - a player on the roof is shielded by the boat from every enemy bullet system
+  ---
+  duration_ms: 6.267794
+  type: 'test'
+  ...
+# Subtest: stranded ranged infantry cannot attack a player seated in a boat
+ok 4 - stranded ranged infantry cannot attack a player seated in a boat
+  ---
+  duration_ms: 3.454624
+  type: 'test'
+  ...
+# Subtest: infantry keep dogpiling the survivor after the teammate respawns
+ok 5 - infantry keep dogpiling the survivor after the teammate respawns
+  ---
+  duration_ms: 8.964833
+  type: 'test'
+  ...
+# Subtest: legacy shore gunners keep identical fixed four-shot bursts
+ok 6 - legacy shore gunners keep identical fixed four-shot bursts
+  ---
+  duration_ms: 6.919609
+  type: 'test'
+  ...
+# Subtest: the heavy pursuer receives a second movement pass every game tick
+ok 7 - the heavy pursuer receives a second movement pass every game tick
+  ---
+  duration_ms: 1.2083
+  type: 'test'
+  ...
+1..7
+# tests 7
+# suites 0
+# pass 7
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 128.608689
+
+EXIT_CODE=0
