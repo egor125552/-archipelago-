@@ -1,39 +1,424 @@
-name: Focused combat AI audit
+name: Focused combat AI hotfix
 
 on:
   push:
     branches:
       - audit/combat-ai-v160
-    paths-ignore:
-      - combat-ai-audit-output.txt
+    paths:
+      - .github/workflows/combat-ai-audit-v160.yml
 
 permissions:
   contents: write
 
 jobs:
-  audit:
+  hotfix:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
-      - name: Run only combat AI audit
+      - name: Patch production combat AI from current main
         shell: bash
         run: |
-          set +e
-          node --test tests/combat-ai-audit-v160.test.mjs tests/combat-ai-audit-v160-pass2.test.mjs > combat-ai-audit-output.txt 2>&1
-          code=$?
-          printf '\nEXIT_CODE=%s\n' "$code" >> combat-ai-audit-output.txt
-          exit 0
-      - name: Publish audit output
+          git fetch origin main
+          git checkout -B hotfix/combat-ai-first-five origin/main
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          root = Path('public/src')
+
+          def read(name):
+              return (root / name).read_text()
+
+          def write(name, text):
+              (root / name).write_text(text)
+
+          def replace_exact(text, old, new, label):
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected one match, found {count}')
+              return text.replace(old, new)
+
+          def replace_regex(text, pattern, replacement, label):
+              updated, count = re.subn(pattern, replacement, text, count=1, flags=re.S)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected one match, found {count}')
+              return updated
+
+          # 1) Every live pursuer receives a real target; solo no longer leaves reserves idle.
+          name = 'free-roam-pursuer-squad.js'
+          text = read(name)
+          text = replace_regex(
+              text,
+              r'function reconcileAssignments\(world, state\) \{.*?\n\}\n\nfunction moveEscort',
+              '''function reconcileAssignments(world, state) {
+  const pursuers = activePursuers(world);
+  const livePlayers = presentPlayers(world).map(({index}) => index);
+  if (!livePlayers.length) {
+    state.assignments = {};
+    return;
+  }
+  const next = {};
+  const pressure = new Map(livePlayers.map(index => [index, 0]));
+  for (const pursuer of pursuers) {
+    const previous = state.assignments[pursuer.id];
+    const candidates = [...livePlayers].sort((left, right) => {
+      const pressureDifference = (pressure.get(left) || 0) - (pressure.get(right) || 0);
+      if (pressureDifference) return pressureDifference;
+      if (left === previous) return -1;
+      if (right === previous) return 1;
+      return distance(pursuer, actorForPlayer(world, left)) - distance(pursuer, actorForPlayer(world, right));
+    });
+    const playerIndex = candidates[0];
+    next[pursuer.id] = playerIndex;
+    pressure.set(playerIndex, (pressure.get(playerIndex) || 0) + 1);
+    if (previous === playerIndex) continue;
+    emit(
+      world,
+      "pursuer-target-lock",
+      "Катер-преследователь выбрал тебя. Только его двойной низкий сигнал предупреждает о выстреле по тебе.",
+      [playerIndex],
+      {
+        sourcePlayer: -1,
+        sourcePursuerId: pursuer.id,
+        targetPlayer: playerIndex,
+        x: pursuer.x,
+        y: pursuer.y,
+      },
+    );
+  }
+  state.assignments = next;
+}
+
+function moveEscort''',
+              'pursuer assignment',
+          )
+          text = replace_regex(
+              text,
+              r'function firstProjectileCollision\(world, projectile, x2, y2\) \{.*?\n\}',
+              '''function firstProjectileCollision(world, projectile, x2, y2) {
+  let roofResult = null;
+  for (const {player, index} of presentPlayers(world)) {
+    if (player.mode !== "roof") continue;
+    const time = segmentCircleHit(projectile.x, projectile.y, x2, y2, player, 1.9);
+    if (time == null || (roofResult && time >= roofResult.time)) continue;
+    roofResult = {kind: "player", actor: player, playerIndex: index, time};
+  }
+  if (roofResult) return roofResult;
+  let result = null;
+  for (const boat of world.boats || []) {
+    if (boat.sunk) continue;
+    const time = segmentCircleHit(projectile.x, projectile.y, x2, y2, boat, 6.6);
+    if (time == null || (result && time >= result.time)) continue;
+    result = {kind: "boat", actor: boat, time};
+  }
+  for (const {player, index} of presentPlayers(world)) {
+    if (!["foot", "swim"].includes(player.mode)) continue;
+    const time = segmentCircleHit(projectile.x, projectile.y, x2, y2, player, 1.9);
+    if (time == null || (result && time >= result.time)) continue;
+    result = {kind: "player", actor: player, playerIndex: index, time};
+  }
+  return result;
+}''',
+              'pursuer roof collision',
+          )
+          write(name, text)
+
+          # 2) All boats get at least one physical crew member; threat five starts stronger.
+          name = 'free-roam-hostile-actors.js'
+          text = read(name)
+          text = replace_regex(
+              text,
+              r'export function startHostileActors\(world, level, encounterId, assignments = \{\}\) \{.*?\n\}\n\nexport function addEliteActor',
+              '''export function startHostileActors(world, level, encounterId, assignments = {}) {
+  const state = ensureHostileActors(world);
+  state.level = level;
+  state.active = level >= 3;
+  state.projectiles = [];
+  state.spawnedEncounterId = encounterId;
+  state.actors = [];
+  if (!state.active) return state;
+  let serial = 1;
+  const coop = (world.freeActivities?.presence || []).filter(Boolean).length > 1;
+  const maximumActors = level >= 5 ? (coop ? 10 : 8) : level >= 4 ? 6 : 4;
+  const boats = sourceBoats(world);
+  const seatsByBoat = new Map(boats.map(boat => [
+    boat.id,
+    Math.max(1, Number(boat.crewSeats) || (level >= 4 && ["pursuer-1", "pursuer-2"].includes(boat.id) ? 2 : 1)),
+  ]));
+  const addSeat = (boat, seat) => {
+    if (state.actors.length >= maximumActors) return;
+    const targetPlayer = Number.isInteger(assignments[boat.id]) ? assignments[boat.id] : serial % 2;
+    const weapon = level >= 4 && (serial + seat) % 4 === 0 ? "knife" : (serial + seat) % 2 ? "automatic" : "pistol";
+    const actor = createActor(`hostile-${encounterId}-${serial++}`, boat, weapon, targetPlayer, false);
+    actor.seatOffset = seat ? 2.2 : -2.2;
+    state.actors.push(actor);
+  };
+  for (const boat of boats) addSeat(boat, 0);
+  for (let seat = 1; state.actors.length < maximumActors; seat += 1) {
+    let added = false;
+    for (const boat of boats) {
+      if (seat >= seatsByBoat.get(boat.id) || state.actors.length >= maximumActors) continue;
+      addSeat(boat, seat);
+      added = true;
+    }
+    if (!added) break;
+  }
+  emit(world, "hostile-crews-ready", "Вражеские экипажи существуют физически: они могут высаживаться, плыть и возвращаться в катера.", [0, 1], {level, count: state.actors.length});
+  return state;
+}
+
+export function addEliteActor''',
+              'physical crew distribution',
+          )
+          text = replace_exact(
+              text,
+              '  if (!target || !["foot", "swim", "roof"].includes(target.mode) || state.projectiles.length >= 24) return false;\n  const angle = bearing(actor, target) * Math.PI / 180;',
+              '  if (!target || !["foot", "swim", "roof", "boat"].includes(target.mode) || state.projectiles.length >= 24) return false;\n  const targetPoint = ["boat", "roof"].includes(target.mode) ? world.boats?.[target.activeBoat] || target : target;\n  const angle = bearing(actor, targetPoint) * Math.PI / 180;',
+              'ranged infantry boat target',
+          )
+          text = replace_exact(
+              text,
+              '    let hit = false;\n    for (const boat of world.boats || []) {',
+              '''    let hit = false;
+    for (let index = 0; index < world.players.length; index += 1) {
+      const player = world.players[index];
+      if (!world.freeActivities?.presence?.[index] || !player?.combat?.alive || player.mode !== "roof") continue;
+      if (!segmentHit(projectile, next, player, 1.9)) continue;
+      helpers?.damagePlayer?.(world, index, projectile.weapon === "pistol" ? 5 : 4, {weapon: projectile.weapon, eventType: "gun-hit", sourcePoint: {x: projectile.sourceX, y: projectile.sourceY}});
+      hit = true;
+      break;
+    }
+    if (!hit) for (const boat of world.boats || []) {''',
+              'infantry roof collision',
+          )
+          write(name, text)
+
+          # 3) Threat five keeps the full opening strike group instead of deleting it.
+          name = 'free-roam-enemy-boats.js'
+          text = read(name)
+          text = replace_regex(
+              text,
+              r'  if \(state\.level >= 5\) \{\n    const coop = .*?\n    roles\.splice\(0, roles\.length, .*?\n  \}\n',
+              '',
+              'threat five opening boats',
+          )
+          text = replace_exact(
+              text,
+              '    let hit = false;\n    for (const boat of world.boats || []) {',
+              '''    let hit = false;
+    for (let index = 0; index < world.players.length; index += 1) {
+      const player = world.players[index];
+      if (!world.freeActivities?.presence?.[index] || !player?.combat?.alive || player.mode !== "roof") continue;
+      if (!segmentHit(projectile, next, player, 1.9)) continue;
+      helpers?.damagePlayer?.(world, index, 4, {weapon: "automatic", eventType: "gun-hit", sourcePoint: {x: projectile.sourceX, y: projectile.sourceY}});
+      hit = true;
+      break;
+    }
+    if (!hit) for (const boat of world.boats || []) {''',
+              'enemy boat roof collision',
+          )
+          write(name, text)
+
+          # 4) Roof players are physical targets for legacy shore gunners and the heavy turret.
+          name = 'free-roam-hostile-gunners.js'
+          text = read(name)
+          text = replace_exact(
+              text,
+              '    let hit = false;\n    for (const boat of world.boats || []) {',
+              '''    let hit = false;
+    for (let index = 0; index < (world.players || []).length; index += 1) {
+      const player = world.players[index];
+      if (!world.freeActivities?.presence?.[index] || !player?.combat?.alive || player.mode !== "roof") continue;
+      if (!segmentHit(projectile, next, player, 1.9)) continue;
+      helpers?.damagePlayer?.(world, index, 4, {weapon: "automatic", eventType: "gun-hit", sourcePoint: {x: projectile.sourceX, y: projectile.sourceY}});
+      hit = true;
+      break;
+    }
+    if (!hit) for (const boat of world.boats || []) {''',
+              'legacy gunner roof collision',
+          )
+          write(name, text)
+
+          name = 'free-roam-heavy-pursuer.js'
+          text = read(name)
+          text = replace_exact(
+              text,
+              '    let hit = false;\n    for (const boat of world.boats || []) {',
+              '''    let hit = false;
+    for (let index = 0; index < world.players.length; index += 1) {
+      const player = world.players[index];
+      if (!world.freeActivities?.presence?.[index] || !player?.combat?.alive || player.mode !== "roof") continue;
+      if (!segmentHit(projectile, next, player, 2)) continue;
+      helpers?.damagePlayer?.(world, index, 6, {weapon: "heavy-automatic", eventType: "gun-hit", sourcePoint: {x: projectile.sourceX, y: projectile.sourceY}});
+      hit = true;
+      break;
+    }
+    if (!hit) for (const boat of world.boats || []) {''',
+              'heavy roof collision',
+          )
+          write(name, text)
+
+          # Cache-bust every direct consumer of the changed modules.
+          replacements = {
+              './free-roam-pursuer-squad.js?v=33': './free-roam-pursuer-squad.js?v=34',
+              './free-roam-hostile-gunners.js?v=32': './free-roam-hostile-gunners.js?v=33',
+              './free-roam-enemy-boats.js?v=3': './free-roam-enemy-boats.js?v=4',
+              './free-roam-hostile-actors.js?v=2': './free-roam-hostile-actors.js?v=3',
+              './free-roam-heavy-pursuer.js?v=3': './free-roam-heavy-pursuer.js?v=4',
+          }
+          for path in root.glob('*.js'):
+              source = path.read_text()
+              updated = source
+              for old, new in replacements.items():
+                  updated = updated.replace(old, new)
+              if updated != source:
+                  path.write_text(updated)
+          PY
+      - run: npm ci
+      - name: Run only the five fixed regressions
+        shell: bash
+        run: |
+          cat > tests/__combat-ai-first-five.test.mjs <<'TEST'
+          import test from "node:test";
+          import assert from "node:assert/strict";
+          import {createFreeWorld} from "../public/src/free-roam-core-v6.js";
+          import {startThreatEncounter} from "../public/src/free-roam-threat-director.js";
+          import {activePursuers, updatePursuerSquad} from "../public/src/free-roam-pursuer-squad.js";
+          import {activeEnemyBoats, updateEnemyBoats} from "../public/src/free-roam-enemy-boats.js";
+          import {activeHostileActors, updateHostileActors} from "../public/src/free-roam-hostile-actors.js";
+          import {updateHostileGunners} from "../public/src/free-roam-hostile-gunners.js";
+          import {startHeavyPursuer, updateHeavyPursuer} from "../public/src/free-roam-heavy-pursuer.js";
+
+          function soloWorld() {
+            const world = createFreeWorld();
+            world.freeActivities.presence = [true, false];
+            world.players[0].combat.alive = true;
+            world.events = [];
+            return world;
+          }
+
+          function opening(level) {
+            const world = soloWorld();
+            startThreatEncounter(world, level, `first-five-${level}`);
+            return {world, pursuers: activePursuers(world), boats: activeEnemyBoats(world), actors: activeHostileActors(world)};
+          }
+
+          test("threat five opens stronger than threat four", () => {
+            const four = opening(4);
+            const five = opening(5);
+            assert.equal(five.boats.length, 3);
+            assert.ok(five.actors.length > four.actors.length);
+            assert.ok(five.pursuers.length + five.boats.length + five.actors.length > four.pursuers.length + four.boats.length + four.actors.length);
+          });
+
+          test("every threat-four boat has a physical crew member", () => {
+            const {world, pursuers, boats, actors} = opening(4);
+            const crewed = new Set(actors.map(actor => actor.boatId));
+            for (const boat of [...pursuers, ...boats]) assert.ok(crewed.has(boat.id), `${boat.id} has no crew`);
+          });
+
+          test("all solo pursuers receive the player as an active target", () => {
+            const {world, pursuers} = opening(4);
+            updatePursuerSquad(world, 0.05, {});
+            assert.equal(Object.keys(world.freePursuerSquad.assignments).length, pursuers.length);
+            assert.deepEqual(new Set(Object.values(world.freePursuerSquad.assignments)), new Set([0]));
+          });
+
+          test("stranded ranged infantry fires at the player's boat", () => {
+            const world = soloWorld();
+            const boat = world.boats[world.players[0].activeBoat];
+            Object.assign(world.players[0], {mode: "boat", x: boat.x, y: boat.y});
+            const actor = {
+              id: "stranded-ranged-fixed", boatId: null, targetPlayer: 0,
+              x: boat.x + 20, y: 69, heading: 0, state: "foot", weapon: "automatic",
+              health: 52, maxHealth: 52, active: true, destroyed: false, elite: false,
+              fireCooldown: 0, aimRemaining: 0, burstRemaining: 0, burstCooldown: 0,
+              attackCooldown: 0, windupRemaining: 0, targetLockUntil: 9999,
+              seatOffset: 0, strandedAt: 0, stepCooldown: 0,
+            };
+            world.freeActivities.marauder.active = false;
+            world.freePursuerSquad.activated = false;
+            world.freeEnemyBoats = {active: false, level: 0, boats: [], projectiles: [], nextProjectileId: 1};
+            world.freeHeavyPursuer = {active: false, boat: null, projectiles: [], nextProjectileId: 1};
+            world.freeHostileActors = {active: true, level: 4, actors: [actor], projectiles: [], nextProjectileId: 1};
+            const before = boat.hull;
+            for (let index = 0; index < 240; index += 1) {
+              updateHostileActors(world, 0.05, {});
+              world.time += 0.05;
+            }
+            assert.ok(boat.hull < before || world.events.some(event => event.type === "enemy-bullet-boat-hit"));
+          });
+
+          function roofWorld() {
+            const world = soloWorld();
+            const boat = world.boats[world.players[0].activeBoat];
+            Object.assign(world.players[0], {mode: "roof", x: boat.x, y: boat.y});
+            return {world, boat};
+          }
+
+          function projectile(boat, extra = {}) {
+            return {id: "roof-shot", x: boat.x, y: boat.y + 8, sourceX: boat.x, sourceY: boat.y + 20, vx: 0, vy: -100, ttl: 1, targetPlayer: 0, damage: 4, nearMissAnnounced: [false, false], ...extra};
+          }
+
+          test("roof players take direct fire from every enemy bullet system", () => {
+            const checks = [];
+            {
+              const {world, boat} = roofWorld();
+              world.freePursuerSquad.activated = true;
+              world.freePursuerSquad.escorts = [];
+              world.freeActivities.marauder.active = false;
+              world.freePursuerSquad.projectiles = [projectile(boat, {sourcePursuerId: "pursuer-test"})];
+              let damage = 0;
+              updatePursuerSquad(world, 0.05, {damagePlayer(_w, _i, amount) { damage += amount; }});
+              checks.push(damage);
+            }
+            {
+              const {world, boat} = roofWorld();
+              world.freeEnemyBoats = {active: true, level: 4, boats: [], projectiles: [projectile(boat, {boatId: "enemy-test"})], nextProjectileId: 2};
+              let damage = 0;
+              updateEnemyBoats(world, 0.05, {damagePlayer(_w, _i, amount) { damage += amount; }});
+              checks.push(damage);
+            }
+            {
+              const {world, boat} = roofWorld();
+              world.freeHostileActors = {active: true, level: 4, actors: [], projectiles: [projectile(boat, {actorId: "actor-test", weapon: "automatic"})], nextProjectileId: 2};
+              let damage = 0;
+              updateHostileActors(world, 0.05, {damagePlayer(_w, _i, amount) { damage += amount; }});
+              checks.push(damage);
+            }
+            {
+              const {world, boat} = roofWorld();
+              world.freeHostileGunners = {gunners: [], projectiles: [projectile(boat, {gunnerId: "gunner-test"})], eliminatedPursuers: [], nextProjectileId: 2};
+              let damage = 0;
+              updateHostileGunners(world, 0.05, {damagePlayer(_w, _i, amount) { damage += amount; }});
+              checks.push(damage);
+            }
+            {
+              const {world, boat} = roofWorld();
+              startHeavyPursuer(world, 1, {x: 30, y: 230}, 0);
+              world.freeHeavyPursuer.projectiles = [projectile(boat)];
+              let damage = 0;
+              updateHeavyPursuer(world, 0.05, {damagePlayer(_w, _i, amount) { damage += amount; }});
+              checks.push(damage);
+            }
+            assert.equal(checks.length, 5);
+            for (const damage of checks) assert.ok(damage > 0);
+          });
+          TEST
+          node --test tests/__combat-ai-first-five.test.mjs
+          rm tests/__combat-ai-first-five.test.mjs
+      - name: Publish clean production hotfix branch
         shell: bash
         run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add combat-ai-audit-output.txt
-          git commit -m "Record focused combat AI audit" || exit 0
-          git push
+          git add public/src
+          git commit -m "Fix first five confirmed combat AI exploits"
+          git push --force origin HEAD:hotfix/combat-ai-first-five
