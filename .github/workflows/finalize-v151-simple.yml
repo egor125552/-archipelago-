@@ -1,4 +1,4 @@
-name: Finalize Archipelago 1.5.1 cache versions
+name: Finalize Archipelago 1.5.1 generated files
 
 on:
   pull_request:
@@ -18,7 +18,10 @@ jobs:
         with:
           ref: agent/fix-contract-board-salvage-heavy-shop
           fetch-depth: 0
-      - name: Update cache versions
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Update generated release files
         run: |
           sed -i 's/free-roam-pistol-audio.js?v=1/free-roam-pistol-audio.js?v=2/' public/free-roam.html
           sed -i 's/free-roam-v4.js?v=49/free-roam-v4.js?v=50/' public/free-roam.html
@@ -28,11 +31,12 @@ jobs:
           sed -i 's/free-roam-shop.js?v=1/free-roam-shop.js?v=2/' public/src/free-roam-v4.js
           sed -i 's/free-roam-heavy-pursuer.js?v=1/free-roam-heavy-pursuer.js?v=2/' public/src/free-roam-core-v6.js
           sed -i 's/free-roam-shop.js?v=1/free-roam-shop.js?v=2/' public/src/free-roam-core-v6.js
+          npm install --package-lock-only --ignore-scripts
           if git diff --quiet; then
             exit 0
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add public/free-roam.html public/src/free-roam-v4.js public/src/free-roam-core-v6.js
-          git commit -m 'Bump Archipelago 1.5.1 browser cache versions'
+          git add package-lock.json public/free-roam.html public/src/free-roam-v4.js public/src/free-roam-core-v6.js
+          git commit -m 'Finalize Archipelago 1.5.1 generated files'
           git push origin HEAD:agent/fix-contract-board-salvage-heavy-shop
