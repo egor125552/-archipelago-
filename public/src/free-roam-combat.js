@@ -9,10 +9,11 @@ import {
 import {COMBAT_TUNING} from "./free-roam-combat-tuning.js?v=32";
 import {isCriticalHealth} from "./free-roam-critical-injury.js?v=32";
 import {activePursuers, damageEscort} from "./free-roam-pursuer-squad.js?v=33";
-import {describeCombatTarget, resolveCombatTarget} from "./free-roam-targeting.js?v=33";
+import {describeCombatTarget, resolveCombatTarget} from "./free-roam-targeting.js?v=34";
 import {activeHostileGunners, damageHostileGunner} from "./free-roam-hostile-gunners.js?v=32";
-import {activeEnemyBoats, damageEnemyBoat} from "./free-roam-enemy-boats.js?v=1";
-import {activeHostileActors, damageHostileActor} from "./free-roam-hostile-actors.js?v=1";
+import {activeEnemyBoats, damageEnemyBoat} from "./free-roam-enemy-boats.js?v=2";
+import {activeHostileActors, damageHostileActor} from "./free-roam-hostile-actors.js?v=2";
+import {activeHeavyPursuer, damageHeavyPursuer} from "./free-roam-heavy-pursuer.js?v=1";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));
@@ -112,6 +113,8 @@ function activeTargets(world, attackerIndex) {
   for (const gunner of activeHostileGunners(world)) {
     targets.push({kind: "gunner", index: -1, gunnerId: gunner.id, point: gunner});
   }
+  const heavy = activeHeavyPursuer(world);
+  if (heavy) targets.push({kind: "heavyHull", index: -1, component: "hull", point: heavy});
   for (const actor of activeHostileActors(world)) {
     targets.push({kind: actor.elite ? "elite" : "hostileActor", index: -1, actorId: actor.id, point: actor});
   }
@@ -450,6 +453,14 @@ function fireAutomatic(world, attackerIndex, helpers) {
   if (["hostileActor", "elite"].includes(target.kind)) {
     damageHostileActor(world, target.actorId, 12, attackerIndex, {weapon: "automatic"});
     if (target.point?.destroyed) {
+      combat.lockedTargetId = null;
+      emit(world, "target-cleared", "", [attackerIndex], {sourcePlayer: attackerIndex});
+    }
+    return;
+  }
+  if (["heavyHull", "heavyTurret", "heavyEngine"].includes(target.kind)) {
+    damageHeavyPursuer(world, target.component || "hull", 12, attackerIndex, helpers, {weapon: "automatic"});
+    if (target.point?.destroyed || (target.kind === "heavyTurret" && target.point?.turretDisabled) || (target.kind === "heavyEngine" && target.point?.engineDisabled)) {
       combat.lockedTargetId = null;
       emit(world, "target-cleared", "", [attackerIndex], {sourcePlayer: attackerIndex});
     }

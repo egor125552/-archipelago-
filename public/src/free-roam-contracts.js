@@ -3,7 +3,7 @@
 import {catalogForCategory, cargoDefinition} from "./free-roam-contract-catalog.js";
 import {contractBonusMultiplier, waterExposureTick} from "./free-roam-cargo-traits.js";
 import {updateSalvageExtraction} from "./free-roam-salvage.js";
-import {cancelThreatEncounter, startThreatEncounter, threatEncounterActive, updateThreatDirector} from "./free-roam-threat-director.js?v=1";
+import {cancelThreatEncounter, startThreatEncounter, threatEncounterActive, updateThreatDirector} from "./free-roam-threat-director.js?v=2";
 
 export const CONTRACT_BOARD = Object.freeze({id: "contract-board", kind: "contract-board", label: "доска заказов", x: 194, y: 58});
 export const CONTRACT_BOARD_ACTION_RANGE = 8.5;

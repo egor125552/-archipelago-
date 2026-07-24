@@ -2,8 +2,9 @@
 
 import {activatePursuerSquad, activePursuers, assignedPursuerForPlayer, isPursuerSquadDefeated} from "./free-roam-pursuer-squad.js?v=33";
 import {activeHostileGunners} from "./free-roam-hostile-gunners.js?v=32";
-import {activeEnemyBoats, ensureEnemyBoats, startEnemyBoats} from "./free-roam-enemy-boats.js?v=1";
-import {activeHostileActors, ensureHostileActors, startHostileActors} from "./free-roam-hostile-actors.js?v=1";
+import {activeEnemyBoats, ensureEnemyBoats, startEnemyBoats} from "./free-roam-enemy-boats.js?v=2";
+import {activeHostileActors, addEliteActor, ensureHostileActors, startHostileActors} from "./free-roam-hostile-actors.js?v=2";
+import {activeHeavyPursuer, ensureHeavyPursuer, startHeavyPursuer} from "./free-roam-heavy-pursuer.js?v=1";
 import {awardEncounter} from "./free-roam-encounter-loot.js?v=1";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -57,7 +58,10 @@ function contractCarrier(world) {
 }
 
 function allThreatBoats(world) {
-  return [...activePursuers(world), ...activeEnemyBoats(world)];
+  const boats = [...activePursuers(world), ...activeEnemyBoats(world)];
+  const heavy = activeHeavyPursuer(world);
+  if (heavy) boats.push(heavy);
+  return boats;
 }
 
 function balanceAssignments(world, state) {
@@ -159,8 +163,13 @@ export function startThreatEncounter(world, requestedLevel, contractId = null) {
   }
   activateBasePursuers(world, state.lastPoint);
   startEnemyBoats(world, level, state.lastPoint);
+  if (level >= 5) startHeavyPursuer(world, state.encounterId, state.lastPoint, 0);
   balanceAssignments(world, state);
   if (level >= 3) startHostileActors(world, level, state.encounterId, state.assignments);
+  if (level >= 5) {
+    const heavy = activeHeavyPursuer(world);
+    if (heavy) addEliteActor(world, heavy, heavy.targetPlayer || 0, state.encounterId);
+  }
   if (world.freeContracts) {
     world.freeContracts.encounterActive = true;
     world.freeContracts.encounterLevel = level;
@@ -206,6 +215,11 @@ export function cancelThreatEncounter(world, reason = "cancelled") {
     world.freeHostileGunners.gunners = [];
     world.freeHostileGunners.projectiles = [];
   }
+  if (world.freeHeavyPursuer) {
+    world.freeHeavyPursuer.active = false;
+    if (world.freeHeavyPursuer.boat) world.freeHeavyPursuer.boat.active = false;
+    world.freeHeavyPursuer.projectiles = [];
+  }
   if (world.freeContracts) {
     world.freeContracts.encounterActive = false;
     world.freeContracts.encounterLevel = 0;
@@ -243,6 +257,7 @@ function combatStillActive(world, level) {
   if (activeEnemyBoats(world).length) return true;
   if (level === 2 && activeHostileGunners(world).length) return true;
   if (level >= 3 && activeHostileActors(world).length) return true;
+  if (level >= 5 && activeHeavyPursuer(world)) return true;
   return false;
 }
 
@@ -250,6 +265,7 @@ export function updateThreatDirector(world) {
   const state = ensureThreatDirector(world);
   ensureEnemyBoats(world);
   ensureHostileActors(world);
+  ensureHeavyPursuer(world);
   if (!state.active) return state;
   if (world.time >= state.retargetAt) balanceAssignments(world, state);
   for (const boat of allThreatBoats(world)) {

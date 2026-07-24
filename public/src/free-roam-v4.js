@@ -3,17 +3,17 @@
 import {
   WORLD,
   playerStatus,
-} from "./free-roam-core-v6.js?v=41";
-import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=41";
+} from "./free-roam-core-v6.js?v=42";
+import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=42";
 import {predictLocalWorld, reconcileLocalPrediction} from "./free-roam-client-prediction.js?v=40";
-import {applyReplicatedWorldDelta} from "./free-roam-replication.js?v=43";
+import {applyReplicatedWorldDelta} from "./free-roam-replication.js?v=44";
 import {createSpeechController} from "./free-roam-speech.js?v=41";
 import {directionFromDelta} from "./free-roam-gesture-model.js";
 import {classifyActionGesture, gestureMetrics} from "./free-roam-action-gestures.js";
-import {resolveCombatTarget} from "./free-roam-targeting.js?v=33";
+import {resolveCombatTarget} from "./free-roam-targeting.js?v=34";
 import {createTargetMenu} from "./free-roam-target-menu.js?v=34";
 import {MERCHANT, SHOP_ITEMS} from "./free-roam-shop.js?v=1";
-import {CONTRACT_BOARD} from "./free-roam-contracts.js?v=1";
+import {CONTRACT_BOARD} from "./free-roam-contracts.js?v=2";
 import {cargoDefinition} from "./free-roam-contract-catalog.js?v=1";
 
 const $ = id => document.getElementById(id);

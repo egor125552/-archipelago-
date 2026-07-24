@@ -1,6 +1,6 @@
 "use strict";
 
-import {assignedPlayerForPursuer} from "./free-roam-pursuer-squad.js?v=32";
+import {assignedPlayerForPursuer} from "./free-roam-pursuer-squad.js?v=33";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));

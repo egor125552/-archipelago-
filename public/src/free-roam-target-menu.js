@@ -1,7 +1,7 @@
 "use strict";
 
-import {describeCombatTarget, listCombatTargets} from "./free-roam-targeting.js?v=32";
-import {encounterActive} from "./free-roam-contracts.js?v=1";
+import {describeCombatTarget, listCombatTargets} from "./free-roam-targeting.js?v=34";
+import {encounterActive} from "./free-roam-contracts.js?v=2";
 
 const NAVIGATION_ENTRIES = Object.freeze([
   Object.freeze({id: "navigation-objective", menuKind: "navigation", navigationTargetId: "objective", label: "текущая задача"}),

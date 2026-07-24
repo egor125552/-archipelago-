@@ -14,9 +14,9 @@ import {activeHostileGunners} from "./free-roam-hostile-gunners.js?v=32";
 import {ensureSonarGuide, updateSonarGuide} from "./free-roam-sonar-guide.js?v=35";
 import {merchantNavigationTarget} from "./free-roam-shop.js?v=1";
 import {contractNavigationTarget, encounterActive, ensureContracts} from "./free-roam-contracts.js?v=2";
-import {assignedThreatTarget} from "./free-roam-threat-director.js?v=1";
-import {activeEnemyBoats} from "./free-roam-enemy-boats.js?v=1";
-import {activeHostileActors} from "./free-roam-hostile-actors.js?v=1";
+import {assignedThreatTarget} from "./free-roam-threat-director.js?v=2";
+import {activeEnemyBoats} from "./free-roam-enemy-boats.js?v=2";
+import {activeHostileActors} from "./free-roam-hostile-actors.js?v=2";
 
 const TARGET_LABELS = Object.freeze({
   plates: "ящик с пластинами",

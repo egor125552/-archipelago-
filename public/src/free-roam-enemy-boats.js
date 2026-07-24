@@ -71,7 +71,10 @@ export function startEnemyBoats(world, level, anchor = null) {
   const roles = state.level >= 4
     ? ["rammer", "rammer", "gunboat"]
     : ["interceptor"];
-  if (state.level >= 5) roles.splice(0, roles.length, "gunboat");
+  if (state.level >= 5) {
+    const coop = (world.freeActivities?.presence || []).filter(Boolean).length > 1;
+    roles.splice(0, roles.length, ...(coop ? ["gunboat"] : []));
+  }
   state.boats = roles.map((role, index) => {
     const side = index % 2 ? 1 : -1;
     return createBoat(

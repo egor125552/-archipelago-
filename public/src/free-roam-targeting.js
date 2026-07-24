@@ -2,8 +2,9 @@
 
 import {activePursuers, assignedPursuerForPlayer} from "./free-roam-pursuer-squad.js?v=33";
 import {activeHostileGunners} from "./free-roam-hostile-gunners.js?v=32";
-import {activeEnemyBoats} from "./free-roam-enemy-boats.js?v=1";
-import {activeHostileActors} from "./free-roam-hostile-actors.js?v=1";
+import {activeEnemyBoats} from "./free-roam-enemy-boats.js?v=2";
+import {activeHostileActors} from "./free-roam-hostile-actors.js?v=2";
+import {heavyCombatTargets} from "./free-roam-heavy-pursuer.js?v=1";
 
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));
 
@@ -84,6 +85,7 @@ export function listCombatTargets(world, attackerIndex, maximumRange = Infinity)
       assigned: boat.targetPlayer === attackerIndex,
     });
   }
+  for (const target of heavyCombatTargets(world, attackerIndex)) targets.push(target);
   for (const actor of activeHostileActors(world)) {
     targets.push({
       id: actor.id,
@@ -117,8 +119,11 @@ export function describeCombatTarget(target, position = 0, total = 1) {
     ? `, корпус ${Math.round(target.point?.hull || 0)}`
     : ["enemyBoat"].includes(target.kind)
       ? `, корпус ${Math.round(target.point?.hull || 0)}`
-      : ["gunner", "hostileActor", "elite"].includes(target.kind)
-        ? `, здоровье ${Math.round(target.point?.health || 0)}`
-        : "";
+      : target.kind === "heavyHull" ? `, корпус ${Math.round(target.point?.hull || 0)}`
+        : target.kind === "heavyTurret" ? `, прочность ${Math.round(target.point?.turretHealth || 0)}`
+          : target.kind === "heavyEngine" ? `, прочность ${Math.round(target.point?.engineHealth || 0)}`
+            : ["gunner", "hostileActor", "elite"].includes(target.kind)
+              ? `, здоровье ${Math.round(target.point?.health || 0)}`
+              : "";
   return `Цель ${number} из ${Math.max(1, total)}: ${target.label}, ${metres} метров${hull}.`;
 }
