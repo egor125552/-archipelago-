@@ -1,0 +1,75 @@
+name: Apply threat 1.4.0 release
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.head_ref == 'agent/threat-director-1.4.0'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/threat-director-1.4.0
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Reconstruct and verify release archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat \
+            .release/threat14-head-00.bin \
+            .release/threat14-head-01.bin \
+            .release/threat14-head-02.bin \
+            .release/threat14-head-03.bin \
+            .release/threat14-head-gap.bin \
+            > /tmp/threat14.tar.gz
+          python - <<'PY'
+          from pathlib import Path
+          root = Path('.release')
+          first = bytearray((root / 'threat14-01aa.b64').read_bytes().replace(b'\r', b'').replace(b'\n', b''))
+          first[5089] = ord('o')
+          Path('/tmp/threat14-01aa.fixed').write_bytes(first)
+          second = bytearray((root / 'threat14-01d.b64').read_bytes().replace(b'\r', b'').replace(b'\n', b''))
+          second[6332] = ord('n')
+          Path('/tmp/threat14-01d.fixed').write_bytes(second)
+          PY
+          cat \
+            .release/threat14-01a.b64 \
+            /tmp/threat14-01aa.fixed \
+            .release/threat14-01b.b64 \
+            .release/threat14-01c.b64 \
+            .release/threat14-gap-85.b64 \
+            /tmp/threat14-01d.fixed \
+            .release/threat14-01e.b64 \
+            .release/threat14-01f.b64 \
+            .release/threat14-01g.b64 \
+            | tr -d '\r\n' | base64 -d > /tmp/threat14-tail.bin
+          cat /tmp/threat14-tail.bin >> /tmp/threat14.tar.gz
+          test "$(wc -c < /tmp/threat14.tar.gz)" -eq 89533
+          echo '3759aa41ebb15ce0d21ad467a7196a6ce61ded71cf7dc7a85e8942564395ba46  /tmp/threat14.tar.gz' | sha256sum -c -
+          tar -tzf /tmp/threat14.tar.gz
+      - name: Apply release and test
+        run: |
+          set -euo pipefail
+          tar -xzf /tmp/threat14.tar.gz -C .
+          npm ci
+          npm test
+          git diff --check
+      - name: Commit clean release
+        run: |
+          set -euo pipefail
+          rm -rf .release/threat14-* .github/workflows/apply-threat-1.4.0.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'Add tactical threat levels and physical enemy crews in 1.4.0'
+          git push origin HEAD:agent/threat-director-1.4.0
