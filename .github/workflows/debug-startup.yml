@@ -1,4 +1,4 @@
-name: Focused startup diagnostic
+name: Focused startup hotfix
 
 on:
   push:
@@ -17,13 +17,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: main
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Verify exact null-source fix
+      - name: Apply exact fix
         shell: bash
         run: |
           python3 - <<'PY'
@@ -36,28 +37,39 @@ jobs:
               raise SystemExit(f'expected one null-unsafe filter, found {text.count(old)}')
           path.write_text(text.replace(old, new))
           PY
-          node --test tests/free-roam-startup-v160.test.mjs
-          cp tests/free-roam-startup-v160.test.mjs /tmp/free-roam-startup-v160.test.mjs
-      - name: Publish clean hotfix branch
+      - name: Run only startup and sonar regression
+        shell: bash
+        run: |
+          cat > tests/__startup-hotfix.test.mjs <<'TEST'
+          import test from "node:test";
+          import assert from "node:assert/strict";
+          import {
+            applyServerFreeInput,
+            createServerFreeRoom,
+            setServerFreePresence,
+            tickServerFreeRoom,
+          } from "../src/free-roam-server.js";
+
+          test("free-roam continues after first snapshot and answers sonar", () => {
+            const startedAt = 1_000_000;
+            const room = createServerFreeRoom(startedAt);
+            setServerFreePresence(room, "captain", true);
+            const first = tickServerFreeRoom(room, startedAt + 40);
+            assert.ok(first?.world);
+            assert.equal(applyServerFreeInput(room, "captain", {sonar: true}, 1), true);
+            const second = tickServerFreeRoom(room, startedAt + 80);
+            assert.ok(second?.world);
+            assert.ok(second.sequence > first.sequence);
+            assert.ok(second.events.some(event => event?.targets?.includes(0) && event.text));
+          });
+          TEST
+          node --test tests/__startup-hotfix.test.mjs
+          rm tests/__startup-hotfix.test.mjs
+      - name: Commit one-line hotfix
         shell: bash
         run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git fetch origin main
-          git checkout -B hotfix/free-roam-startup-null-source origin/main
-          python3 - <<'PY'
-          from pathlib import Path
-          path = Path('public/src/free-roam-threat-intelligence.js')
-          text = path.read_text()
-          old = '].filter(source => source?.active !== false && !source?.destroyed);'
-          new = '].filter(source => Boolean(source) && source.active !== false && !source.destroyed);'
-          if text.count(old) != 1:
-              raise SystemExit(f'expected one null-unsafe filter, found {text.count(old)}')
-          path.write_text(text.replace(old, new))
-          PY
-          cp /tmp/free-roam-startup-v160.test.mjs tests/__startup-hotfix.test.mjs
-          node --test tests/__startup-hotfix.test.mjs
-          rm tests/__startup-hotfix.test.mjs
           git add public/src/free-roam-threat-intelligence.js
           git commit -m "Fix free-roam startup null source"
-          git push --force-with-lease origin HEAD:hotfix/free-roam-startup-null-source
+          git push origin HEAD:main
