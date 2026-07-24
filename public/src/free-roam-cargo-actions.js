@@ -5,10 +5,11 @@ import {isFootDockZone} from "./free-roam-cargo-rules.js?v=32";
 const THEFT_NOTICE_DISTANCE = 14;
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));
 
-export function deliverCarriedCargoAtDock(world, playerIndex, crate, rewardPlayer, emit) {
+export function deliverCarriedCargoAtDock(world, playerIndex, crate, rewardPlayer, emit, canDeliver = () => true) {
   const player = world.players[playerIndex];
   const atDock = isFootDockZone(player);
   if (!atDock || !crate) return false;
+  if (!canDeliver(world, crate)) return false;
   const boat = world.boats.find(candidate => candidate.owner === playerIndex) || world.boats[0];
   const effect = rewardPlayer(world, playerIndex, boat, crate);
   player.combat.carriedCrate = null;

@@ -5,7 +5,7 @@ import {relativeMovementPan} from "./free-roam-audio-v3.js?v=38";
 import {injuryLowpassFrequency} from "./free-roam-combat-recovery.js?v=32";
 import {COMBAT_TUNING} from "./free-roam-combat-tuning.js?v=32";
 import {MERCHANT, MERCHANT_AUDIO_RANGE} from "./free-roam-shop.js?v=1";
-import {CONTRACT_BOARD, CONTRACT_BOARD_AUDIO_RANGE, contractsUnlocked} from "./free-roam-contracts.js?v=1";
+import {CONTRACT_BOARD, CONTRACT_BOARD_AUDIO_RANGE, contractsUnlocked} from "./free-roam-contracts.js?v=2";
 
 const ROOT = "/assets/audio/free-roam-v25/";
 const COMBAT_SOUNDS = Object.freeze({
@@ -220,7 +220,10 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
     const selectedEscort = world?.freePursuerSquad?.escorts?.find(escort => (
       escort.id === targetId && escort.active && !escort.destroyed
     ));
-    const marauder = selectedEscort || primary;
+    const selectedEnemyBoat = world?.freeEnemyBoats?.boats?.find(boat => (
+      boat.id === targetId && boat.active && !boat.destroyed
+    ));
+    const marauder = selectedEnemyBoat || selectedEscort || primary;
     if (!this.ctx || !this.listenerPoint || !marauder?.active || marauder.destroyed) {
       if (this.ctx && this.marauderEngine) this.marauderEngine.gain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.18);
       return;
@@ -309,6 +312,19 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
         });
         return;
       }
+      case "hostile-footstep": {
+        const name = this.nextFootstep();
+        if (name) this.play(name, {pan: spatial.pan, gain: (event.elite ? 0.34 : 0.24) * spatial.gain, rate: event.elite ? 1.08 : 0.98, lowpass: 7200});
+        return;
+      }
+      case "hostile-swim-step":
+        this.play("swimImpactV25", {pan: spatial.pan, gain: 0.28 * spatial.gain, rate: event.elite ? 1.08 : 0.94, lowpass: 5200});
+        return;
+      case "enemy-knife-windup":
+      case "elite-knife-windup":
+        this.play("knifeDraw", {pan: spatial.pan, gain: (event.type === "elite-knife-windup" ? 0.68 : 0.46) * spatial.gain, rate: event.type === "elite-knife-windup" ? 0.82 : 1});
+        this.playSynthPip({pan: spatial.pan, frequency: event.type === "elite-knife-windup" ? 145 : 220, gain: 0.13, duration: 0.16, delay: 0.08});
+        return;
       case "pursuer-aim": {
         const aimSpatial = this.eventPanAndGain(event, 520);
         const warningGain = 0.085 + aimSpatial.gain * 0.075;

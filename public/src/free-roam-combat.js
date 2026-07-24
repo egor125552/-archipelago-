@@ -8,9 +8,11 @@ import {
 } from "./free-roam-combat-recovery.js?v=32";
 import {COMBAT_TUNING} from "./free-roam-combat-tuning.js?v=32";
 import {isCriticalHealth} from "./free-roam-critical-injury.js?v=32";
-import {activePursuers, damageEscort} from "./free-roam-pursuer-squad.js?v=32";
-import {describeCombatTarget, resolveCombatTarget} from "./free-roam-targeting.js?v=32";
-import {damageHostileGunner} from "./free-roam-hostile-gunners.js?v=32";
+import {activePursuers, damageEscort} from "./free-roam-pursuer-squad.js?v=33";
+import {describeCombatTarget, resolveCombatTarget} from "./free-roam-targeting.js?v=33";
+import {activeHostileGunners, damageHostileGunner} from "./free-roam-hostile-gunners.js?v=32";
+import {activeEnemyBoats, damageEnemyBoat} from "./free-roam-enemy-boats.js?v=1";
+import {activeHostileActors, damageHostileActor} from "./free-roam-hostile-actors.js?v=1";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));
@@ -104,6 +106,15 @@ function activeTargets(world, attackerIndex) {
       point: pursuer,
     });
   }
+  for (const boat of activeEnemyBoats(world)) {
+    targets.push({kind: "enemyBoat", index: -1, enemyBoatId: boat.id, point: boat});
+  }
+  for (const gunner of activeHostileGunners(world)) {
+    targets.push({kind: "gunner", index: -1, gunnerId: gunner.id, point: gunner});
+  }
+  for (const actor of activeHostileActors(world)) {
+    targets.push({kind: actor.elite ? "elite" : "hostileActor", index: -1, actorId: actor.id, point: actor});
+  }
   return targets;
 }
 
@@ -112,7 +123,7 @@ function nearestTarget(world, attackerIndex, range, cone, includeMarauder = true
   let result = null;
   let best = range;
   for (const target of activeTargets(world, attackerIndex)) {
-    if (!includeMarauder && target.kind !== "player") continue;
+    if (!includeMarauder && !["player", "gunner", "hostileActor", "elite"].includes(target.kind)) continue;
     const metres = distance(attacker, target.point);
     if (metres > best || !inAttackCone(attacker, target.point, range, cone)) continue;
     best = metres;
@@ -308,6 +319,14 @@ function performMelee(world, attackerIndex, heavyRequested, helpers) {
     return;
   }
   const damage = weapon === "knife" ? (heavy ? 38 : 24) : (heavy ? 20 : 9);
+  if (target.kind === "gunner") {
+    damageHostileGunner(world, target.gunnerId, damage, attackerIndex);
+    return;
+  }
+  if (["hostileActor", "elite"].includes(target.kind)) {
+    damageHostileActor(world, target.actorId, damage, attackerIndex, {weapon, heavy});
+    return;
+  }
   damagePlayer(world, target.index, damage, attackerIndex, {
     weapon,
     heavy,
@@ -330,6 +349,7 @@ function destroyMarauder(world, attackerIndex, helpers) {
     y: marauder.y,
   });
   helpers?.spawnRareCrate?.(world, marauder.x, marauder.y, "valuable", "pursuer");
+  helpers?.onEnemyBoatDestroyed?.(world, marauder, attackerIndex);
 }
 
 function fireAutomatic(world, attackerIndex, helpers) {
@@ -421,6 +441,22 @@ function fireAutomatic(world, attackerIndex, helpers) {
   }
   if (target.kind === "gunner") {
     damageHostileGunner(world, target.gunnerId, 12, attackerIndex);
+    if (target.point?.destroyed) {
+      combat.lockedTargetId = null;
+      emit(world, "target-cleared", "", [attackerIndex], {sourcePlayer: attackerIndex});
+    }
+    return;
+  }
+  if (["hostileActor", "elite"].includes(target.kind)) {
+    damageHostileActor(world, target.actorId, 12, attackerIndex, {weapon: "automatic"});
+    if (target.point?.destroyed) {
+      combat.lockedTargetId = null;
+      emit(world, "target-cleared", "", [attackerIndex], {sourcePlayer: attackerIndex});
+    }
+    return;
+  }
+  if (target.kind === "enemyBoat") {
+    damageEnemyBoat(world, target.enemyBoatId, 12, attackerIndex, helpers, {weapon: "automatic"});
     if (target.point?.destroyed) {
       combat.lockedTargetId = null;
       emit(world, "target-cleared", "", [attackerIndex], {sourcePlayer: attackerIndex});

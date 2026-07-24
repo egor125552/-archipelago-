@@ -1,14 +1,14 @@
 "use strict";
 
 import {placeJoiningPlayer} from "./free-roam-player-spawn.js";
-import {deliverCarriedCargoAtDock, updateCargoActionPrompts} from "./free-roam-cargo-actions.js?v=38";
+import {deliverCarriedCargoAtDock, updateCargoActionPrompts} from "./free-roam-cargo-actions.js?v=39";
 import {
   CARGO_ACTION_RANGE,
   LANDING_MAX_X,
   LANDING_MIN_X,
   isBoatDockZone,
 } from "./free-roam-cargo-rules.js?v=32";
-import {updateFootDockDelivery} from "./free-roam-foot-dock.js?v=38";
+import {updateFootDockDelivery} from "./free-roam-foot-dock.js?v=39";
 import {grantWeaponFromCrate} from "./free-roam-weapon-crates.js?v=32";
 import {
   ensureShopState,
@@ -17,10 +17,11 @@ import {
 } from "./free-roam-shop.js?v=1";
 import {
   completeContractDelivery,
+  contractDeliveryBlocked,
   ensureContracts,
   handleContractBoardAction,
   notifyContractCargoStowed,
-} from "./free-roam-contracts.js?v=1";
+} from "./free-roam-contracts.js?v=2";
 import {cargoSlotCost} from "./free-roam-cargo-traits.js?v=1";
 
 const WORLD_CRATES = Object.freeze([
@@ -296,7 +297,7 @@ export function handleActivityAction(world, playerIndex) {
   const carriedId = player.combat.carriedCrate;
   if (carriedId) {
     const crate = state.crates.find(candidate => candidate.id === carriedId);
-    if (deliverCarriedCargoAtDock(world, playerIndex, crate, rewardPlayer, emit)) return true;
+    if (deliverCarriedCargoAtDock(world, playerIndex, crate, rewardPlayer, emit, (targetWorld, targetCrate) => !contractDeliveryBlocked(targetWorld, targetCrate))) return true;
     const otherIndex = 1 - playerIndex;
     const other = world.players[otherIndex];
     if (crate && state.presence[otherIndex] && other?.combat?.alive && !other.combat.carriedCrate && distance(player, other) <= 4.5) {
@@ -403,9 +404,15 @@ function deliverBoatCargo(world, boat) {
   const playerIndex = state.presence[boat.driver] ? boat.driver : boat.owner;
   const delivered = [];
   const effects = [];
+  const remaining = [];
   for (const id of boat.cargo.splice(0)) {
     const crate = state.crates.find(candidate => candidate.id === id);
     if (!crate) continue;
+    if (contractDeliveryBlocked(world, crate)) {
+      remaining.push(id);
+      emit(world, "contract-delivery-blocked", "Сначала устрани боевую угрозу. Опасный груз остаётся на лодке.", [playerIndex], {contractId: crate.contractId, crateId: crate.id, x: boat.x, y: boat.y});
+      continue;
+    }
     effects.push(rewardPlayer(world, playerIndex, boat, crate));
     crate.state = crate.singleUse ? "consumed" : "delivered";
     crate.carriedBy = null;
@@ -413,6 +420,7 @@ function deliverBoatCargo(world, boat) {
     crate.respawnAt = world.time + 12;
     delivered.push(crate);
   }
+  boat.cargo.push(...remaining);
   if (!delivered.length) return;
   emit(world, "cargo-delivered", `Груз доставлен: ${delivered.length}. ${effects.join(" ")}`, [0, 1], {
     sourcePlayer: playerIndex,
@@ -486,7 +494,7 @@ export function updateActivities(world, dt) {
   ensureActivities(world);
   updateCrates(world);
   for (const boat of world.boats || []) updateBoatLoad(world, boat, dt);
-  updateFootDockDelivery(world, dt, rewardPlayer, emit);
+  updateFootDockDelivery(world, dt, rewardPlayer, emit, (targetWorld, targetCrate) => !contractDeliveryBlocked(targetWorld, targetCrate));
   updateCargoActionPrompts(world, emit);
 }
 

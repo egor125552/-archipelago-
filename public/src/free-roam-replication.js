@@ -105,6 +105,12 @@ const PURSUER_FIELDS = Object.freeze([
 const GUNNER_FIELDS = Object.freeze([
   "id", "pursuerId", "targetPlayer", "x", "y", "heading", "health", "active", "destroyed", "returning",
 ]);
+const ENEMY_BOAT_FIELDS = Object.freeze([
+  "id", "role", "x", "y", "heading", "speed", "hull", "maxHull", "active", "destroyed", "targetPlayer", "crewSeats",
+]);
+const HOSTILE_ACTOR_FIELDS = Object.freeze([
+  "id", "boatId", "targetPlayer", "x", "y", "heading", "state", "weapon", "health", "maxHealth", "active", "destroyed", "elite",
+]);
 const CRATE_FIELDS = Object.freeze([
   "id", "kind", "label", "rarity", "weight", "slots", "traits", "x", "y", "state", "carriedBy", "stowedBoat", "source",
   "contractId", "contractDefinitionId", "contractCategory", "contractDamage", "waterExposure",
@@ -119,6 +125,9 @@ export function replicatedFreeWorld(world) {
   const scenario = world?.freeScenario || {};
   const pursuers = world?.freePursuerSquad || {};
   const gunners = world?.freeHostileGunners || {};
+  const enemyBoats = world?.freeEnemyBoats || {};
+  const hostileActors = world?.freeHostileActors || {};
+  const threat = world?.freeThreatDirector || {};
   return compact({
     version: world?.version,
     time: world?.time,
@@ -166,5 +175,20 @@ export function replicatedFreeWorld(world) {
       gunners: (gunners.gunners || []).map(gunner => select(gunner, GUNNER_FIELDS)),
       projectiles: (gunners.projectiles || []).map(projectile => select(projectile, ["id", "x", "y"])),
     },
+    freeEnemyBoats: enemyBoats.active || (enemyBoats.boats || []).length ? {
+      active: enemyBoats.active,
+      level: enemyBoats.level,
+      boats: (enemyBoats.boats || []).map(boat => select(boat, ENEMY_BOAT_FIELDS)),
+      projectiles: (enemyBoats.projectiles || []).map(projectile => select(projectile, ["id", "x", "y"])),
+    } : null,
+    freeHostileActors: hostileActors.active || (hostileActors.actors || []).length ? {
+      active: hostileActors.active,
+      level: hostileActors.level,
+      actors: (hostileActors.actors || []).map(actor => select(actor, HOSTILE_ACTOR_FIELDS)),
+      projectiles: (hostileActors.projectiles || []).map(projectile => select(projectile, ["id", "x", "y"])),
+    } : null,
+    freeThreatDirector: threat.active || threat.level ? select(threat, [
+      "active", "level", "encounterId", "contractId", "assignments", "graceUntil", "rewardIssued", "cleared",
+    ]) : null,
   });
 }

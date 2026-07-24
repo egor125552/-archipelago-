@@ -404,8 +404,12 @@ function updateWeapon(world, state, shooter, weapon, dt, playerIndex) {
 }
 
 function hasDismountedGunner(world, pursuerId) {
-  return (world.freeHostileGunners?.gunners || []).some(gunner =>
+  const legacy = (world.freeHostileGunners?.gunners || []).some(gunner =>
     gunner.pursuerId === pursuerId && gunner.active && !gunner.destroyed
+  );
+  if (legacy) return true;
+  return (world.freeHostileActors?.actors || []).some(actor =>
+    actor.boatId === pursuerId && actor.active && !actor.destroyed && actor.state !== "aboard"
   );
 }
 
@@ -572,6 +576,7 @@ export function damageEscort(world, pursuerId, amount, sourcePlayer, helpers = {
     const kind = escort.id === "pursuer-2" ? "ammo" : "plates";
     helpers.spawnRareCrate(world, escort.x, escort.y, kind, "pursuer");
   }
+  helpers?.onEnemyBoatDestroyed?.(world, escort, sourcePlayer);
   return true;
 }
 

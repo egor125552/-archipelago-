@@ -1,10 +1,12 @@
 "use strict";
 
-import * as base from "./free-roam-combat.js?v=32";
+import * as base from "./free-roam-combat.js?v=33";
 import {COMBAT_TUNING} from "./free-roam-combat-tuning.js?v=33";
 import {damageHostileGunner} from "./free-roam-hostile-gunners.js?v=32";
-import {damageEscort} from "./free-roam-pursuer-squad.js?v=32";
-import {listCombatTargets, resolveCombatTarget} from "./free-roam-targeting.js?v=32";
+import {damageEscort} from "./free-roam-pursuer-squad.js?v=33";
+import {damageEnemyBoat} from "./free-roam-enemy-boats.js?v=1";
+import {damageHostileActor} from "./free-roam-hostile-actors.js?v=1";
+import {listCombatTargets, resolveCombatTarget} from "./free-roam-targeting.js?v=33";
 
 export const PISTOL_START_AMMO = 36;
 
@@ -110,6 +112,7 @@ function destroyMarauder(world, attackerIndex, helpers) {
     y: marauder.y,
   });
   helpers?.spawnRareCrate?.(world, marauder.x, marauder.y, "valuable", "pursuer");
+  helpers?.onEnemyBoatDestroyed?.(world, marauder, attackerIndex);
 }
 
 function firePistol(world, attackerIndex, helpers) {
@@ -198,6 +201,24 @@ function firePistol(world, attackerIndex, helpers) {
 
   if (target.kind === "gunner") {
     damageHostileGunner(world, target.gunnerId, COMBAT_TUNING.pistolDamage, attackerIndex);
+    if (target.point?.destroyed) {
+      combat.lockedTargetId = null;
+      emit(world, "target-cleared", "", [attackerIndex], {sourcePlayer: attackerIndex});
+    }
+    return;
+  }
+
+  if (["hostileActor", "elite"].includes(target.kind)) {
+    damageHostileActor(world, target.actorId, COMBAT_TUNING.pistolDamage, attackerIndex, {weapon: "pistol"});
+    if (target.point?.destroyed) {
+      combat.lockedTargetId = null;
+      emit(world, "target-cleared", "", [attackerIndex], {sourcePlayer: attackerIndex});
+    }
+    return;
+  }
+
+  if (target.kind === "enemyBoat") {
+    damageEnemyBoat(world, target.enemyBoatId, COMBAT_TUNING.pistolBoatDamage, attackerIndex, helpers, {weapon: "pistol"});
     if (target.point?.destroyed) {
       combat.lockedTargetId = null;
       emit(world, "target-cleared", "", [attackerIndex], {sourcePlayer: attackerIndex});
