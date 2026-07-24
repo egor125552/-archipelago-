@@ -8,7 +8,7 @@ import {
   stepFreeWorld,
 } from "../public/src/free-roam-core-v6.js";
 import {applyCombatDamage} from "../public/src/free-roam-combat-v2.js?v=5";
-import {applyCombatAiHotfixV161} from "../public/src/free-roam-combat-ai-hotfix-v161.js?v=1";
+import {applyCombatAiHotfixV162} from "../public/src/free-roam-combat-ai-hotfix-v162.js?v=1";
 import {replicatedFreeWorld} from "../public/src/free-roam-replication.js";
 import {reserveUnconnectedBoats} from "../public/src/free-roam-reserve-boats.js";
 
@@ -37,7 +37,7 @@ function normalizeInput(input) {
 }
 
 function applyAuthoritativeCombatHotfix(world, dt) {
-  applyCombatAiHotfixV161(world, dt, {
+  applyCombatAiHotfixV162(world, dt, {
     damagePlayer(targetWorld, targetIndex, amount, details) {
       return applyCombatDamage(targetWorld, targetIndex, amount, -1, details, {});
     },
