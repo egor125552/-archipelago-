@@ -266,11 +266,12 @@ export function heavyCombatTargets(world, attackerIndex) {
   const boat = activeHeavyPursuer(world);
   if (!boat) return [];
   const assigned = boat.targetPlayer === attackerIndex;
-  return [
+  const targets = [
     {id: "heavy-pursuer", kind: "heavyHull", component: "hull", point: boat, label: "корпус тяжёлого катера", assigned},
-    {id: "heavy-turret", kind: "heavyTurret", component: "turret", point: boat, label: boat.turretDisabled ? "выведенная из строя тяжёлая установка" : "тяжёлая оружейная установка", assigned},
-    {id: "heavy-engine", kind: "heavyEngine", component: "engine", point: boat, label: boat.engineDisabled ? "повреждённый двигатель тяжёлого катера" : "двигатель тяжёлого катера", assigned},
   ];
+  if (!boat.turretDisabled && boat.turretHealth > 0) targets.push({id: "heavy-turret", kind: "heavyTurret", component: "turret", point: boat, label: "тяжёлая оружейная установка", assigned});
+  if (!boat.engineDisabled && boat.engineHealth > 0) targets.push({id: "heavy-engine", kind: "heavyEngine", component: "engine", point: boat, label: "двигатель тяжёлого катера", assigned});
+  return targets;
 }
 
 export function updateHeavyPursuer(world, dt, helpers = {}) {

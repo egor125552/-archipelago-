@@ -14,7 +14,7 @@ function occurrences(source, fragment) {
 }
 
 test("knife sonar is offered before pursuit, not during it", () => {
-  assert.match(coreSource, /free-roam-scenario\.js\?v=43/);
+  assert.match(coreSource, /free-roam-scenario\.js\?v=44/);
   assert.doesNotMatch(coreSource, /free-roam-scenario-v2/);
   assert.match(scenarioSource, /ARM_TARGET_MODES = Object\.freeze\(\["automatic", "knife"\]\)/);
   assert.match(scenarioSource, /До начала погони можно забрать нож/);

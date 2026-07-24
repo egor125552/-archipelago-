@@ -9,11 +9,11 @@ import {
 import {COMBAT_TUNING} from "./free-roam-combat-tuning.js?v=32";
 import {isCriticalHealth} from "./free-roam-critical-injury.js?v=32";
 import {activePursuers, damageEscort} from "./free-roam-pursuer-squad.js?v=33";
-import {describeCombatTarget, resolveCombatTarget} from "./free-roam-targeting.js?v=34";
+import {describeCombatTarget, resolveCombatTarget} from "./free-roam-targeting.js?v=35";
 import {activeHostileGunners, damageHostileGunner} from "./free-roam-hostile-gunners.js?v=32";
-import {activeEnemyBoats, damageEnemyBoat} from "./free-roam-enemy-boats.js?v=2";
+import {activeEnemyBoats, damageEnemyBoat} from "./free-roam-enemy-boats.js?v=3";
 import {activeHostileActors, damageHostileActor} from "./free-roam-hostile-actors.js?v=2";
-import {activeHeavyPursuer, damageHeavyPursuer} from "./free-roam-heavy-pursuer.js?v=1";
+import {activeHeavyPursuer, damageHeavyPursuer} from "./free-roam-heavy-pursuer.js?v=3";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));

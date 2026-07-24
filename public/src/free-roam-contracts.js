@@ -2,8 +2,7 @@
 
 import {catalogForCategory, cargoDefinition} from "./free-roam-contract-catalog.js";
 import {contractBonusMultiplier, waterExposureTick} from "./free-roam-cargo-traits.js";
-import {updateSalvageExtraction} from "./free-roam-salvage.js";
-import {cancelThreatEncounter, startThreatEncounter, threatEncounterActive, updateThreatDirector} from "./free-roam-threat-director.js?v=2";
+import {cancelThreatEncounter, startThreatEncounter, threatEncounterActive, updateThreatDirector} from "./free-roam-threat-director.js?v=3";
 
 export const CONTRACT_BOARD = Object.freeze({id: "contract-board", kind: "contract-board", label: "доска заказов", x: 194, y: 58});
 export const CONTRACT_BOARD_ACTION_RANGE = 8.5;
@@ -116,6 +115,12 @@ export function ensureContracts(world) {
   state.decks ||= {};
   state.history ||= {};
   for (const category of CATEGORIES) ensureDeck(state, category);
+  if (state.activeContract) {
+    if (typeof state.activeContract.threatTriggered !== "boolean") {
+      state.activeContract.threatTriggered = Boolean(state.encounterActive || state.encounterDefeated);
+    }
+    if (!("threatTriggeredAt" in state.activeContract)) state.activeContract.threatTriggeredAt = null;
+  }
   return state;
 }
 
@@ -247,6 +252,8 @@ function acceptOffer(world, playerIndex, offer) {
     crateId: null,
     rewardIssued: false,
     abandonConfirmUntil: 0,
+    threatTriggered: false,
+    threatTriggeredAt: null,
   };
   state.encounterActive = false;
   state.encounterLevel = 0;
@@ -334,8 +341,10 @@ export function completeContractDelivery(world, playerIndex, boat, crate) {
 }
 
 function activateContractPursuit(world, active) {
-  if (!active || threatEncounterActive(world)) return;
+  if (!active || active.threatTriggered || threatEncounterActive(world)) return;
   const level = Math.max(1, Math.min(5, Math.floor(Number(active.threat) || 1)));
+  active.threatTriggered = true;
+  active.threatTriggeredAt = world.time;
   startThreatEncounter(world, level, active.id);
   if (level <= 1) {
     active.phase = "transport";
@@ -350,12 +359,21 @@ function activateContractPursuit(world, active) {
   state.encounterLevel = level;
 }
 
+export function notifyContractCargoTaken(world, crate) {
+  const state = ensureContracts(world);
+  const active = state.activeContract;
+  if (!active || crate?.contractId !== active.id || active.category !== "dangerous") return false;
+  if (active.threatTriggered || state.encounterDefeated) return false;
+  activateContractPursuit(world, active);
+  return true;
+}
+
 export function notifyContractCargoStowed(world, crate) {
   const state = ensureContracts(world);
   const active = state.activeContract;
   if (!active || crate?.contractId !== active.id) return;
-  active.phase = "transport";
-  if (active.category === "dangerous" && !state.encounterActive && !state.encounterDefeated) activateContractPursuit(world, active);
+  notifyContractCargoTaken(world, crate);
+  if (!state.encounterActive) active.phase = "transport";
 }
 
 function rising(input, previous, key) {
@@ -423,7 +441,6 @@ export function updateContracts(world, dt) {
   const state = ensureContracts(world);
   updateContractBoard(world);
   suppressGameplayWhileContractBoard(world);
-  updateSalvageExtraction(world, dt, emit);
   const active = state.activeContract;
   if (active?.crateId) {
     const crate = world.freeActivities?.crates?.find(candidate => candidate.id === active.crateId);

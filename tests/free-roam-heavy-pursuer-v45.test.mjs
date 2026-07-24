@@ -28,6 +28,8 @@ function worldForFive(coop = true) {
     world.boats[index].y = 170;
   }
   startThreatEncounter(world, 5, "red-contract");
+  world.time = world.freeThreatDirector.heavyStartsAt;
+  updateThreatDirector(world);
   return world;
 }
 
@@ -84,6 +86,7 @@ test("pistol cannot pierce heavy armour while automatic fire disables systems", 
   damageHeavyPursuer(world, "engine", 180, 0, {}, {weapon: "automatic"});
   assert.equal(heavy.turretDisabled, true);
   assert.equal(heavy.engineDisabled, true);
+  assert.deepEqual(heavyCombatTargets(world, 0).map(target => target.id), ["heavy-pursuer"]);
 });
 
 test("heavy gun announces a windup before producing a long finite barrage", () => {

@@ -2,9 +2,9 @@
 
 import {activePursuers, assignedPursuerForPlayer} from "./free-roam-pursuer-squad.js?v=33";
 import {activeHostileGunners} from "./free-roam-hostile-gunners.js?v=32";
-import {activeEnemyBoats} from "./free-roam-enemy-boats.js?v=2";
+import {activeEnemyBoats} from "./free-roam-enemy-boats.js?v=3";
 import {activeHostileActors} from "./free-roam-hostile-actors.js?v=2";
-import {heavyCombatTargets} from "./free-roam-heavy-pursuer.js?v=1";
+import {heavyCombatTargets} from "./free-roam-heavy-pursuer.js?v=3";
 
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));
 

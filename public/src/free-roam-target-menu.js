@@ -1,7 +1,7 @@
 "use strict";
 
-import {describeCombatTarget, listCombatTargets} from "./free-roam-targeting.js?v=34";
-import {encounterActive} from "./free-roam-contracts.js?v=2";
+import {describeCombatTarget, listCombatTargets} from "./free-roam-targeting.js?v=35";
+import {encounterActive} from "./free-roam-contracts.js?v=3";
 
 const NAVIGATION_ENTRIES = Object.freeze([
   Object.freeze({id: "navigation-objective", menuKind: "navigation", navigationTargetId: "objective", label: "текущая задача"}),
@@ -29,7 +29,7 @@ export function createTargetMenu({
     const world = getWorld();
     const playerIndex = getPlayerIndex();
     const combat = world?.players?.[playerIndex]?.combat;
-    const fighting = encounterActive(world);
+    const fighting = encounterActive(world) || world?.freeScenario?.phase === "pursuit";
     const rangedReady = Boolean(
       (combat?.weapons?.pistol && combat.pistolAmmo > 0)
       || (combat?.weapons?.automatic && combat.ammo > 0)
@@ -38,7 +38,9 @@ export function createTargetMenu({
     // the selected gun is empty. The player may still switch weapon, ram, use
     // a knife, or simply inspect which physical enemy remains alive.
     const combatTargets = (fighting || rangedReady)
-      ? listCombatTargets(world, playerIndex, 420).map(target => ({...target, menuKind: "combat"}))
+      ? listCombatTargets(world, playerIndex, 420)
+        .filter(target => !fighting || !["player", "boat"].includes(target.kind))
+        .map(target => ({...target, menuKind: "combat"}))
       : [];
     if (fighting) return combatTargets;
     return [...NAVIGATION_ENTRIES.map(entry => ({...entry})), ...combatTargets];
@@ -84,7 +86,7 @@ export function createTargetMenu({
     announce(
       target
         ? `Выбор цели. ${describe(target)} Листай, подтверди нужную или отмени выбор.`
-        : encounterActive(world)
+        : (encounterActive(world) || world?.freeScenario?.phase === "pursuit")
           ? "Бой ещё отмечен активным, но живых физических целей сервер сейчас не видит."
           : "Доступных целей сейчас нет.",
       true,

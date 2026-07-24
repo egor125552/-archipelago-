@@ -1,7 +1,7 @@
 "use strict";
 
 import {isBoatDockPosition} from "./free-roam-cargo-rules.js?v=32";
-import {ensureContracts} from "./free-roam-contracts.js?v=2";
+import {ensureContracts} from "./free-roam-contracts.js?v=3";
 
 export const MERCHANT = Object.freeze({
   id: "merchant",
@@ -19,6 +19,7 @@ export const SHOP_ITEMS = Object.freeze([
   Object.freeze({id: "repair-plate", label: "ремонтная пластина", amount: 1, price: 30, maximum: 10, boatItem: true}),
   Object.freeze({id: "fuel-canister", label: "аварийная канистра", amount: 1, price: 25, maximum: 5, boatItem: true}),
   Object.freeze({id: "dock-service", label: "полное восстановление лодки", price: 85, boatItem: true, service: true}),
+  Object.freeze({id: "wreck-recovery", label: "аварийный подъём затонувшей лодки", price: 60, wreckService: true}),
   Object.freeze({id: "hull-upgrade", label: "усиление корпуса", scrapPrice: 8, boatItem: true, upgrade: "hullUpgradeLevel", maximum: 3}),
   Object.freeze({id: "pump-upgrade", label: "усиление насоса", scrapPrice: 7, boatItem: true, upgrade: "pumpUpgradeLevel", maximum: 3}),
   Object.freeze({id: "engine-upgrade", label: "форсировка двигателя", scrapPrice: 10, boatItem: true, upgrade: "engineUpgradeLevel", maximum: 3}),
@@ -42,9 +43,11 @@ export function ensureShopState(world) {
   activities.shopOpen ||= Array.from({length: world.players?.length || 2}, () => false);
   activities.shopSelection ||= Array.from({length: world.players?.length || 2}, () => 0);
   activities.merchantPrompted ||= Array.from({length: world.players?.length || 2}, () => false);
+  activities.freeWreckRecoveryUsed ||= Array.from({length: world.players?.length || 2}, () => false);
   while (activities.shopOpen.length < world.players.length) activities.shopOpen.push(false);
   while (activities.shopSelection.length < world.players.length) activities.shopSelection.push(0);
   while (activities.merchantPrompted.length < world.players.length) activities.merchantPrompted.push(false);
+  while (activities.freeWreckRecoveryUsed.length < world.players.length) activities.freeWreckRecoveryUsed.push(false);
   activities.shopSelection = activities.shopSelection.map(clampIndex);
   return activities;
 }
@@ -55,6 +58,10 @@ export function merchantNavigationTarget() {
 
 export function isPlayerNearMerchant(player, maximum = MERCHANT_ACTION_RANGE) {
   return Boolean(player?.mode === "foot" && distance(player, MERCHANT) <= maximum);
+}
+
+function ownedBoat(world, playerIndex) {
+  return (world.boats || []).find(boat => boat.owner === playerIndex) || null;
 }
 
 function ownedDockedBoat(world, playerIndex) {
@@ -78,6 +85,14 @@ function itemText(world, playerIndex, item) {
   const state = ensureShopState(world);
   const contracts = ensureContracts(world);
   const boat = ownedDockedBoat(world, playerIndex);
+  if (item.wreckService) {
+    const wreck = ownedBoat(world, playerIndex);
+    const freeAvailable = !state.freeWreckRecoveryUsed[playerIndex];
+    const condition = wreck?.sunk
+      ? `Лодка затонула. Подъём доступен из любой точки бухты.${freeAvailable ? " Если кредитов не хватает, один аварийный подъём будет бесплатным." : ""}`
+      : "Собственная лодка не затонула.";
+    return `${item.label}. Цена ${item.price} кредитов. ${condition} Баланс команды ${state.credits}.`;
+  }
   if (item.service) {
     const condition = boat
       ? `Корпус ${Math.round(boat.hull)} процентов, вода ${Math.round(boat.water)} процентов, течь ${(Number(boat.leak) || 0).toFixed(1)}.`
@@ -156,6 +171,48 @@ function purchase(world, playerIndex) {
   const player = world.players?.[playerIndex];
   const combat = player?.combat;
   if (!item || !combat) return;
+
+  if (item.wreckService) {
+    const wreck = ownedBoat(world, playerIndex);
+    if (!wreck?.sunk) {
+      emit(world, "shop-denied", "Собственная лодка не затонула. Аварийный подъём не требуется.", [playerIndex]);
+      return;
+    }
+    const freeRecovery = state.credits < item.price && !state.freeWreckRecoveryUsed[playerIndex];
+    if (state.credits < item.price && !freeRecovery) {
+      emit(world, "shop-denied", `Недостаточно кредитов. Нужно ${item.price}, а бесплатный аварийный подъём уже использован.`, [playerIndex]);
+      return;
+    }
+    if (freeRecovery) state.freeWreckRecoveryUsed[playerIndex] = true;
+    else state.credits -= item.price;
+    wreck.sunk = false;
+    wreck.x = playerIndex === 0 ? 174 : 246;
+    wreck.y = 90;
+    wreck.heading = playerIndex === 0 ? 0 : 180;
+    wreck.speed = 0;
+    wreck.throttle = 0;
+    wreck.rudder = 0;
+    wreck.driver = null;
+    wreck.hull = 20;
+    wreck.water = 35;
+    wreck.leak = Math.min(Math.max(Number(wreck.leak) || 0, 0.8), 2.5);
+    wreck.engineTemp = Math.min(Number(wreck.engineTemp) || 55, 65);
+    wreck.engineStalled = true;
+    wreck.emergencyActive = false;
+    wreck.emergencyRemaining = 0;
+    wreck.restartProgress = 0;
+    wreck.fuel = Math.max(10, Number(wreck.fuel) || 0);
+    emit(world, "wreck-recovery-complete", `${freeRecovery ? "Бесплатный аварийный" : "Аварийный"} подъём выполнен. Лодка у причала: корпус 20, вода 35, двигатель заглушён. Постоянные улучшения и груз сохранены. Баланс команды ${state.credits}.`, [0, 1], {
+      sourcePlayer: playerIndex,
+      itemId: item.id,
+      freeRecovery,
+      price: freeRecovery ? 0 : item.price,
+      credits: state.credits,
+      x: wreck.x,
+      y: wreck.y,
+    });
+    return;
+  }
 
   const boat = item.boatItem ? ownedDockedBoat(world, playerIndex) : null;
   if (item.boatItem && !boat) {

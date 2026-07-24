@@ -11,7 +11,7 @@ function emit(world, type, text, targets = [0, 1], extra = {}) {
   if (world.events.length > 180) world.events.splice(0, world.events.length - 180);
 }
 
-export const ENEMY_BOAT_ROLES = Object.freeze(["rammer", "gunboat", "landing", "interceptor", "reserve"]);
+export const ENEMY_BOAT_ROLES = Object.freeze(["observer", "rammer", "gunboat", "landing", "interceptor", "reserve"]);
 
 function createBoat(id, role, x, y, heading, level) {
   const hull = level >= 4 ? 76 : 60;
@@ -36,6 +36,8 @@ function createBoat(id, role, x, y, heading, level) {
     rewardDropped: false,
     assignmentReleased: false,
     destroyedAt: 0,
+    hostile: role !== "observer",
+    observeUntil: 0,
   };
 }
 
@@ -50,8 +52,12 @@ export function ensureEnemyBoats(world) {
   return state;
 }
 
-export function activeEnemyBoats(world) {
+function activeStateBoats(world) {
   return ensureEnemyBoats(world).boats.filter(boat => boat.active && !boat.destroyed);
+}
+
+export function activeEnemyBoats(world) {
+  return activeStateBoats(world).filter(boat => boat.hostile !== false);
 }
 
 export function enemyBoatById(world, id) {
@@ -61,34 +67,40 @@ export function enemyBoatById(world, id) {
 export function startEnemyBoats(world, level, anchor = null) {
   const state = ensureEnemyBoats(world);
   state.level = Math.max(0, Math.min(5, Math.floor(Number(level) || 0)));
-  state.active = state.level >= 3;
+  state.active = state.level === 1 || state.level >= 3;
   state.projectiles = [];
   if (!state.active) {
     state.boats = [];
     return state;
   }
   const base = anchor || world.players?.[0] || {x: 210, y: 200};
-  const roles = state.level >= 4
-    ? ["rammer", "rammer", "gunboat"]
-    : ["interceptor"];
+  const roles = state.level === 1
+    ? ["observer"]
+    : state.level >= 4
+      ? ["rammer", "rammer", "gunboat"]
+      : ["interceptor"];
   if (state.level >= 5) {
     const coop = (world.freeActivities?.presence || []).filter(Boolean).length > 1;
     roles.splice(0, roles.length, ...(coop ? ["gunboat"] : []));
   }
   state.boats = roles.map((role, index) => {
     const side = index % 2 ? 1 : -1;
-    return createBoat(
+    const boat = createBoat(
       `threat-boat-${index + 1}`,
       role,
-      clamp((base.x || 210) + side * (75 + index * 18), 18, 402),
-      clamp((base.y || 180) + 82 + index * 14, 92, 302),
+      clamp((base.x || 210) + side * (role === "observer" ? 118 : 75 + index * 18), 18, 402),
+      clamp((base.y || 180) + (role === "observer" ? 40 : 82 + index * 14), 92, 302),
       side > 0 ? -35 : 35,
       state.level,
     );
+    if (role === "observer") boat.observeUntil = world.time + 18;
+    return boat;
   });
-  emit(world, "enemy-reinforcements", state.level >= 4
-    ? "Угроза четыре из пяти. В бухту вошла ударная группа: таранщики и стрелковый катер."
-    : "Угроза три из пяти. К преследователям присоединился катер-перехватчик.", [0, 1], {level: state.level});
+  emit(world, "enemy-reinforcements", state.level === 1
+    ? "Разведывательный катер держится на расстоянии. Слышны мотор и короткие радиопередачи; огня не будет."
+    : state.level >= 4
+      ? "Угроза четыре из пяти. В бухту вошла ударная группа: таранщики и стрелковый катер."
+      : "Угроза три из пяти. К преследователям присоединился катер-перехватчик.", [0, 1], {level: state.level});
   return state;
 }
 
@@ -113,6 +125,10 @@ function velocityForPlayer(world, playerIndex) {
 function desiredPoint(world, boat) {
   const player = actorForPlayer(world, boat.targetPlayer) || actorForPlayer(world, 0) || {x: 210, y: 180};
   const metres = distance(boat, player);
+  if (boat.role === "observer") {
+    const angle = bearing(player, boat) * Math.PI / 180;
+    return {x: clamp(player.x + Math.sin(angle) * 125, 12, 408), y: clamp(player.y - Math.cos(angle) * 125, 82, 308)};
+  }
   if (boat.role === "interceptor") {
     const velocity = velocityForPlayer(world, boat.targetPlayer);
     return {x: clamp(player.x + velocity.x * 4.5, 12, 408), y: clamp(player.y + velocity.y * 4.5, 82, 308)};
@@ -137,7 +153,8 @@ function moveBoat(world, boat, dt) {
   if (boat.role === "gunboat" && metres < 45) desiredHeading = wrapDeg(desiredHeading + 180);
   const turnRate = boat.role === "rammer" ? 72 : boat.role === "interceptor" ? 92 : 64;
   boat.heading = wrapDeg(boat.heading + clamp(wrapDeg(desiredHeading - boat.heading), -turnRate * dt, turnRate * dt));
-  const desiredSpeed = boat.role === "rammer" ? (metres > 45 ? 19 : 15)
+  const desiredSpeed = boat.role === "observer" ? (metres > 18 ? 8 : 3)
+    : boat.role === "rammer" ? (metres > 45 ? 19 : 15)
     : boat.role === "interceptor" ? (metres > 55 ? 18 : 12)
       : boat.role === "landing" ? (metres > 20 ? 13 : 5)
         : boat.role === "reserve" ? 9
@@ -269,12 +286,18 @@ export function damageEnemyBoat(world, boatId, amount, sourcePlayer = -1, helper
 export function updateEnemyBoats(world, dt, helpers = {}) {
   const state = ensureEnemyBoats(world);
   if (!state.active) return state;
-  for (const boat of activeEnemyBoats(world)) {
+  for (const boat of activeStateBoats(world)) {
+    if (boat.role === "observer" && world.time >= boat.observeUntil) {
+      boat.active = false;
+      boat.speed = 0;
+      emit(world, "observer-departed", "Разведывательный катер завершил наблюдение и ушёл из бухты.", [0, 1], {x: boat.x, y: boat.y});
+      continue;
+    }
     moveBoat(world, boat, dt);
     updateRamming(world, boat, dt);
     updateWeapon(world, state, boat, dt);
   }
   updateProjectiles(world, state, dt, helpers);
-  if (!activeEnemyBoats(world).length) state.active = false;
+  if (!activeStateBoats(world).length) state.active = false;
   return state;
 }
