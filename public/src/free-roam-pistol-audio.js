@@ -1,9 +1,10 @@
 "use strict";
 
-// Keep this import version aligned with free-roam-v4.js. The old v=39 import
-// patched a different cached class after the 1.5.0 audio bump, so the recorded
-// pistol shot silently fell back to the generic weapon sound.
-import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=45";
+// Load the decisive-action patch before capturing the shared audio methods.
+// Keep this import version aligned with free-roam-v4.js so every wrapper edits
+// the class instance that the live client actually constructs.
+import "./free-roam-sharp-feedback-v1.js?v=1";
+import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=44";
 import {COMBAT_TUNING} from "./free-roam-combat-tuning.js?v=33";
 
 const PISTOL_RECORDING_URL = "https://raw.githubusercontent.com/Gabrielsgp/hand-shotter/a9e2dac862291cbff1af8e2c3e82922c3aeb726c/songs/163456__lemudcrab__pistol-shot.wav";
@@ -71,6 +72,7 @@ FreeRoamAudio.prototype.preload = async function preloadWithPistol() {
 
 FreeRoamAudio.prototype.playCombatImpact = function playCombatImpactWithPistol(event, playerIndex) {
   if (event?.weapon !== "pistol") return originalImpact.call(this, event, playerIndex);
+  if (typeof this.playSharpCombatImpact === "function") return this.playSharpCombatImpact(event, playerIndex);
   const spatial = this.eventPanAndGain(event, COMBAT_TUNING.pistolImpactRange);
   const localTarget = event.targetPlayer === playerIndex;
   const gain = (localTarget ? 0.72 : 0.5) * spatial.gain * COMBAT_TUNING.pistolImpactGain;
@@ -81,13 +83,26 @@ FreeRoamAudio.prototype.playCombatImpact = function playCombatImpactWithPistol(e
 FreeRoamAudio.prototype.handleFreeEvent = function handleFreeEventWithPistol(event, playerIndex) {
   if (event?.type === "gun-shot" && event.weapon === "pistol") {
     if (!event.targets?.includes(playerIndex)) return;
+    const now = this.ctx?.currentTime || 0;
+    if (event.sourcePlayer === playerIndex && now <= (this.localSharpGunUntil || 0)) return;
     const spatial = this.eventPanAndGain(event, COMBAT_TUNING.pistolAudibleRange);
-    this.play("pistolShot", {
-      pan: spatial.pan,
-      gain: COMBAT_TUNING.pistolShotGain * spatial.gain,
-      rate: 0.985 + Math.random() * 0.03,
-      lowpass: 13500,
-    });
+    if (typeof this.playSharpBuffer === "function") {
+      this.playSharpBuffer("pistolShot", {
+        pan: spatial.pan,
+        gain: COMBAT_TUNING.pistolShotGain * spatial.gain,
+        rate: 0.985 + Math.random() * 0.03,
+        highpass: 75,
+        lowpass: 17_500,
+        duration: 0.48,
+      });
+    } else {
+      this.play("pistolShot", {
+        pan: spatial.pan,
+        gain: COMBAT_TUNING.pistolShotGain * spatial.gain,
+        rate: 0.985 + Math.random() * 0.03,
+        lowpass: 13500,
+      });
+    }
     return;
   }
   if (event?.type === "weapon-switch" && event.weapon === "pistol") {
@@ -98,12 +113,23 @@ FreeRoamAudio.prototype.handleFreeEvent = function handleFreeEventWithPistol(eve
   if (["salvage-extraction-start", "salvage-extraction-progress", "salvage-extraction-resumed"].includes(event?.type)) {
     if (!event.targets?.includes(playerIndex)) return;
     const spatial = this.eventPanAndGain(event, 80);
-    this.play("repair", {
-      pan: spatial.pan,
-      gain: (event.type === "salvage-extraction-start" ? 0.5 : 0.34) * spatial.gain,
-      rate: event.type === "salvage-extraction-progress" ? 0.86 : 0.74,
-      lowpass: 5200,
-    });
+    if (typeof this.playSharpBuffer === "function") {
+      this.playSharpBuffer("repair", {
+        pan: spatial.pan,
+        gain: (event.type === "salvage-extraction-start" ? 0.52 : 0.37) * spatial.gain,
+        rate: event.type === "salvage-extraction-progress" ? 0.94 : 0.86,
+        highpass: 220,
+        lowpass: 12_500,
+        duration: 0.23,
+      });
+    } else {
+      this.play("repair", {
+        pan: spatial.pan,
+        gain: (event.type === "salvage-extraction-start" ? 0.5 : 0.34) * spatial.gain,
+        rate: event.type === "salvage-extraction-progress" ? 0.86 : 0.74,
+        lowpass: 5200,
+      });
+    }
     return;
   }
   if (event?.type === "salvage-extraction-paused") {
