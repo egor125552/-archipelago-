@@ -40,6 +40,10 @@ jobs:
               "await moveFootToTarget(60, 4.5);",
               "const footDockPoint = {x: state.target.x, y: state.target.y};\n            await moveFootToPoint(footDockPoint, 60, 4.5);"
           )
+          script = script.replace(
+              "await moveFootToPoint(boatPoint);",
+              "await moveFootToPoint(boatPoint, 55, 12.5);"
+          )
           Path('.progression-route-v2.mjs').write_text(script)
           PY
       - name: Continue delivery and arming route
