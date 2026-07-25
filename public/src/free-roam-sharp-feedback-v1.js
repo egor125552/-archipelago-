@@ -1,6 +1,6 @@
 "use strict";
 
-import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=44";
+import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=45";
 import {CARGO_ACTION_RANGE} from "./free-roam-cargo-rules.js?v=32";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));

@@ -4,7 +4,7 @@
 // Keep this import version aligned with free-roam-v4.js so every wrapper edits
 // the class instance that the live client actually constructs.
 import "./free-roam-sharp-feedback-v1.js?v=1";
-import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=44";
+import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=45";
 import {COMBAT_TUNING} from "./free-roam-combat-tuning.js?v=33";
 
 const PISTOL_RECORDING_URL = "https://raw.githubusercontent.com/Gabrielsgp/hand-shotter/a9e2dac862291cbff1af8e2c3e82922c3aeb726c/songs/163456__lemudcrab__pistol-shot.wav";
