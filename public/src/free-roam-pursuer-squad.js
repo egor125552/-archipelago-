@@ -74,8 +74,8 @@ export function ensurePursuerSquad(world) {
   if (!Number.isFinite(state.nextProjectileId)) state.nextProjectileId = 1;
   state.primaryWeapon ||= {targetPlayer: 0, fireCooldown: 1.2, aimRemaining: 0, burstRemaining: 0, burstCooldown: 0};
   state.assignments ||= {};
-  state.escorts ||= [];
-  state.projectiles ||= [];
+  if (!Array.isArray(state.escorts)) state.escorts = state.escorts && typeof state.escorts === "object" ? Object.values(state.escorts) : [];
+  if (!Array.isArray(state.projectiles)) state.projectiles = state.projectiles && typeof state.projectiles === "object" ? Object.values(state.projectiles) : [];
   const primary = world.freeActivities?.marauder;
   if (primary) primary.id ||= "pursuer-1";
   return state;

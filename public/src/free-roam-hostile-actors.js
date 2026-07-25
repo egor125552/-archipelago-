@@ -16,8 +16,8 @@ function emit(world, type, text, targets = [0, 1], extra = {}) {
 export function ensureHostileActors(world) {
   world.freeHostileActors ||= {active: false, level: 0, actors: [], projectiles: [], nextProjectileId: 1, spawnedEncounterId: null};
   const state = world.freeHostileActors;
-  state.actors ||= [];
-  state.projectiles ||= [];
+  if (!Array.isArray(state.actors)) state.actors = state.actors && typeof state.actors === "object" ? Object.values(state.actors) : [];
+  if (!Array.isArray(state.projectiles)) state.projectiles = state.projectiles && typeof state.projectiles === "object" ? Object.values(state.projectiles) : [];
   if (!Number.isFinite(state.nextProjectileId)) state.nextProjectileId = 1;
   if (!Number.isFinite(state.level)) state.level = 0;
   return state;

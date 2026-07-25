@@ -20,7 +20,7 @@ export function ensureHeavyPursuer(world) {
     nextProjectileId: 1,
   };
   const state = world.freeHeavyPursuer;
-  state.projectiles ||= [];
+  if (!Array.isArray(state.projectiles)) state.projectiles = state.projectiles && typeof state.projectiles === "object" ? Object.values(state.projectiles) : [];
   if (!Number.isFinite(state.nextProjectileId)) state.nextProjectileId = 1;
   return state;
 }

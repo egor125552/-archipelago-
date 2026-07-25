@@ -8,7 +8,7 @@ function ensureState(world) {
     fixedOpeningActorIds: [],
   };
   const state = world.freeCombatAiHotfixV163;
-  state.fixedOpeningActorIds ||= [];
+  if (!Array.isArray(state.fixedOpeningActorIds)) state.fixedOpeningActorIds = state.fixedOpeningActorIds && typeof state.fixedOpeningActorIds === "object" ? Object.values(state.fixedOpeningActorIds) : [];
   return state;
 }
 

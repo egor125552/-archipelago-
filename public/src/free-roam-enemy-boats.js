@@ -44,8 +44,8 @@ function createBoat(id, role, x, y, heading, level) {
 export function ensureEnemyBoats(world) {
   world.freeEnemyBoats ||= {active: false, level: 0, boats: [], projectiles: [], nextProjectileId: 1};
   const state = world.freeEnemyBoats;
-  state.boats ||= [];
-  state.projectiles ||= [];
+  if (!Array.isArray(state.boats)) state.boats = state.boats && typeof state.boats === "object" ? Object.values(state.boats) : [];
+  if (!Array.isArray(state.projectiles)) state.projectiles = state.projectiles && typeof state.projectiles === "object" ? Object.values(state.projectiles) : [];
   if (!Number.isFinite(state.nextProjectileId)) state.nextProjectileId = 1;
   if (!Number.isFinite(state.level)) state.level = 0;
   if (typeof state.active !== "boolean") state.active = false;

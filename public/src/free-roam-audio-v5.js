@@ -221,14 +221,18 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
     const selectedEscort = world?.freePursuerSquad?.escorts?.find(escort => (
       escort.id === targetId && escort.active && !escort.destroyed
     ));
-    const selectedEnemyBoat = world?.freeEnemyBoats?.boats?.find(boat => (
+    const enemyBoatsValue = world?.freeEnemyBoats?.boats;
+    const enemyBoats = Array.isArray(enemyBoatsValue)
+      ? enemyBoatsValue
+      : enemyBoatsValue && typeof enemyBoatsValue === "object" ? Object.values(enemyBoatsValue) : [];
+    const selectedEnemyBoat = enemyBoats.find(boat => (
       boat.id === targetId && boat.active && !boat.destroyed
     ));
     const heavy = world?.freeHeavyPursuer?.boat;
     const selectedHeavy = heavy?.active && !heavy.destroyed && ["heavy-pursuer", "heavy-turret", "heavy-engine"].includes(targetId)
       ? heavy
       : null;
-    const nearestEnemyBoat = (world?.freeEnemyBoats?.boats || [])
+    const nearestEnemyBoat = enemyBoats
       .filter(boat => boat.active && !boat.destroyed)
       .sort((left, right) => distance(this.listenerPoint || {}, left) - distance(this.listenerPoint || {}, right))[0];
     const nearbyHeavy = heavy?.active && !heavy.destroyed ? heavy : null;

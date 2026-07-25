@@ -21,7 +21,7 @@ function ensureState(world) {
     roofByBoat: {},
   };
   const state = world.freeCombatAiHotfix;
-  state.pendingRoofHits ||= [];
+  if (!Array.isArray(state.pendingRoofHits)) state.pendingRoofHits = state.pendingRoofHits && typeof state.pendingRoofHits === "object" ? Object.values(state.pendingRoofHits) : [];
   state.boatHull ||= {};
   state.roofByBoat ||= {};
   return state;
@@ -130,8 +130,8 @@ function hostileState(world, encounterId, level) {
     spawnedEncounterId: encounterId,
   };
   const state = world.freeHostileActors;
-  state.actors ||= [];
-  state.projectiles ||= [];
+  if (!Array.isArray(state.actors)) state.actors = state.actors && typeof state.actors === "object" ? Object.values(state.actors) : [];
+  if (!Array.isArray(state.projectiles)) state.projectiles = state.projectiles && typeof state.projectiles === "object" ? Object.values(state.projectiles) : [];
   state.active = true;
   state.level = Math.max(level, Number(state.level) || 0);
   if (!Number.isFinite(state.nextProjectileId)) state.nextProjectileId = 1;

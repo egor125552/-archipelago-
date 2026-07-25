@@ -14,9 +14,9 @@ function emit(world, type, text, targets, extra = {}) {
 export function ensureHostileGunners(world) {
   world.freeHostileGunners ||= {gunners: [], projectiles: [], eliminatedPursuers: [], nextProjectileId: 1};
   const state = world.freeHostileGunners;
-  state.gunners ||= [];
-  state.projectiles ||= [];
-  state.eliminatedPursuers ||= [];
+  if (!Array.isArray(state.gunners)) state.gunners = state.gunners && typeof state.gunners === "object" ? Object.values(state.gunners) : [];
+  if (!Array.isArray(state.projectiles)) state.projectiles = state.projectiles && typeof state.projectiles === "object" ? Object.values(state.projectiles) : [];
+  if (!Array.isArray(state.eliminatedPursuers)) state.eliminatedPursuers = state.eliminatedPursuers && typeof state.eliminatedPursuers === "object" ? Object.values(state.eliminatedPursuers) : [];
   if (!Number.isFinite(state.nextProjectileId)) state.nextProjectileId = 1;
   return state;
 }

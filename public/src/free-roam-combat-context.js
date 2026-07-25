@@ -1,7 +1,8 @@
 "use strict";
 
 function live(items) {
-  return (items || []).some(item => item?.active && !item?.destroyed);
+  const list = Array.isArray(items) ? items : items && typeof items === "object" ? Object.values(items) : [];
+  return list.some(item => item?.active && !item?.destroyed);
 }
 
 export function contractCombatActive(world) {

@@ -78,7 +78,7 @@ function pursuerWeapon(state, pursuer, primary) {
 }
 
 function spawnPursuerProjectile(world, state, pursuer, target) {
-  state.projectiles ||= [];
+  if (!Array.isArray(state.projectiles)) state.projectiles = state.projectiles && typeof state.projectiles === "object" ? Object.values(state.projectiles) : [];
   if (!Number.isFinite(state.nextProjectileId)) state.nextProjectileId = 1;
   if (state.projectiles.length >= 20) return false;
   const angle = bearing(pursuer, target.actor) * Math.PI / 180;

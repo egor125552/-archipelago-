@@ -1,5 +1,6 @@
 import baseWorker, {Lobby as MemoryLobby} from "./worker.js";
 import {setServerFreePresence} from "./free-roam-server.js";
+import {normalizePersistedFreeWorld} from "./world-storage-normalization.js";
 
 const ROOM_STORAGE_PREFIX = "free-room-v1:";
 const ROOM_ROLES = Object.freeze(["captain", "crew"]);
@@ -33,13 +34,18 @@ function storedRoom(room, savedAt = Date.now()) {
     createdAt: room.createdAt,
     lastSeen: {...(room.lastSeen || {})},
     emptySince: Number(room.emptySince) || 0,
-    freeServer: cloneValue(room.freeServer),
+    freeServer: (() => {
+      const freeServer = cloneValue(room.freeServer);
+      freeServer.world = normalizePersistedFreeWorld(freeServer.world);
+      return freeServer;
+    })(),
   };
 }
 
 function restoredRoom(saved, now = Date.now()) {
   if (!saved || saved.mode !== "free" || !saved.id || !saved.freeServer?.world) return null;
   const freeServer = cloneValue(saved.freeServer);
+  freeServer.world = normalizePersistedFreeWorld(freeServer.world);
   freeServer.lastTickAt = now;
   // WebSocket transports never survive a Durable Object restart. Keep the
   // actual world, but clear both online roles until their browsers reconnect.

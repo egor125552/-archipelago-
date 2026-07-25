@@ -33,8 +33,8 @@ function ensureState(world) {
     nextBoatSerial: 1,
   };
   const state = world.freeThreatIntelligence;
-  state.lastAlive ||= [];
-  state.graceUntil ||= [];
+  if (!Array.isArray(state.lastAlive)) state.lastAlive = state.lastAlive && typeof state.lastAlive === "object" ? Object.values(state.lastAlive) : [];
+  if (!Array.isArray(state.graceUntil)) state.graceUntil = state.graceUntil && typeof state.graceUntil === "object" ? Object.values(state.graceUntil) : [];
   state.announcedKnife ||= {};
   while (state.lastAlive.length < (world.players?.length || 0)) state.lastAlive.push(null);
   while (state.graceUntil.length < (world.players?.length || 0)) state.graceUntil.push(0);

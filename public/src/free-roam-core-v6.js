@@ -54,8 +54,8 @@ function ensureSalvageWork(world) {
     quarterByCrate: {},
   };
   const state = world.freeSalvageWork;
-  state.workers ||= [];
-  state.deniedAt ||= [];
+  if (!Array.isArray(state.workers)) state.workers = state.workers && typeof state.workers === "object" ? Object.values(state.workers) : [];
+  if (!Array.isArray(state.deniedAt)) state.deniedAt = state.deniedAt && typeof state.deniedAt === "object" ? Object.values(state.deniedAt) : [];
   state.quarterByCrate ||= {};
   while (state.workers.length < world.players.length) state.workers.push(null);
   while (state.deniedAt.length < world.players.length) state.deniedAt.push(-999);
