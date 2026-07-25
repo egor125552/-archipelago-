@@ -1,0 +1,58 @@
+name: Free roam progression audit v2
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  reachable-progression-v2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm install --no-save playwright@1.54.1
+      - run: npx playwright install --with-deps chromium
+      - name: Start Worker
+        run: |
+          npx wrangler dev --local --port 8798 > /tmp/progression-v2-worker.log 2>&1 &
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:8798/free-roam.html >/dev/null && exit 0; sleep 1; done
+          cat /tmp/progression-v2-worker.log
+          exit 1
+      - name: Extract and correct the reachable route
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import textwrap
+          source = Path('.github/workflows/free-roam-progression-audit.yml').read_text()
+          marker = "cat > .progression-route.mjs <<'EOF'\n"
+          script = source.split(marker, 1)[1].split("\n          EOF", 1)[0]
+          script = textwrap.dedent(script)
+          script = script.replace("const base = 'http://127.0.0.1:8797';", "const base = 'http://127.0.0.1:8798';")
+          script = script.replace(
+              "await moveFootToTarget(60, 4.5);",
+              "const footDockPoint = {x: state.target.x, y: state.target.y};\n            await moveFootToPoint(footDockPoint, 60, 4.5);"
+          )
+          Path('.progression-route-v2.mjs').write_text(script)
+          PY
+      - name: Continue delivery and arming route
+        shell: bash
+        run: |
+          set -o pipefail
+          node ./.progression-route-v2.mjs 2>&1 | tee /tmp/progression-v2-output.txt
+      - name: Upload progression diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: free-roam-progression-v2-output
+          path: |
+            /tmp/progression-v2-output.txt
+            /tmp/progression-v2-worker.log
+          if-no-files-found: warn
