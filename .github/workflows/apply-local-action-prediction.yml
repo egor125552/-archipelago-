@@ -1,0 +1,35 @@
+name: Apply local action prediction
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preserve repair script and switch to main
+        run: |
+          cp .github/scripts/apply-local-action-prediction.py /tmp/apply-local-action-prediction.py
+          git fetch origin main
+          git checkout -B main origin/main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Apply local action prediction
+        run: python /tmp/apply-local-action-prediction.py
+      - run: npm ci
+      - name: Run Node tests
+        run: npm test
+      - name: Commit tested local action prediction
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "4189823+github-actions[bot]@users.noreply.github.com"
+          git add public tests
+          git commit -m "Predict local jump brake and cargo actions"
+          git push origin HEAD:main
