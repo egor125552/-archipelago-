@@ -13,7 +13,15 @@ function blendAngle(authoritative, predicted, keep) {
   return wrapDeg((Number(authoritative) || 0) + difference * keep);
 }
 
-export function reconcileLocalPrediction(previousWorld, nextWorld, playerIndex) {
+export function localPredictionLeadSeconds({networkRttMs, inputReceiptMs, controlLatencyMs} = {}) {
+  const preferred = [networkRttMs, inputReceiptMs, controlLatencyMs]
+    .map(Number)
+    .find(value => Number.isFinite(value) && value > 0);
+  if (!preferred) return 0;
+  return clamp(preferred / 2_000, 0, 0.18);
+}
+
+export function reconcileLocalPrediction(previousWorld, nextWorld, playerIndex, options = {}) {
   const previousPlayer = previousWorld?.players?.[playerIndex];
   const nextPlayer = nextWorld?.players?.[playerIndex];
   if (!previousPlayer || !nextPlayer || previousPlayer.mode !== nextPlayer.mode) return nextWorld;
@@ -38,8 +46,13 @@ export function reconcileLocalPrediction(previousWorld, nextWorld, playerIndex) 
 
   if (["foot", "swim"].includes(nextPlayer.mode)) {
     const error = Math.hypot(previousPlayer.x - nextPlayer.x, previousPlayer.y - nextPlayer.y);
-    if (error > 7) return nextWorld;
-    const keep = 0.68;
+    // Person prediction has no full collision model. A large disagreement is a
+    // real boundary, hit or mode correction and must win immediately.
+    if (error > 3.5) return nextWorld;
+    const input = options.input || {};
+    const moving = Boolean(input.up || input.down || input.left || input.right);
+    const latencyBlend = clamp(((Number(options.networkRttMs) || 0) - 40) / 240, 0, 1);
+    const keep = moving ? 0.72 + latencyBlend * 0.14 : 0.56;
     nextPlayer.x += (previousPlayer.x - nextPlayer.x) * keep;
     nextPlayer.y += (previousPlayer.y - nextPlayer.y) * keep;
     nextPlayer.heading = blendAngle(nextPlayer.heading, previousPlayer.heading, keep);
@@ -56,9 +69,6 @@ function predictBoat(world, playerIndex, input, dt) {
   if (thrust) {
     boat.throttle += (thrust - (Number(boat.throttle) || 0)) * Math.min(1, dt * 4.5);
   } else {
-    // The authoritative free-roam model deliberately preserves physical
-    // coast after releasing the engine. Predict the same behaviour so a
-    // local release never looks like an invented brake.
     boat.throttle = 0;
   }
   if (boat.engineStalled || boat.emergencyActive) boat.throttle = 0;
@@ -99,5 +109,15 @@ export function predictLocalWorld(world, playerIndex, input, dt) {
   if (!world || safeDt <= 0) return world;
   predictBoat(world, playerIndex, input || {}, safeDt);
   predictPerson(world, playerIndex, input || {}, safeDt);
+  return world;
+}
+
+export function predictLocalWorldAhead(world, playerIndex, input, seconds) {
+  let remaining = clamp(Number(seconds) || 0, 0, 0.18);
+  while (remaining > 0.0001) {
+    const chunk = Math.min(0.05, remaining);
+    predictLocalWorld(world, playerIndex, input, chunk);
+    remaining -= chunk;
+  }
   return world;
 }

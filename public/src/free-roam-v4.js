@@ -4,8 +4,13 @@ import {
   WORLD,
   playerStatus,
 } from "./free-roam-core-v6.js?v=44";
-import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=43";
-import {predictLocalWorld, reconcileLocalPrediction} from "./free-roam-client-prediction.js?v=41";
+import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=44";
+import {
+  localPredictionLeadSeconds,
+  predictLocalWorld,
+  predictLocalWorldAhead,
+  reconcileLocalPrediction,
+} from "./free-roam-client-prediction.js?v=42";
 import {applyReplicatedWorldDelta} from "./free-roam-replication.js?v=45";
 import {createSpeechController} from "./free-roam-speech.js?v=41";
 import {directionFromDelta} from "./free-roam-gesture-model.js";
@@ -424,7 +429,12 @@ function connect(role, {reconnecting = false, targetRoom = ""} = {}) {
       const renderWorld = typeof structuredClone === "function"
         ? structuredClone(authoritativeWorld)
         : JSON.parse(JSON.stringify(authoritativeWorld));
-      world = reconcileLocalPrediction(previousWorld, renderWorld, playerIndex);
+      const predictionLead = localPredictionLeadSeconds({networkRttMs, inputReceiptMs, controlLatencyMs});
+      predictLocalWorldAhead(renderWorld, playerIndex, localInput, predictionLead);
+      world = reconcileLocalPrediction(previousWorld, renderWorld, playerIndex, {
+        input: localInput,
+        networkRttMs,
+      });
       lastStateSequence = sequence;
       lastStateAt = performance.now();
       // Acknowledge before speech, audio or rendering. Even if an assistive
@@ -620,6 +630,7 @@ function frame(now) {
   previousFrame = now;
   if (world) {
     predictLocalWorld(world, playerIndex, localInput, dt);
+    audio.updateLocalFeedback?.(world, playerIndex, localInput);
     if (now - lastRenderAt >= 32) {
       lastRenderAt = now;
       render();
@@ -967,7 +978,10 @@ function useSonarOrCombatTargets() {
   });
   if (action === "open-targets") targetMenu.open();
   else if (action === "report") targetMenu.reportCurrent();
-  else actionPulse("sonar");
+  else {
+    audio.playLocalCommandCue?.("sonar");
+    actionPulse("sonar");
+  }
 }
 
 function runTapGesture(metrics) {
@@ -1104,6 +1118,7 @@ function bindKeyboard() {
       actionPulse("action");
     } else if (!event.repeat && event.code === "Space") {
       event.preventDefault();
+      audio.playLocalCommandCue?.(world?.players?.[playerIndex]?.mode === "boat" ? "brake" : "jump");
       actionPulse("jump");
     } else if (event.code === "KeyX") {
       event.preventDefault();
@@ -1224,7 +1239,10 @@ $("actionButton").addEventListener("click", () => {
   if (targetMenu.isOpen()) targetMenu.confirm();
   else actionPulse(boardIsOpen() ? "boardAccept" : shopIsOpen() ? "shopBuy" : "action");
 });
-$("jumpButton").addEventListener("click", () => actionPulse("jump"));
+$("jumpButton").addEventListener("click", () => {
+  audio.playLocalCommandCue?.(world?.players?.[playerIndex]?.mode === "boat" ? "brake" : "jump");
+  actionPulse("jump");
+});
 bindHold($("attackButton"), "attack", 90);
 $("attackButton").addEventListener("click", event => {
   if (event.detail === 0) actionPulse("attack");
@@ -1264,6 +1282,9 @@ window.__freeRoam = {
   gestureDirection: () => gestureDirection,
   isHost: () => isHost,
   playerIndex: () => playerIndex,
+  localFeedback: () => {
+    if (world) audio.updateLocalFeedback?.(world, playerIndex, localInput);
+  },
   audioDiagnostics: () => globalThis.__freeRoamAudioDiagnostics || null,
   speechDiagnostics: () => ({
     available: speech.available,

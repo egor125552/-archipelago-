@@ -52,6 +52,14 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
     this.cargoBeaconAt = new Map();
     this.merchantChimeAt = 0;
     this.contractBoardChimeAt = 0;
+    this.localStepAt = 0;
+    this.localStepMode = "";
+    this.localStepX = null;
+    this.localStepY = null;
+    this.localMovementSuppressUntil = 0;
+    this.localFireAt = 0;
+    this.localFireBudget = 0;
+    this.localFireSuppressUntil = 0;
   }
 
   async init() {
@@ -129,6 +137,100 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
     const name = names[this.footstepIndex % names.length];
     this.footstepIndex += 1;
     return name;
+  }
+
+  playLocalCommandCue(kind = "action") {
+    if (!this.ctx) return false;
+    const frequency = kind === "sonar" ? 610 : kind === "brake" ? 190 : 340;
+    this.playSynthPip({frequency, gain: 0.035, duration: 0.045});
+    return true;
+  }
+
+  updateLocalFeedback(world, playerIndex, input = {}) {
+    if (!this.ctx) return;
+    const player = world?.players?.[playerIndex];
+    const combat = player?.combat;
+    const now = this.ctx.currentTime;
+    const movingInput = Boolean(input.up || input.down || input.left || input.right);
+    const personMode = ["foot", "swim"].includes(player?.mode);
+    const moved = this.localStepX == null || this.localStepY == null
+      ? false
+      : Math.hypot((Number(player?.x) || 0) - this.localStepX, (Number(player?.y) || 0) - this.localStepY) > 0.004;
+    this.localStepX = Number(player?.x) || 0;
+    this.localStepY = Number(player?.y) || 0;
+
+    const movementActive = Boolean(
+      personMode
+      && movingInput
+      && moved
+      && combat?.alive !== false
+      && !combat?.knockedDown
+    );
+    if (!movementActive) {
+      this.localStepAt = 0;
+      this.localStepMode = player?.mode || "";
+    } else {
+      const running = player.mode === "foot" && Boolean(input.run || player.running);
+      const interval = player.mode === "swim" ? 0.58 : running ? 0.27 : 0.46;
+      if (!this.localStepAt || this.localStepMode !== player.mode || now > this.localStepAt + interval * 1.6) {
+        this.localStepAt = now;
+        this.localStepMode = player.mode;
+      }
+      if (now + 0.008 >= this.localStepAt) {
+        this.walkAlternation *= -1;
+        const side = Number(Boolean(input.right)) - Number(Boolean(input.left));
+        const pan = clamp(side * 0.56 + this.walkAlternation * (side ? 0.08 : 0.17), -0.88, 0.88);
+        let played = false;
+        if (player.mode === "swim") {
+          const name = this.buffers.has("waterSide") ? "waterSide" : this.buffers.has("waterSoft") ? "waterSoft" : null;
+          if (name) {
+            this.play(name, {gain: 0.29, rate: 0.9 + Math.random() * 0.08, pan, lowpass: 6500});
+            played = true;
+          }
+        } else {
+          const name = this.nextFootstep();
+          if (name) {
+            this.play(name, {gain: running ? 0.29 : 0.22, rate: running ? 1.15 : 0.98, pan});
+            played = true;
+          }
+        }
+        if (played) this.localMovementSuppressUntil = now + 1.25;
+        this.localStepAt = now + interval;
+      }
+    }
+
+    const automaticAmmo = Math.max(0, Math.floor(Number(combat?.ammo) || 0));
+    const localAutomatic = Boolean(
+      input.attack
+      && combat?.alive !== false
+      && !combat?.knockedDown
+      && combat?.equipped === "automatic"
+      && combat?.weapons?.automatic
+      && automaticAmmo > 0
+    );
+    if (!localAutomatic) {
+      this.localFireAt = 0;
+      this.localFireBudget = 0;
+      return;
+    }
+    if (!this.localFireAt) {
+      this.localFireAt = now;
+      this.localFireBudget = automaticAmmo;
+    } else {
+      this.localFireBudget = Math.min(this.localFireBudget, automaticAmmo);
+    }
+    const interval = Math.max(0.08, Number(COMBAT_TUNING.automaticShotInterval) || 0.12);
+    if (now > this.localFireAt + interval * 1.8) this.localFireAt = now;
+    if (now + 0.006 < this.localFireAt || this.localFireBudget <= 0 || !this.buffers.has("automaticShot")) return;
+    this.play("automaticShot", {
+      pan: 0,
+      gain: COMBAT_TUNING.automaticShotGain,
+      rate: 0.98 + Math.random() * 0.04,
+      lowpass: 12000,
+    });
+    this.localFireBudget -= 1;
+    this.localFireSuppressUntil = now + 2;
+    this.localFireAt = now + interval;
   }
 
   nextSound(prefix, count) {
@@ -298,6 +400,18 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
 
   handleFreeEvent(event, playerIndex) {
     if (!event?.targets?.includes(playerIndex)) return;
+    const localNow = this.ctx?.currentTime || 0;
+    if (
+      event.sourcePlayer === playerIndex
+      && ["footstep", "swim-step"].includes(event.type)
+      && localNow <= this.localMovementSuppressUntil
+    ) return;
+    if (
+      event.type === "gun-shot"
+      && event.sourcePlayer === playerIndex
+      && event.weapon !== "pistol"
+      && localNow <= this.localFireSuppressUntil
+    ) return;
     const spatial = this.eventPanAndGain(event, 145);
     switch (event.type) {
       case "combat-swing":

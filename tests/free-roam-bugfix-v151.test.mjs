@@ -168,8 +168,8 @@ test("audio wrappers target the same audio class as the live client", async () =
   const pistolSource = await readFile(new URL("../public/src/free-roam-pistol-audio.js", import.meta.url), "utf8");
   const qualitySource = await readFile(new URL("../public/src/free-roam-quality-v1.js", import.meta.url), "utf8");
   const clientSource = await readFile(new URL("../public/src/free-roam-v4.js", import.meta.url), "utf8");
-  assert.match(pistolSource, /free-roam-audio-v5\.js\?v=43/);
-  assert.match(qualitySource, /free-roam-audio-v5\.js\?v=43/);
-  assert.match(clientSource, /free-roam-audio-v5\.js\?v=43/);
+  assert.match(pistolSource, /free-roam-audio-v5\.js\?v=44/);
+  assert.match(qualitySource, /free-roam-audio-v5\.js\?v=44/);
+  assert.match(clientSource, /free-roam-audio-v5\.js\?v=44/);
   assert.match(pistolSource, /163456__lemudcrab__pistol-shot\.wav/);
 });
