@@ -5,3 +5,4 @@ Campaign audit: fourth pass
 UI consistency audit: fifth pass
 Startup input audit: sixth pass
 Focus return audit: seventh pass
+Startup pulse audit: eighth pass
