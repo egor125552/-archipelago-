@@ -48,6 +48,10 @@ function createRouteWorld() {
   return {world, player, boat};
 }
 
+function setDockTarget(world) {
+  world.freeScenario.targets[0] = {...target};
+}
+
 function stepFor(world, seconds, nextInput) {
   const events = [];
   const frames = Math.ceil(seconds / 0.05);
@@ -85,6 +89,7 @@ test("the direct sonar bearing reaches the dock without a collision", () => {
 
   for (let frame = 0; frame < 1_600; frame += 1) {
     if (frame % 20 === 0) {
+      setDockTarget(world);
       turnBoatToSonar(world, 0, () => {});
       guideHeadings.push({time: world.time, x: boat.x, y: boat.y, heading: boat.heading, distance: distance(boat, target)});
     }
@@ -114,6 +119,7 @@ test("the old browser audit overshoots because it brakes only inside 8.5 metres"
       stepFor(world, 1.3, {});
       break;
     }
+    setDockTarget(world);
     turnBoatToSonar(world, 0, () => {});
     const holdSeconds = metres > 55 ? 0.95 : metres > 25 ? 0.7 : 0.42;
     const events = stepFor(world, holdSeconds, {up: true});
@@ -142,6 +148,7 @@ test("a speed-aware approach reaches and stops at the dock safely", () => {
       stepFor(world, 1.3, {});
       if (distance(boat, target) <= 14) break;
     }
+    setDockTarget(world);
     turnBoatToSonar(world, 0, () => {});
     const holdSeconds = metres > 80 ? 0.8 : metres > 45 ? 0.5 : 0.22;
     const events = stepFor(world, holdSeconds, {up: true});
