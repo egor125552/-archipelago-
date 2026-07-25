@@ -1,0 +1,44 @@
+name: Sonar cue audit
+
+on:
+  pull_request:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: python tests/prepare-sonar-cue-audit.py
+      - name: Install WebKit
+        run: |
+          npm install --no-save --package-lock=false playwright
+          npx playwright install --with-deps webkit
+      - name: Measure local cue through delayed network
+        shell: bash
+        run: |
+          npx wrangler dev --local --port 8787 --log-level error >worker-dev.log 2>&1 &
+          WORKER_PID=$!
+          node tests/sonar-jitter-proxy.mjs >sonar-proxy.log 2>&1 &
+          PROXY_PID=$!
+          trap 'kill $WORKER_PID $PROXY_PID || true' EXIT
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent 'http://127.0.0.1:8787/api/rooms?mode=free' >/dev/null; then break; fi
+            sleep 1
+          done
+          node tests/sonar-cue-audit.mjs
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sonar-cue-audit
+          path: |
+            sonar-cue-result.json
+            worker-dev.log
+            sonar-proxy.log
+          if-no-files-found: ignore
