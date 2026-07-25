@@ -3,3 +3,4 @@ Rejoin timing audit: second pass
 Reconnect state audit: third pass
 Campaign audit: fourth pass
 UI consistency audit: fifth pass
+Startup input audit: sixth pass
