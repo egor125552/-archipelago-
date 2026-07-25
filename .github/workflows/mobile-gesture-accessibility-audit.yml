@@ -1,0 +1,191 @@
+name: Mobile gesture accessibility audit
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  mobile-gestures:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm install --no-save playwright@1.54.1
+      - run: npx playwright install --with-deps chromium
+      - name: Start Worker
+        run: |
+          npx wrangler dev --local --port 8799 > /tmp/mobile-gesture-worker.log 2>&1 &
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:8799/free-roam.html >/dev/null && exit 0; sleep 1; done
+          cat /tmp/mobile-gesture-worker.log
+          exit 1
+      - name: Exercise real multi-touch and VoiceOver button route
+        shell: bash
+        run: |
+          cat > .mobile-gestures.mjs <<'EOF'
+          import {chromium} from 'playwright';
+          import assert from 'node:assert/strict';
+
+          const browser = await chromium.launch({headless: true});
+          const context = await browser.newContext({
+            viewport: {width: 390, height: 844},
+            isMobile: true,
+            hasTouch: true,
+            userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1',
+          });
+          const page = await context.newPage();
+          const errors = [];
+          page.on('pageerror', error => errors.push(String(error)));
+          const client = await context.newCDPSession(page);
+          const wrap = value => ((value + 180) % 360 + 360) % 360 - 180;
+
+          function points(count, x, y) {
+            return Array.from({length: count}, (_, index) => ({
+              x: x + (index - (count - 1) / 2) * 26,
+              y,
+              id: index + 1,
+              radiusX: 4,
+              radiusY: 4,
+              force: 1,
+            }));
+          }
+
+          async function tap(count, x, y, hold = 70) {
+            await client.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: points(count, x, y)});
+            await page.waitForTimeout(hold);
+            await client.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
+          }
+
+          async function swipe(count, x, y, dx, dy) {
+            await client.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: points(count, x, y)});
+            await page.waitForTimeout(80);
+            await client.send('Input.dispatchTouchEvent', {type: 'touchMove', touchPoints: points(count, x + dx, y + dy)});
+            await page.waitForTimeout(100);
+            await client.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
+          }
+
+          try {
+            await page.goto('http://127.0.0.1:8799/free-roam.html');
+            await page.locator('#hostButton').click();
+            await page.locator('#game').waitFor({state: 'visible', timeout: 15000});
+            await page.waitForFunction(() => window.__freeRoam.networkDiagnostics().receivedStateCount >= 3, null, {timeout: 10000});
+
+            // A VoiceOver user must be able to leave gesture-only mode through settings.
+            assert.equal(await page.evaluate(() => document.body.classList.contains('gesture-mode')), true, 'iPhone did not start in gesture mode');
+            assert.equal(await page.locator('#controls').isVisible(), false, 'gesture mode did not hide game buttons');
+            await page.locator('#gameSettingsButton').click();
+            await page.locator('#settingsPanel').waitFor({state: 'visible'});
+            await page.waitForTimeout(40);
+            assert.equal(await page.evaluate(() => document.activeElement?.id), 'settingsTitle', 'settings did not move focus to its heading');
+            await page.locator('#settingsGameButtonsButton').click();
+            await page.locator('#settingsCloseButton').click();
+            await page.waitForTimeout(80);
+            assert.equal(await page.evaluate(() => document.body.classList.contains('gesture-mode')), false, 'settings did not enable button mode');
+            assert.equal(await page.locator('#controls').isVisible(), true, 'button controls remained hidden for assistive input');
+            assert.equal(await page.evaluate(() => document.activeElement?.id), 'gameSettingsButton', 'closing settings did not restore focus');
+
+            // Return to gesture mode through the same accessible settings route.
+            await page.locator('#gameSettingsButton').click();
+            await page.locator('#settingsGameButtonsButton').click();
+            await page.locator('#settingsCloseButton').click();
+            await page.waitForTimeout(80);
+            assert.equal(await page.evaluate(() => document.body.classList.contains('gesture-mode')), true, 'settings did not restore gesture mode');
+
+            const box = await page.locator('#playSurface').boundingBox();
+            assert.ok(box, 'play surface has no bounds');
+            const x = box.x + box.width / 2;
+            const y = box.y + Math.min(box.height - 60, 430);
+
+            // Two-finger tap: sonar.
+            await tap(2, x, y);
+            await page.waitForTimeout(600);
+            let state = await page.evaluate(() => ({
+              target: window.__freeRoam.getWorld().freeScenario.targets[0],
+              message: document.querySelector('#message')?.textContent?.trim(),
+            }));
+            console.log(`TWO TAP ${JSON.stringify(state)}`);
+            assert.ok(state.target, 'two-finger tap did not select a sonar target');
+            assert.match(state.message || '', /Сонар:/, 'two-finger tap did not report sonar');
+
+            // Two-finger horizontal swipe: weapon.
+            await swipe(2, x - 70, y, 150, 0);
+            await page.waitForTimeout(700);
+            state = await page.evaluate(() => ({
+              weapon: window.__freeRoam.getWorld().players[0].combat.equipped,
+              label: document.querySelector('#weaponValue')?.textContent?.trim(),
+            }));
+            console.log(`TWO SIDE ${JSON.stringify(state)}`);
+            assert.equal(state.weapon, 'pistol', 'two-finger side swipe did not switch weapon');
+            assert.match(state.label || '', /пистолет/, 'weapon label did not follow gesture');
+
+            // Two-finger upward swipe: pump toggle.
+            await swipe(2, x, y, 0, -150);
+            await page.waitForTimeout(500);
+            state = await page.evaluate(() => ({input: window.__freeRoam.input.pump, label: document.querySelector('#pumpButton')?.textContent?.trim()}));
+            console.log(`TWO UP ${JSON.stringify(state)}`);
+            assert.equal(state.input, true, 'two-finger upward swipe did not enable pump');
+
+            // Four-finger tap: turn to current sonar target.
+            const beforeTurn = await page.evaluate(() => {
+              const world = window.__freeRoam.getWorld();
+              const boat = world.boats[world.players[0].activeBoat];
+              const target = world.freeScenario.targets[0];
+              return {heading: boat.heading, expected: Math.atan2(target.x - boat.x, -(target.y - boat.y)) * 180 / Math.PI};
+            });
+            await tap(4, x, y);
+            await page.waitForTimeout(700);
+            const afterTurn = await page.evaluate(() => ({
+              heading: window.__freeRoam.getWorld().boats[window.__freeRoam.getWorld().players[0].activeBoat].heading,
+              message: document.querySelector('#message')?.textContent?.trim(),
+            }));
+            console.log(`FOUR TAP before=${JSON.stringify(beforeTurn)} after=${JSON.stringify(afterTurn)}`);
+            assert.ok(Math.abs(wrap(afterTurn.heading - beforeTurn.expected)) <= 2, 'four-finger turn did not face sonar target');
+            assert.match(afterTurn.message || '', /повёрнута прямо к цели/i, 'four-finger turn gave no clear confirmation');
+
+            // Double three-finger tap: target menu.
+            await tap(3, x, y);
+            await page.waitForTimeout(150);
+            await tap(3, x, y);
+            await page.waitForTimeout(450);
+            const targeting = await page.evaluate(() => window.__freeRoam.targeting());
+            console.log(`THREE DOUBLE ${JSON.stringify(targeting)}`);
+            assert.equal(Boolean(targeting?.open), true, 'double three-finger tap did not open target menu');
+            await page.keyboard.press('Escape');
+            await page.waitForTimeout(200);
+
+            // Held three fingers with a pistol: firing must consume ammunition.
+            const ammoBefore = await page.evaluate(() => window.__freeRoam.getWorld().players[0].combat.pistolAmmo);
+            await tap(3, x, y, 650);
+            await page.waitForTimeout(1300);
+            const fireState = await page.evaluate(() => ({
+              ammo: window.__freeRoam.getWorld().players[0].combat.pistolAmmo,
+              message: document.querySelector('#message')?.textContent?.trim(),
+            }));
+            console.log(`THREE HOLD ammo=${ammoBefore}->${fireState.ammo} message=${JSON.stringify(fireState.message)}`);
+            assert.ok(fireState.ammo < ammoBefore, 'held three-finger fire did not consume pistol ammunition');
+
+            assert.equal(errors.length, 0, errors.join(' | '));
+            console.log('MOBILE GESTURE ACCESSIBILITY PASS');
+          } finally {
+            await context.close();
+            await browser.close();
+          }
+          EOF
+          set -o pipefail
+          node ./.mobile-gestures.mjs 2>&1 | tee /tmp/mobile-gesture-output.txt
+      - name: Upload mobile diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-gesture-accessibility-output
+          path: |
+            /tmp/mobile-gesture-output.txt
+            /tmp/mobile-gesture-worker.log
+          if-no-files-found: warn
