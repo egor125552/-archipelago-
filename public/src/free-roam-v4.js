@@ -1135,7 +1135,7 @@ function bindKeyboard() {
       toggleControl("repair");
     } else if (!event.repeat && event.code === "KeyQ") {
       event.preventDefault();
-      actionPulse("sonar");
+      useSonarOrCombatTargets();
     } else if (!event.repeat && event.code === "KeyY") {
       event.preventDefault();
       actionPulse("guide");
