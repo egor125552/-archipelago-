@@ -2,3 +2,4 @@ Confirmed bug hunt trigger: 2026-07-25
 Rejoin timing audit: second pass
 Reconnect state audit: third pass
 Campaign audit: fourth pass
+UI consistency audit: fifth pass
