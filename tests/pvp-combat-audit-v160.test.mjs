@@ -34,6 +34,15 @@ function putOnFoot(world, index, x, y, heading = 0) {
   Object.assign(world.players[index], {mode: "foot", activeBoat: null, x, y, heading});
 }
 
+function occupyBoat(world, playerIndex, x, y, hull = 100) {
+  const player = world.players[playerIndex];
+  const boat = world.boats[player.activeBoat];
+  assert.ok(boat);
+  Object.assign(boat, {owner: playerIndex, driver: playerIndex, x, y, hull, leak: 0, sunk: false});
+  Object.assign(player, {mode: "boat", activeBoat: boat.id, x: boat.x, y: boat.y});
+  return boat;
+}
+
 function armAutomatic(world, index, ammo = 40) {
   const combat = world.players[index].combat;
   combat.weapons.automatic = true;
@@ -94,10 +103,7 @@ test("the same locked automatic path works against a swimming player", () => {
 
 test("unlocked automatic fire bypasses the boat and damages a seated driver", () => {
   const world = quietWorld();
-  const boat = world.boats[world.players[1].activeBoat];
-  assert.ok(boat);
-  Object.assign(boat, {x: 200, y: 120, hull: 100, sunk: false});
-  Object.assign(world.players[1], {mode: "boat", activeBoat: boat.id, x: boat.x, y: boat.y});
+  const boat = occupyBoat(world, 1, 200, 120, 100);
   putOnFoot(world, 0, 180, 120, 90);
   armAutomatic(world, 0, 10);
   world.players[0].combat.lockedTargetId = null;
@@ -112,9 +118,7 @@ test("unlocked automatic fire bypasses the boat and damages a seated driver", ()
 
 test("the target menu hides a seated player even though unlocked automatic fire can hit them", () => {
   const world = quietWorld();
-  const boat = world.boats[world.players[1].activeBoat];
-  Object.assign(boat, {x: 200, y: 120, hull: 100, sunk: false});
-  Object.assign(world.players[1], {mode: "boat", activeBoat: boat.id, x: boat.x, y: boat.y});
+  occupyBoat(world, 1, 200, 120, 100);
   putOnFoot(world, 0, 180, 120, 90);
   const targets = listCombatTargets(world, 0, 420);
   assert.equal(targets.some(target => target.kind === "player" && target.playerIndex === 1), false);
@@ -123,9 +127,7 @@ test("the target menu hides a seated player even though unlocked automatic fire 
 
 test("melee attacks also pass through a boat and hit its seated driver", () => {
   const world = quietWorld();
-  const boat = world.boats[world.players[1].activeBoat];
-  Object.assign(boat, {x: 190, y: 120, hull: 100, sunk: false});
-  Object.assign(world.players[1], {mode: "boat", activeBoat: boat.id, x: boat.x, y: boat.y});
+  const boat = occupyBoat(world, 1, 190, 120, 100);
   putOnFoot(world, 0, 180, 120, 90);
   world.players[0].combat.equipped = "fists";
   const beforeHealth = world.players[1].combat.health;
@@ -143,9 +145,7 @@ test("melee attacks also pass through a boat and hit its seated driver", () => {
 
 test("locked automatic fire at an occupied boat cannot defeat the seated player", () => {
   const world = quietWorld();
-  const boat = world.boats[world.players[1].activeBoat];
-  Object.assign(boat, {x: 200, y: 120, hull: 20, leak: 0, sunk: false});
-  Object.assign(world.players[1], {mode: "boat", activeBoat: boat.id, x: boat.x, y: boat.y});
+  const boat = occupyBoat(world, 1, 200, 120, 20);
   putOnFoot(world, 0, 180, 120, 90);
   armAutomatic(world, 0, 50);
   world.players[0].combat.lockedTargetId = `boat-${boat.id}`;
