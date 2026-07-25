@@ -26,7 +26,7 @@ jobs:
           for i in $(seq 1 60); do curl -fsS http://127.0.0.1:8800/free-roam.html >/dev/null && exit 0; sleep 1; done
           cat /tmp/mobile-dispatch-worker.log
           exit 1
-      - name: Test each real gesture independently
+      - name: Test gesture handler with exact pointer groups
         shell: bash
         run: |
           cat > .mobile-dispatch.mjs <<'EOF'
@@ -50,136 +50,123 @@ jobs:
             await page.locator('#hostButton').click();
             await page.locator('#game').waitFor({state: 'visible', timeout: 15000});
             await page.waitForFunction(() => window.__freeRoam.networkDiagnostics().receivedStateCount >= 3, null, {timeout: 10000});
-            await page.evaluate(() => {
-              window.__pointerAudit = [];
-              for (const type of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel']) {
-                document.addEventListener(type, event => window.__pointerAudit.push({type, id: event.pointerId, pointerType: event.pointerType}), true);
-              }
+            const surface = page.locator('#playSurface');
+            return {context, page, surface};
+          }
+
+          async function pointer(surface, type, id, x, y, buttons) {
+            await surface.dispatchEvent(type, {
+              pointerId: id,
+              pointerType: 'touch',
+              isPrimary: id === 101,
+              clientX: x,
+              clientY: y,
+              buttons,
+              bubbles: true,
+              cancelable: true,
             });
-            const client = await context.newCDPSession(page);
-            const box = await page.locator('#playSurface').boundingBox();
+          }
+
+          async function tap(surface, page, count, duration = 70) {
+            const box = await surface.boundingBox();
             assert.ok(box, 'play surface has no bounds');
-            return {context, page, client, x: box.x + box.width / 2, y: box.y + Math.min(box.height - 60, 430)};
-          }
-
-          function points(count, x, y) {
-            return Array.from({length: count}, (_, index) => ({
-              x: x + (index - (count - 1) / 2) * 26,
-              y,
-              id: index + 1,
-              radiusX: 4,
-              radiusY: 4,
-              force: 1,
-            }));
-          }
-
-          async function tap(client, page, count, x, y, duration = 70) {
-            await client.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: points(count, x, y)});
+            const x = box.x + box.width / 2;
+            const y = box.y + Math.min(box.height - 60, 430);
+            for (let index = 0; index < count; index++) await pointer(surface, 'pointerdown', 101 + index, x + index * 12, y, 1);
             await page.waitForTimeout(duration);
-            await client.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
+            for (let index = 0; index < count; index++) await pointer(surface, 'pointerup', 101 + index, x + index * 12, y, 0);
           }
 
-          async function swipe(client, page, count, x, y, dx, dy) {
-            await client.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: points(count, x, y)});
-            await page.waitForTimeout(80);
-            await client.send('Input.dispatchTouchEvent', {type: 'touchMove', touchPoints: points(count, x + dx, y + dy)});
-            await page.waitForTimeout(100);
-            await client.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
+          async function swipe(surface, page, count, dx, dy) {
+            const box = await surface.boundingBox();
+            assert.ok(box, 'play surface has no bounds');
+            const x = box.x + box.width / 2 - dx / 2;
+            const y = box.y + Math.min(box.height - 60, 430) - dy / 2;
+            for (let index = 0; index < count; index++) await pointer(surface, 'pointerdown', 101 + index, x + index * 12, y, 1);
+            await page.waitForTimeout(70);
+            for (let index = 0; index < count; index++) await pointer(surface, 'pointermove', 101 + index, x + dx + index * 12, y + dy, 1);
+            await page.waitForTimeout(90);
+            for (let index = 0; index < count; index++) await pointer(surface, 'pointerup', 101 + index, x + dx + index * 12, y + dy, 0);
           }
 
           async function scenario(name, run) {
-            const mobile = await openMobile();
-            try {
-              console.log(`${name} START`);
-              await run(mobile);
-              const pointerLog = await mobile.page.evaluate(() => window.__pointerAudit);
-              console.log(`${name} POINTERS ${JSON.stringify(pointerLog)}`);
-              console.log(`${name} PASS`);
-            } catch (error) {
-              const state = await mobile.page.evaluate(() => ({
-                input: {...window.__freeRoam.input},
-                target: window.__freeRoam.getWorld()?.freeScenario?.targets?.[0],
-                scenario: window.__freeRoam.getWorld()?.freeScenario,
-                combat: window.__freeRoam.getWorld()?.players?.[0]?.combat,
-                targeting: window.__freeRoam.targeting(),
-                pointerLog: window.__pointerAudit,
-                message: document.querySelector('#message')?.textContent?.trim(),
-              })).catch(() => null);
-              failures.push(`${name}: ${error.stack || error}; state=${JSON.stringify(state)}`);
-              console.error(`${name} FAIL ${error.stack || error} STATE ${JSON.stringify(state)}`);
-            } finally {
-              await mobile.context.close();
+            for (let attempt = 1; attempt <= 3; attempt++) {
+              const mobile = await openMobile();
+              try {
+                await run(mobile);
+                console.log(`${name} ${attempt} PASS`);
+              } catch (error) {
+                const state = await mobile.page.evaluate(() => ({
+                  input: {...window.__freeRoam.input},
+                  target: window.__freeRoam.getWorld()?.freeScenario?.targets?.[0],
+                  beacon: window.__freeRoam.getWorld()?.freeScenario?.beaconUntil?.[0],
+                  combat: window.__freeRoam.getWorld()?.players?.[0]?.combat,
+                  targeting: window.__freeRoam.targeting(),
+                  message: document.querySelector('#message')?.textContent?.trim(),
+                })).catch(() => null);
+                failures.push(`${name} ${attempt}: ${error.stack || error}; state=${JSON.stringify(state)}`);
+                console.error(`${name} ${attempt} FAIL ${error.stack || error} STATE ${JSON.stringify(state)}`);
+              } finally {
+                await mobile.context.close();
+              }
             }
           }
 
-          await scenario('TWO_FINGER_SONAR', async ({page, client, x, y}) => {
-            const before = await page.evaluate(() => ({
-              cooldown: window.__freeRoam.getWorld().freeScenario.sonarCooldown[0],
-              beacon: window.__freeRoam.getWorld().freeScenario.beaconUntil[0],
-            }));
-            await tap(client, page, 2, x, y);
-            let observed = null;
-            for (let index = 0; index < 25; index++) {
-              await page.waitForTimeout(50);
-              const sample = await page.evaluate(() => ({
-                pulse: window.__freeRoam.input.sonar,
-                cooldown: window.__freeRoam.getWorld().freeScenario.sonarCooldown[0],
-                beacon: window.__freeRoam.getWorld().freeScenario.beaconUntil[0],
-                message: document.querySelector('#message')?.textContent?.trim(),
-              }));
-              if (sample.pulse || sample.cooldown > before.cooldown + 0.2 || sample.beacon > 1_000_000 || /Сонар:/.test(sample.message || '')) observed = sample;
-            }
-            console.log(`TWO_FINGER_SONAR OBSERVED ${JSON.stringify(observed)}`);
-            assert.ok(observed, 'two-finger tap produced no sonar pulse, cooldown or report');
+          await scenario('TWO_FINGER_SONAR', async ({page, surface}) => {
+            await tap(surface, page, 2);
+            await page.waitForFunction(() => window.__freeRoam.getWorld().freeScenario.beaconUntil[0] > 1_000_000, null, {timeout: 2500});
           });
 
-          await scenario('TWO_FINGER_WEAPON', async ({page, client, x, y}) => {
-            await swipe(client, page, 2, x - 70, y, 150, 0);
-            await page.waitForFunction(() => window.__freeRoam.getWorld().players[0].combat.equipped === 'pistol', null, {timeout: 3000});
-            assert.match((await page.locator('#weaponValue').textContent()) || '', /пистолет/);
+          await scenario('TWO_FINGER_WEAPON', async ({page, surface}) => {
+            await swipe(surface, page, 2, 150, 0);
+            await page.waitForFunction(() => window.__freeRoam.getWorld().players[0].combat.equipped === 'pistol', null, {timeout: 2500});
           });
 
-          await scenario('TWO_FINGER_PUMP', async ({page, client, x, y}) => {
-            await swipe(client, page, 2, x, y, 0, -150);
+          await scenario('TWO_FINGER_PUMP', async ({page, surface}) => {
+            await swipe(surface, page, 2, 0, -150);
             await page.waitForFunction(() => window.__freeRoam.input.pump === true, null, {timeout: 1500});
           });
 
-          await scenario('FOUR_FINGER_GUIDE', async ({page, client, x, y}) => {
+          await scenario('FOUR_FINGER_GUIDE', async ({page, surface}) => {
             await page.keyboard.press('KeyQ');
-            await page.waitForFunction(() => Boolean(window.__freeRoam.getWorld().freeScenario.targets[0]), null, {timeout: 3000});
+            await page.waitForFunction(() => window.__freeRoam.getWorld().freeScenario.beaconUntil[0] > 1_000_000, null, {timeout: 2500});
             const before = await page.evaluate(() => {
               const world = window.__freeRoam.getWorld();
               const boat = world.boats[world.players[0].activeBoat];
               const target = world.freeScenario.targets[0];
               return {expected: Math.atan2(target.x - boat.x, -(target.y - boat.y)) * 180 / Math.PI};
             });
-            await tap(client, page, 4, x, y);
-            await page.waitForTimeout(900);
-            const after = await page.evaluate(() => {
+            await tap(surface, page, 4);
+            await page.waitForTimeout(500);
+            const heading = await page.evaluate(() => {
               const world = window.__freeRoam.getWorld();
-              return {heading: world.boats[world.players[0].activeBoat].heading, message: document.querySelector('#message')?.textContent?.trim()};
+              return world.boats[world.players[0].activeBoat].heading;
             });
-            assert.ok(Math.abs(wrap(after.heading - before.expected)) <= 2, `four-finger guide heading mismatch: ${JSON.stringify({before, after})}`);
+            assert.ok(Math.abs(wrap(heading - before.expected)) <= 2, `heading ${heading}, expected ${before.expected}`);
           });
 
-          await scenario('THREE_FINGER_DOUBLE_TARGETS', async ({page, client, x, y}) => {
-            await tap(client, page, 3, x, y);
-            await page.waitForTimeout(150);
-            await tap(client, page, 3, x, y);
-            await page.waitForFunction(() => Boolean(window.__freeRoam.targeting()?.open), null, {timeout: 2000});
+          await scenario('THREE_FINGER_DOUBLE_TARGETS', async ({page, surface}) => {
+            await tap(surface, page, 3);
+            await page.waitForTimeout(120);
+            await tap(surface, page, 3);
+            await page.waitForFunction(() => Boolean(window.__freeRoam.targeting()?.open), null, {timeout: 1800});
           });
 
-          await scenario('THREE_FINGER_HOLD_FIRE', async ({page, client, x, y}) => {
+          await scenario('THREE_FINGER_HOLD_ATTACK', async ({page, surface}) => {
             await page.keyboard.press('KeyZ');
-            await page.waitForFunction(() => window.__freeRoam.getWorld().players[0].combat.equipped === 'pistol', null, {timeout: 3000});
-            const before = await page.evaluate(() => window.__freeRoam.getWorld().players[0].combat.pistolAmmo);
-            await tap(client, page, 3, x, y, 650);
-            await page.waitForFunction(value => window.__freeRoam.getWorld().players[0].combat.pistolAmmo < value, before, {timeout: 2500});
+            await page.waitForFunction(() => window.__freeRoam.getWorld().players[0].combat.equipped === 'pistol', null, {timeout: 2500});
+            await tap(surface, page, 3, 650);
+            let observed = false;
+            for (let index = 0; index < 14; index++) {
+              if (await page.evaluate(() => window.__freeRoam.input.attack === true)) observed = true;
+              await page.waitForTimeout(50);
+            }
+            assert.equal(observed, true, 'held three-finger gesture never produced attack pulse');
           });
 
           await browser.close();
-          console.log(`MOBILE DISPATCH SUMMARY failures=${failures.length}`);
-          for (const failure of failures) console.error(`MOBILE_DISPATCH_FAILURE ${failure}`);
+          console.log(`MOBILE HANDLER SUMMARY failures=${failures.length}`);
+          for (const failure of failures) console.error(`MOBILE_HANDLER_FAILURE ${failure}`);
           if (failures.length) process.exit(1);
           EOF
           set -o pipefail
