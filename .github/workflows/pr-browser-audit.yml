@@ -45,7 +45,7 @@ jobs:
       - name: Repeat player scenario
         shell: bash
         run: |
-          cat > /tmp/audit.mjs <<'EOF'
+          cat > .browser-audit.mjs <<'EOF'
           import { chromium } from 'playwright';
           import assert from 'node:assert/strict';
           const browser = await chromium.launch({ headless: true });
@@ -96,7 +96,7 @@ jobs:
           if (failures.length) process.exit(1);
           EOF
           set -o pipefail
-          node /tmp/audit.mjs 2>&1 | tee /tmp/browser-output.txt
+          node ./.browser-audit.mjs 2>&1 | tee /tmp/browser-output.txt
       - name: Upload browser diagnostics
         if: always()
         uses: actions/upload-artifact@v4
