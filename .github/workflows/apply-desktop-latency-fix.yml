@@ -12,9 +12,10 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - name: Preserve repair script and switch to main
+      - name: Preserve repair scripts and switch to main
         run: |
           cp .github/scripts/apply-desktop-latency-fix.py /tmp/apply-desktop-latency-fix.py
+          cp .github/scripts/finish-desktop-latency-fix.py /tmp/finish-desktop-latency-fix.py
           git fetch origin main
           git checkout -B main origin/main
       - uses: actions/setup-node@v4
@@ -22,7 +23,9 @@ jobs:
           node-version: 22
           cache: npm
       - name: Apply latency repair
-        run: python /tmp/apply-desktop-latency-fix.py
+        run: |
+          python /tmp/apply-desktop-latency-fix.py
+          python /tmp/finish-desktop-latency-fix.py
       - run: npm ci
       - name: Run Node tests
         shell: bash
