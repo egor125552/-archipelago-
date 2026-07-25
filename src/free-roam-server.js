@@ -21,6 +21,11 @@ const INPUT_KEYS = Object.freeze([
   "shopPrevious", "shopNext", "shopBuy", "shopClose",
   "boardPrevious", "boardNext", "boardAccept", "boardClose",
 ]);
+const PULSE_INPUT_KEYS = Object.freeze([
+  "action", "jump", "weapon", "sonar", "guide",
+  "shopPrevious", "shopNext", "shopBuy", "shopClose",
+  "boardPrevious", "boardNext", "boardAccept", "boardClose",
+]);
 
 export function freePlayerIndex(role) {
   return role === "captain" ? 0 : role === "crew" ? 1 : -1;
@@ -34,6 +39,46 @@ function normalizeInput(input) {
     ? input.navigationTargetId
     : "objective";
   return result;
+}
+
+function withoutPulseInputs(input) {
+  const result = {...normalizeInput(input)};
+  for (const key of PULSE_INPUT_KEYS) result[key] = false;
+  return result;
+}
+
+function ensureInputBuffers(serverRoom) {
+  const playerCount = serverRoom?.world?.players?.length || 2;
+  serverRoom.inputSequence ||= [];
+  serverRoom.receivedInputs ||= [];
+  serverRoom.pendingPulses ||= [];
+  while (serverRoom.inputSequence.length < playerCount) serverRoom.inputSequence.push(0);
+  while (serverRoom.receivedInputs.length < playerCount) serverRoom.receivedInputs.push(normalizeInput({}));
+  while (serverRoom.pendingPulses.length < playerCount) serverRoom.pendingPulses.push({});
+}
+
+function bufferedInput(serverRoom, playerIndex) {
+  const result = withoutPulseInputs(serverRoom.receivedInputs[playerIndex]);
+  const pending = serverRoom.pendingPulses[playerIndex] || {};
+  for (const key of PULSE_INPUT_KEYS) {
+    if (pending[key]) result[key] = true;
+  }
+  return result;
+}
+
+function deliverPendingPulses(serverRoom) {
+  ensureInputBuffers(serverRoom);
+  for (let index = 0; index < serverRoom.world.players.length; index += 1) {
+    setPlayerInput(serverRoom.world, index, bufferedInput(serverRoom, index));
+  }
+}
+
+function clearDeliveredPulses(serverRoom) {
+  ensureInputBuffers(serverRoom);
+  for (let index = 0; index < serverRoom.world.players.length; index += 1) {
+    serverRoom.pendingPulses[index] = {};
+    setPlayerInput(serverRoom.world, index, withoutPulseInputs(serverRoom.receivedInputs[index]));
+  }
 }
 
 function applyAuthoritativeCombatHotfix(world, dt) {
@@ -50,39 +95,50 @@ export function createServerFreeRoom(now = Date.now()) {
   setPlayerPresence(world, 1, false);
   reserveUnconnectedBoats(world);
   drainEvents(world);
+  const playerCount = world.players.length;
   return {
     world,
     lastTickAt: now,
     sequence: 0,
-    inputSequence: [0, 0],
+    inputSequence: Array.from({length: playerCount}, () => 0),
+    receivedInputs: Array.from({length: playerCount}, () => normalizeInput({})),
+    pendingPulses: Array.from({length: playerCount}, () => ({})),
   };
 }
 
 export function setServerFreePresence(serverRoom, role, present) {
   const playerIndex = freePlayerIndex(role);
   if (!serverRoom?.world || playerIndex < 0) return false;
-  serverRoom.inputSequence ||= [0, 0];
-  while (serverRoom.inputSequence.length < serverRoom.world.players.length) serverRoom.inputSequence.push(0);
-  if (present) {
-    // Input sequence numbers are scoped to one WebSocket connection, not to
-    // the lifetime of the room. A page reload creates a new JavaScript
-    // context whose counter starts at one; keeping the previous connection's
-    // high-water mark would reject every command until the new page caught up.
-    serverRoom.inputSequence[playerIndex] = 0;
-  }
+  ensureInputBuffers(serverRoom);
+  serverRoom.inputSequence[playerIndex] = 0;
+  serverRoom.receivedInputs[playerIndex] = normalizeInput({});
+  serverRoom.pendingPulses[playerIndex] = {};
   setPlayerPresence(serverRoom.world, playerIndex, present);
-  if (!present) setPlayerInput(serverRoom.world, playerIndex, {});
+  setPlayerInput(serverRoom.world, playerIndex, withoutPulseInputs(serverRoom.receivedInputs[playerIndex]));
   return true;
 }
 
 export function applyServerFreeInput(serverRoom, role, input, rawSequence) {
   const playerIndex = freePlayerIndex(role);
   if (!serverRoom?.world || playerIndex < 0) return false;
+  ensureInputBuffers(serverRoom);
   const sequence = Math.max(0, Math.floor(Number(rawSequence) || 0));
   if (sequence && sequence <= serverRoom.inputSequence[playerIndex]) return false;
   if (sequence) serverRoom.inputSequence[playerIndex] = sequence;
+
+  const normalized = normalizeInput(input);
+  const previous = serverRoom.receivedInputs[playerIndex] || normalizeInput({});
+  const pending = serverRoom.pendingPulses[playerIndex] || (serverRoom.pendingPulses[playerIndex] = {});
+  for (const key of PULSE_INPUT_KEYS) {
+    if (normalized[key] && !previous[key]) pending[key] = true;
+  }
+  serverRoom.receivedInputs[playerIndex] = normalized;
+
   setPlayerPresence(serverRoom.world, playerIndex, true);
-  setPlayerInput(serverRoom.world, playerIndex, normalizeInput(input));
+  // Continuous controls apply immediately. One-shot commands are held in a
+  // server-side latch until an authoritative tick consumes them, so a quick
+  // true/false pair cannot disappear during Worker cold start or event-loop load.
+  setPlayerInput(serverRoom.world, playerIndex, withoutPulseInputs(normalized));
   return true;
 }
 
@@ -114,7 +170,11 @@ export function tickServerFreeRoom(serverRoom, now = Date.now()) {
   if (!serverRoom?.world) return null;
   const elapsedSeconds = Math.max(0, (now - serverRoom.lastTickAt) / 1_000);
   serverRoom.lastTickAt = now;
-  stepInChunks(serverRoom.world, elapsedSeconds);
+  if (elapsedSeconds > 0.0001) {
+    deliverPendingPulses(serverRoom);
+    stepInChunks(serverRoom.world, elapsedSeconds);
+    clearDeliveredPulses(serverRoom);
+  }
   const events = drainEvents(serverRoom.world);
   return snapshotServerFreeRoom(serverRoom, now, events);
 }
