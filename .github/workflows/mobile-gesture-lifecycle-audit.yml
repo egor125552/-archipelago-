@@ -1,0 +1,139 @@
+name: Mobile gesture lifecycle audit
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  pointer-lifecycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm install --no-save playwright@1.54.1
+      - run: npx playwright install --with-deps chromium
+      - name: Start Worker
+        run: |
+          npx wrangler dev --local --port 8801 > /tmp/mobile-lifecycle-worker.log 2>&1 &
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:8801/free-roam.html >/dev/null && exit 0; sleep 1; done
+          cat /tmp/mobile-lifecycle-worker.log
+          exit 1
+      - name: Exercise exact pointer lifecycle
+        shell: bash
+        run: |
+          cat > .mobile-lifecycle.mjs <<'EOF'
+          import {chromium} from 'playwright';
+          import assert from 'node:assert/strict';
+
+          const browser = await chromium.launch({headless: true});
+          const context = await browser.newContext({viewport: {width: 390, height: 844}, isMobile: true, hasTouch: true});
+          await context.addInitScript(() => {
+            Object.defineProperty(Element.prototype, 'setPointerCapture', {configurable: true, value() {}});
+            Object.defineProperty(Element.prototype, 'releasePointerCapture', {configurable: true, value() {}});
+          });
+          const page = await context.newPage();
+          const failures = [];
+
+          async function snapshot() {
+            return page.evaluate(() => ({
+              input: {...window.__freeRoam.input},
+              target: window.__freeRoam.getWorld()?.freeScenario?.targets?.[0] || null,
+              beacon: window.__freeRoam.getWorld()?.freeScenario?.beaconUntil?.[0] || 0,
+              guide: window.__freeRoam.getWorld()?.freeScenario?.guideEnabled?.[0] || false,
+              combat: {...window.__freeRoam.getWorld()?.players?.[0]?.combat},
+              targeting: window.__freeRoam.targeting(),
+              message: document.querySelector('#message')?.textContent?.trim(),
+              gestureMode: document.body.classList.contains('gesture-mode'),
+            }));
+          }
+
+          async function emit(type, id, x, y, buttons) {
+            await page.locator('#playSurface').dispatchEvent(type, {
+              pointerType: 'touch', pointerId: id, isPrimary: id === 1,
+              clientX: x, clientY: y, buttons,
+              bubbles: true, cancelable: true,
+            });
+          }
+
+          async function gesture(count, {dx = 0, dy = 0, duration = 70} = {}) {
+            const box = await page.locator('#playSurface').boundingBox();
+            const x = box.x + box.width / 2;
+            const y = box.y + Math.min(box.height - 80, 420);
+            for (let index = 0; index < count; index++) await emit('pointerdown', index + 1, x + index * 18, y, 1);
+            if (dx || dy) {
+              await page.waitForTimeout(80);
+              for (let index = 0; index < count; index++) await emit('pointermove', index + 1, x + index * 18 + dx, y + dy, 1);
+            }
+            await page.waitForTimeout(duration);
+            for (let index = 0; index < count; index++) await emit('pointerup', index + 1, x + index * 18 + dx, y + dy, 0);
+          }
+
+          async function scenario(name, run) {
+            try { await run(); console.log(`${name} PASS ${JSON.stringify(await snapshot())}`); }
+            catch (error) { failures.push(`${name}: ${error.stack || error}`); console.error(`${name} FAIL ${error.stack || error} STATE ${JSON.stringify(await snapshot())}`); }
+          }
+
+          await page.goto('http://127.0.0.1:8801/free-roam.html');
+          await page.locator('#hostButton').click();
+          await page.locator('#game').waitFor({state: 'visible', timeout: 15000});
+          await page.waitForFunction(() => window.__freeRoam.networkDiagnostics().receivedStateCount >= 3, null, {timeout: 10000});
+          assert.equal((await snapshot()).gestureMode, true);
+
+          await scenario('TWO_TAP', async () => {
+            const before = (await snapshot()).beacon;
+            await gesture(2);
+            await page.waitForFunction(value => window.__freeRoam.getWorld().freeScenario.beaconUntil[0] > value, before, {timeout: 2500});
+          });
+          await scenario('TWO_SIDE', async () => {
+            await gesture(2, {dx: 150});
+            await page.waitForFunction(() => window.__freeRoam.getWorld().players[0].combat.equipped === 'pistol', null, {timeout: 2500});
+          });
+          await scenario('TWO_UP', async () => {
+            await gesture(2, {dy: -150});
+            await page.waitForFunction(() => window.__freeRoam.input.pump === true, null, {timeout: 1500});
+          });
+          await scenario('FOUR_TAP', async () => {
+            const before = await page.evaluate(() => window.__freeRoam.getWorld().boats[0].heading);
+            await gesture(4);
+            await page.waitForFunction(value => Math.abs(window.__freeRoam.getWorld().boats[0].heading - value) > 1, before, {timeout: 2500});
+          });
+          await scenario('THREE_DOUBLE', async () => {
+            await gesture(3);
+            await page.waitForTimeout(150);
+            await gesture(3);
+            await page.waitForFunction(() => window.__freeRoam.targeting().open === true, null, {timeout: 2000});
+            await page.keyboard.press('Escape');
+          });
+          await scenario('THREE_HOLD', async () => {
+            if ((await snapshot()).combat.equipped !== 'pistol') await page.keyboard.press('KeyZ');
+            await page.waitForFunction(() => window.__freeRoam.getWorld().players[0].combat.equipped === 'pistol', null, {timeout: 2500});
+            const before = (await snapshot()).combat.pistolAmmo;
+            await gesture(3, {duration: 650});
+            await page.waitForFunction(value => window.__freeRoam.getWorld().players[0].combat.pistolAmmo < value, before, {timeout: 2500});
+          });
+
+          await context.close();
+          await browser.close();
+          console.log(`MOBILE LIFECYCLE SUMMARY failures=${failures.length}`);
+          for (const failure of failures) console.error(`MOBILE_LIFECYCLE_FAILURE ${failure}`);
+          if (failures.length) process.exit(1);
+          EOF
+          set -o pipefail
+          node ./.mobile-lifecycle.mjs 2>&1 | tee /tmp/mobile-lifecycle-output.txt
+      - name: Upload lifecycle diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-gesture-lifecycle-output
+          path: |
+            /tmp/mobile-lifecycle-output.txt
+            /tmp/mobile-lifecycle-worker.log
+          if-no-files-found: warn
