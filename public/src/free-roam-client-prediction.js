@@ -13,6 +13,28 @@ function blendAngle(authoritative, predicted, keep) {
   return wrapDeg((Number(authoritative) || 0) + difference * keep);
 }
 
+function movementDirection(input = {}) {
+  let x = Number(Boolean(input.right)) - Number(Boolean(input.left));
+  let y = Number(Boolean(input.down)) - Number(Boolean(input.up));
+  const length = Math.hypot(x, y);
+  if (length < 0.001) return null;
+  x /= length;
+  y /= length;
+  return {x, y};
+}
+
+function authoritativePersonCorrection(previousPlayer, nextPlayer) {
+  const previousCombat = previousPlayer?.combat;
+  const nextCombat = nextPlayer?.combat;
+  if (previousCombat?.alive !== nextCombat?.alive) return true;
+  if (previousCombat?.knockedDown !== nextCombat?.knockedDown) return true;
+  const previousHealth = Number(previousCombat?.health);
+  const nextHealth = Number(nextCombat?.health);
+  return Number.isFinite(previousHealth)
+    && Number.isFinite(nextHealth)
+    && nextHealth < previousHealth - 0.01;
+}
+
 export function localPredictionLeadSeconds({networkRttMs, inputReceiptMs, controlLatencyMs} = {}) {
   const preferred = [networkRttMs, inputReceiptMs, controlLatencyMs]
     .map(Number)
@@ -45,14 +67,31 @@ export function reconcileLocalPrediction(previousWorld, nextWorld, playerIndex, 
   }
 
   if (["foot", "swim"].includes(nextPlayer.mode)) {
-    const error = Math.hypot(previousPlayer.x - nextPlayer.x, previousPlayer.y - nextPlayer.y);
-    // Person prediction has no full collision model. A large disagreement is a
-    // real boundary, hit or mode correction and must win immediately.
-    if (error > 3.5) return nextWorld;
-    const input = options.input || {};
-    const moving = Boolean(input.up || input.down || input.left || input.right);
+    if (authoritativePersonCorrection(previousPlayer, nextPlayer)) return nextWorld;
+    const direction = movementDirection(options.input);
+    const deltaX = (Number(nextPlayer.x) || 0) - (Number(previousPlayer.x) || 0);
+    const deltaY = (Number(nextPlayer.y) || 0) - (Number(previousPlayer.y) || 0);
+    const error = Math.hypot(deltaX, deltaY);
+
+    if (direction) {
+      const along = deltaX * direction.x + deltaY * direction.y;
+      const perpendicularX = deltaX - direction.x * along;
+      const perpendicularY = deltaY - direction.y * along;
+      const lateralCorrection = 0.18;
+      const forwardCorrection = along > 0 ? 0.65 : 0;
+      nextPlayer.x = previousPlayer.x
+        + direction.x * along * forwardCorrection
+        + perpendicularX * lateralCorrection;
+      nextPlayer.y = previousPlayer.y
+        + direction.y * along * forwardCorrection
+        + perpendicularY * lateralCorrection;
+      nextPlayer.heading = blendAngle(nextPlayer.heading, previousPlayer.heading, 0.86);
+      return nextWorld;
+    }
+
+    if (error > 8) return nextWorld;
     const latencyBlend = clamp(((Number(options.networkRttMs) || 0) - 40) / 240, 0, 1);
-    const keep = moving ? 0.72 + latencyBlend * 0.14 : 0.56;
+    const keep = 0.82 + latencyBlend * 0.16;
     nextPlayer.x += (previousPlayer.x - nextPlayer.x) * keep;
     nextPlayer.y += (previousPlayer.y - nextPlayer.y) * keep;
     nextPlayer.heading = blendAngle(nextPlayer.heading, previousPlayer.heading, keep);
@@ -99,8 +138,12 @@ function predictPerson(world, playerIndex, input, dt) {
   dx /= length;
   dy /= length;
   const speed = player.mode === "swim" ? 6 : input.run ? 13.76 : 8;
-  player.x = clamp(player.x + dx * speed * dt, 5, WORLD.width - 5);
-  player.y = clamp(player.y + dy * speed * dt, 5, WORLD.height - 5);
+  const minimumX = player.mode === "foot" ? Number(WORLD.landMinX) || 5 : 5;
+  const maximumX = player.mode === "foot" ? Number(WORLD.landMaxX) || WORLD.width - 5 : WORLD.width - 5;
+  const minimumY = player.mode === "foot" ? Number(WORLD.landMinY) || 5 : 5;
+  const maximumY = player.mode === "foot" ? Number(WORLD.landMaxY) || WORLD.shoreY + 4 : WORLD.height - 5;
+  player.x = clamp(player.x + dx * speed * dt, minimumX, maximumX);
+  player.y = clamp(player.y + dy * speed * dt, minimumY, maximumY);
   player.heading = Math.atan2(dx, -dy) * 180 / Math.PI;
 }
 
