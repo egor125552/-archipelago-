@@ -2,11 +2,11 @@
 
 (() => {
   const SAVED_WORLD_KEY = "echo-free-roam-saved-world-v2";
-  const LEGACY_SESSION_KEY = "echo-free-roam-active-session-v1";
+  const LIVE_SESSION_KEY = "echo-free-roam-active-session-v1";
   const INTERFACE_SETTINGS_KEY = "echo-free-roam-interface-settings-v1";
   const NativeWebSocket = globalThis.WebSocket;
 
-  let savedWorld = migrateSavedWorld();
+  let savedWorld = readSavedWorld();
   let pendingSavedJoin = false;
   let createNewPending = false;
   let bypassCreateGuard = false;
@@ -20,25 +20,18 @@
     catch (_) { return null; }
   }
 
-  function migrateSavedWorld() {
+  function readSavedWorld() {
     const stored = readJson(localStorage, SAVED_WORLD_KEY);
-    const legacy = readJson(sessionStorage, LEGACY_SESSION_KEY);
-    const result = validSession(stored) ? stored : validSession(legacy) ? legacy : null;
-    if (result) {
-      try {
-        localStorage.setItem(SAVED_WORLD_KEY, JSON.stringify({
-          room: String(result.room),
-          role: result.role,
-          savedAt: Number(result.savedAt) || Date.now(),
-        }));
-      } catch (_) {}
-    }
-    try { sessionStorage.removeItem(LEGACY_SESSION_KEY); } catch (_) {}
-    return result && {
-      room: String(result.room),
-      role: result.role,
-      savedAt: Number(result.savedAt) || Date.now(),
+    if (!validSession(stored)) return null;
+    return {
+      room: String(stored.room),
+      role: stored.role,
+      savedAt: Number(stored.savedAt) || Date.now(),
     };
+  }
+
+  function hasLiveSession() {
+    return validSession(readJson(sessionStorage, LIVE_SESSION_KEY));
   }
 
   async function savedWorldStatus(room = "") {
@@ -69,7 +62,8 @@
     savedWorld = null;
     pendingSavedJoin = false;
     try { localStorage.removeItem(SAVED_WORLD_KEY); } catch (_) {}
-    try { sessionStorage.removeItem(LEGACY_SESSION_KEY); } catch (_) {}
+    // The live page-reload session belongs to free-roam-startup-v1.js. A
+    // durable-save validation failure must never eject an active ephemeral room.
     syncButtons();
   }
 
@@ -207,7 +201,7 @@
   }, true);
 
   function autoResumeSavedWorld() {
-    if (!savedWorld || !autoResumeEnabled()) return;
+    if (!savedWorld || !autoResumeEnabled() || hasLiveSession()) return;
     const lobby = document.getElementById("lobby");
     const join = document.getElementById("joinButton");
     const resume = document.getElementById("resumeSavedButton");
@@ -220,7 +214,9 @@
 
   syncButtons();
   validateSavedWorld().then(valid => {
-    if (valid && autoResumeEnabled()) setTimeout(autoResumeSavedWorld, 0);
+    // A live session gets first priority and is resumed by startup-v1. Durable
+    // auto-resume is only for a genuinely new tab/browser session.
+    if (valid && autoResumeEnabled() && !hasLiveSession()) setTimeout(autoResumeSavedWorld, 0);
   });
 
   globalThis.__freeRoamSavedWorld = {
