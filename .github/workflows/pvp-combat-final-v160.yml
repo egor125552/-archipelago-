@@ -21,11 +21,11 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Run only PvP automatic regressions
+      - name: Run only focused PvP regressions and audit
         shell: bash
         run: |
           set +e
-          node --test tests/pvp-combat-final-v160.test.mjs > pvp-combat-final-output.txt 2>&1
+          node --test tests/pvp-combat-final-v160.test.mjs tests/pvp-combat-audit-pass2-v160.test.mjs > pvp-combat-final-output.txt 2>&1
           code=$?
           printf '\nEXIT_CODE=%s\n' "$code" >> pvp-combat-final-output.txt
           exit 0
