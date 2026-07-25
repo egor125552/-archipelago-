@@ -3,8 +3,17 @@ import {setServerFreePresence} from "./free-roam-server.js";
 
 const ROOM_STORAGE_PREFIX = "free-room-v1:";
 const ROOM_ROLES = Object.freeze(["captain", "crew"]);
-const RECONNECT_GRACE_MS = 30 * 60 * 1000;
 const PERSIST_INTERVAL_MS = 1000;
+
+function json(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+    },
+  });
+}
 
 function socketLooksOpen(socket) {
   return Boolean(socket && (socket.readyState == null || socket.readyState === 1));
@@ -33,7 +42,7 @@ function restoredRoom(saved, now = Date.now()) {
   const freeServer = cloneValue(saved.freeServer);
   freeServer.lastTickAt = now;
   // WebSocket transports never survive a Durable Object restart. Keep the
-  // world, but clear both roles until their browsers reconnect.
+  // actual world, but clear both online roles until their browsers reconnect.
   setServerFreePresence(freeServer, "captain", false);
   setServerFreePresence(freeServer, "crew", false);
   return {
@@ -44,7 +53,7 @@ function restoredRoom(saved, now = Date.now()) {
     createdAt: Number(saved.createdAt) || now,
     pending: {captain: [], crew: []},
     lastSeen: {captain: 0, crew: 0},
-    emptySince: now,
+    emptySince: Number(saved.emptySince) || now,
     freeServer,
   };
 }
@@ -62,26 +71,19 @@ export class Lobby extends MemoryLobby {
       try {
         const entries = await state.storage.list({prefix: ROOM_STORAGE_PREFIX});
         const now = Date.now();
-        const expiredKeys = [];
+        const invalidKeys = [];
         for (const [key, saved] of entries) {
-          const priorEmptySince = Number(saved?.emptySince) || 0;
-          if (priorEmptySince && now - priorEmptySince >= RECONNECT_GRACE_MS) {
-            expiredKeys.push(key);
-            continue;
-          }
           const room = restoredRoom(saved, now);
           if (!room) {
-            expiredKeys.push(key);
+            invalidKeys.push(key);
             continue;
           }
           this.rooms.set(room.id, room);
           this.persistedRoomIds.add(room.id);
         }
-        for (const key of expiredKeys) await state.storage.delete(key);
+        for (const key of invalidKeys) await state.storage.delete(key);
       } catch (error) {
         // A storage read failure must not make the whole game unreachable.
-        // The client will receive an honest new-world message if no saved room
-        // can be recovered, and later writes can heal the persistent cache.
         console.error("Unable to restore free-roam rooms", error);
       }
     });
@@ -89,6 +91,24 @@ export class Lobby extends MemoryLobby {
 
   storageKey(roomId) {
     return `${ROOM_STORAGE_PREFIX}${roomId}`;
+  }
+
+  async deleteSavedRoom(roomId) {
+    const id = String(roomId || "").trim().slice(0, 32);
+    if (!id) return false;
+    const room = this.rooms.get(id);
+    if (room?.mode === "free") {
+      for (const role of ROOM_ROLES) {
+        const socket = room[role];
+        if (!socket) continue;
+        this.clients.delete(socket);
+        try { socket.close(4105, "saved-world-deleted"); } catch (_) {}
+      }
+      this.rooms.delete(id);
+    }
+    this.persistedRoomIds.delete(id);
+    await this.persistentState.storage.delete(this.storageKey(id));
+    return Boolean(room);
   }
 
   async flushPersistence() {
@@ -164,9 +184,11 @@ export class Lobby extends MemoryLobby {
         }
       }
       if (!room.captain && !room.crew) {
-        if (!room.emptySince) room.emptySince = now;
-        if (room.mode !== "free" || now - room.emptySince >= RECONNECT_GRACE_MS) {
-          this.rooms.delete(room.id);
+        // An empty free world is a saved game, not garbage. It remains hidden
+        // from the public waiting-room list and survives until its owner presses
+        // “Create new world”, which calls the explicit deletion endpoint below.
+        if (!room.emptySince) {
+          room.emptySince = now;
           changed = true;
         }
       } else if (room.emptySince) {
@@ -179,8 +201,25 @@ export class Lobby extends MemoryLobby {
   }
 
   async fetch(request) {
-    const response = await super.fetch(request);
     const url = new URL(request.url);
+    if (url.pathname === "/api/saved-world") {
+      const roomId = String(url.searchParams.get("room") || "").trim();
+      if (request.method === "DELETE") {
+        const existed = await this.deleteSavedRoom(roomId);
+        return json({ok: true, room: roomId, deleted: existed});
+      }
+      if (request.method === "GET") {
+        const room = this.rooms.get(roomId);
+        return json({
+          room: roomId,
+          exists: Boolean(room?.mode === "free" && room.freeServer?.world),
+          online: Boolean(room?.captain || room?.crew),
+        });
+      }
+      return json({error: "Method not allowed"}, 405);
+    }
+
+    const response = await super.fetch(request);
     if (url.pathname === "/api/connect") this.queuePersistence(true);
     return response;
   }
