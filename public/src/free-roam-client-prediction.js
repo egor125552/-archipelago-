@@ -7,10 +7,45 @@ import {operationSteeringDelta} from "./free-roam-steering-model.js";
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const wrapDeg = value => ((value + 180) % 360 + 360) % 360 - 180;
 const rad = degrees => degrees * Math.PI / 180;
+const PLAYER_RADIUS = 1.4;
+const BOAT_RADIUS = 6;
+const PURSUER_RADIUS = 6.8;
 
 function blendAngle(authoritative, predicted, keep) {
   const difference = wrapDeg((Number(predicted) || 0) - (Number(authoritative) || 0));
   return wrapDeg((Number(authoritative) || 0) + difference * keep);
+}
+
+function separatePointFromBody(point, body, minimum, fallbackX = 1) {
+  if (!point || !body) return false;
+  let dx = (Number(point.x) || 0) - (Number(body.x) || 0);
+  let dy = (Number(point.y) || 0) - (Number(body.y) || 0);
+  let metres = Math.hypot(dx, dy);
+  if (metres >= minimum) return false;
+  if (metres < 0.001) {
+    dx = fallbackX;
+    dy = 0;
+    metres = 1;
+  }
+  const push = minimum - metres;
+  point.x += dx / metres * push;
+  point.y += dy / metres * push;
+  return true;
+}
+
+function resolvePredictedPersonBodies(world, playerIndex, player) {
+  for (const boat of world?.boats || []) {
+    if (!boat || boat.sunk) continue;
+    separatePointFromBody(player, boat, PLAYER_RADIUS + BOAT_RADIUS, playerIndex ? 1 : -1);
+  }
+  const marauder = world?.freeActivities?.marauder;
+  if (marauder?.active && !marauder.destroyed) {
+    separatePointFromBody(player, marauder, PLAYER_RADIUS + PURSUER_RADIUS, playerIndex ? 1 : -1);
+  }
+  for (const escort of world?.freePursuerSquad?.escorts || []) {
+    if (!escort?.active || escort.destroyed) continue;
+    separatePointFromBody(player, escort, PLAYER_RADIUS + PURSUER_RADIUS, playerIndex ? 1 : -1);
+  }
 }
 
 export function localPredictionLeadSeconds({networkRttMs, inputReceiptMs, controlLatencyMs} = {}) {
@@ -46,16 +81,15 @@ export function reconcileLocalPrediction(previousWorld, nextWorld, playerIndex, 
 
   if (["foot", "swim"].includes(nextPlayer.mode)) {
     const error = Math.hypot(previousPlayer.x - nextPlayer.x, previousPlayer.y - nextPlayer.y);
-    // Person prediction has no full collision model. A large disagreement is a
-    // real boundary, hit or mode correction and must win immediately.
-    if (error > 3.5) return nextWorld;
+    if (error > 4.5) return nextWorld;
     const input = options.input || {};
     const moving = Boolean(input.up || input.down || input.left || input.right);
     const latencyBlend = clamp(((Number(options.networkRttMs) || 0) - 40) / 240, 0, 1);
-    const keep = moving ? 0.72 + latencyBlend * 0.14 : 0.56;
+    const keep = moving ? 0.76 + latencyBlend * 0.14 : 0.66 + latencyBlend * 0.2;
     nextPlayer.x += (previousPlayer.x - nextPlayer.x) * keep;
     nextPlayer.y += (previousPlayer.y - nextPlayer.y) * keep;
     nextPlayer.heading = blendAngle(nextPlayer.heading, previousPlayer.heading, keep);
+    resolvePredictedPersonBodies(nextWorld, playerIndex, nextPlayer);
   }
   return nextWorld;
 }
@@ -102,6 +136,7 @@ function predictPerson(world, playerIndex, input, dt) {
   player.x = clamp(player.x + dx * speed * dt, 5, WORLD.width - 5);
   player.y = clamp(player.y + dy * speed * dt, 5, WORLD.height - 5);
   player.heading = Math.atan2(dx, -dy) * 180 / Math.PI;
+  resolvePredictedPersonBodies(world, playerIndex, player);
 }
 
 export function predictLocalWorld(world, playerIndex, input, dt) {
