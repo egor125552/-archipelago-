@@ -30,22 +30,14 @@ async function beginSamples(name, durationMs) {
     const sample = now => {
       const player = globalThis.__freeRoam?.getWorld?.()?.players?.[0];
       const boat = globalThis.__freeRoam?.getWorld?.()?.boats?.[0];
-      if (player) globalThis[name].push({
-        at: now,
-        x: player.x,
-        y: player.y,
-        mode: player.mode,
-        boatX: boat?.x,
-        boatY: boat?.y,
-        inputUp: Boolean(globalThis.__freeRoam?.input?.up),
-        inputDown: Boolean(globalThis.__freeRoam?.input?.down),
-        state: globalThis.__lastFreeState || null,
-      });
+      if (player) globalThis[name].push({at: now, x: player.x, y: player.y, mode: player.mode, boatX: boat?.x, boatY: boat?.y});
       if (now < stopAt) requestAnimationFrame(sample);
     };
     requestAnimationFrame(sample);
   }, {name, durationMs});
 }
+
+const intervals = items => items.slice(1).map((item, index) => item.at - items[index].at);
 
 await page.goto("http://127.0.0.1:8788/free-roam.html", {waitUntil: "domcontentloaded"});
 await page.click("#hostButton");
@@ -71,7 +63,6 @@ const collision = await page.evaluate(() => {
     if (deltaY > 0.015) corrections.push(deltaY);
   }
   return {
-    sampleCount: samples.length,
     expectedMinimumY,
     minimumY,
     hullPenetration: Math.max(0, expectedMinimumY - minimumY),
@@ -81,6 +72,10 @@ const collision = await page.evaluate(() => {
   };
 });
 
+await page.evaluate(() => {
+  globalThis.__jitterEvents = [];
+  if (globalThis.__localFeedbackAudit) globalThis.__localFeedbackAudit.steps = [];
+});
 await page.waitForTimeout(500);
 await beginSamples("__openWaterSamples", 5400);
 await page.keyboard.down("ArrowDown");
@@ -97,9 +92,9 @@ const openWater = await page.evaluate(() => {
     if (deltaY < -0.015) backwards.push(-deltaY);
     if (deltaY > 0.001) forward.push(deltaY);
   }
-  const steps = (globalThis.__jitterEvents || []).filter(event => event.type === "swim-step" && event.sourcePlayer === 0);
+  const serverSteps = (globalThis.__jitterEvents || []).filter(event => event.type === "swim-step" && event.sourcePlayer === 0);
+  const localSteps = globalThis.__localFeedbackAudit?.steps || [];
   return {
-    sampleCount: samples.length,
     startY: samples[0]?.y,
     finalY: samples.at(-1)?.y,
     distance: (samples.at(-1)?.y || 0) - (samples[0]?.y || 0),
@@ -107,13 +102,42 @@ const openWater = await page.evaluate(() => {
     largeBackwardsCount: backwards.filter(value => value > 0.08).length,
     maxBackwards: backwards.length ? Math.max(...backwards) : 0,
     maximumForwardFrame: forward.length ? Math.max(...forward) : 0,
-    stepCount: steps.length,
-    stepIntervals: steps.slice(1).map((event, index) => event.at - steps[index].at),
+    serverStepIntervals: serverSteps.slice(1).map((event, index) => event.at - serverSteps[index].at),
+    localStepCount: localSteps.length,
+    localStepIntervals: localSteps.slice(1).map((event, index) => event.at - localSteps[index].at),
     network: globalThis.__freeRoam?.networkDiagnostics?.(),
   };
 });
 
-const result = {collision, openWater};
+await page.evaluate(() => {
+  globalThis.__jitterEvents = [];
+  globalThis.__localFeedbackAudit.shots = [];
+  globalThis.__localFeedbackAudit.commands = [];
+});
+await page.keyboard.down("KeyX");
+await page.waitForTimeout(3200);
+await page.keyboard.up("KeyX");
+await page.waitForTimeout(400);
+const automatic = await page.evaluate(() => {
+  const localShots = globalThis.__localFeedbackAudit?.shots || [];
+  const serverShots = (globalThis.__jitterEvents || []).filter(event => event.type === "gun-shot" && event.sourcePlayer === 0);
+  return {
+    equipped: globalThis.__freeRoam?.getWorld?.()?.players?.[0]?.combat?.equipped,
+    localShotCount: localShots.length,
+    localShotIntervals: localShots.slice(1).map((event, index) => event.at - localShots[index].at),
+    serverShotIntervals: serverShots.slice(1).map((event, index) => event.at - serverShots[index].at),
+  };
+});
+
+const sonarStartedAt = await page.evaluate(() => performance.now());
+await page.keyboard.press("KeyC");
+await page.waitForTimeout(120);
+const sonar = await page.evaluate(startedAt => {
+  const command = (globalThis.__localFeedbackAudit?.commands || []).find(item => item.kind === "sonar");
+  return {localCueDelayMs: command ? command.at - startedAt : null};
+}, sonarStartedAt);
+
+const result = {collision, openWater, automatic, sonar};
 await writeFile("desktop-jitter-result.json", JSON.stringify(result, null, 2));
 console.log("DESKTOP_JITTER_AUDIT " + JSON.stringify(result));
 await browser.close();
