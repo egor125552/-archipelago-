@@ -24,7 +24,7 @@ export function listCombatTargets(world, attackerIndex, maximumRange = Infinity)
   for (let index = 0; index < (world.players || []).length; index += 1) {
     if (index === attackerIndex || !presence[index]) continue;
     const player = world.players[index];
-    if (player?.combat?.alive && ["foot", "swim", "roof"].includes(player.mode)) {
+    if (player?.combat?.alive && ["foot", "swim", "roof", "boat"].includes(player.mode)) {
       targets.push({
         id: `player-${index}`,
         kind: "player",
