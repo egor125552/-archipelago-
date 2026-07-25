@@ -88,7 +88,7 @@ test("startup physically collapses legacy saves to one newest world", async () =
   assert.equal(storage.values.get(PRIMARY_KEY), "FREE-NEW");
 });
 
-test("only the first room can become durable", async () => {
+test("many live rooms may exist but only the first can become durable", async () => {
   const storage = new FakeStorage();
   const state = fakeState(storage);
   const lobby = new Lobby(state, {});
@@ -101,6 +101,7 @@ test("only the first room can become durable", async () => {
   assert.equal(lobby.markRoomDirty("FREE-B"), false);
   await lobby.flushPersistence();
 
+  assert.deepEqual([...lobby.rooms.keys()], ["FREE-A", "FREE-B"]);
   assert.equal(lobby.primarySavedRoomId, "FREE-A");
   assert.equal(storage.values.get(PRIMARY_KEY), "FREE-A");
   assert.equal(storage.values.has(`${ROOM_PREFIX}FREE-A`), true);
@@ -117,7 +118,7 @@ test("nearest entry and explicit resume are separate paths", async () => {
   assert.match(client, /join\.textContent = "Войти в ближайший мир"/);
   assert.match(client, /resumeSavedButton/);
   assert.doesNotMatch(client, /closest\("#joinButton"\)[\s\S]{0,100}pendingSavedJoin = true/);
-  assert.match(worker, /routeToPrimaryRoom/);
-  assert.match(worker, /routed\.searchParams\.set\("role", "auto"\)/);
+  assert.doesNotMatch(worker, /routeToPrimaryRoom/);
+  assert.match(worker, /if \(!roomId \|\| !this\.claimPrimarySavedRoom\(roomId\)\) return false/);
   assert.match(html, /free-roam-saved-world-v1\.js\?v=2/);
 });
