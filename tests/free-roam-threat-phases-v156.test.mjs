@@ -89,19 +89,22 @@ test("knife enemies leave the shore, catch a swimmer, and strike", () => {
   assert.ok(damage > 0);
 });
 
-test("the delayed level-five final phase creates a mixed physical landing once", () => {
+test("level-five opening deploys phase two immediately and final reserves once", () => {
   const world = createFreeWorld();
   world.freeActivities.presence = [true, false];
   world.freeThreatDirector = {active: true, level: 5, encounterId: 177};
   world.freeHeavyPursuer ||= {projectiles: []};
-  world.freeHeavyPursuer.boat = {id: "heavy-pursuer", role: "heavy", x: 210, y: 150, heading: 0, active: true, destroyed: false};
+  world.freeHeavyPursuer.boat = {id: "heavy-pursuer", role: "heavy", x: 210, y: 150, heading: 0, hull: 700, maxHull: 700, active: true, destroyed: false};
   world.freeHostileActors.active = true;
   world.freeHostileActors.actors = [];
   prepareThreatIntelligence(world);
-  assert.equal(world.freeHostileActors.actors.length, 0);
+  assert.equal(world.freeHostileActors.actors.filter(actor => actor.active).length, 10);
+  assert.equal(world.events.filter(event => event.type === "contract-threat-phase-two").length, 1);
+  world.freeHeavyPursuer.boat.destroyed = true;
+  world.freeHeavyPursuer.boat.active = false;
   world.time += 4.6;
   prepareThreatIntelligence(world);
-  assert.equal(world.freeHostileActors.actors.filter(actor => actor.active).length, 10);
+  assert.equal(world.freeHostileActors.actors.filter(actor => actor.active).length, 16);
   assert.ok(world.freeHostileActors.actors.some(actor => actor.weapon === "knife"));
   assert.ok(world.freeHostileActors.actors.some(actor => actor.weapon === "automatic"));
   const count = world.freeHostileActors.actors.length;
@@ -111,7 +114,7 @@ test("the delayed level-five final phase creates a mixed physical landing once",
   assert.equal(world.events.filter(event => event.type === "contract-threat-final-wave").length, 1);
 });
 
-test("cooperative final phase caps at fourteen distributed fighters", () => {
+test("cooperative final phase creates twenty-two distributed fighters and three boats", () => {
   const world = createFreeWorld();
   world.freeActivities.presence = [true, true];
   world.freeThreatDirector = {active: true, level: 5, encounterId: 188};
@@ -119,8 +122,9 @@ test("cooperative final phase caps at fourteen distributed fighters", () => {
   world.freeHeavyPursuer.boat = {id: "heavy-pursuer", role: "heavy", x: 210, y: 150, heading: 0, active: true, destroyed: false};
   world.freeHostileActors.active = true;
   world.freeHostileActors.actors = [];
-  assert.equal(spawnFinalThreatWave(world), 14);
-  assert.equal(world.freeHostileActors.actors.length, 14);
+  assert.equal(spawnFinalThreatWave(world), 25);
+  assert.equal(world.freeHostileActors.actors.length, 22);
+  assert.equal(world.freeEnemyBoats.boats.length, 3);
   assert.deepEqual(new Set(world.freeHostileActors.actors.map(actor => actor.targetPlayer)), new Set([0, 1]));
 });
 
