@@ -1,0 +1,49 @@
+name: Real-client hostile gunner audit
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  hostile-gunner-client:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm install --no-save --package-lock=false @playwright/test
+      - run: npx playwright install --with-deps chromium webkit
+      - name: Start local authoritative audit Worker
+        shell: bash
+        run: |
+          npx wrangler dev src/worker-hostile-gunner-audit.js --config wrangler.jsonc --local --port 8787 --log-level error > hostile-gunner-worker.log 2>&1 &
+          echo $! > /tmp/hostile-gunner-worker.pid
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent --show-error 'http://127.0.0.1:8787/api/rooms?mode=free' >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat hostile-gunner-worker.log
+          exit 1
+      - name: Run actual Chromium and WebKit clients
+        run: npx playwright test --config=playwright.gunner-audit.config.mjs
+      - name: Upload hostile gunner evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hostile-gunner-real-client-evidence
+          path: |
+            test-results
+            hostile-gunner-worker.log
+          if-no-files-found: warn
+          retention-days: 7
+      - if: always()
+        run: kill $(cat /tmp/hostile-gunner-worker.pid) || true
