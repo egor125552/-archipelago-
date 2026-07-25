@@ -149,6 +149,15 @@ try {
       }
     }
 
+    function suppressGenericReconnectNotice(data) {
+      if (!requestedRoom || !["captain", "crew"].includes(requestedRole)) return false;
+      try {
+        return JSON.parse(String(data))?.type === "peer-connected";
+      } catch (_) {
+        return false;
+      }
+    }
+
     // Reconnect ownership is decided by the authoritative Worker. This wrapper
     // only keeps the optional saved session and mobile wording in sync; it must
     // never fabricate a successful lobby message or repeatedly close sockets.
@@ -167,6 +176,12 @@ try {
     socket.addEventListener = function addGuardedListener(type, listener, options) {
       if (type !== "message" || !listener) return nativeAddEventListener(type, listener, options);
       const wrapped = event => {
+        // An exact room-and-role socket is a reconnect or automatic resume.
+        // The game already announces its successful state restoration after
+        // receiving the first authoritative snapshot. Suppress only the generic
+        // peer-connected event on that returning client so it cannot immediately
+        // overwrite or interrupt the useful accessibility confirmation.
+        if (suppressGenericReconnectNotice(event.data)) return;
         const data = localizeMessageData(event.data);
         const transformed = messageEventWithData(event, data);
         if (typeof listener === "function") listener.call(socket, transformed);
