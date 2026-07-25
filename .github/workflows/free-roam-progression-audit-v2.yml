@@ -46,11 +46,20 @@ jobs:
           )
           Path('.progression-route-v2.mjs').write_text(script)
           PY
-      - name: Continue delivery and arming route
+      - name: Repeat the reachable route three times
         shell: bash
         run: |
-          set -o pipefail
-          node ./.progression-route-v2.mjs 2>&1 | tee /tmp/progression-v2-output.txt
+          set +e
+          failures=0
+          : > /tmp/progression-v2-output.txt
+          for attempt in 1 2 3; do
+            echo "===== ROUTE ATTEMPT $attempt =====" | tee -a /tmp/progression-v2-output.txt
+            node ./.progression-route-v2.mjs 2>&1 | tee -a /tmp/progression-v2-output.txt
+            status=${PIPESTATUS[0]}
+            if [ "$status" -ne 0 ]; then failures=$((failures + 1)); fi
+          done
+          echo "ROUTE FAILURES=$failures" | tee -a /tmp/progression-v2-output.txt
+          exit "$failures"
       - name: Upload progression diagnostics
         if: always()
         uses: actions/upload-artifact@v4
