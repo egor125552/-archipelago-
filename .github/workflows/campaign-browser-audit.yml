@@ -1,0 +1,185 @@
+name: Campaign browser audit
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  campaign:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm install --no-save playwright@1.54.1
+      - run: npx playwright install --with-deps chromium webkit
+      - name: Start Worker
+        run: |
+          npx wrangler dev --local --port 8792 > /tmp/campaign-worker.log 2>&1 &
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:8792/ >/dev/null && exit 0; sleep 1; done
+          cat /tmp/campaign-worker.log
+          exit 1
+      - name: Run every campaign operation
+        shell: bash
+        run: |
+          cat > .campaign-audit.mjs <<'EOF'
+          import {chromium, webkit} from 'playwright';
+          import assert from 'node:assert/strict';
+
+          const base = 'http://127.0.0.1:8792';
+          const failures = [];
+          const cases = [
+            {level: 1, boat: 'strizh', boatLabel: 'Стриж'},
+            {level: 2, boat: 'strizh', boatLabel: 'Стриж'},
+            {level: 3, boat: 'kasatka', boatLabel: 'Касатка'},
+            {level: 4, boat: 'burevestnik', boatLabel: 'Буревестник'},
+            {level: 5, boat: 'burevestnik', boatLabel: 'Буревестник'},
+            {level: 6, boat: 'grom', boatLabel: 'Гром'},
+          ];
+          const numeric = text => Number(String(text || '').trim().replace(',', '.').replace(/[^0-9.-]/g, ''));
+          const profile = item => ({
+            version: 2,
+            credits: 9999,
+            unlockedLevel: 6,
+            selectedLevel: item.level,
+            selectedBoat: item.boat,
+            ownedUpgrades: ['coast-brake', 'mini-armor', 'high-flow-pump', 'ram-keel', 'debris-tools'],
+            runs: 6,
+            wins: 6,
+            bestScore: 5000,
+            bestByLevel: {1: 1000, 2: 1200, 3: 1500, 4: 1800, 5: 2200, 6: 5000},
+          });
+
+          async function runBrowser(label, browserType) {
+            const browser = await browserType.launch({headless: true});
+            try {
+              for (const item of cases) {
+                const context = await browser.newContext({viewport: {width: 1280, height: 900}});
+                await context.addInitScript(({value}) => {
+                  localStorage.setItem('echo-archipelago-profile-v1', JSON.stringify(value));
+                }, {value: profile(item)});
+                const page = await context.newPage();
+                const errors = [];
+                page.on('pageerror', error => errors.push(String(error)));
+                try {
+                  console.log(`${label} LEVEL ${item.level} START`);
+                  await page.goto(`${base}/`, {waitUntil: 'domcontentloaded'});
+                  assert.equal(await page.locator(`#operation${item.level}`).getAttribute('aria-pressed'), 'true', 'selected operation not reflected in menu');
+                  await page.locator('#soloButton').click();
+                  await page.locator('#gameScreen').waitFor({state: 'visible', timeout: 15000});
+                  assert.equal((await page.locator('#operationLevel').textContent() || '').trim(), String(item.level));
+                  assert.match((await page.locator('#boatName').textContent() || '').trim(), new RegExp(item.boatLabel));
+                  assert.equal(await page.evaluate(() => document.activeElement?.id), 'gameTitle', 'focus did not move to game title');
+
+                  const view = await page.evaluate(() => window.__echoArchipelago.getView());
+                  assert.equal(view?.progression?.level, item.level, 'runtime level differs from selected operation');
+                  assert.equal(view?.progression?.boatId, item.boat, 'runtime boat differs from selected boat');
+
+                  if (item.level >= 2) {
+                    await page.locator('#routeModeButton').click();
+                    await page.waitForTimeout(150);
+                    assert.equal(await page.locator('#routeModeButton').getAttribute('aria-pressed'), 'true', 'risk route did not switch on');
+                  }
+
+                  const before = numeric(await page.locator('#speed').textContent());
+                  const throttle = page.locator('#throttleButton');
+                  await throttle.hover();
+                  await page.mouse.down();
+                  await page.waitForTimeout(1400);
+                  await page.mouse.up();
+                  await page.waitForTimeout(250);
+                  const moving = numeric(await page.locator('#speed').textContent());
+                  await page.locator('#anchorButton').click();
+                  await page.waitForTimeout(1200);
+                  const braked = numeric(await page.locator('#speed').textContent());
+                  await page.locator('#sonarButton').click();
+                  await page.waitForTimeout(250);
+                  const message = (await page.locator('#missionMessage').textContent() || '').trim();
+                  console.log(`${label} LEVEL ${item.level} speed=${before}->${moving}->${braked} message=${JSON.stringify(message)}`);
+                  assert.ok(moving > before + 0.4, `boat did not accelerate: ${before}->${moving}`);
+                  assert.ok(braked < moving, `floating brake did not slow: ${moving}->${braked}`);
+                  assert.ok(message.length > 0, 'sonar produced no usable message');
+                  if (item.level === 6) assert.match((await page.locator('#repairHullButton').textContent() || ''), /30/, 'Grom does not expose its 30 plates');
+                  assert.equal(errors.length, 0, errors.join(' | '));
+
+                  await page.evaluate(() => window.__echoArchipelago.resetOperation());
+                  await page.locator('#startScreen').waitFor({state: 'visible'});
+                  assert.equal(await page.evaluate(() => document.activeElement?.id), 'soloButton', 'return to map did not restore focus');
+                  console.log(`${label} LEVEL ${item.level} PASS`);
+                } catch (error) {
+                  failures.push(`${label} level ${item.level}: ${error.stack || error}`);
+                  console.error(`${label} LEVEL ${item.level} FAIL ${error.stack || error}`);
+                } finally {
+                  await context.close();
+                }
+              }
+
+              const readerContext = await browser.newContext({viewport: {width: 1280, height: 900}});
+              await readerContext.addInitScript(({value}) => localStorage.setItem('echo-archipelago-profile-v1', JSON.stringify(value)), {value: profile(cases.at(-1))});
+              const reader = await readerContext.newPage();
+              const readerErrors = [];
+              reader.on('pageerror', error => readerErrors.push(String(error)));
+              try {
+                await reader.goto(`${base}/`);
+                await reader.locator('#modeReader').click();
+                await reader.locator('#soloButton').click();
+                await reader.locator('#gameScreen').waitFor({state: 'visible', timeout: 15000});
+                const before = numeric(await reader.locator('#speed').textContent());
+                await reader.locator('#throttleButton').click();
+                await reader.waitForTimeout(1200);
+                const moving = numeric(await reader.locator('#speed').textContent());
+                await reader.locator('#reverseButton').click();
+                await reader.waitForTimeout(1200);
+                const stopped = numeric(await reader.locator('#speed').textContent());
+                console.log(`${label} READER speed=${before}->${moving}->${stopped}`);
+                assert.ok(moving > before, 'reader click throttle did not move boat');
+                assert.ok(stopped < moving, 'reader click brake did not slow boat');
+                assert.equal(readerErrors.length, 0, readerErrors.join(' | '));
+              } catch (error) {
+                failures.push(`${label} reader: ${error.stack || error}`);
+                console.error(`${label} READER FAIL ${error.stack || error}`);
+              } finally {
+                await readerContext.close();
+              }
+            } finally {
+              await browser.close();
+            }
+          }
+
+          await runBrowser('CHROMIUM', chromium);
+          await runBrowser('WEBKIT', webkit);
+          console.log(`CAMPAIGN SUMMARY failures=${failures.length}`);
+          for (const failure of failures) console.error(`CAMPAIGN_FAILURE ${failure}`);
+          if (failures.length) process.exit(1);
+          EOF
+          set -o pipefail
+          node ./.campaign-audit.mjs 2>&1 | tee /tmp/campaign-output.txt
+      - name: Upload campaign diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: campaign-browser-output
+          path: |
+            /tmp/campaign-output.txt
+            /tmp/campaign-worker.log
+          if-no-files-found: warn
+
+  worker-bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build Worker bundle without publishing
+        run: npx wrangler deploy --dry-run --outdir=.worker-dry-run
