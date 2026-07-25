@@ -108,6 +108,21 @@ test("many live rooms may exist but only the first can become durable", async ()
   assert.equal(storage.values.has(`${ROOM_PREFIX}FREE-B`), false);
 });
 
+test("durable save controls never delete the live reload session", async () => {
+  const [client, startup] = await Promise.all([
+    readFile(new URL("../public/src/free-roam-saved-world-v1.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/src/free-roam-startup-v1.js", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(client, /LIVE_SESSION_KEY/);
+  assert.match(client, /hasLiveSession/);
+  assert.doesNotMatch(client, /sessionStorage\.removeItem/);
+  assert.doesNotMatch(client, /sessionStorage\.setItem/);
+  assert.match(startup, /function saveSession/);
+  assert.match(startup, /sessionStorage\.setItem\(SESSION_KEY/);
+  assert.match(startup, /window\.addEventListener\("pagehide", syncSessionFromGame\)/);
+});
+
 test("nearest entry and explicit resume are separate paths", async () => {
   const [client, worker, html] = await Promise.all([
     readFile(new URL("../public/src/free-roam-saved-world-v1.js", import.meta.url), "utf8"),
