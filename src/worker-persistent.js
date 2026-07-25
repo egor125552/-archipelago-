@@ -104,6 +104,8 @@ export class Lobby extends MemoryLobby {
           await state.storage.delete(PRIMARY_ROOM_STORAGE_KEY);
         }
 
+        // A temporary deployment allowed each browser to create its own durable
+        // save. Keep exactly one physical save, but do not restrict live rooms.
         for (const candidate of candidates) {
           if (candidate !== selected) invalidKeys.push(candidate.key);
         }
@@ -293,24 +295,8 @@ export class Lobby extends MemoryLobby {
     this.queuePersistence(true);
   }
 
-  routeToPrimaryRoom(request, url) {
-    if (
-      url.pathname !== "/api/connect"
-      || url.searchParams.get("mode") !== "free"
-      || url.searchParams.get("room")
-      || !this.primarySavedRoomId
-    ) return request;
-
-    const primaryRoom = this.rooms.get(this.primarySavedRoomId);
-    if (!primaryRoom || (primaryRoom.captain && primaryRoom.crew)) return request;
-    const routed = new URL(url);
-    routed.searchParams.set("room", this.primarySavedRoomId);
-    routed.searchParams.set("role", "auto");
-    return new Request(routed.toString(), request);
-  }
-
   async fetch(request) {
-    let url = new URL(request.url);
+    const url = new URL(request.url);
     if (url.pathname === "/api/saved-world") {
       const roomId = String(url.searchParams.get("room") || "").trim();
       if (request.method === "DELETE") {
@@ -333,8 +319,6 @@ export class Lobby extends MemoryLobby {
       return json({error: "Method not allowed"}, 405);
     }
 
-    request = this.routeToPrimaryRoom(request, url);
-    url = new URL(request.url);
     const response = await super.fetch(request);
     if (url.pathname === "/api/connect") {
       this.markConnectedRoomsDirty();
