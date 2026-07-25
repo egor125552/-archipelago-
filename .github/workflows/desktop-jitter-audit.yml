@@ -1,0 +1,43 @@
+name: Desktop WebKit jitter audit
+
+on:
+  pull_request:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Install WebKit
+        run: |
+          npm install --no-save --package-lock=false playwright
+          npx playwright install --with-deps webkit
+      - name: Run delayed real-client audit
+        shell: bash
+        run: |
+          npx wrangler dev --local --port 8787 --log-level error >worker-dev.log 2>&1 &
+          WORKER_PID=$!
+          node tests/jitter-proxy.mjs >jitter-proxy.log 2>&1 &
+          PROXY_PID=$!
+          trap 'kill $WORKER_PID $PROXY_PID || true' EXIT
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent 'http://127.0.0.1:8787/api/rooms?mode=free' >/dev/null; then break; fi
+            sleep 1
+          done
+          node tests/desktop-jitter-audit.mjs
+      - name: Upload metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-webkit-jitter-audit
+          path: |
+            desktop-jitter-result.json
+            worker-dev.log
+            jitter-proxy.log
+          if-no-files-found: ignore
