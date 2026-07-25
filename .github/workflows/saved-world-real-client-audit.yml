@@ -24,7 +24,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p test-results .saved-world-state
-          npx wrangler dev --local --persist-to .saved-world-state --port 8787 --log-level error > test-results/saved-world-worker-first.log 2>&1 &
+          setsid npx wrangler dev --local --persist-to .saved-world-state --port 8787 --log-level error > test-results/saved-world-worker-first.log 2>&1 &
           echo $! > /tmp/saved-world-worker.pid
           for attempt in $(seq 1 60); do
             if curl --fail --silent --show-error 'http://127.0.0.1:8787/api/rooms?mode=free' >/dev/null; then exit 0; fi
@@ -34,19 +34,34 @@ jobs:
           exit 1
       - name: Create and move a world through the real client
         run: node tests/saved-world-real-client-audit.mjs create
-      - name: Fully stop the Worker
+      - name: Fully stop the entire Worker process group
         shell: bash
         run: |
-          kill $(cat /tmp/saved-world-worker.pid) || true
-          wait $(cat /tmp/saved-world-worker.pid) 2>/dev/null || true
-          sleep 2
+          PID=$(cat /tmp/saved-world-worker.pid)
+          kill -TERM -- -$PID 2>/dev/null || true
+          for attempt in $(seq 1 40); do
+            if ! curl --fail --silent 'http://127.0.0.1:8787/api/rooms?mode=free' >/dev/null 2>&1; then
+              echo "First Worker is fully stopped."
+              exit 0
+            fi
+            sleep 0.25
+          done
+          echo "First Worker still answers after process-group termination."
+          ps -ef | grep -E 'wrangler|workerd' | grep -v grep || true
+          exit 1
       - name: Restart from the same Durable Object storage
         shell: bash
         run: |
-          npx wrangler dev --local --persist-to .saved-world-state --port 8787 --log-level error > test-results/saved-world-worker-second.log 2>&1 &
+          setsid npx wrangler dev --local --persist-to .saved-world-state --port 8787 --log-level error > test-results/saved-world-worker-second.log 2>&1 &
           echo $! > /tmp/saved-world-worker.pid
           for attempt in $(seq 1 60); do
-            if curl --fail --silent --show-error 'http://127.0.0.1:8787/api/rooms?mode=free' >/dev/null; then exit 0; fi
+            if curl --fail --silent --show-error 'http://127.0.0.1:8787/api/rooms?mode=free' >/dev/null; then
+              if grep -q 'Address already in use' test-results/saved-world-worker-second.log; then
+                cat test-results/saved-world-worker-second.log
+                exit 1
+              fi
+              exit 0
+            fi
             sleep 1
           done
           cat test-results/saved-world-worker-second.log
@@ -62,4 +77,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
       - if: always()
-        run: kill $(cat /tmp/saved-world-worker.pid) || true
+        shell: bash
+        run: |
+          PID=$(cat /tmp/saved-world-worker.pid 2>/dev/null || true)
+          if [ -n "$PID" ]; then kill -TERM -- -$PID 2>/dev/null || true; fi
