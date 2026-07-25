@@ -30,6 +30,7 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
           import textwrap
           source = Path('.github/workflows/free-roam-progression-audit.yml').read_text()
           marker = "cat > .progression-route.mjs <<'EOF'\n"
@@ -38,16 +39,20 @@ jobs:
           script = script.replace("const base = 'http://127.0.0.1:8797';", "const base = 'http://127.0.0.1:8798';")
           script = script.replace(
               "await moveFootToTarget(60, 4.5);",
-              "const footDockPoint = {x: state.target.x, y: state.target.y};\n            await moveFootToPoint(footDockPoint, 60, 4.5);"
+              "const footDockPoint = {x: state.target.x, y: state.target.y};\n  await moveFootToPoint(footDockPoint, 60, 4.5);"
           )
           script = script.replace(
               "await moveFootToPoint(boatPoint);",
               "await moveFootToPoint(boatPoint, 55, 12.5);"
           )
-          script = script.replace(
-              "await pulse('KeyQ');\n            assert.equal((await snapshot('SONAR AUTOMATIC DOCK')).target?.kind, 'dock');",
-              "state = await snapshot('AUTOMATIC DOCK TARGET');\n            assert.equal(state.target?.kind, 'dock', 'automatic cargo did not keep the dock target');"
+          script, replaced = re.subn(
+              r"\n\s*await pulse\('KeyQ'\);\n\s*assert\.equal\(\(await snapshot\('SONAR AUTOMATIC DOCK'\)\)\.target\?\.kind, 'dock'\);",
+              "\n  state = await snapshot('AUTOMATIC DOCK TARGET');\n  assert.equal(state.target?.kind, 'dock', 'automatic cargo did not keep the dock target');",
+              script,
+              count=1,
           )
+          if replaced != 1:
+              raise SystemExit('automatic dock correction did not match exactly once')
           Path('.progression-route-v2.mjs').write_text(script)
           PY
       - name: Repeat the reachable route three times
