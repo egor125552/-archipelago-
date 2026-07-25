@@ -1,9 +1,9 @@
 "use strict";
 
-// Load the decisive-action patch before capturing the shared audio methods.
+// Load the decisive-action patches before capturing the shared audio methods.
 // Keep this import version aligned with free-roam-v4.js so every wrapper edits
 // the class instance that the live client actually constructs.
-import "./free-roam-sharp-feedback-v1.js?v=1";
+import "./free-roam-sharp-action-cues-v1.js?v=1";
 import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=45";
 import {COMBAT_TUNING} from "./free-roam-combat-tuning.js?v=33";
 
