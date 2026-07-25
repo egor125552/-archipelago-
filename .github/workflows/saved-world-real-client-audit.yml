@@ -1,0 +1,65 @@
+name: Saved-world real-client audit
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  saved-world:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm install --no-save --package-lock=false playwright@1.54.1
+      - run: npx playwright install --with-deps chromium
+      - name: Start persistent Worker for world creation
+        shell: bash
+        run: |
+          mkdir -p test-results .saved-world-state
+          npx wrangler dev --local --persist-to .saved-world-state --port 8787 --log-level error > test-results/saved-world-worker-first.log 2>&1 &
+          echo $! > /tmp/saved-world-worker.pid
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent --show-error 'http://127.0.0.1:8787/api/rooms?mode=free' >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat test-results/saved-world-worker-first.log
+          exit 1
+      - name: Create and move a world through the real client
+        run: node tests/saved-world-real-client-audit.mjs create
+      - name: Fully stop the Worker
+        shell: bash
+        run: |
+          kill $(cat /tmp/saved-world-worker.pid) || true
+          wait $(cat /tmp/saved-world-worker.pid) 2>/dev/null || true
+          sleep 2
+      - name: Restart from the same Durable Object storage
+        shell: bash
+        run: |
+          npx wrangler dev --local --persist-to .saved-world-state --port 8787 --log-level error > test-results/saved-world-worker-second.log 2>&1 &
+          echo $! > /tmp/saved-world-worker.pid
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent --show-error 'http://127.0.0.1:8787/api/rooms?mode=free' >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat test-results/saved-world-worker-second.log
+          exit 1
+      - name: Resume the same progress and replace it with a new world
+        run: node tests/saved-world-real-client-audit.mjs resume
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: saved-world-real-client-evidence
+          path: test-results
+          if-no-files-found: warn
+          retention-days: 7
+      - if: always()
+        run: kill $(cat /tmp/saved-world-worker.pid) || true
