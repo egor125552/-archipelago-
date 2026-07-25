@@ -43,6 +43,7 @@ jobs:
           cat /tmp/wrangler.log
           exit 1
       - name: Repeat player scenario
+        shell: bash
         run: |
           cat > /tmp/audit.mjs <<'EOF'
           import { chromium } from 'playwright';
@@ -55,31 +56,53 @@ jobs:
             const errors = [];
             page.on('pageerror', e => errors.push(String(e)));
             try {
+              console.log(`ATTEMPT ${attempt} START`);
               await page.goto('http://127.0.0.1:8787/free-roam.html');
               await page.locator('#hostButton').click();
               await page.locator('#game').waitFor({ state: 'visible', timeout: 15000 });
-              const before = Number(await page.locator('#speedValue').textContent() || 0);
+              const beforeText = (await page.locator('#speedValue').textContent() || '0').trim();
+              const before = Number(beforeText.replace(',', '.'));
               await page.keyboard.down('ArrowUp');
               await page.waitForTimeout(1400);
               await page.keyboard.up('ArrowUp');
               await page.waitForTimeout(250);
-              const moving = Number(await page.locator('#speedValue').textContent() || 0);
-              assert.ok(moving > before, `throttle failed ${before} -> ${moving}`);
+              const movingText = (await page.locator('#speedValue').textContent() || '0').trim();
+              const moving = Number(movingText.replace(',', '.'));
+              console.log(`ATTEMPT ${attempt} SPEED ${beforeText} -> ${movingText}`);
+              assert.ok(Number.isFinite(moving) && moving > before, `throttle failed ${beforeText} -> ${movingText}`);
               await page.keyboard.press('Space');
               await page.waitForTimeout(1200);
-              const stopped = Number(await page.locator('#speedValue').textContent() || 0);
-              assert.ok(stopped < moving, `brake failed ${moving} -> ${stopped}`);
+              const stoppedText = (await page.locator('#speedValue').textContent() || '0').trim();
+              const stopped = Number(stoppedText.replace(',', '.'));
+              console.log(`ATTEMPT ${attempt} BRAKE ${movingText} -> ${stoppedText}`);
+              assert.ok(Number.isFinite(stopped) && stopped < moving, `brake failed ${movingText} -> ${stoppedText}`);
               await page.keyboard.press('q');
               await page.waitForTimeout(300);
+              const target = (await page.locator('#targetValue').textContent() || '').trim();
+              const message = (await page.locator('#message').textContent() || '').trim();
+              console.log(`ATTEMPT ${attempt} SONAR target=${JSON.stringify(target)} message=${JSON.stringify(message)}`);
               assert.equal(errors.length, 0, errors.join(' | '));
               await page.locator('#leaveButton').click();
               await page.locator('#lobby').waitFor({ state: 'visible' });
-            } catch (e) { failures.push(`attempt ${attempt}: ${e.stack || e}`); }
+              console.log(`ATTEMPT ${attempt} PASS`);
+            } catch (e) {
+              console.error(`ATTEMPT ${attempt} FAIL ${e.stack || e}`);
+              failures.push(`attempt ${attempt}: ${e.stack || e}`);
+            }
             await context.close();
           }
           await browser.close();
-          if (failures.length) { console.error(failures.join('\n\n')); process.exit(1); }
+          console.log(`SUMMARY failures=${failures.length}`);
+          if (failures.length) process.exit(1);
           EOF
-          node /tmp/audit.mjs
-      - if: failure()
-        run: cat /tmp/wrangler.log
+          set -o pipefail
+          node /tmp/audit.mjs 2>&1 | tee /tmp/browser-output.txt
+      - name: Upload browser diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-audit-output
+          path: |
+            /tmp/browser-output.txt
+            /tmp/wrangler.log
+          if-no-files-found: warn
