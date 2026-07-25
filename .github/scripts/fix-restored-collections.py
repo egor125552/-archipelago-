@@ -1,0 +1,149 @@
+from pathlib import Path
+import re
+
+normalizer = Path('src/world-storage-normalization.js')
+normalizer.write_text(r'''"use strict";
+
+function numericObjectValues(value) {
+  if (!value || typeof value !== "object") return null;
+  if (value instanceof Map) return [...value.values()];
+  const entries = Object.entries(value);
+  if (!entries.length) return null;
+  if (!entries.every(([key]) => /^(0|[1-9]\d*)$/.test(key))) return null;
+  entries.sort((left, right) => Number(left[0]) - Number(right[0]));
+  for (let index = 0; index < entries.length; index += 1) {
+    if (Number(entries[index][0]) !== index) return null;
+  }
+  return entries.map(([, item]) => item);
+}
+
+export function storedList(value) {
+  if (Array.isArray(value)) return value;
+  return numericObjectValues(value) || [];
+}
+
+function reviveStoredValue(value, seen = new WeakMap()) {
+  if (!value || typeof value !== "object") return value;
+  if (seen.has(value)) return seen.get(value);
+  const numeric = numericObjectValues(value);
+  if (numeric) {
+    const result = [];
+    seen.set(value, result);
+    for (const item of numeric) result.push(reviveStoredValue(item, seen));
+    return result;
+  }
+  if (Array.isArray(value)) {
+    const result = [];
+    seen.set(value, result);
+    for (const item of value) result.push(reviveStoredValue(item, seen));
+    return result;
+  }
+  const result = {};
+  seen.set(value, result);
+  for (const [key, item] of Object.entries(value)) result[key] = reviveStoredValue(item, seen);
+  return result;
+}
+
+export function normalizePersistedFreeWorld(input) {
+  const world = reviveStoredValue(input);
+  if (!world || typeof world !== "object") return world;
+  const paths = [
+    [world, "players"], [world, "boats"], [world, "inputs"], [world, "previousInputs"],
+    [world, "operationInputs"], [world, "operationPreviousInputs"], [world, "events"],
+    [world.freeEnemyBoats, "boats"], [world.freeEnemyBoats, "projectiles"],
+    [world.freeHostileActors, "actors"], [world.freeHostileActors, "projectiles"],
+    [world.freeHostileGunners, "gunners"], [world.freeHostileGunners, "projectiles"],
+    [world.freePursuerSquad, "escorts"], [world.freePursuerSquad, "projectiles"],
+  ];
+  for (const [owner, key] of paths) {
+    if (owner && typeof owner === "object") owner[key] = storedList(owner[key]);
+  }
+  return world;
+}
+''', encoding='utf-8')
+
+worker = Path('src/worker-persistent.js')
+text = worker.read_text(encoding='utf-8')
+import_line = 'import {normalizePersistedFreeWorld} from "./world-storage-normalization.js";\n'
+if import_line not in text:
+    text = text.replace('import {setServerFreePresence} from "./free-roam-server.js";\n', 'import {setServerFreePresence} from "./free-roam-server.js";\n' + import_line)
+old = '    freeServer: cloneValue(room.freeServer),\n'
+new = '    freeServer: (() => {\n      const freeServer = cloneValue(room.freeServer);\n      freeServer.world = normalizePersistedFreeWorld(freeServer.world);\n      return freeServer;\n    })(),\n'
+if old in text:
+    text = text.replace(old, new, 1)
+restore_old = '  const freeServer = cloneValue(saved.freeServer);\n  freeServer.lastTickAt = now;\n'
+restore_new = '  const freeServer = cloneValue(saved.freeServer);\n  freeServer.world = normalizePersistedFreeWorld(freeServer.world);\n  freeServer.lastTickAt = now;\n'
+if restore_old in text:
+    text = text.replace(restore_old, restore_new, 1)
+worker.write_text(text, encoding='utf-8')
+
+for path in Path('public/src').glob('free-roam-*.js'):
+    source = path.read_text(encoding='utf-8')
+    updated = re.sub(
+        r'^(\s*)state\.(\w+) \|\|= \[\];$',
+        lambda m: f'{m.group(1)}if (!Array.isArray(state.{m.group(2)})) state.{m.group(2)} = state.{m.group(2)} && typeof state.{m.group(2)} === "object" ? Object.values(state.{m.group(2)}) : [];',
+        source,
+        flags=re.MULTILINE,
+    )
+    if updated != source:
+        path.write_text(updated, encoding='utf-8')
+
+combat = Path('public/src/free-roam-combat-context.js')
+text = combat.read_text(encoding='utf-8')
+text = text.replace(
+    'function live(items) {\n  return (items || []).some(item => item?.active && !item?.destroyed);\n}',
+    'function live(items) {\n  const list = Array.isArray(items) ? items : items && typeof items === "object" ? Object.values(items) : [];\n  return list.some(item => item?.active && !item?.destroyed);\n}',
+)
+combat.write_text(text, encoding='utf-8')
+
+audio = Path('public/src/free-roam-audio-v5.js')
+text = audio.read_text(encoding='utf-8')
+old = '''    const selectedEnemyBoat = world?.freeEnemyBoats?.boats?.find(boat => (\n      boat.id === targetId && boat.active && !boat.destroyed\n    ));'''
+new = '''    const enemyBoatsValue = world?.freeEnemyBoats?.boats;\n    const enemyBoats = Array.isArray(enemyBoatsValue)\n      ? enemyBoatsValue\n      : enemyBoatsValue && typeof enemyBoatsValue === "object" ? Object.values(enemyBoatsValue) : [];\n    const selectedEnemyBoat = enemyBoats.find(boat => (\n      boat.id === targetId && boat.active && !boat.destroyed\n    ));'''
+if old not in text:
+    raise SystemExit('Audio selected-enemy snippet not found')
+text = text.replace(old, new, 1)
+text = text.replace('    const nearestEnemyBoat = (world?.freeEnemyBoats?.boats || [])\n', '    const nearestEnemyBoat = enemyBoats\n', 1)
+audio.write_text(text, encoding='utf-8')
+
+test = Path('tests/restored-world-collections.test.mjs')
+test.write_text(r'''import test from "node:test";
+import assert from "node:assert/strict";
+import {normalizePersistedFreeWorld, storedList} from "../src/world-storage-normalization.js";
+import {ensureEnemyBoats, activeEnemyBoats} from "../public/src/free-roam-enemy-boats.js";
+import {contractCombatActive} from "../public/src/free-roam-combat-context.js";
+
+const legacyList = (...items) => Object.fromEntries(items.map((item, index) => [String(index), item]));
+
+test("storedList revives contiguous numeric-key objects", () => {
+  assert.deepEqual(storedList(legacyList({id: "a"}, {id: "b"})), [{id: "a"}, {id: "b"}]);
+  assert.deepEqual(storedList({named: true}), []);
+});
+
+test("persisted free worlds restore combat collections as arrays", () => {
+  const world = normalizePersistedFreeWorld({
+    players: legacyList({mode: "boat"}, {mode: "boat"}),
+    boats: legacyList({id: 0}, {id: 1}),
+    events: {},
+    freeEnemyBoats: {active: true, boats: legacyList({id: "enemy-1", active: true, destroyed: false, hostile: true}), projectiles: {}},
+    freeHostileActors: {actors: legacyList({id: "actor-1", active: true, destroyed: false}), projectiles: {}},
+    freeHostileGunners: {gunners: {}, projectiles: {}},
+    freePursuerSquad: {escorts: {}, projectiles: {}},
+  });
+  assert.equal(Array.isArray(world.players), true);
+  assert.equal(Array.isArray(world.freeEnemyBoats.boats), true);
+  assert.equal(Array.isArray(world.freeHostileActors.actors), true);
+  assert.equal(Array.isArray(world.freeHostileGunners.gunners), true);
+  assert.equal(Array.isArray(world.freePursuerSquad.escorts), true);
+  assert.equal(activeEnemyBoats(world).length, 1);
+  assert.equal(contractCombatActive(world), true);
+});
+
+test("enemy boat ensure repairs a malformed live snapshot", () => {
+  const world = {freeEnemyBoats: {boats: legacyList({id: "enemy-1", active: true, destroyed: false}), projectiles: {}}};
+  const state = ensureEnemyBoats(world);
+  assert.equal(Array.isArray(state.boats), true);
+  assert.equal(Array.isArray(state.projectiles), true);
+  assert.equal(activeEnemyBoats(world).length, 1);
+});
+''', encoding='utf-8')
