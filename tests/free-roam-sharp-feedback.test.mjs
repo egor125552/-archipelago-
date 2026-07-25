@@ -34,12 +34,14 @@ test("boat cargo and steal range count as cargo actions", () => {
 });
 
 test("live audio wrappers patch the exact class used by the client", async () => {
-  const [client, pistol, sharp, cues] = await Promise.all([
+  const [html, client, pistol, sharp, cues] = await Promise.all([
+    readFile(new URL("../public/free-roam.html", import.meta.url), "utf8"),
     readFile(new URL("../public/src/free-roam-v4.js", import.meta.url), "utf8"),
     readFile(new URL("../public/src/free-roam-pistol-audio.js", import.meta.url), "utf8"),
     readFile(new URL("../public/src/free-roam-sharp-feedback-v1.js", import.meta.url), "utf8"),
     readFile(new URL("../public/src/free-roam-sharp-action-cues-v1.js", import.meta.url), "utf8"),
   ]);
+  assert.match(html, /free-roam-pistol-audio\.js\?v=5/);
   assert.match(client, /free-roam-audio-v5\.js\?v=45/);
   assert.match(pistol, /free-roam-audio-v5\.js\?v=45/);
   assert.match(sharp, /free-roam-audio-v5\.js\?v=45/);
