@@ -28,6 +28,7 @@ export function listCombatTargets(world, attackerIndex, maximumRange = Infinity)
       targets.push({
         id: `player-${index}`,
         kind: "player",
+        index,
         playerIndex: index,
         point: player,
         label: `игрок ${index + 1}, ${playerModeLabel(player)}`,
