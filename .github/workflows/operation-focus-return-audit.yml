@@ -1,0 +1,84 @@
+name: Operation focus return audit
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  focus-return:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm install --no-save playwright@1.54.1
+      - run: npx playwright install --with-deps chromium webkit
+      - name: Start Worker
+        run: |
+          npx wrangler dev --local --port 8795 > /tmp/focus-worker.log 2>&1 &
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:8795/ >/dev/null && exit 0; sleep 1; done
+          cat /tmp/focus-worker.log
+          exit 1
+      - name: Measure focus after returning to operation map
+        shell: bash
+        run: |
+          cat > .focus-return.mjs <<'EOF'
+          import {chromium, webkit} from 'playwright';
+
+          const base = 'http://127.0.0.1:8795';
+          const failures = [];
+          for (const [label, type] of [['CHROMIUM', chromium], ['WEBKIT', webkit]]) {
+            const browser = await type.launch({headless: true});
+            for (let attempt = 1; attempt <= 5; attempt++) {
+              const context = await browser.newContext({viewport: {width: 1280, height: 900}});
+              const page = await context.newPage();
+              try {
+                await page.goto(`${base}/`);
+                await page.locator('#modeReader').click();
+                await page.locator('#soloButton').click();
+                await page.locator('#gameScreen').waitFor({state: 'visible', timeout: 15000});
+                await page.locator('#sonarButton').focus();
+                await page.evaluate(() => window.__echoArchipelago.resetOperation());
+                const samples = [];
+                for (const delay of [0, 16, 100, 500]) {
+                  if (delay) await page.waitForTimeout(delay - samples.at(-1).delay);
+                  samples.push({
+                    delay,
+                    active: await page.evaluate(() => document.activeElement?.id || ''),
+                    startVisible: await page.locator('#startScreen').isVisible(),
+                    gameHidden: await page.locator('#gameScreen').isHidden(),
+                  });
+                }
+                console.log(`${label} ${attempt} ${JSON.stringify(samples)}`);
+                const final = samples.at(-1);
+                if (final.active !== 'soloButton' || !final.startVisible || !final.gameHidden) {
+                  failures.push(`${label} ${attempt}: focus did not return by 500 ms; ${JSON.stringify(samples)}`);
+                }
+              } finally {
+                await context.close();
+              }
+            }
+            await browser.close();
+          }
+          console.log(`FOCUS RETURN SUMMARY failures=${failures.length}`);
+          for (const failure of failures) console.error(`FOCUS_RETURN_FAILURE ${failure}`);
+          if (failures.length) process.exit(1);
+          EOF
+          set -o pipefail
+          node ./.focus-return.mjs 2>&1 | tee /tmp/focus-return-output.txt
+      - name: Upload focus diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: operation-focus-return-output
+          path: |
+            /tmp/focus-return-output.txt
+            /tmp/focus-worker.log
+          if-no-files-found: warn
