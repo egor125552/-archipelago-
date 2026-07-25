@@ -1,42 +1,78 @@
 TAP version 13
-# Subtest: manual player targeting kills a player on foot with an automatic
-ok 1 - manual player targeting kills a player on foot with an automatic
+# Subtest: simultaneous lethal automatic shots always favour player one
+not ok 1 - simultaneous lethal automatic shots always favour player one
   ---
-  duration_ms: 5.46809
+  duration_ms: 5.649806
+  type: 'test'
+  location: '/home/runner/work/-archipelago-/-archipelago-/tests/pvp-combat-audit-pass2-v160.test.mjs:39:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    11.125 !== 11
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 11
+  actual: 11.125
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///home/runner/work/-archipelago-/-archipelago-/tests/pvp-combat-audit-pass2-v160.test.mjs:51:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.start (node:internal/test_runner/test:944:17)
+    startSubtestAfterBootstrap (node:internal/test_runner/harness:296:17)
+  ...
+# Subtest: a killed player keeps their old combat lock through death and respawn
+ok 2 - a killed player keeps their old combat lock through death and respawn
+  ---
+  duration_ms: 0.731578
+  type: 'test'
+  ...
+# Subtest: holding attack while dead fires at the stale target immediately after respawn
+ok 3 - holding attack while dead fires at the stale target immediately after respawn
+  ---
+  duration_ms: 1.050935
+  type: 'test'
+  ...
+# Subtest: manual player targeting kills a player on foot with an automatic
+ok 4 - manual player targeting kills a player on foot with an automatic
+  ---
+  duration_ms: 5.4273
   type: 'test'
   ...
 # Subtest: a seated player and their boat are two separate selectable targets
-ok 2 - a seated player and their boat are two separate selectable targets
+ok 5 - a seated player and their boat are two separate selectable targets
   ---
-  duration_ms: 0.857307
+  duration_ms: 0.854969
   type: 'test'
   ...
 # Subtest: manual player targeting kills a seated driver and releases the controls
-ok 3 - manual player targeting kills a seated driver and releases the controls
+ok 6 - manual player targeting kills a seated driver and releases the controls
   ---
-  duration_ms: 1.071518
+  duration_ms: 1.199494
   type: 'test'
   ...
 # Subtest: selecting the boat damages hull without damaging its driver
-ok 4 - selecting the boat damages hull without damaging its driver
+ok 7 - selecting the boat damages hull without damaging its driver
   ---
-  duration_ms: 0.70386
+  duration_ms: 0.951049
   type: 'test'
   ...
 # Subtest: melee still reaches a seated driver through the boat hull
-ok 5 - melee still reaches a seated driver through the boat hull
+ok 8 - melee still reaches a seated driver through the boat hull
   ---
-  duration_ms: 1.037395
+  duration_ms: 1.675975
   type: 'test'
   ...
-1..5
-# tests 5
+1..8
+# tests 8
 # suites 0
-# pass 5
-# fail 0
+# pass 7
+# fail 1
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 109.54678
+# duration_ms 114.890717
 
-EXIT_CODE=0
+EXIT_CODE=1
