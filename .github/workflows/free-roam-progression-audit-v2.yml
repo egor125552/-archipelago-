@@ -44,6 +44,10 @@ jobs:
               "await moveFootToPoint(boatPoint);",
               "await moveFootToPoint(boatPoint, 55, 12.5);"
           )
+          script = script.replace(
+              "await pulse('KeyQ');\n            assert.equal((await snapshot('SONAR AUTOMATIC DOCK')).target?.kind, 'dock');",
+              "state = await snapshot('AUTOMATIC DOCK TARGET');\n            assert.equal(state.target?.kind, 'dock', 'automatic cargo did not keep the dock target');"
+          )
           Path('.progression-route-v2.mjs').write_text(script)
           PY
       - name: Repeat the reachable route three times
