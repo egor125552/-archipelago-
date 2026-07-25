@@ -39,9 +39,9 @@ test("live audio wrappers patch the exact class used by the client", async () =>
     readFile(new URL("../public/src/free-roam-pistol-audio.js", import.meta.url), "utf8"),
     readFile(new URL("../public/src/free-roam-sharp-feedback-v1.js", import.meta.url), "utf8"),
   ]);
-  assert.match(client, /free-roam-audio-v5\.js\?v=44/);
-  assert.match(pistol, /free-roam-audio-v5\.js\?v=44/);
-  assert.match(sharp, /free-roam-audio-v5\.js\?v=44/);
+  assert.match(client, /free-roam-audio-v5\.js\?v=45/);
+  assert.match(pistol, /free-roam-audio-v5\.js\?v=45/);
+  assert.match(sharp, /free-roam-audio-v5\.js\?v=45/);
   assert.match(pistol, /free-roam-sharp-feedback-v1\.js\?v=1/);
 });
 
