@@ -45,6 +45,7 @@ function restoredRoom(saved, now = Date.now()) {
   // actual world, but clear both online roles until their browsers reconnect.
   setServerFreePresence(freeServer, "captain", false);
   setServerFreePresence(freeServer, "crew", false);
+  freeServer.world.events = [];
   return {
     id: String(saved.id),
     mode: "free",
@@ -62,9 +63,9 @@ export class Lobby extends MemoryLobby {
   constructor(state, env) {
     super(state, env);
     this.persistentState = state;
-    this.persistedRoomIds = new Set();
-    this.persistenceDirty = false;
+    this.dirtyRoomIds = new Set();
     this.persistencePromise = null;
+    this.persistenceRetryTimer = null;
     this.nextPersistAt = 0;
 
     state.blockConcurrencyWhile(async () => {
@@ -79,7 +80,6 @@ export class Lobby extends MemoryLobby {
             continue;
           }
           this.rooms.set(room.id, room);
-          this.persistedRoomIds.add(room.id);
         }
         for (const key of invalidKeys) await state.storage.delete(key);
       } catch (error) {
@@ -91,6 +91,17 @@ export class Lobby extends MemoryLobby {
 
   storageKey(roomId) {
     return `${ROOM_STORAGE_PREFIX}${roomId}`;
+  }
+
+  markRoomDirty(roomOrId) {
+    const roomId = typeof roomOrId === "string" ? roomOrId : roomOrId?.id;
+    if (roomId) this.dirtyRoomIds.add(String(roomId));
+  }
+
+  markConnectedRoomsDirty() {
+    for (const room of this.rooms.values()) {
+      if (room.mode === "free" && (room.captain || room.crew)) this.markRoomDirty(room);
+    }
   }
 
   async deleteSavedRoom(roomId) {
@@ -106,71 +117,88 @@ export class Lobby extends MemoryLobby {
       }
       this.rooms.delete(id);
     }
-    this.persistedRoomIds.delete(id);
+    this.dirtyRoomIds.delete(id);
     await this.persistentState.storage.delete(this.storageKey(id));
     return Boolean(room);
   }
 
   async flushPersistence() {
-    this.persistenceDirty = false;
+    const roomIds = [...this.dirtyRoomIds];
+    this.dirtyRoomIds.clear();
+    const failed = [];
     const now = Date.now();
-    const current = new Map();
-    for (const room of this.rooms.values()) {
-      if (room.mode !== "free" || !room.freeServer?.world) continue;
-      current.set(room.id, storedRoom(room, now));
+
+    for (const roomId of roomIds) {
+      try {
+        const room = this.rooms.get(roomId);
+        if (room?.mode === "free" && room.freeServer?.world) {
+          await this.persistentState.storage.put(this.storageKey(roomId), storedRoom(room, now));
+        } else {
+          await this.persistentState.storage.delete(this.storageKey(roomId));
+        }
+      } catch (error) {
+        failed.push(roomId);
+        console.error(`Unable to persist free-roam room ${roomId}`, error);
+      }
     }
 
-    try {
-      for (const [roomId, saved] of current) {
-        await this.persistentState.storage.put(this.storageKey(roomId), saved);
-      }
-      for (const roomId of this.persistedRoomIds) {
-        if (!current.has(roomId)) await this.persistentState.storage.delete(this.storageKey(roomId));
-      }
-      this.persistedRoomIds = new Set(current.keys());
-    } catch (error) {
-      this.persistenceDirty = true;
-      console.error("Unable to persist free-roam rooms", error);
-    }
+    for (const roomId of failed) this.dirtyRoomIds.add(roomId);
+  }
+
+  schedulePersistenceRetry() {
+    if (this.persistenceRetryTimer || !this.dirtyRoomIds.size) return;
+    this.persistenceRetryTimer = setTimeout(() => {
+      this.persistenceRetryTimer = null;
+      this.queuePersistence(true);
+    }, PERSIST_INTERVAL_MS);
+    this.persistenceRetryTimer?.unref?.();
   }
 
   queuePersistence(force = false) {
-    this.persistenceDirty = true;
+    if (!this.dirtyRoomIds.size) return;
     const now = Date.now();
+    if (this.persistencePromise) return;
     if (!force && now < this.nextPersistAt) return;
     this.nextPersistAt = now + PERSIST_INTERVAL_MS;
-    if (this.persistencePromise) return;
 
     const pending = this.flushPersistence()
       .catch(error => console.error("Free-roam persistence failed", error))
       .finally(() => {
         this.persistencePromise = null;
-        if (this.persistenceDirty && Date.now() >= this.nextPersistAt) this.queuePersistence(true);
+        if (this.dirtyRoomIds.size) this.schedulePersistenceRetry();
       });
     this.persistencePromise = pending;
     this.persistentState.waitUntil(pending);
   }
 
   tickFreeRooms(now = Date.now()) {
+    const activeRoomIds = [...this.rooms.values()]
+      .filter(room => room.mode === "free" && (room.captain || room.crew))
+      .map(room => room.id);
     const result = super.tickFreeRooms(now);
+    for (const roomId of activeRoomIds) this.markRoomDirty(roomId);
     this.queuePersistence(false);
     return result;
   }
 
   replaceFreeRoleConnection(room, role) {
     const replaced = super.replaceFreeRoleConnection(room, role);
-    if (replaced) this.queuePersistence(true);
+    if (replaced) {
+      this.markRoomDirty(room);
+      this.queuePersistence(true);
+    }
     return replaced;
   }
 
   removeRole(room, role, notify = true) {
     super.removeRole(room, role, notify);
+    this.markRoomDirty(room);
     this.queuePersistence(true);
   }
 
   pruneRooms(now = Date.now()) {
-    let changed = false;
     for (const room of this.rooms.values()) {
+      let changed = false;
       room.lastSeen ||= {captain: room.createdAt || now, crew: room.createdAt || now};
       for (const role of ROOM_ROLES) {
         const socket = room[role];
@@ -195,9 +223,10 @@ export class Lobby extends MemoryLobby {
         room.emptySince = 0;
         changed = true;
       }
+      if (changed) this.markRoomDirty(room);
     }
     this.stopFreeTickerIfIdle();
-    if (changed) this.queuePersistence(true);
+    this.queuePersistence(true);
   }
 
   async fetch(request) {
@@ -220,7 +249,10 @@ export class Lobby extends MemoryLobby {
     }
 
     const response = await super.fetch(request);
-    if (url.pathname === "/api/connect") this.queuePersistence(true);
+    if (url.pathname === "/api/connect") {
+      this.markConnectedRoomsDirty();
+      this.queuePersistence(true);
+    }
     return response;
   }
 }
