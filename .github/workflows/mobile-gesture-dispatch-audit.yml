@@ -1,0 +1,195 @@
+name: Mobile gesture dispatch audit
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  gesture-dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm install --no-save playwright@1.54.1
+      - run: npx playwright install --with-deps chromium
+      - name: Start Worker
+        run: |
+          npx wrangler dev --local --port 8800 > /tmp/mobile-dispatch-worker.log 2>&1 &
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:8800/free-roam.html >/dev/null && exit 0; sleep 1; done
+          cat /tmp/mobile-dispatch-worker.log
+          exit 1
+      - name: Test each real gesture independently
+        shell: bash
+        run: |
+          cat > .mobile-dispatch.mjs <<'EOF'
+          import {chromium} from 'playwright';
+          import assert from 'node:assert/strict';
+
+          const browser = await chromium.launch({headless: true});
+          const base = 'http://127.0.0.1:8800';
+          const failures = [];
+          const wrap = value => ((value + 180) % 360 + 360) % 360 - 180;
+
+          async function openMobile() {
+            const context = await browser.newContext({
+              viewport: {width: 390, height: 844},
+              isMobile: true,
+              hasTouch: true,
+              userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1',
+            });
+            const page = await context.newPage();
+            await page.goto(`${base}/free-roam.html`);
+            await page.locator('#hostButton').click();
+            await page.locator('#game').waitFor({state: 'visible', timeout: 15000});
+            await page.waitForFunction(() => window.__freeRoam.networkDiagnostics().receivedStateCount >= 3, null, {timeout: 10000});
+            await page.evaluate(() => {
+              window.__pointerAudit = [];
+              for (const type of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel']) {
+                document.addEventListener(type, event => window.__pointerAudit.push({type, id: event.pointerId, pointerType: event.pointerType}), true);
+              }
+            });
+            const client = await context.newCDPSession(page);
+            const box = await page.locator('#playSurface').boundingBox();
+            assert.ok(box, 'play surface has no bounds');
+            return {context, page, client, x: box.x + box.width / 2, y: box.y + Math.min(box.height - 60, 430)};
+          }
+
+          function points(count, x, y) {
+            return Array.from({length: count}, (_, index) => ({
+              x: x + (index - (count - 1) / 2) * 26,
+              y,
+              id: index + 1,
+              radiusX: 4,
+              radiusY: 4,
+              force: 1,
+            }));
+          }
+
+          async function tap(client, page, count, x, y, duration = 70) {
+            await client.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: points(count, x, y)});
+            await page.waitForTimeout(duration);
+            await client.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
+          }
+
+          async function swipe(client, page, count, x, y, dx, dy) {
+            await client.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: points(count, x, y)});
+            await page.waitForTimeout(80);
+            await client.send('Input.dispatchTouchEvent', {type: 'touchMove', touchPoints: points(count, x + dx, y + dy)});
+            await page.waitForTimeout(100);
+            await client.send('Input.dispatchTouchEvent', {type: 'touchEnd', touchPoints: []});
+          }
+
+          async function scenario(name, run) {
+            const mobile = await openMobile();
+            try {
+              console.log(`${name} START`);
+              await run(mobile);
+              const pointerLog = await mobile.page.evaluate(() => window.__pointerAudit);
+              console.log(`${name} POINTERS ${JSON.stringify(pointerLog)}`);
+              console.log(`${name} PASS`);
+            } catch (error) {
+              const state = await mobile.page.evaluate(() => ({
+                input: {...window.__freeRoam.input},
+                target: window.__freeRoam.getWorld()?.freeScenario?.targets?.[0],
+                scenario: window.__freeRoam.getWorld()?.freeScenario,
+                combat: window.__freeRoam.getWorld()?.players?.[0]?.combat,
+                targeting: window.__freeRoam.targeting(),
+                pointerLog: window.__pointerAudit,
+                message: document.querySelector('#message')?.textContent?.trim(),
+              })).catch(() => null);
+              failures.push(`${name}: ${error.stack || error}; state=${JSON.stringify(state)}`);
+              console.error(`${name} FAIL ${error.stack || error} STATE ${JSON.stringify(state)}`);
+            } finally {
+              await mobile.context.close();
+            }
+          }
+
+          await scenario('TWO_FINGER_SONAR', async ({page, client, x, y}) => {
+            const before = await page.evaluate(() => ({
+              cooldown: window.__freeRoam.getWorld().freeScenario.sonarCooldown[0],
+              beacon: window.__freeRoam.getWorld().freeScenario.beaconUntil[0],
+            }));
+            await tap(client, page, 2, x, y);
+            let observed = null;
+            for (let index = 0; index < 25; index++) {
+              await page.waitForTimeout(50);
+              const sample = await page.evaluate(() => ({
+                pulse: window.__freeRoam.input.sonar,
+                cooldown: window.__freeRoam.getWorld().freeScenario.sonarCooldown[0],
+                beacon: window.__freeRoam.getWorld().freeScenario.beaconUntil[0],
+                message: document.querySelector('#message')?.textContent?.trim(),
+              }));
+              if (sample.pulse || sample.cooldown > before.cooldown + 0.2 || sample.beacon > 1_000_000 || /Сонар:/.test(sample.message || '')) observed = sample;
+            }
+            console.log(`TWO_FINGER_SONAR OBSERVED ${JSON.stringify(observed)}`);
+            assert.ok(observed, 'two-finger tap produced no sonar pulse, cooldown or report');
+          });
+
+          await scenario('TWO_FINGER_WEAPON', async ({page, client, x, y}) => {
+            await swipe(client, page, 2, x - 70, y, 150, 0);
+            await page.waitForFunction(() => window.__freeRoam.getWorld().players[0].combat.equipped === 'pistol', null, {timeout: 3000});
+            assert.match((await page.locator('#weaponValue').textContent()) || '', /пистолет/);
+          });
+
+          await scenario('TWO_FINGER_PUMP', async ({page, client, x, y}) => {
+            await swipe(client, page, 2, x, y, 0, -150);
+            await page.waitForFunction(() => window.__freeRoam.input.pump === true, null, {timeout: 1500});
+          });
+
+          await scenario('FOUR_FINGER_GUIDE', async ({page, client, x, y}) => {
+            await page.keyboard.press('KeyQ');
+            await page.waitForFunction(() => Boolean(window.__freeRoam.getWorld().freeScenario.targets[0]), null, {timeout: 3000});
+            const before = await page.evaluate(() => {
+              const world = window.__freeRoam.getWorld();
+              const boat = world.boats[world.players[0].activeBoat];
+              const target = world.freeScenario.targets[0];
+              return {expected: Math.atan2(target.x - boat.x, -(target.y - boat.y)) * 180 / Math.PI};
+            });
+            await tap(client, page, 4, x, y);
+            await page.waitForTimeout(900);
+            const after = await page.evaluate(() => {
+              const world = window.__freeRoam.getWorld();
+              return {heading: world.boats[world.players[0].activeBoat].heading, message: document.querySelector('#message')?.textContent?.trim()};
+            });
+            assert.ok(Math.abs(wrap(after.heading - before.expected)) <= 2, `four-finger guide heading mismatch: ${JSON.stringify({before, after})}`);
+          });
+
+          await scenario('THREE_FINGER_DOUBLE_TARGETS', async ({page, client, x, y}) => {
+            await tap(client, page, 3, x, y);
+            await page.waitForTimeout(150);
+            await tap(client, page, 3, x, y);
+            await page.waitForFunction(() => Boolean(window.__freeRoam.targeting()?.open), null, {timeout: 2000});
+          });
+
+          await scenario('THREE_FINGER_HOLD_FIRE', async ({page, client, x, y}) => {
+            await page.keyboard.press('KeyZ');
+            await page.waitForFunction(() => window.__freeRoam.getWorld().players[0].combat.equipped === 'pistol', null, {timeout: 3000});
+            const before = await page.evaluate(() => window.__freeRoam.getWorld().players[0].combat.pistolAmmo);
+            await tap(client, page, 3, x, y, 650);
+            await page.waitForFunction(value => window.__freeRoam.getWorld().players[0].combat.pistolAmmo < value, before, {timeout: 2500});
+          });
+
+          await browser.close();
+          console.log(`MOBILE DISPATCH SUMMARY failures=${failures.length}`);
+          for (const failure of failures) console.error(`MOBILE_DISPATCH_FAILURE ${failure}`);
+          if (failures.length) process.exit(1);
+          EOF
+          set -o pipefail
+          node ./.mobile-dispatch.mjs 2>&1 | tee /tmp/mobile-dispatch-output.txt
+      - name: Upload mobile dispatch diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-gesture-dispatch-output
+          path: |
+            /tmp/mobile-dispatch-output.txt
+            /tmp/mobile-dispatch-worker.log
+          if-no-files-found: warn
