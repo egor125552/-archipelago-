@@ -1,0 +1,33 @@
+name: Apply restored collection fix
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python .github/scripts/fix-restored-collections.py
+      - run: npm ci
+      - run: npm test
+      - name: Commit repaired collections
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src public/src tests
+          git commit -m "Repair legacy combat arrays in saved worlds"
+          git push origin HEAD:main
