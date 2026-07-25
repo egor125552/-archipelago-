@@ -21,11 +21,11 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Run only focused PvP combat audit
+      - name: Run only exact locked-target PvP regression
         shell: bash
         run: |
           set +e
-          node --test tests/pvp-combat-audit-v160.test.mjs > pvp-combat-audit-output.txt 2>&1
+          node --test tests/pvp-combat-lock-path-v160.test.mjs > pvp-combat-audit-output.txt 2>&1
           code=$?
           printf '\nEXIT_CODE=%s\n' "$code" >> pvp-combat-audit-output.txt
           exit 0
