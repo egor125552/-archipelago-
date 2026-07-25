@@ -1,7 +1,7 @@
 "use strict";
 
 import "./free-roam-player-boat-audio-v1.js?v=1";
-import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=44";
+import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=45";
 import {predictLocalWorld} from "./free-roam-client-prediction.js?v=42";
 import {
   AUDIO_INTERVAL_MS,

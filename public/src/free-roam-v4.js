@@ -4,13 +4,18 @@ import {
   WORLD,
   playerStatus,
 } from "./free-roam-core-v6.js?v=44";
-import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=44";
+import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=45";
 import {
   localPredictionLeadSeconds,
   predictLocalWorld,
   predictLocalWorldAhead,
   reconcileLocalPrediction,
 } from "./free-roam-client-prediction.js?v=42";
+import {
+  applyLocalActionPrediction,
+  createLocalActionPrediction,
+  localActionPredictionExpired,
+} from "./free-roam-local-actions.js?v=1";
 import {applyReplicatedWorldDelta} from "./free-roam-replication.js?v=45";
 import {createSpeechController} from "./free-roam-speech.js?v=41";
 import {directionFromDelta} from "./free-roam-gesture-model.js";
@@ -96,6 +101,8 @@ let latencyTimer = 0;
 const latencySentAt = new Map();
 const inputSentAt = new Map();
 let messageVersion = 0;
+let pendingActionPredictions = [];
+const localAnnouncementSuppressUntil = new Map();
 
 function distance(a, b) {
   return Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));
@@ -365,6 +372,8 @@ function connect(role, {reconnecting = false, targetRoom = ""} = {}) {
       lastStateSequence = 0;
       authoritativeWorld = null;
       inputSentAt.clear();
+      pendingActionPredictions = [];
+      localAnnouncementSuppressUntil.clear();
       $("roomLabel").textContent = `Свободный мир ${roomId}`;
       if (reconnecting) {
         waitingForReconnectState = true;
@@ -426,9 +435,17 @@ function connect(role, {reconnecting = false, targetRoom = ""} = {}) {
       }
       authoritativeWorld = nextAuthoritative;
       const previousWorld = world;
+      const acknowledged = Math.max(0, Number(message.ackInput) || 0);
+      const receivedAt = performance.now();
+      pendingActionPredictions = pendingActionPredictions.filter(prediction => (
+        prediction.sequence > acknowledged && !localActionPredictionExpired(prediction, receivedAt)
+      ));
       const renderWorld = typeof structuredClone === "function"
         ? structuredClone(authoritativeWorld)
         : JSON.parse(JSON.stringify(authoritativeWorld));
+      for (const prediction of pendingActionPredictions) {
+        applyLocalActionPrediction(renderWorld, prediction, receivedAt);
+      }
       const predictionLead = localPredictionLeadSeconds({networkRttMs, inputReceiptMs, controlLatencyMs});
       predictLocalWorldAhead(renderWorld, playerIndex, localInput, predictionLead);
       world = reconcileLocalPrediction(previousWorld, renderWorld, playerIndex, {
@@ -436,12 +453,11 @@ function connect(role, {reconnecting = false, targetRoom = ""} = {}) {
         networkRttMs,
       });
       lastStateSequence = sequence;
-      lastStateAt = performance.now();
+      lastStateAt = receivedAt;
       // Acknowledge before speech, audio or rendering. Even if an assistive
       // technology blocks the main thread afterward, the server will retain
       // only one newer state instead of building a stale queue.
       send({type: "free-state-ack", sequence});
-      const acknowledged = Math.max(0, Number(message.ackInput) || 0);
       const sentAt = inputSentAt.get(acknowledged);
       if (sentAt != null) {
         const sample = Math.max(0, performance.now() - sentAt);
@@ -514,12 +530,13 @@ function leaveGame() {
 
 function sendInput(force = false) {
   const serialized = JSON.stringify(localInput);
-  if (!force && serialized === lastInputSent) return;
+  if (!force && serialized === lastInputSent) return 0;
   lastInputSent = serialized;
   const sequence = ++inputSequence;
   inputSentAt.set(sequence, performance.now());
   while (inputSentAt.size > 48) inputSentAt.delete(inputSentAt.keys().next().value);
   send({type: "free-input", sequence, input: localInput});
+  return sequence;
 }
 
 function opposite(name) {
@@ -538,9 +555,9 @@ function setControl(name, active) {
   }
   if (!changed) return false;
   localInput[name] = Boolean(active);
-  sendInput(true);
+  const sequence = sendInput(true);
   syncControlButtons();
-  return true;
+  return sequence || true;
 }
 
 function toggleControl(name) {
@@ -548,7 +565,23 @@ function toggleControl(name) {
 }
 
 function actionPulse(name, duration = 140) {
-  setControl(name, true);
+  const startedAt = performance.now();
+  const prediction = !localInput[name]
+    ? createLocalActionPrediction(world, playerIndex, name, startedAt)
+    : null;
+  const sequence = setControl(name, true);
+  if (prediction && sequence) {
+    prediction.sequence = Number(sequence) || inputSequence;
+    pendingActionPredictions.push(prediction);
+    while (pendingActionPredictions.length > 12) pendingActionPredictions.shift();
+    applyLocalActionPrediction(world, prediction, startedAt);
+    audio.playLocalActionCue?.(prediction.cue, prediction.suppressEvents);
+    for (const eventType of prediction.suppressEvents || []) {
+      localAnnouncementSuppressUntil.set(eventType, startedAt + 2_000);
+    }
+    if (prediction.announcement) announce(prediction.announcement);
+    render();
+  }
   clearTimeout(holdTimers.get(name));
   holdTimers.set(name, setTimeout(() => setControl(name, false), duration));
 }
@@ -614,6 +647,12 @@ function handleGameEvent(event) {
     sendInput(true);
   }
   if (["hull-repair-complete", "repair-blocked"].includes(event.type)) setControl("repair", false);
+  const suppressUntil = localAnnouncementSuppressUntil.get(event.type) || 0;
+  const localSource = event.sourcePlayer == null || event.sourcePlayer === playerIndex;
+  if (event.text && localSource && performance.now() <= suppressUntil) {
+    localAnnouncementSuppressUntil.delete(event.type);
+    return;
+  }
   if (!event.text) return;
   const critical = [
     "sink", "ram", "tow-detach", "flood-emergency-start", "flood-emergency-warning",
@@ -1118,7 +1157,6 @@ function bindKeyboard() {
       actionPulse("action");
     } else if (!event.repeat && event.code === "Space") {
       event.preventDefault();
-      audio.playLocalCommandCue?.(world?.players?.[playerIndex]?.mode === "boat" ? "brake" : "jump");
       actionPulse("jump");
     } else if (event.code === "KeyX") {
       event.preventDefault();
@@ -1240,7 +1278,6 @@ $("actionButton").addEventListener("click", () => {
   else actionPulse(boardIsOpen() ? "boardAccept" : shopIsOpen() ? "shopBuy" : "action");
 });
 $("jumpButton").addEventListener("click", () => {
-  audio.playLocalCommandCue?.(world?.players?.[playerIndex]?.mode === "boat" ? "brake" : "jump");
   actionPulse("jump");
 });
 bindHold($("attackButton"), "attack", 90);
@@ -1285,6 +1322,11 @@ window.__freeRoam = {
   localFeedback: () => {
     if (world) audio.updateLocalFeedback?.(world, playerIndex, localInput);
   },
+  localActionDiagnostics: () => pendingActionPredictions.map(prediction => ({
+    type: prediction.type,
+    sequence: prediction.sequence,
+    ageMs: Math.max(0, performance.now() - prediction.startedAtMs),
+  })),
   audioDiagnostics: () => globalThis.__freeRoamAudioDiagnostics || null,
   speechDiagnostics: () => ({
     available: speech.available,

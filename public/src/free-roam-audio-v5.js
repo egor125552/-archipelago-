@@ -60,6 +60,7 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
     this.localFireAt = 0;
     this.localFireBudget = 0;
     this.localFireSuppressUntil = 0;
+    this.localActionSuppressUntil = new Map();
   }
 
   async init() {
@@ -144,6 +145,40 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
     const frequency = kind === "sonar" ? 610 : kind === "brake" ? 190 : 340;
     this.playSynthPip({frequency, gain: 0.035, duration: 0.045});
     return true;
+  }
+
+  playLocalActionCue(kind = "action", suppressEvents = []) {
+    if (!this.ctx) return false;
+    const now = this.ctx.currentTime;
+    for (const eventType of suppressEvents || []) {
+      this.localActionSuppressUntil.set(eventType, now + 2);
+    }
+    if (kind === "jump" || kind === "roof") {
+      this.playFootstep({gain: 0.28, rate: kind === "roof" ? 1.08 : 1.02});
+      if (this.buffers.has("hullCreak")) {
+        this.play("hullCreak", {gain: kind === "roof" ? 0.17 : 0.09, rate: 1.05, lowpass: 5200});
+      }
+      return true;
+    }
+    if (kind === "brake") {
+      this.playSynthPip({frequency: 190, gain: 0.065, duration: 0.07});
+      if (this.buffers.has("hullCreak")) this.play("hullCreak", {gain: 0.16, rate: 0.76, lowpass: 3200});
+      return true;
+    }
+    if (["cargo-pickup", "cargo-stow", "cargo-drop"].includes(kind)) {
+      if (this.buffers.has("repair")) {
+        const rate = kind === "cargo-stow" ? 0.86 : kind === "cargo-drop" ? 0.78 : 1.08;
+        this.play("repair", {gain: 0.27, rate, lowpass: 5200});
+      } else {
+        this.playSynthPip({frequency: kind === "cargo-pickup" ? 540 : 330, gain: 0.055, duration: 0.07});
+      }
+      return true;
+    }
+    if (kind === "deny") {
+      this.handle([{type: "ui-deny"}]);
+      return true;
+    }
+    return this.playLocalCommandCue(kind);
   }
 
   updateLocalFeedback(world, playerIndex, input = {}) {
@@ -401,6 +436,12 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
   handleFreeEvent(event, playerIndex) {
     if (!event?.targets?.includes(playerIndex)) return;
     const localNow = this.ctx?.currentTime || 0;
+    const localActionUntil = this.localActionSuppressUntil.get(event.type) || 0;
+    const localActionSource = event.sourcePlayer == null || event.sourcePlayer === playerIndex;
+    if (localActionSource && localNow <= localActionUntil) {
+      this.localActionSuppressUntil.delete(event.type);
+      return;
+    }
     if (
       event.sourcePlayer === playerIndex
       && ["footstep", "swim-step"].includes(event.type)
