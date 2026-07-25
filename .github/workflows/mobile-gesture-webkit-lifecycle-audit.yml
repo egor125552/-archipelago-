@@ -1,0 +1,52 @@
+name: Mobile gesture WebKit lifecycle audit
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  webkit-pointer-lifecycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm install --no-save playwright@1.54.1
+      - run: npx playwright install --with-deps webkit
+      - name: Start Worker
+        run: |
+          npx wrangler dev --local --port 8802 > /tmp/mobile-webkit-worker.log 2>&1 &
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:8802/free-roam.html >/dev/null && exit 0; sleep 1; done
+          cat /tmp/mobile-webkit-worker.log
+          exit 1
+      - name: Reuse lifecycle script in WebKit
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import textwrap
+          source = Path('.github/workflows/mobile-gesture-lifecycle-audit.yml').read_text()
+          marker = "cat > .mobile-lifecycle.mjs <<'EOF'\n"
+          script = textwrap.dedent(source.split(marker, 1)[1].split("\n          EOF", 1)[0])
+          script = script.replace("import {chromium} from 'playwright';", "import {webkit} from 'playwright';")
+          script = script.replace("chromium.launch({headless: true})", "webkit.launch({headless: true})")
+          script = script.replace("http://127.0.0.1:8801", "http://127.0.0.1:8802")
+          Path('.mobile-webkit-lifecycle.mjs').write_text(script)
+          PY
+          set -o pipefail
+          node ./.mobile-webkit-lifecycle.mjs 2>&1 | tee /tmp/mobile-webkit-output.txt
+      - name: Upload WebKit lifecycle diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-gesture-webkit-lifecycle-output
+          path: |
+            /tmp/mobile-webkit-output.txt
+            /tmp/mobile-webkit-worker.log
+          if-no-files-found: warn
