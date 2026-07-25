@@ -15,13 +15,33 @@ const delay = direction => {
 const server = net.createServer(client => {
   const upstream = net.connect({host: "127.0.0.1", port: targetPort});
   const forward = (source, destination, direction) => {
-    source.on("data", chunk => {
-      const copy = Buffer.from(chunk);
+    const queue = [];
+    let active = false;
+    let ended = false;
+
+    const flush = () => {
+      if (active) return;
+      const chunk = queue.shift();
+      if (!chunk) {
+        if (ended && !destination.destroyed) destination.end();
+        return;
+      }
+      active = true;
       setTimeout(() => {
-        if (!destination.destroyed) destination.write(copy);
+        if (!destination.destroyed) destination.write(chunk);
+        active = false;
+        flush();
       }, delay(direction));
+    };
+
+    source.on("data", chunk => {
+      queue.push(Buffer.from(chunk));
+      flush();
     });
-    source.on("end", () => destination.end());
+    source.on("end", () => {
+      ended = true;
+      flush();
+    });
     source.on("error", () => destination.destroy());
   };
   forward(client, upstream, "up");
