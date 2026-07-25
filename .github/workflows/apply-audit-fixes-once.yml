@@ -1,0 +1,69 @@
+name: Apply confirmed audit fixes once
+
+on:
+  push:
+    branches: [audit-confirmed-bugs-20260725]
+
+permissions:
+  contents: write
+
+jobs:
+  patch-main:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Apply exact reviewed patches
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          worker = Path('src/worker.js')
+          text = worker.read_text()
+          old = '''    if (matched) this.finishMatch(room);'''
+          new = '''    const exactFreeReconnect = mode === "free"
+              && Boolean(requestedRoom)
+              && ["captain", "crew"].includes(requestedRole);
+            if (matched) this.finishMatch(room, {suppressRole: exactFreeReconnect ? role : null});'''
+          if old not in text:
+              raise SystemExit('worker match call not found')
+          text = text.replace(old, new, 1)
+
+          old = '''  finishMatch(room) {
+            safeSend(room.captain, {type: "peer-connected", room: room.id, mode: room.mode || "ops"});
+            safeSend(room.crew, {type: "peer-connected", room: room.id, mode: room.mode || "ops"});'''
+          new = '''  finishMatch(room, {suppressRole = null} = {}) {
+            if (suppressRole !== "captain") safeSend(room.captain, {type: "peer-connected", room: room.id, mode: room.mode || "ops"});
+            if (suppressRole !== "crew") safeSend(room.crew, {type: "peer-connected", room: room.id, mode: room.mode || "ops"});'''
+          if old not in text:
+              raise SystemExit('worker finishMatch block not found')
+          worker.write_text(text.replace(old, new, 1))
+
+          audit = Path('.github/workflows/free-roam-progression-audit.yml')
+          text = audit.read_text()
+          old = '''          async function moveFootToTarget(maxSteps = 70, limit = 3.1) {
+                    for (let step = 0; step < maxSteps; step++) {'''
+          new = '''          async function moveFootToTarget(maxSteps = 70, limit = 3.1, stopWhen = null) {
+                    for (let step = 0; step < maxSteps; step++) {
+                      if (stopWhen && await page.evaluate(stopWhen)) return await snapshot('FOOT GOAL COMPLETED');'''
+          if old not in text:
+              raise SystemExit('progression helper not found')
+          text = text.replace(old, new, 1)
+          old = '''            await moveFootToTarget(60, 4.5);
+                    await page.waitForFunction(() => window.__freeRoam.getWorld().freeActivities.delivered[0] >= 2, null, {timeout: 7000});'''
+          new = '''            await moveFootToTarget(60, 4.5, () => window.__freeRoam.getWorld().freeActivities.delivered[0] >= 2);
+                    await page.waitForFunction(() => window.__freeRoam.getWorld().freeActivities.delivered[0] >= 2, null, {timeout: 7000});'''
+          if old not in text:
+              raise SystemExit('progression delivery call not found')
+          audit.write_text(text.replace(old, new, 1))
+          PY
+      - name: Commit fixes to main
+        run: |
+          git config user.name "Echo Archipelago Audit"
+          git config user.email "actions@users.noreply.github.com"
+          git add src/worker.js .github/workflows/free-roam-progression-audit.yml
+          git diff --cached --check
+          git commit -m "Fix reconnect announcement and progression audit"
+          git push origin HEAD:main
