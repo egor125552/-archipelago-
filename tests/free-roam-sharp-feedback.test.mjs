@@ -34,24 +34,31 @@ test("boat cargo and steal range count as cargo actions", () => {
 });
 
 test("live audio wrappers patch the exact class used by the client", async () => {
-  const [client, pistol, sharp] = await Promise.all([
+  const [client, pistol, sharp, cues] = await Promise.all([
     readFile(new URL("../public/src/free-roam-v4.js", import.meta.url), "utf8"),
     readFile(new URL("../public/src/free-roam-pistol-audio.js", import.meta.url), "utf8"),
     readFile(new URL("../public/src/free-roam-sharp-feedback-v1.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/src/free-roam-sharp-action-cues-v1.js", import.meta.url), "utf8"),
   ]);
   assert.match(client, /free-roam-audio-v5\.js\?v=45/);
   assert.match(pistol, /free-roam-audio-v5\.js\?v=45/);
   assert.match(sharp, /free-roam-audio-v5\.js\?v=45/);
-  assert.match(pistol, /free-roam-sharp-feedback-v1\.js\?v=1/);
+  assert.match(cues, /free-roam-audio-v5\.js\?v=45/);
+  assert.match(pistol, /free-roam-sharp-action-cues-v1\.js\?v=1/);
 });
 
 test("decisive sounds bypass the injury path and delayed duplicates are suppressed", async () => {
-  const source = await readFile(new URL("../public/src/free-roam-sharp-feedback-v1.js", import.meta.url), "utf8");
+  const [source, cues] = await Promise.all([
+    readFile(new URL("../public/src/free-roam-sharp-feedback-v1.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/src/free-roam-sharp-action-cues-v1.js", import.meta.url), "utf8"),
+  ]);
   assert.match(source, /sharpTransientBus\.connect\(this\.compressor\)/);
   assert.match(source, /localSharpJumpUntil/);
   assert.match(source, /localSharpAttackUntil/);
   assert.match(source, /localSharpCargoUntil/);
   assert.match(source, /playSharpCombatImpact/);
-  assert.match(source, /event\.code === "KeyX"/);
-  assert.match(source, /event\.code === "KeyF"/);
+  assert.match(cues, /prototype\.playLocalActionCue/);
+  assert.match(cues, /kind === "jump" \|\| kind === "roof"/);
+  assert.match(cues, /\["cargo-pickup", "cargo-stow", "cargo-drop"\]/);
+  assert.match(cues, /__sharpPreviousAttackInput/);
 });
