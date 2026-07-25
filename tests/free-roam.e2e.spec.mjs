@@ -306,6 +306,8 @@ test("threat five exposes the heavy boat systems and elite actor in the browser"
       world.freeScenario.phase = "victory";
       core.setPlayerPresence(world, 1, true);
       threats.startThreatEncounter(world, 5, "browser-red-contract");
+      world.time += 7.1;
+      threats.updateThreatDirector(world);
       const heavy = heavyModule.activeHeavyPursuer(world);
       return {
         heavy: heavy && {hull: heavy.hull, maxHull: heavy.maxHull, role: heavy.role},
