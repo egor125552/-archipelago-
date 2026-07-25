@@ -3,6 +3,14 @@ import fs from "node:fs";
 import path from "node:path";
 
 async function prepareContext(context) {
+  await context.addInitScript(() => {
+    localStorage.setItem("echo-free-roam-interface-settings-v1", JSON.stringify({
+      gameButtons: true,
+      quickControl: false,
+      quickSpeech: false,
+      autoResume: false,
+    }));
+  });
   await context.route("**/*", async route => {
     const url = route.request().url();
     if (/\.(?:ogg|mp3|wav)(?:\?|$)/i.test(url) || url.includes("/api/sound/")) {
@@ -23,6 +31,7 @@ async function createRealClient(browser, testInfo) {
   await page.goto("/free-roam.html", {waitUntil: "domcontentloaded"});
   await page.getByRole("button", {name: "Создать свободный мир"}).click();
   await expect(page.locator("#game")).toBeVisible();
+  await expect(page.locator("#controls")).toBeVisible();
   await expect.poll(() => page.evaluate(() => window.__freeRoam.networkDiagnostics().receivedStateCount)).toBeGreaterThan(2);
   return {context, page};
 }
@@ -102,6 +111,13 @@ function gunnerEscortDistance(state) {
   return Math.hypot(state.gunner.x - state.escort.x, state.gunner.y - state.escort.y);
 }
 
+function writeReport(report, projectName) {
+  fs.mkdirSync("test-results", {recursive: true});
+  const output = path.join("test-results", `hostile-gunner-client-audit-${projectName}.json`);
+  fs.writeFileSync(output, JSON.stringify(report, null, 2));
+  console.log("HOSTILE_GUNNER_CLIENT_AUDIT", JSON.stringify(report));
+}
+
 test("real clients expose hostile gunner intelligence and mechanic failures", async ({browser}, testInfo) => {
   const {context, page} = await createRealClient(browser, testInfo);
   const report = {project: testInfo.project.name};
@@ -131,12 +147,14 @@ test("real clients expose hostile gunner intelligence and mechanic failures", as
 
     await setupScenario(page, "roof");
     const roofCycles = [];
+    const jumpButton = page.locator("#jumpButton");
+    await expect(jumpButton).toBeVisible();
     for (let cycle = 0; cycle < 3; cycle += 1) {
       await expect.poll(() => page.evaluate(() => window.__freeRoam.getWorld().players[0].mode)).toBe("foot");
       await expect.poll(() => page.evaluate(() => Boolean(window.__freeRoam.getWorld().freeHostileGunners?.gunners?.some(gunner => gunner.active && !gunner.destroyed)))).toBe(true);
       const beforeRoof = await snapshot(page);
 
-      await page.keyboard.press("Space");
+      await jumpButton.click();
       await expect.poll(() => page.evaluate(() => window.__freeRoam.getWorld().players[0].mode), {timeout: 5_000}).toBe("roof");
       await expect.poll(() => page.evaluate(() => {
         const gunner = window.__freeRoam.getWorld().freeHostileGunners?.gunners?.find(candidate => candidate.pursuerId === "audit-pursuer");
@@ -159,7 +177,7 @@ test("real clients expose hostile gunner intelligence and mechanic failures", as
         boardedDistanceFromBoat: gunnerEscortDistance(boarded),
       });
 
-      await page.keyboard.press("Space");
+      await jumpButton.click();
       await expect.poll(() => page.evaluate(() => window.__freeRoam.getWorld().players[0].mode), {timeout: 5_000}).toBe("foot");
       await expect.poll(() => page.evaluate(() => Boolean(window.__freeRoam.getWorld().freeHostileGunners?.gunners?.some(gunner => gunner.active && !gunner.destroyed))), {timeout: 7_000}).toBe(true);
     }
@@ -168,12 +186,11 @@ test("real clients expose hostile gunner intelligence and mechanic failures", as
       allBoardedFarFromBoat: roofCycles.every(item => Number(item.boardedDistanceFromBoat) > 35),
       totalRoofDamage: roofCycles.reduce((sum, item) => sum + Number(item.damageWhileRoof || 0), 0),
     };
-
-    fs.mkdirSync("test-results", {recursive: true});
-    const output = path.join("test-results", `hostile-gunner-client-audit-${testInfo.project.name}.json`);
-    fs.writeFileSync(output, JSON.stringify(report, null, 2));
-    console.log("HOSTILE_GUNNER_CLIENT_AUDIT", JSON.stringify(report));
+  } catch (error) {
+    report.failure = String(error?.stack || error);
+    throw error;
   } finally {
+    writeReport(report, testInfo.project.name);
     await context.close();
   }
 });
