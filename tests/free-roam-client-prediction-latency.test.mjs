@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   localPredictionLeadSeconds,
+  predictLocalWorld,
   predictLocalWorldAhead,
   reconcileLocalPrediction,
 } from "../public/src/free-roam-client-prediction.js";
@@ -32,4 +33,14 @@ test("large person disagreements still snap to the authoritative world", () => {
     networkRttMs: 260,
   });
   assert.equal(result.players[0].y, 100);
+});
+
+test("local swimmer prediction stops at the same boat hull radius as the server", () => {
+  const world = {
+    players: [{mode: "swim", x: 199, y: 166, heading: 0, combat: {alive: true, knockedDown: false}}],
+    boats: [{id: 0, x: 199, y: 158, sunk: false}],
+  };
+  for (let index = 0; index < 30; index += 1) predictLocalWorld(world, 0, {up: true}, 0.05);
+  assert.equal(world.players[0].x, 199);
+  assert.ok(Math.abs(world.players[0].y - 165.4) < 0.0001, `unexpected hull penetration: ${world.players[0].y}`);
 });
