@@ -106,3 +106,227 @@ jobs:
             /tmp/browser-output.txt
             /tmp/wrangler.log
           if-no-files-found: warn
+
+  extended-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm install --no-save playwright@1.54.1
+      - run: npx playwright install --with-deps chromium
+      - name: Start isolated Worker
+        run: |
+          npx wrangler dev --local --port 8788 > /tmp/extended-wrangler.log 2>&1 &
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:8788/free-roam.html >/dev/null && exit 0; sleep 1; done
+          cat /tmp/extended-wrangler.log
+          exit 1
+      - name: Run extended player scenarios
+        shell: bash
+        run: |
+          cat > .extended-audit.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import assert from 'node:assert/strict';
+
+          const base = 'http://127.0.0.1:8788';
+          const browser = await chromium.launch({ headless: true });
+          const failures = [];
+          const parseNumber = text => Number(String(text || '').trim().replace(',', '.').replace(/[^0-9.-]/g, ''));
+          const numericPartner = text => /^\d+\s*м$/.test(String(text || '').trim());
+
+          async function scenario(name, run) {
+            console.log(`SCENARIO ${name} START`);
+            try {
+              await run();
+              console.log(`SCENARIO ${name} PASS`);
+            } catch (error) {
+              failures.push(`${name}: ${error.stack || error}`);
+              console.error(`SCENARIO ${name} FAIL ${error.stack || error}`);
+            }
+          }
+
+          await scenario('two-client replication and rejoin', async () => {
+            const hostContext = await browser.newContext({viewport: {width: 1280, height: 900}});
+            const joinContext = await browser.newContext({viewport: {width: 1280, height: 900}});
+            const host = await hostContext.newPage();
+            const join = await joinContext.newPage();
+            const hostErrors = [];
+            const joinErrors = [];
+            host.on('pageerror', error => hostErrors.push(String(error)));
+            join.on('pageerror', error => joinErrors.push(String(error)));
+            await Promise.all([host.goto(`${base}/free-roam.html`), join.goto(`${base}/free-roam.html`)]);
+            await host.locator('#hostButton').click();
+            await host.locator('#game').waitFor({state: 'visible', timeout: 15000});
+            await join.locator('#joinButton').click();
+            await join.locator('#game').waitFor({state: 'visible', timeout: 15000});
+            await host.waitForFunction(() => /^\d+\s*м$/.test(document.querySelector('#otherValue')?.textContent?.trim() || ''), null, {timeout: 15000});
+            await join.waitForFunction(() => /^\d+\s*м$/.test(document.querySelector('#otherValue')?.textContent?.trim() || ''), null, {timeout: 15000});
+            const hostRoom = (await host.locator('#roomLabel').textContent() || '').trim();
+            const joinRoom = (await join.locator('#roomLabel').textContent() || '').trim();
+            assert.equal(hostRoom, joinRoom, `room mismatch: ${hostRoom} vs ${joinRoom}`);
+            const distanceBefore = parseNumber(await join.locator('#otherValue').textContent());
+            const joinSpeedBefore = parseNumber(await join.locator('#speedValue').textContent());
+            await host.keyboard.down('ArrowUp');
+            await host.waitForTimeout(1500);
+            await host.keyboard.up('ArrowUp');
+            await host.waitForTimeout(700);
+            const hostSpeed = parseNumber(await host.locator('#speedValue').textContent());
+            const joinSpeedAfter = parseNumber(await join.locator('#speedValue').textContent());
+            const distanceAfter = parseNumber(await join.locator('#otherValue').textContent());
+            console.log(`TWO CLIENTS room=${hostRoom} hostSpeed=${hostSpeed} joinSpeed=${joinSpeedBefore}->${joinSpeedAfter} distance=${distanceBefore}->${distanceAfter}`);
+            assert.ok(hostSpeed > 0.5, 'host boat did not move');
+            assert.ok(joinSpeedAfter <= joinSpeedBefore + 0.2, `join boat moved from host input: ${joinSpeedBefore}->${joinSpeedAfter}`);
+            assert.ok(Math.abs(distanceAfter - distanceBefore) >= 1, `partner distance did not replicate: ${distanceBefore}->${distanceAfter}`);
+            assert.equal(await host.evaluate(() => document.activeElement?.id), 'gameTitle', 'keyboard movement changed focus');
+
+            await host.keyboard.down('ArrowUp');
+            await host.waitForTimeout(700);
+            const beforeBlur = parseNumber(await host.locator('#speedValue').textContent());
+            await host.evaluate(() => window.dispatchEvent(new Event('blur')));
+            await host.waitForTimeout(1400);
+            const afterBlur = parseNumber(await host.locator('#speedValue').textContent());
+            await host.keyboard.up('ArrowUp');
+            console.log(`BLUR RELEASE speed=${beforeBlur}->${afterBlur}`);
+            assert.ok(afterBlur <= beforeBlur + 0.6, `lost keyup kept accelerating: ${beforeBlur}->${afterBlur}`);
+
+            await join.locator('#leaveButton').click();
+            await join.locator('#lobby').waitFor({state: 'visible', timeout: 5000});
+            await host.waitForFunction(() => document.querySelector('#otherValue')?.textContent?.trim() === 'ждём', null, {timeout: 10000});
+            await join.locator('#joinButton').click();
+            await join.locator('#game').waitFor({state: 'visible', timeout: 15000});
+            await host.waitForFunction(() => /^\d+\s*м$/.test(document.querySelector('#otherValue')?.textContent?.trim() || ''), null, {timeout: 15000});
+            assert.ok(numericPartner(await join.locator('#otherValue').textContent()), 'rejoined player cannot see partner');
+            assert.equal(hostErrors.length, 0, hostErrors.join(' | '));
+            assert.equal(joinErrors.length, 0, joinErrors.join(' | '));
+            await hostContext.close();
+            await joinContext.close();
+          });
+
+          await scenario('automatic reconnect after offline period', async () => {
+            const hostContext = await browser.newContext({viewport: {width: 1280, height: 900}});
+            const joinContext = await browser.newContext({viewport: {width: 1280, height: 900}});
+            const host = await hostContext.newPage();
+            const join = await joinContext.newPage();
+            await Promise.all([host.goto(`${base}/free-roam.html`), join.goto(`${base}/free-roam.html`)]);
+            await host.locator('#hostButton').click();
+            await host.locator('#game').waitFor({state: 'visible', timeout: 15000});
+            await join.locator('#joinButton').click();
+            await join.locator('#game').waitFor({state: 'visible', timeout: 15000});
+            await join.waitForFunction(() => /^\d+\s*м$/.test(document.querySelector('#otherValue')?.textContent?.trim() || ''), null, {timeout: 15000});
+            const roomBefore = (await join.locator('#roomLabel').textContent() || '').trim();
+            await joinContext.setOffline(true);
+            await join.waitForTimeout(2200);
+            await joinContext.setOffline(false);
+            await join.waitForFunction(() => /^\d+\s*м$/.test(document.querySelector('#otherValue')?.textContent?.trim() || ''), null, {timeout: 25000});
+            await host.waitForFunction(() => /^\d+\s*м$/.test(document.querySelector('#otherValue')?.textContent?.trim() || ''), null, {timeout: 25000});
+            const roomAfter = (await join.locator('#roomLabel').textContent() || '').trim();
+            const reconnectMessage = (await join.locator('#message').textContent() || '').trim();
+            console.log(`RECONNECT room=${roomBefore}->${roomAfter} message=${JSON.stringify(reconnectMessage)}`);
+            assert.equal(roomAfter, roomBefore, 'reconnect entered a different world');
+            assert.equal(await join.locator('#game').isVisible(), true, 'game closed during reconnect');
+            await hostContext.close();
+            await joinContext.close();
+          });
+
+          await scenario('mobile pointer cancellation releases throttle', async () => {
+            for (let attempt = 1; attempt <= 3; attempt++) {
+              const context = await browser.newContext({
+                viewport: {width: 390, height: 844},
+                isMobile: true,
+                hasTouch: true,
+                userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1',
+              });
+              const page = await context.newPage();
+              const errors = [];
+              page.on('pageerror', error => errors.push(String(error)));
+              await page.goto(`${base}/free-roam.html`);
+              await page.locator('#hostButton').click();
+              await page.locator('#game').waitFor({state: 'visible', timeout: 15000});
+              const coarse = await page.evaluate(() => matchMedia('(pointer: coarse)').matches);
+              const surface = page.locator('#playSurface');
+              await surface.dispatchEvent('pointerdown', {pointerId: 71, pointerType: 'touch', isPrimary: true, clientX: 190, clientY: 620, buttons: 1});
+              await surface.dispatchEvent('pointermove', {pointerId: 71, pointerType: 'touch', isPrimary: true, clientX: 190, clientY: 430, buttons: 1});
+              await page.waitForTimeout(1400);
+              const moving = parseNumber(await page.locator('#speedValue').textContent());
+              await surface.dispatchEvent('pointercancel', {pointerId: 71, pointerType: 'touch', isPrimary: true, clientX: 190, clientY: 430, buttons: 0});
+              await page.waitForTimeout(1400);
+              const afterCancel = parseNumber(await page.locator('#speedValue').textContent());
+              console.log(`MOBILE ${attempt} coarse=${coarse} speed=${moving}->${afterCancel}`);
+              assert.equal(coarse, true, 'mobile context did not enable coarse-pointer gestures');
+              assert.ok(moving > 0.5, `touch swipe did not move boat: ${moving}`);
+              assert.ok(afterCancel <= moving + 0.6, `pointercancel left throttle accelerating: ${moving}->${afterCancel}`);
+              assert.equal(errors.length, 0, errors.join(' | '));
+              await context.close();
+            }
+          });
+
+          await scenario('solo operation touch and screen-reader controls', async () => {
+            const touchContext = await browser.newContext({viewport: {width: 1280, height: 900}});
+            const touch = await touchContext.newPage();
+            const touchErrors = [];
+            touch.on('pageerror', error => touchErrors.push(String(error)));
+            await touch.goto(`${base}/`);
+            await touch.locator('#soloButton').click();
+            await touch.locator('#gameScreen').waitFor({state: 'visible', timeout: 15000});
+            assert.equal(await touch.evaluate(() => document.activeElement?.id), 'gameTitle', 'operation did not move focus to title');
+            const before = parseNumber(await touch.locator('#speed').textContent());
+            await touch.locator('#throttleButton').hover();
+            await touch.mouse.down();
+            await touch.waitForTimeout(1400);
+            await touch.mouse.up();
+            await touch.waitForTimeout(250);
+            const moving = parseNumber(await touch.locator('#speed').textContent());
+            await touch.locator('#anchorButton').click();
+            await touch.waitForTimeout(1200);
+            const braked = parseNumber(await touch.locator('#speed').textContent());
+            await touch.locator('#sonarButton').click();
+            await touch.waitForTimeout(300);
+            const sonarMessage = (await touch.locator('#missionMessage').textContent() || '').trim();
+            console.log(`OPERATION TOUCH speed=${before}->${moving}->${braked} sonar=${JSON.stringify(sonarMessage)}`);
+            assert.ok(moving > before, 'held operation throttle did not increase speed');
+            assert.ok(braked < moving, 'operation floating brake did not reduce speed');
+            assert.ok(sonarMessage.length > 0, 'operation sonar produced no message');
+            assert.equal(touchErrors.length, 0, touchErrors.join(' | '));
+            await touchContext.close();
+
+            const readerContext = await browser.newContext({viewport: {width: 1280, height: 900}});
+            const reader = await readerContext.newPage();
+            const readerErrors = [];
+            reader.on('pageerror', error => readerErrors.push(String(error)));
+            await reader.goto(`${base}/`);
+            await reader.locator('#modeReader').click();
+            await reader.locator('#soloButton').click();
+            await reader.locator('#gameScreen').waitFor({state: 'visible', timeout: 15000});
+            const readerBefore = parseNumber(await reader.locator('#speed').textContent());
+            await reader.locator('#throttleButton').click();
+            await reader.waitForTimeout(1200);
+            const readerMoving = parseNumber(await reader.locator('#speed').textContent());
+            await reader.locator('#reverseButton').click();
+            await reader.waitForTimeout(1200);
+            const readerStopped = parseNumber(await reader.locator('#speed').textContent());
+            console.log(`OPERATION READER speed=${readerBefore}->${readerMoving}->${readerStopped}`);
+            assert.ok(readerMoving > readerBefore, 'screen-reader throttle click did not move boat');
+            assert.ok(readerStopped < readerMoving, 'screen-reader brake click did not slow boat');
+            assert.equal(readerErrors.length, 0, readerErrors.join(' | '));
+            await readerContext.close();
+          });
+
+          await browser.close();
+          console.log(`EXTENDED SUMMARY failures=${failures.length}`);
+          if (failures.length) process.exit(1);
+          EOF
+          set -o pipefail
+          node ./.extended-audit.mjs 2>&1 | tee /tmp/extended-output.txt
+      - name: Upload extended diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: extended-browser-audit-output
+          path: |
+            /tmp/extended-output.txt
+            /tmp/extended-wrangler.log
+          if-no-files-found: warn
