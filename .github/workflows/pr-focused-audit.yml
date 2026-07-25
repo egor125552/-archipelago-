@@ -1,0 +1,155 @@
+name: PR focused browser audit
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  focused-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm install --no-save playwright@1.54.1
+      - run: npx playwright install --with-deps chromium
+      - name: Start isolated Worker
+        run: |
+          npx wrangler dev --local --port 8789 > /tmp/focused-wrangler.log 2>&1 &
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:8789/free-roam.html >/dev/null && exit 0; sleep 1; done
+          cat /tmp/focused-wrangler.log
+          exit 1
+      - name: Run focused scenarios
+        shell: bash
+        run: |
+          cat > .focused-audit.mjs <<'EOF'
+          import { chromium } from 'playwright';
+          import assert from 'node:assert/strict';
+
+          const base = 'http://127.0.0.1:8789';
+          const browser = await chromium.launch({headless: true});
+          const failures = [];
+          const parseNumber = text => Number(String(text || '').trim().replace(',', '.').replace(/[^0-9.-]/g, ''));
+          const partnerVisible = () => /^\d+\s*м$/.test(document.querySelector('#otherValue')?.textContent?.trim() || '');
+
+          async function scenario(name, run) {
+            console.log(`SCENARIO ${name} START`);
+            try {
+              await run();
+              console.log(`SCENARIO ${name} PASS`);
+            } catch (error) {
+              failures.push(`${name}: ${error.stack || error}`);
+              console.error(`SCENARIO ${name} FAIL ${error.stack || error}`);
+            }
+          }
+
+          async function openPair() {
+            const hostContext = await browser.newContext({viewport: {width: 1280, height: 900}});
+            const joinContext = await browser.newContext({viewport: {width: 1280, height: 900}});
+            const host = await hostContext.newPage();
+            const join = await joinContext.newPage();
+            await Promise.all([host.goto(`${base}/free-roam.html`), join.goto(`${base}/free-roam.html`)]);
+            await host.locator('#hostButton').click();
+            await host.locator('#game').waitFor({state: 'visible', timeout: 15000});
+            await join.locator('#joinButton').click();
+            await join.locator('#game').waitFor({state: 'visible', timeout: 15000});
+            await host.waitForFunction(partnerVisible, null, {timeout: 15000});
+            await join.waitForFunction(partnerVisible, null, {timeout: 15000});
+            return {hostContext, joinContext, host, join};
+          }
+
+          await scenario('clean leave and rejoin same world three times', async () => {
+            for (let attempt = 1; attempt <= 3; attempt++) {
+              const {hostContext, joinContext, host, join} = await openPair();
+              const roomBefore = (await join.locator('#roomLabel').textContent() || '').trim();
+              await Promise.all([
+                join.waitForNavigation({waitUntil: 'domcontentloaded', timeout: 10000}),
+                join.locator('#leaveButton').click(),
+              ]);
+              await join.locator('#lobby').waitFor({state: 'visible', timeout: 10000});
+              await host.waitForFunction(() => document.querySelector('#otherValue')?.textContent?.trim() === 'ждём', null, {timeout: 15000});
+              await join.locator('#refreshButton').click();
+              await join.waitForFunction(() => document.querySelectorAll('#roomsList li').length > 0, null, {timeout: 15000});
+              await join.locator('#joinButton').click();
+              await join.locator('#game').waitFor({state: 'visible', timeout: 15000});
+              await join.waitForFunction(partnerVisible, null, {timeout: 15000});
+              const roomAfter = (await join.locator('#roomLabel').textContent() || '').trim();
+              const message = (await join.locator('#message').textContent() || '').trim();
+              console.log(`REJOIN ${attempt} room=${roomBefore}->${roomAfter} message=${JSON.stringify(message)}`);
+              assert.equal(roomAfter, roomBefore, 'player rejoined a different world');
+              await hostContext.close();
+              await joinContext.close();
+            }
+          });
+
+          await scenario('watchdog reconnect after real silence', async () => {
+            for (let attempt = 1; attempt <= 2; attempt++) {
+              const {hostContext, joinContext, join} = await openPair();
+              const roomBefore = (await join.locator('#roomLabel').textContent() || '').trim();
+              await joinContext.setOffline(true);
+              await join.waitForFunction(() => /переподключ|восстанавли|перестал присылать/i.test(document.querySelector('#message')?.textContent || ''), null, {timeout: 22000});
+              const offlineMessage = (await join.locator('#message').textContent() || '').trim();
+              await joinContext.setOffline(false);
+              await join.waitForFunction(partnerVisible, null, {timeout: 35000});
+              const roomAfter = (await join.locator('#roomLabel').textContent() || '').trim();
+              const onlineMessage = (await join.locator('#message').textContent() || '').trim();
+              console.log(`RECONNECT ${attempt} room=${roomBefore}->${roomAfter} offline=${JSON.stringify(offlineMessage)} online=${JSON.stringify(onlineMessage)}`);
+              assert.equal(roomAfter, roomBefore, 'watchdog reconnect entered another world');
+              assert.equal(await join.locator('#game').isVisible(), true, 'game closed during reconnect');
+              await hostContext.close();
+              await joinContext.close();
+            }
+          });
+
+          await scenario('real touch cancellation releases throttle', async () => {
+            for (let attempt = 1; attempt <= 3; attempt++) {
+              const context = await browser.newContext({
+                viewport: {width: 390, height: 844},
+                isMobile: true,
+                hasTouch: true,
+                userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1',
+              });
+              const page = await context.newPage();
+              const errors = [];
+              page.on('pageerror', error => errors.push(String(error)));
+              await page.goto(`${base}/free-roam.html`);
+              await page.locator('#hostButton').click();
+              await page.locator('#game').waitFor({state: 'visible', timeout: 15000});
+              const cdp = await context.newCDPSession(page);
+              await cdp.send('Input.dispatchTouchEvent', {type: 'touchStart', touchPoints: [{x: 190, y: 620, radiusX: 2, radiusY: 2, force: 1, id: 71}]});
+              await cdp.send('Input.dispatchTouchEvent', {type: 'touchMove', touchPoints: [{x: 190, y: 430, radiusX: 2, radiusY: 2, force: 1, id: 71}]});
+              await page.waitForTimeout(1400);
+              const moving = parseNumber(await page.locator('#speedValue').textContent());
+              await cdp.send('Input.dispatchTouchEvent', {type: 'touchCancel', touchPoints: []});
+              await page.waitForTimeout(1400);
+              const afterCancel = parseNumber(await page.locator('#speedValue').textContent());
+              console.log(`TOUCH CANCEL ${attempt} speed=${moving}->${afterCancel} errors=${JSON.stringify(errors)}`);
+              assert.ok(moving > 0.5, `real touch swipe did not move boat: ${moving}`);
+              assert.ok(afterCancel <= moving + 0.6, `touch cancellation kept accelerating: ${moving}->${afterCancel}`);
+              assert.equal(errors.length, 0, errors.join(' | '));
+              await context.close();
+            }
+          });
+
+          await browser.close();
+          console.log(`FOCUSED SUMMARY failures=${failures.length}`);
+          if (failures.length) process.exit(1);
+          EOF
+          set -o pipefail
+          node ./.focused-audit.mjs 2>&1 | tee /tmp/focused-output.txt
+      - name: Upload focused diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: focused-browser-audit-output
+          path: |
+            /tmp/focused-output.txt
+            /tmp/focused-wrangler.log
+          if-no-files-found: warn
