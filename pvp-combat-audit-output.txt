@@ -2,43 +2,43 @@ TAP version 13
 # Subtest: a manually selected player target exposes the index used by automatic fire
 ok 1 - a manually selected player target exposes the index used by automatic fire
   ---
-  duration_ms: 3.376716
+  duration_ms: 3.82062
   type: 'test'
   ...
 # Subtest: a locked automatic can damage and kill the other player
 ok 2 - a locked automatic can damage and kill the other player
   ---
-  duration_ms: 1.922514
+  duration_ms: 2.766417
   type: 'test'
   ...
 # Subtest: the same locked automatic path works against a swimming player
 ok 3 - the same locked automatic path works against a swimming player
   ---
-  duration_ms: 0.782768
+  duration_ms: 1.136617
   type: 'test'
   ...
 # Subtest: unlocked automatic fire bypasses the boat and damages a seated driver
 ok 4 - unlocked automatic fire bypasses the boat and damages a seated driver
   ---
-  duration_ms: 0.785612
+  duration_ms: 0.835304
   type: 'test'
   ...
 # Subtest: the target menu hides a seated player even though unlocked automatic fire can hit them
 ok 5 - the target menu hides a seated player even though unlocked automatic fire can hit them
   ---
-  duration_ms: 0.657443
+  duration_ms: 0.8709
   type: 'test'
   ...
 # Subtest: melee attacks also pass through a boat and hit its seated driver
 ok 6 - melee attacks also pass through a boat and hit its seated driver
   ---
-  duration_ms: 0.725133
+  duration_ms: 0.874287
   type: 'test'
   ...
 # Subtest: locked automatic fire at an occupied boat cannot defeat the seated player
 not ok 7 - locked automatic fire at an occupied boat cannot defeat the seated player
   ---
-  duration_ms: 1.983976
+  duration_ms: 2.655359
   type: 'test'
   location: '/home/runner/work/-archipelago-/-archipelago-/tests/pvp-combat-audit-v160.test.mjs:146:1'
   failureType: 'testCodeFailure'
@@ -69,6 +69,6 @@ not ok 7 - locked automatic fire at an occupied boat cannot defeat the seated pl
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 121.170393
+# duration_ms 215.697737
 
 EXIT_CODE=1
