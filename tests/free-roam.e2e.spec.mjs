@@ -99,7 +99,7 @@ async function createPair(browser, testInfo) {
     crew.goto("/free-roam.html", {waitUntil: "domcontentloaded"}),
   ]);
 
-  await captain.getByRole("button", {name: "Создать свободный мир"}).click();
+  await captain.locator("#hostButton").click();
   await expect(captain.locator("#game")).toBeVisible();
   const soloStatus = await captain.evaluate(() => window.__freeRoam.status());
   expect(soloStatus).toContain("Пока ждём второго игрока");

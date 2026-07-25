@@ -79,7 +79,7 @@ test("interface, speech, and reload settings persist from the main menu into the
     await expect(quickSpeech).toHaveAttribute("aria-pressed", "true");
     await page.locator("#settingsCloseButton").click();
 
-    await page.getByRole("button", {name: "Создать свободный мир"}).click();
+    await page.locator("#hostButton").click();
     await expect(page.locator("#game")).toBeVisible();
     await expect(page.locator("#gameSettingsButton")).toBeVisible();
     await expect(page.locator("#speechButton")).toBeVisible();
