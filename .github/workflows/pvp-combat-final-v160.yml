@@ -1,0 +1,39 @@
+name: Final PvP automatic regressions
+
+on:
+  push:
+    branches:
+      - audit/pvp-combat-v160-final
+    paths-ignore:
+      - pvp-combat-final-output.txt
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Run only PvP automatic regressions
+        shell: bash
+        run: |
+          set +e
+          node --test tests/pvp-combat-final-v160.test.mjs > pvp-combat-final-output.txt 2>&1
+          code=$?
+          printf '\nEXIT_CODE=%s\n' "$code" >> pvp-combat-final-output.txt
+          exit 0
+      - name: Publish focused output
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add pvp-combat-final-output.txt
+          git commit -m "Record final PvP automatic regressions" || exit 0
+          git push
