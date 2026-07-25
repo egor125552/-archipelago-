@@ -25,7 +25,17 @@ jobs:
         run: python /tmp/apply-desktop-latency-fix.py
       - run: npm ci
       - name: Run Node tests
-        run: npm test
+        shell: bash
+        run: |
+          set -o pipefail
+          npm test 2>&1 | tee node-test.log
+      - name: Upload Node log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-latency-node-log
+          path: node-test.log
+          if-no-files-found: ignore
       - name: Commit tested latency repair
         run: |
           git config user.name "github-actions[bot]"
