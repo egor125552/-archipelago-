@@ -91,6 +91,14 @@ function applyAuthoritativeCombatHotfix(world, dt) {
 
 export function createServerFreeRoom(now = Date.now()) {
   const world = createFreeWorld();
+  // Test-only branch setup: one ordinary crate starts inside captain action
+  // range. Production main is not modified by this audit fixture.
+  const auditCrate = world.freeActivities?.crates?.find(crate => crate.id === "crate-pump");
+  const captainBoat = world.boats?.[0];
+  if (auditCrate && captainBoat) {
+    auditCrate.x = captainBoat.x;
+    auditCrate.y = captainBoat.y;
+  }
   setPlayerPresence(world, 0, false);
   setPlayerPresence(world, 1, false);
   reserveUnconnectedBoats(world);
