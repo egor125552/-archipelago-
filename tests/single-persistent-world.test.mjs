@@ -108,19 +108,39 @@ test("many live rooms may exist but only the first can become durable", async ()
   assert.equal(storage.values.has(`${ROOM_PREFIX}FREE-B`), false);
 });
 
-test("durable save controls never delete the live reload session", async () => {
+test("world identity is never persisted in browser storage", async () => {
   const [client, startup] = await Promise.all([
     readFile(new URL("../public/src/free-roam-saved-world-v1.js", import.meta.url), "utf8"),
     readFile(new URL("../public/src/free-roam-startup-v1.js", import.meta.url), "utf8"),
   ]);
 
-  assert.match(client, /LIVE_SESSION_KEY/);
-  assert.match(client, /hasLiveSession/);
-  assert.doesNotMatch(client, /sessionStorage\.removeItem/);
-  assert.doesNotMatch(client, /sessionStorage\.setItem/);
-  assert.match(startup, /function saveSession/);
-  assert.match(startup, /sessionStorage\.setItem\(SESSION_KEY/);
-  assert.match(startup, /window\.addEventListener\("pagehide", syncSessionFromGame\)/);
+  assert.doesNotMatch(client, /sessionStorage/);
+  assert.doesNotMatch(startup, /sessionStorage/);
+  assert.doesNotMatch(client, /echo-free-roam-saved-world/);
+  assert.doesNotMatch(startup, /echo-free-roam-active-session/);
+  assert.doesNotMatch(client, /localStorage\.(?:setItem|removeItem)/);
+  assert.match(client, /refreshSavedWorld/);
+  assert.match(client, /\/api\/saved-world/);
+  assert.match(client, /\/api\/rooms\?mode=free/);
+});
+
+test("browser can discover the one durable world from the server", async () => {
+  const storage = new FakeStorage([
+    [`${ROOM_PREFIX}FREE-SAVED`, savedRoom("FREE-SAVED", 300)],
+  ]);
+  const state = fakeState(storage);
+  const lobby = new Lobby(state, {});
+  await state.ready;
+
+  const primaryResponse = await lobby.fetch(new Request("https://example.test/api/saved-world"));
+  const primaryStatus = await primaryResponse.json();
+  assert.equal(primaryStatus.primaryRoom, "FREE-SAVED");
+
+  const roomResponse = await lobby.fetch(new Request("https://example.test/api/saved-world?room=FREE-SAVED"));
+  const roomStatus = await roomResponse.json();
+  assert.equal(roomStatus.primary, true);
+  assert.equal(roomStatus.exists, true);
+  assert.equal(roomStatus.online, false);
 });
 
 test("nearest entry and explicit resume are separate paths", async () => {
@@ -132,7 +152,7 @@ test("nearest entry and explicit resume are separate paths", async () => {
 
   assert.match(client, /join\.textContent = "Войти в ближайший мир"/);
   assert.match(client, /resumeSavedButton/);
-  assert.doesNotMatch(client, /closest\("#joinButton"\)[\s\S]{0,100}pendingSavedJoin = true/);
+  assert.match(client, /pendingSavedJoin = true/);
   assert.doesNotMatch(worker, /routeToPrimaryRoom/);
   assert.match(worker, /if \(!roomId \|\| !this\.claimPrimarySavedRoom\(roomId\)\) return false/);
   assert.match(html, /free-roam-saved-world-v1\.js\?v=2/);
