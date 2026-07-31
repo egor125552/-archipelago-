@@ -1,38 +1,14 @@
 "use strict";
 
 (() => {
-  const SAVED_WORLD_KEY = "echo-free-roam-saved-world-v2";
-  const LIVE_SESSION_KEY = "echo-free-roam-active-session-v1";
   const INTERFACE_SETTINGS_KEY = "echo-free-roam-interface-settings-v1";
   const NativeWebSocket = globalThis.WebSocket;
 
-  let savedWorld = readSavedWorld();
+  let savedWorld = null;
+  let serverState = "loading";
   let pendingSavedJoin = false;
   let createNewPending = false;
   let bypassCreateGuard = false;
-
-  function validSession(value) {
-    return Boolean(value?.room && ["captain", "crew"].includes(value.role));
-  }
-
-  function readJson(storage, key) {
-    try { return JSON.parse(storage.getItem(key) || "null"); }
-    catch (_) { return null; }
-  }
-
-  function readSavedWorld() {
-    const stored = readJson(localStorage, SAVED_WORLD_KEY);
-    if (!validSession(stored)) return null;
-    return {
-      room: String(stored.room),
-      role: stored.role,
-      savedAt: Number(stored.savedAt) || Date.now(),
-    };
-  }
-
-  function hasLiveSession() {
-    return validSession(readJson(sessionStorage, LIVE_SESSION_KEY));
-  }
 
   async function savedWorldStatus(room = "") {
     try {
@@ -45,36 +21,18 @@
     }
   }
 
-  async function saveWorld(room, role) {
-    if (!room || !["captain", "crew"].includes(role)) return false;
-    const status = await savedWorldStatus(room);
-    if (!status?.primary || !status?.exists) {
-      if (savedWorld?.room === String(room)) clearSavedWorld();
-      return false;
+  async function waitingRoleForRoom(room) {
+    try {
+      const response = await fetch("/api/rooms?mode=free", {cache: "no-store"});
+      if (!response.ok) return null;
+      const data = await response.json();
+      const entry = Array.isArray(data?.rooms)
+        ? data.rooms.find(item => String(item?.id || "") === String(room))
+        : null;
+      return ["captain", "crew"].includes(entry?.waitingFor) ? entry.waitingFor : null;
+    } catch (_) {
+      return null;
     }
-    savedWorld = {room: String(room), role, savedAt: Date.now()};
-    try { localStorage.setItem(SAVED_WORLD_KEY, JSON.stringify(savedWorld)); } catch (_) {}
-    syncButtons();
-    return true;
-  }
-
-  function clearSavedWorld() {
-    savedWorld = null;
-    pendingSavedJoin = false;
-    try { localStorage.removeItem(SAVED_WORLD_KEY); } catch (_) {}
-    // The live page-reload session belongs to free-roam-startup-v1.js. A
-    // durable-save validation failure must never eject an active ephemeral room.
-    syncButtons();
-  }
-
-  async function validateSavedWorld() {
-    if (!savedWorld) return false;
-    const status = await savedWorldStatus(savedWorld.room);
-    if (!status?.primary || !status?.exists) {
-      clearSavedWorld();
-      return false;
-    }
-    return true;
   }
 
   function autoResumeEnabled() {
@@ -97,10 +55,80 @@
     }
   }
 
+  function clearSavedWorld() {
+    savedWorld = null;
+    pendingSavedJoin = false;
+    syncButtons();
+  }
+
+  async function refreshSavedWorld() {
+    serverState = "loading";
+    const primaryStatus = await savedWorldStatus();
+    if (!primaryStatus) {
+      serverState = "error";
+      syncButtons();
+      return false;
+    }
+
+    const room = String(primaryStatus.primaryRoom || "").trim();
+    if (!room) {
+      savedWorld = null;
+      serverState = "ready";
+      syncButtons();
+      return true;
+    }
+
+    const status = await savedWorldStatus(room);
+    if (!status) {
+      serverState = "error";
+      syncButtons();
+      return false;
+    }
+    if (!status.primary || !status.exists) {
+      savedWorld = null;
+      serverState = "ready";
+      syncButtons();
+      return true;
+    }
+
+    let role = "captain";
+    let full = false;
+    if (status.online) {
+      const waitingRole = await waitingRoleForRoom(room);
+      if (waitingRole) role = waitingRole;
+      else {
+        role = null;
+        full = true;
+      }
+    }
+
+    savedWorld = {room, role, full};
+    serverState = "ready";
+    syncButtons();
+    return true;
+  }
+
+  async function saveWorld(room, role) {
+    if (!room || !["captain", "crew"].includes(role)) return false;
+    const status = await savedWorldStatus(room);
+    if (!status?.primary || !status?.exists) {
+      if (savedWorld?.room === String(room)) clearSavedWorld();
+      return false;
+    }
+    savedWorld = {room: String(room), role, full: false};
+    serverState = "ready";
+    syncButtons();
+    return true;
+  }
+
   function syncButtons() {
     const host = document.getElementById("hostButton");
     const join = document.getElementById("joinButton");
-    if (host) host.textContent = savedWorld ? "Создать новый мир и удалить сохранённый" : "Создать новый мир";
+    if (host) {
+      host.textContent = savedWorld
+        ? "Создать новый мир и удалить сохранённый"
+        : "Создать новый мир";
+    }
     if (join) {
       join.textContent = "Войти в ближайший мир";
       join.dataset.savedRoom = "";
@@ -115,14 +143,18 @@
     }
     if (resume) {
       resume.hidden = !savedWorld;
-      resume.textContent = savedWorld
-        ? `Вернуться в сохранённый мир ${savedWorld.room}`
-        : "Вернуться в сохранённый мир";
+      if (savedWorld?.full) {
+        resume.textContent = `Проверить сохранённый мир ${savedWorld.room}: сейчас заняты оба места`;
+      } else {
+        resume.textContent = savedWorld
+          ? `Вернуться в сохранённый мир ${savedWorld.room}`
+          : "Вернуться в сохранённый мир";
+      }
     }
   }
 
   function rewriteSavedWorldUrl(input) {
-    if (!pendingSavedJoin || !savedWorld) return input;
+    if (!pendingSavedJoin || !savedWorld || !["captain", "crew"].includes(savedWorld.role)) return input;
     try {
       const url = new URL(String(input), location.href);
       if (url.pathname !== "/api/connect" || url.searchParams.get("mode") !== "free") return input;
@@ -158,6 +190,11 @@
     globalThis.WebSocket = SavedWorldWebSocket;
   }
 
+  async function ensureServerState() {
+    if (serverState === "ready") return true;
+    return refreshSavedWorld();
+  }
+
   async function deleteOldWorldAndCreate(hostButton) {
     if (!savedWorld || createNewPending) return;
     createNewPending = true;
@@ -181,27 +218,61 @@
     }
   }
 
+  async function createWorldSafely(hostButton) {
+    if (createNewPending) return;
+    const ready = await ensureServerState();
+    if (!ready) {
+      announce("Не удалось проверить сохранённый мир на сервере. Новый мир не создан, чтобы случайно не потерять прогресс.", true);
+      return;
+    }
+    if (savedWorld) {
+      await deleteOldWorldAndCreate(hostButton);
+      return;
+    }
+    bypassCreateGuard = true;
+    hostButton.click();
+    bypassCreateGuard = false;
+  }
+
+  async function joinSavedWorld() {
+    const ready = await refreshSavedWorld();
+    if (!ready) {
+      announce("Не удалось получить сохранённый мир с сервера. Проверь соединение и попробуй ещё раз.", true);
+      return false;
+    }
+    if (!savedWorld) {
+      announce("На сервере сейчас нет сохранённого мира.", true);
+      return false;
+    }
+    if (savedWorld.full || !["captain", "crew"].includes(savedWorld.role)) {
+      announce("Сохранённый мир сейчас занят двумя игроками. Попробуй войти позже.", true);
+      return false;
+    }
+    pendingSavedJoin = true;
+    document.getElementById("joinButton")?.click();
+    return true;
+  }
+
   document.addEventListener("click", event => {
     const target = event.target instanceof Element ? event.target : null;
     const host = target?.closest("#hostButton");
-    if (host && savedWorld && !bypassCreateGuard) {
+    if (host && !bypassCreateGuard) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      deleteOldWorldAndCreate(host);
+      createWorldSafely(host).catch(() => {});
       return;
     }
 
     const resume = target?.closest("#resumeSavedButton");
-    if (resume && savedWorld) {
+    if (resume) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      pendingSavedJoin = true;
-      document.getElementById("joinButton")?.click();
+      joinSavedWorld().catch(() => {});
     }
   }, true);
 
   function autoResumeSavedWorld() {
-    if (!savedWorld || !autoResumeEnabled() || hasLiveSession()) return;
+    if (!savedWorld || !autoResumeEnabled()) return;
     const lobby = document.getElementById("lobby");
     const join = document.getElementById("joinButton");
     const resume = document.getElementById("resumeSavedButton");
@@ -209,24 +280,24 @@
       setTimeout(autoResumeSavedWorld, 80);
       return;
     }
-    resume.click();
+    joinSavedWorld().catch(() => {});
   }
 
   syncButtons();
-  validateSavedWorld().then(valid => {
-    // A live session gets first priority and is resumed by startup-v1. Durable
-    // auto-resume is only for a genuinely new tab/browser session.
-    if (valid && autoResumeEnabled() && !hasLiveSession()) setTimeout(autoResumeSavedWorld, 0);
+  refreshSavedWorld().then(ready => {
+    // Give a reloaded page a moment for the old WebSocket close to reach the
+    // server. No browser-side room or role marker is used for the reconnect.
+    if (ready && savedWorld && autoResumeEnabled()) setTimeout(autoResumeSavedWorld, 700);
   });
 
   globalThis.__freeRoamSavedWorld = {
     active: () => savedWorld ? {...savedWorld} : null,
     clear: clearSavedWorld,
+    refresh: refreshSavedWorld,
     save: saveWorld,
     join: () => {
-      if (!savedWorld) return false;
-      document.getElementById("resumeSavedButton")?.click();
-      return true;
+      joinSavedWorld().catch(() => {});
+      return Boolean(savedWorld);
     },
   };
 })();
