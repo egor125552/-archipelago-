@@ -2,7 +2,6 @@
 
 const SPEECH_PREFERENCE_KEY = "echo-free-roam-speech";
 const SPEECH_DEFAULT_MIGRATION_KEY = "echo-free-roam-speech-default-v2";
-const INTERFACE_SETTINGS_KEY = "echo-free-roam-interface-settings-v1";
 
 try {
   if (localStorage.getItem(SPEECH_DEFAULT_MIGRATION_KEY) !== "done") {
@@ -20,21 +19,9 @@ try {
 }
 
 (() => {
-  const SESSION_KEY = "echo-free-roam-active-session-v1";
   const NativeWebSocket = globalThis.WebSocket;
   const MOBILE_SALVAGE_OBJECTIVE = "Задача: доставь два обычных ящика. Коснись двумя пальцами — сонар назовёт одну цель. Подойди к ящику ближе 12 метров и коснись экрана одним пальцем. После погрузки снова коснись двумя пальцами, доедь до причала и остановись — разгрузка автоматическая.";
-  let resumeSession = null;
-  let resumePending = false;
   let leaveConfirmUntil = 0;
-
-  function autoResumeEnabled() {
-    try {
-      const settings = JSON.parse(localStorage.getItem(INTERFACE_SETTINGS_KEY) || "null");
-      return settings?.autoResume === true;
-    } catch (_) {
-      return false;
-    }
-  }
 
   function touchGameplay() {
     return Number(navigator.maxTouchPoints || 0) > 0
@@ -62,50 +49,6 @@ try {
     }
   }
 
-  function readSession() {
-    try {
-      const parsed = JSON.parse(sessionStorage.getItem(SESSION_KEY) || "null");
-      return parsed?.room && ["captain", "crew"].includes(parsed.role) ? parsed : null;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  function saveSession(room, role) {
-    if (!room || !["captain", "crew"].includes(role)) return;
-    try { sessionStorage.setItem(SESSION_KEY, JSON.stringify({room, role})); } catch (_) {}
-  }
-
-  function clearSession() {
-    try { sessionStorage.removeItem(SESSION_KEY); } catch (_) {}
-    resumeSession = null;
-    resumePending = false;
-  }
-
-  function syncSessionFromGame() {
-    const api = globalThis.__freeRoam;
-    const game = document.getElementById("game");
-    if (!api || !game || game.hidden) return false;
-    const room = String(api.roomId?.() || "").trim();
-    if (!room) return false;
-    saveSession(room, api.isHost?.() ? "captain" : "crew");
-    return true;
-  }
-
-  function guardedSocketUrl(input) {
-    if (!resumePending || !resumeSession) return input;
-    try {
-      const url = new URL(String(input), location.href);
-      if (url.pathname !== "/api/connect" || url.searchParams.get("mode") !== "free") return input;
-      url.searchParams.set("room", resumeSession.room);
-      url.searchParams.set("role", resumeSession.role);
-      resumePending = false;
-      return url.toString();
-    } catch (_) {
-      return input;
-    }
-  }
-
   function messageEventWithData(event, data) {
     if (data === event.data) return event;
     try {
@@ -122,66 +65,16 @@ try {
   }
 
   function GuardedWebSocket(url, protocols) {
-    const finalUrl = guardedSocketUrl(url);
     const socket = protocols === undefined
-      ? new NativeWebSocket(finalUrl)
-      : new NativeWebSocket(finalUrl, protocols);
+      ? new NativeWebSocket(url)
+      : new NativeWebSocket(url, protocols);
     const nativeAddEventListener = socket.addEventListener.bind(socket);
     const nativeRemoveEventListener = socket.removeEventListener.bind(socket);
     const wrappedMessageListeners = new WeakMap();
-    let requestedRoom = "";
-    let requestedRole = "";
-
-    try {
-      const parsedUrl = new URL(String(finalUrl), location.href);
-      if (parsedUrl.pathname === "/api/connect" && parsedUrl.searchParams.get("mode") === "free") {
-        requestedRoom = String(parsedUrl.searchParams.get("room") || "").trim();
-        requestedRole = String(parsedUrl.searchParams.get("role") || "").trim();
-      }
-    } catch (_) {}
-
-    function parseLobbyMessage(data) {
-      try {
-        const message = JSON.parse(String(data));
-        return message?.type === "lobby-ready" ? message : null;
-      } catch (_) {
-        return null;
-      }
-    }
-
-    function suppressGenericReconnectNotice(data) {
-      if (!requestedRoom || !["captain", "crew"].includes(requestedRole)) return false;
-      try {
-        return JSON.parse(String(data))?.type === "peer-connected";
-      } catch (_) {
-        return false;
-      }
-    }
-
-    // Reconnect ownership is decided by the authoritative Worker. This wrapper
-    // only keeps the optional saved session and mobile wording in sync; it must
-    // never fabricate a successful lobby message or repeatedly close sockets.
-    nativeAddEventListener("message", event => {
-      const message = parseLobbyMessage(event.data);
-      if (!message) return;
-      const targetedReconnect = requestedRoom && ["captain", "crew"].includes(requestedRole);
-      const acceptedSession = !targetedReconnect || (
-        message.room === requestedRoom
-        && message.role === requestedRole
-        && (message.preferredRoomFound === true || message.recreatedRoom === true)
-      );
-      if (acceptedSession) saveSession(message.room, message.role);
-    });
 
     socket.addEventListener = function addGuardedListener(type, listener, options) {
       if (type !== "message" || !listener) return nativeAddEventListener(type, listener, options);
       const wrapped = event => {
-        // An exact room-and-role socket is a reconnect or automatic resume.
-        // The game already announces its successful state restoration after
-        // receiving the first authoritative snapshot. Suppress only the generic
-        // peer-connected event on that returning client so it cannot immediately
-        // overwrite or interrupt the useful accessibility confirmation.
-        if (suppressGenericReconnectNotice(event.data)) return;
         const data = localizeMessageData(event.data);
         const transformed = messageEventWithData(event, data);
         if (typeof listener === "function") listener.call(socket, transformed);
@@ -233,9 +126,7 @@ try {
       event.stopImmediatePropagation();
       leaveConfirmUntil = now + 2800;
       reportLeaveConfirmation();
-      return;
     }
-    clearSession();
   }, true);
 
   document.addEventListener("touchmove", event => {
@@ -253,46 +144,15 @@ try {
   new MutationObserver(removeReleaseDebugButton).observe(document.documentElement, {childList: true, subtree: true});
   removeReleaseDebugButton();
 
-  if (autoResumeEnabled()) {
-    resumeSession = readSession();
-    resumePending = Boolean(resumeSession);
-  }
-
-  function resumeWorld() {
-    if (!resumeSession) return;
-    const lobby = document.getElementById("lobby");
-    const button = document.getElementById(resumeSession.role === "captain" ? "hostButton" : "joinButton");
-    // The button exists as soon as HTML is parsed, but its click handler is
-    // attached later by the deferred game module. Clicking before
-    // window.__freeRoam exists silently does nothing and used to strand a
-    // reloaded player in the lobby forever. Wait for the real bindings.
-    if (!globalThis.__freeRoam || !button || button.disabled || lobby?.hidden) {
-      setTimeout(resumeWorld, 80);
-      return;
-    }
-    button.click();
-  }
-
-  if (resumeSession) setTimeout(resumeWorld, 0);
-
-  // WebSocket messages are still the fastest way to save the room, but the
-  // browser is allowed to reload or suspend a page at awkward moments. Keep a
-  // second independent copy path and perform one final synchronous save on
-  // pagehide so a hard refresh can always return to the same role and world
-  // when automatic return is enabled in settings.
-  setInterval(syncSessionFromGame, 500);
-  window.addEventListener("pagehide", syncSessionFromGame);
-  document.addEventListener("visibilitychange", () => {
-    if (document.hidden) syncSessionFromGame();
-  });
-
+  // Kept as a compatibility surface for older modules. World/session identity is
+  // deliberately never persisted in the browser anymore.
   globalThis.__freeRoamSessionGuard = {
-    active: () => readSession(),
-    autoResumeEnabled,
-    clear: clearSession,
+    active: () => null,
+    autoResumeEnabled: () => false,
+    clear: () => {},
     localizeMessageData,
-    save: saveSession,
-    sync: syncSessionFromGame,
+    save: () => false,
+    sync: () => false,
     touchGameplay,
   };
 })();
