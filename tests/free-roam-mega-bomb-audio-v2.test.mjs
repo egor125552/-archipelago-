@@ -8,8 +8,14 @@ const assets = [
   "../public/audio/mega-bomb-flight-real-v1.mp3",
   "../public/audio/mega-bomb-explosion-real-v1.mp3",
 ];
+const killParts = [
+  "../public/audio/enemy-killed-v1.part-00.b64",
+  "../public/audio/enemy-killed-v1.part-01.b64",
+  "../public/audio/enemy-killed-v1.part-02.b64",
+  "../public/audio/enemy-killed-v1.part-03.b64",
+];
 
-test("real mega-bomb flight and explosion recordings ship as MP3 assets", async () => {
+test("real mega-bomb and kill-confirmation recordings ship as MP3 assets", async () => {
   for (const relative of assets) {
     const url = new URL(relative, import.meta.url);
     const info = await stat(url);
@@ -17,20 +23,24 @@ test("real mega-bomb flight and explosion recordings ship as MP3 assets", async 
     assert.ok(info.size > 10_000, `${relative} must contain a real recording`);
     assert.ok(head === "ID3" || head.charCodeAt(0) === 0xff, `${relative} must be MP3 data`);
   }
+  const encoded = (await Promise.all(killParts.map(relative => readFile(new URL(relative, import.meta.url), "utf8")))).join("");
+  const killBytes = Buffer.from(encoded, "base64");
+  assert.ok(killBytes.length > 10_000, "kill confirmation must contain the supplied real recording");
+  assert.ok(killBytes.subarray(0, 3).toString("ascii") === "ID3" || killBytes[0] === 0xff);
 });
 
-test("old ten-charge test worlds migrate once to fifty charges", () => {
+test("old fifty-charge test worlds migrate once to one hundred charges", () => {
   const world = {
     players: [
       {combat: {megaBombAmmo: 7, megaBombCooldown: 0, weapons: {}}},
-      {combat: {megaBombAmmo: 10, megaBombCooldown: 0, weapons: {}}},
+      {combat: {megaBombAmmo: 50, megaBombCooldown: 0, weapons: {}}},
     ],
-    freeMegaBombs: {projectiles: [], nextId: 1},
+    freeMegaBombs: {projectiles: [], nextId: 1, ammoVersion: 2},
   };
   ensureMegaBombState(world);
-  assert.equal(MEGA_BOMB_START_AMMO, 50);
-  assert.deepEqual(world.players.map(player => player.combat.megaBombAmmo), [50, 50]);
-  world.players[0].combat.megaBombAmmo = 43;
+  assert.equal(MEGA_BOMB_START_AMMO, 100);
+  assert.deepEqual(world.players.map(player => player.combat.megaBombAmmo), [100, 100]);
+  world.players[0].combat.megaBombAmmo = 87;
   ensureMegaBombState(world);
-  assert.equal(world.players[0].combat.megaBombAmmo, 43, "migration must not refill repeatedly");
+  assert.equal(world.players[0].combat.megaBombAmmo, 87, "migration must not refill repeatedly");
 });
