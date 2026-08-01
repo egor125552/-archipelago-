@@ -7,6 +7,7 @@ import {retireClaimedKnifeCrates} from "../public/src/free-roam-unique-weapons.j
 const scenarioSource = await readFile(new URL("../public/src/free-roam-scenario.js", import.meta.url), "utf8");
 const coreSource = await readFile(new URL("../public/src/free-roam-core-v6.js", import.meta.url), "utf8");
 const startupSource = await readFile(new URL("../public/src/free-roam-startup-v1.js", import.meta.url), "utf8");
+const savedWorldSource = await readFile(new URL("../public/src/free-roam-saved-world-v1.js", import.meta.url), "utf8");
 const freeRoamHtml = await readFile(new URL("../public/free-roam.html", import.meta.url), "utf8");
 
 function occurrences(source, fragment) {
@@ -50,14 +51,13 @@ test("unclaimed knife remains available", () => {
   assert.equal(world.freeActivities.crates[0].state, "world");
 });
 
-test("gesture mode guards accidental exits and page reloads", () => {
-  assert.match(startupSource, /echo-free-roam-active-session-v1/);
-  assert.match(startupSource, /sessionStorage\.setItem/);
-  assert.match(startupSource, /url\.searchParams\.set\("room", resumeSession\.room\)/);
-  assert.match(startupSource, /syncSessionFromGame/);
-  assert.match(startupSource, /pagehide/);
-  assert.match(startupSource, /visibilitychange/);
-  assert.match(startupSource, /!globalThis\.__freeRoam/);
+test("gesture mode guards accidental exits without persisting world identity in the browser", () => {
+  assert.doesNotMatch(startupSource, /echo-free-roam-active-session-v1/);
+  assert.doesNotMatch(startupSource, /sessionStorage/);
+  assert.match(startupSource, /active: \(\) => null/);
+  assert.match(startupSource, /autoResumeEnabled: \(\) => false/);
+  assert.match(savedWorldSource, /fetch\(`\/api\/saved-world/);
+  assert.match(savedWorldSource, /url\.searchParams\.set\("room", savedWorld\.room\)/);
   assert.match(freeRoamHtml, /free-roam-startup-v1\.js\?v=7/);
   assert.match(startupSource, /gestureMode && directPointerClick/);
   assert.match(startupSource, /leaveConfirmUntil = now \+ 2800/);
@@ -66,10 +66,11 @@ test("gesture mode guards accidental exits and page reloads", () => {
   assert.doesNotMatch(startupSource, /retryingPreferredRoom|retry-preferred-room|reconnectRetry/);
 });
 
-test("page reload stays in the menu unless automatic return is explicitly enabled", () => {
-  assert.match(startupSource, /echo-free-roam-interface-settings-v1/);
-  assert.match(startupSource, /settings\?\.autoResume === true/);
-  assert.match(startupSource, /if \(autoResumeEnabled\(\)\)/);
+test("page reload stays in the menu unless server-discovered auto return is explicitly enabled", () => {
+  assert.match(savedWorldSource, /echo-free-roam-interface-settings-v1/);
+  assert.match(savedWorldSource, /settings\?\.autoResume === true/);
+  assert.match(savedWorldSource, /if \(ready && savedWorld && autoResumeEnabled\(\)\)/);
+  assert.match(savedWorldSource, /No browser-side room or role marker is used/);
   assert.match(freeRoamHtml, /id="settingsAutoResumeButton"/);
   assert.match(freeRoamHtml, /После обновления: остаться в меню/);
 });
