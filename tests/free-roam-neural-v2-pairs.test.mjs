@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {createNeuralV2PairPlan} from "../training/generate_neural_v2_pairs.mjs";
+import {
+  createNeuralV2PairPlan,
+  simulateNeuralV2Pair,
+} from "../training/generate_neural_v2_pairs.mjs";
 import {
   expectedPairsForShard,
   mergeNeuralV2PairShards,
@@ -24,6 +27,26 @@ test("v2 pair plans are deterministic, bounded and start early on threat two", (
   assert.equal(validAction(first.action), true);
   assert.equal(first.started, false);
   assert.equal(first.appliedSamples, 0);
+  assert.equal(first.controlledFramesBeforeLastSample, null);
+  assert.equal(first.controlledFramesAtEnd, null);
+});
+
+test("the final recorded v2 sample is applied by an authoritative server tick", async () => {
+  const pair = await simulateNeuralV2Pair({
+    battleIndex: 9_001,
+    durationMs: 20_000,
+    level: 5,
+    script: "idle-no-fire",
+    coop: false,
+  });
+  assert.equal(pair.intervention.started, true);
+  assert.equal(pair.intervention.completed, true);
+  assert.equal(pair.intervention.finishAfterTick, false);
+  assert.equal(pair.intervention.appliedSamples, pair.intervention.durationSamples);
+  assert.ok(pair.intervention.controlledFramesAtEnd > pair.intervention.controlledFramesBeforeLastSample);
+  assert.ok(pair.explored.diagnostics.controlledFrames >= pair.intervention.controlledFramesAtEnd);
+  assert.ok(pair.explored.samples.length >= pair.intervention.durationSamples);
+  for (const sample of pair.explored.samples) assert.deepEqual(sample.features.slice(-5), [0, 0, 0, 0, 0]);
 });
 
 test("v2 shard accounting covers uneven pair counts exactly", () => {
