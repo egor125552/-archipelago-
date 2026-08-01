@@ -24,6 +24,13 @@ import {
   updateServerNeuralShadow,
 } from "./free-roam-neural-shadow.js";
 import {
+  clearServerNeuralV2Overrides,
+  finishServerNeuralV2Overrides,
+  neuralV2OverrideStatus,
+  prepareServerNeuralV2Overrides,
+  setServerNeuralV2Override,
+} from "./free-roam-neural-v2-overrides.js";
+import {
   consumeCompletedTrainingEpisodes,
   finishServerTrainingBattle as finishServerTrainingBattleBase,
   persistedWorldForServerRoom,
@@ -174,9 +181,11 @@ function stepInChunks(serverRoom, elapsedSeconds) {
     const chunk = Math.min(MAX_STEP_SECONDS, remaining);
     applyAuthoritativeCombatHotfix(world, 0);
     const neuralFrames = prepareServerNeuralControl(serverRoom);
+    const neuralV2Frames = prepareServerNeuralV2Overrides(serverRoom);
     stepFreeWorld(world, chunk);
     applyAuthoritativeCombatHotfix(world, chunk);
     finishServerNeuralControl(serverRoom, neuralFrames, chunk);
+    finishServerNeuralV2Overrides(serverRoom, neuralV2Frames, chunk);
     remaining -= chunk;
   }
 }
@@ -216,6 +225,7 @@ function attachTrainingNeuralDiagnostics(serverRoom) {
     ],
     decisions,
     guardrails: neuralControlDiagnostics(serverRoom),
+    v2Override: neuralV2OverrideStatus(serverRoom),
     decisionSchema: [
       "id", "role", "kind", "movementIndex", "confidence", "fire", "rawFire",
       "fireProbability", "fireThreshold", "fireLatch", "forcedExploration",
@@ -259,6 +269,7 @@ export function startServerTrainingBattle(serverRoom, requestedLevel, record = t
   const neuralOnly = request.neuralOnly === true;
 
   clearServerNeuralShadow(serverRoom);
+  clearServerNeuralV2Overrides(serverRoom);
   startServerTrainingBattleBase(serverRoom, level, record, now);
   const activities = serverRoom?.world?.freeActivities;
   if (activities) activities.credits = Math.max(TRAINING_CREDIT_FLOOR, Number(activities.credits) || 0);
@@ -272,6 +283,7 @@ export function startServerTrainingBattle(serverRoom, requestedLevel, record = t
 export function finishServerTrainingBattle(serverRoom, outcome = "manual", options = {}) {
   finishServerTrainingBattleBase(serverRoom, outcome, options);
   clearServerNeuralShadow(serverRoom);
+  clearServerNeuralV2Overrides(serverRoom);
   return trainingRuntimeStatus(serverRoom);
 }
 
@@ -283,13 +295,17 @@ export function trainingRuntimeStatus(serverRoom) {
     neuralOnly: Boolean(base.trainingActive && neuralShadow.controlEnabled),
     neuralShadow,
     neuralGuardrails: neuralControlDiagnostics(serverRoom),
+    neuralV2Override: neuralV2OverrideStatus(serverRoom),
   };
 }
 
 export {
+  clearServerNeuralV2Overrides,
   consumeCompletedTrainingEpisodes,
+  neuralV2OverrideStatus,
   persistedWorldForServerRoom,
   serializeTrainingEpisode,
   setServerNeuralControlForTest,
+  setServerNeuralV2Override,
   setServerTrainingRecording,
 };
