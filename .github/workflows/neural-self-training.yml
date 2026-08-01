@@ -12,11 +12,12 @@ on:
       - "training/train_selfplay_policy.py"
       - "training/compare_selfplay_candidate.mjs"
       - "tests/free-roam-neural-selfplay.test.mjs"
+      - "tests/free-roam-neural-trust-region.test.mjs"
       - ".github/workflows/neural-self-training.yml"
   workflow_dispatch:
     inputs:
       campaign_target:
-        description: Declared target of explored/baseline pairs; one run covers only one indexed batch
+        description: Declared target of baseline/macro pairs; one run covers one indexed batch
         required: true
         default: "1000000"
       start_index:
@@ -32,11 +33,11 @@ on:
         required: true
         default: "128"
       duration_ms:
-        description: Maximum simulated duration of each baseline or explored rollout
+        description: Maximum simulated duration of each baseline or single-macro rollout
         required: true
         default: "60000"
       elite_per_scenario:
-        description: Positive-advantage trajectories retained per threat/script/solo-or-co-op group and shard
+        description: Positive single-macro trajectories retained per scenario, mode and intervention kind
         required: true
         default: "4"
 
@@ -104,7 +105,7 @@ jobs:
       - name: Install project dependencies
         run: npm ci
 
-      - name: Generate paired authoritative trajectories
+      - name: Generate identical-seed baseline and single-macro rollouts
         run: >-
           node training/generate_neural_selfplay_dataset.mjs
           --battles=${{ needs.plan.outputs.batch_battles }}
@@ -114,8 +115,7 @@ jobs:
           --duration-ms=${{ needs.plan.outputs.duration_ms }}
           --elite-per-scenario=${{ needs.plan.outputs.elite_per_scenario }}
           --minimum-advantage=2.5
-          --movement-epsilon=0.24
-          --fire-epsilon=0.10
+          --movement-probability=0.72
           --output=training/reports/selfplay/shard-${{ matrix.shard }}.json
 
       - name: Upload paired shard
@@ -154,10 +154,10 @@ jobs:
           python -m pip install torch==2.10.0 --index-url https://download.pytorch.org/whl/cpu
           python -m py_compile training/*.py
 
-      - name: Reject incomplete exploration matrix
+      - name: Reject incomplete paired matrix
         if: needs.explore.result != 'success'
         run: |
-          echo "At least one paired exploration shard failed. No candidate may be trained from an incomplete batch."
+          echo "At least one baseline/macro shard failed. No candidate may be trained from an incomplete batch."
           exit 2
 
       - name: Download all paired shards
@@ -167,7 +167,7 @@ jobs:
           path: training/reports/selfplay/input
           merge-multiple: true
 
-      - name: Verify pair, rollout and shard coverage
+      - name: Verify pair, rollout, intervention and shard coverage
         run: >-
           node training/merge_neural_selfplay_shards.mjs
           --input=training/reports/selfplay/input
@@ -187,11 +187,11 @@ jobs:
             "authoritativeRollouts": $(( ${{ needs.plan.outputs.batch_battles }} * 2 )),
             "shards": ${{ needs.plan.outputs.shards }},
             "coverageReport": "selfplay-aggregate.json",
-            "note": "Every pair contains an unchanged and explored rollout with the same world seed. This artifact proves one pair range only, not the full campaign."
+            "note": "Every pair contains an unchanged rollout and one rollout with at most one coherent macro on one neural actor. This proves one pair range only, not the full campaign."
           }
           JSON
 
-      - name: Fine-tune only positive-advantage explored actions
+      - name: Fine-tune only positive-advantage macro actions inside a hard trust region
         run: >-
           python training/train_selfplay_policy.py
           --input training/reports/selfplay-aggregate.json
