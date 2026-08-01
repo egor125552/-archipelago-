@@ -93,6 +93,13 @@ export const NEURAL_V2_FEATURE_NAMES = Object.freeze([
 
 export const NEURAL_V2_INPUT_SIZE = NEURAL_V2_FEATURE_NAMES.length;
 
+const ACTION_HEAD_KEYS = Object.freeze([
+  "throttleIndex", "throttle",
+  "steeringIndex", "steering",
+  "rangeIndex", "range",
+  "routeIndex", "route",
+  "fireIndex", "fire",
+]);
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, Number(value) || 0));
 const indexOfClass = (classes, value, fallback = 0) => {
   if (Number.isInteger(value)) return Math.max(0, Math.min(classes.length - 1, value));
@@ -130,7 +137,9 @@ export function normalizeNeuralV2Action(raw = {}) {
 }
 
 export function neuralV2ActionFeatureState(raw = null) {
-  if (!raw || typeof raw !== "object" || Object.keys(raw).length === 0) return [0, 0, 0, 0, 0];
+  const hasActionHead = raw && typeof raw === "object"
+    && ACTION_HEAD_KEYS.some(key => raw[key] !== undefined && raw[key] !== null);
+  if (!hasActionHead) return [0, 0, 0, 0, 0];
   const action = normalizeNeuralV2Action(raw);
   return [
     action.throttleIndex / Math.max(1, NEURAL_V2_THROTTLE_CLASSES.length - 1),
