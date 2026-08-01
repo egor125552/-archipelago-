@@ -125,9 +125,9 @@ function roundedFeatures(values) {
   return values.map(value => Math.round((Number(value) || 0) * 100000) / 100000);
 }
 
-function chooseDifferentMovement(current, random) {
+function chooseDifferentMovement(current, unitValue) {
   if (MOVEMENTS.length <= 1) return current;
-  const offset = 1 + Math.floor(random() * (MOVEMENTS.length - 1));
+  const offset = 1 + Math.floor(unitValue * (MOVEMENTS.length - 1));
   return (current + offset) % MOVEMENTS.length;
 }
 
@@ -138,26 +138,80 @@ export function previousActionFeatureState(previousActions, actorId) {
     : {movementIndex: 0, fire: false};
 }
 
-function recordAndExplore(server, trajectories, previousActions, explorationRandom, movementEpsilon, fireEpsilon, elapsedMs) {
-  for (const actor of collectNeuralActors(server.world)) {
+export function createInterventionPlan(seed, durationMs, movementProbability = 0.72) {
+  const random = seededRandom(seed);
+  const latestStart = Math.max(1200, durationMs - 6000);
+  return {
+    kind: random() < movementProbability ? "movement" : "fire",
+    startAtMs: 1000 + Math.floor(random() * Math.max(1, latestStart - 1000)),
+    durationSamples: 4 + Math.floor(random() * 7),
+    actorUnit: random(),
+    actionUnit: random(),
+    started: false,
+    completed: false,
+    actorId: null,
+    action: null,
+    policyActionAtStart: null,
+    startedAtMs: null,
+    endedAtMs: null,
+    appliedSamples: 0,
+  };
+}
+
+function startInterventionIfReady(plan, actors, server, elapsedMs) {
+  if (plan.started || plan.completed || elapsedMs < plan.startAtMs) return;
+  let candidates = actors.filter(actor => plan.kind === "movement" ? actor.controlsMovement !== false : actor.controlsFire !== false);
+  if (!candidates.length && plan.kind === "fire" && elapsedMs >= plan.startAtMs + 5000) {
+    plan.kind = "movement";
+    candidates = actors.filter(actor => actor.controlsMovement !== false);
+  }
+  if (!candidates.length) return;
+  const actor = candidates[Math.min(candidates.length - 1, Math.floor(plan.actorUnit * candidates.length))];
+  const decision = neuralDecision(server, actor.id);
+  if (!decision) return;
+  plan.actorId = actor.id;
+  plan.policyActionAtStart = plan.kind === "movement" ? Number(decision.movementIndex) || 0 : Boolean(decision.fire);
+  plan.action = plan.kind === "movement"
+    ? chooseDifferentMovement(plan.policyActionAtStart, plan.actionUnit)
+    : !plan.policyActionAtStart;
+  plan.started = true;
+  plan.startedAtMs = elapsedMs;
+}
+
+function recordWithSingleIntervention(server, trajectories, previousActions, plan, elapsedMs) {
+  const actors = collectNeuralActors(server.world);
+  startInterventionIfReady(plan, actors, server, elapsedMs);
+  let appliedThisSample = false;
+
+  for (const actor of actors) {
     const decision = neuralDecision(server, actor.id);
     if (!decision) continue;
     const recurrentState = previousActionFeatureState(previousActions, actor.id);
     const features = roundedFeatures(neuralFeatureVector(server.world, actor, recurrentState));
-    const policyMovement = Math.max(0, Math.min(MOVEMENTS.length - 1, Number(decision.movementIndex) || 0));
-    const policyFire = Boolean(decision.fire);
-    const movementExplored = actor.controlsMovement !== false && explorationRandom() < movementEpsilon;
-    const fireExplored = actor.controlsFire !== false && explorationRandom() < fireEpsilon;
-    const selectedMovement = movementExplored ? chooseDifferentMovement(policyMovement, explorationRandom) : policyMovement;
-    const selectedFire = fireExplored ? !policyFire : policyFire;
+    let movementExplored = false;
+    let fireExplored = false;
 
-    decision.movementIndex = selectedMovement;
-    decision.movement = MOVEMENTS[selectedMovement];
-    if (actor.controlsFire !== false) {
-      decision.fire = selectedFire;
-      decision.rawFire = selectedFire;
-      if (selectedFire) decision.fireLatch = Math.max(Number(decision.fireLatch) || 0, actor.role === "heavy_turret" ? 12 : 2);
+    if (plan.started && !plan.completed && actor.id === plan.actorId) {
+      if (plan.kind === "movement") {
+        decision.movementIndex = plan.action;
+        decision.movement = MOVEMENTS[plan.action];
+        movementExplored = true;
+      } else {
+        decision.fire = Boolean(plan.action);
+        decision.rawFire = Boolean(plan.action);
+        if (plan.action) decision.fireLatch = Math.max(Number(decision.fireLatch) || 0, actor.role === "heavy_turret" ? 12 : 3);
+        fireExplored = true;
+      }
+      appliedThisSample = true;
+      plan.appliedSamples += 1;
+      if (plan.appliedSamples >= plan.durationSamples) {
+        plan.completed = true;
+        plan.endedAtMs = elapsedMs;
+      }
     }
+
+    const selectedMovement = Math.max(0, Math.min(MOVEMENTS.length - 1, Number(decision.movementIndex) || 0));
+    const selectedFire = Boolean(decision.fire);
     previousActions.set(actor.id, {movementIndex: selectedMovement, fire: selectedFire});
 
     let trajectory = trajectories.get(actor.id);
@@ -170,13 +224,18 @@ function recordAndExplore(server, trajectories, previousActions, explorationRand
       f: features,
       m: selectedMovement,
       fire: Number(selectedFire),
-      pm: policyMovement,
-      pf: Number(policyFire),
+      pm: Number(decision.movementIndex) || 0,
+      pf: Number(Boolean(decision.rawFire ?? decision.fire)),
       em: Number(movementExplored),
       ef: Number(fireExplored),
       confidence: Math.round((Number(decision.confidence) || 0) * 10000) / 10000,
       fireProbability: Math.round((Number(decision.fireProbability) || 0) * 10000) / 10000,
     });
+  }
+
+  if (plan.started && !plan.completed && !appliedThisSample && elapsedMs >= plan.startedAtMs + 3000) {
+    plan.completed = true;
+    plan.endedAtMs = elapsedMs;
   }
 }
 
@@ -190,18 +249,16 @@ export function selfPlayScore({outcome, playerHealth, boatHull, boatWater, enemy
   return Math.round((pressure + outcomeScore + speedBonus - guardPenalty) * 1000) / 1000;
 }
 
-function hasExploredTrainableTrajectory(episode) {
-  return (episode?.actors || []).some(actor => {
-    const samples = actor?.samples || [];
-    return samples.length >= 4 && samples.some(sample => sample?.em || sample?.ef);
-  });
+function hasCompletedIntervention(episode) {
+  return Boolean(episode?.intervention?.started && episode?.intervention?.appliedSamples >= 2)
+    && (episode?.actors || []).some(actor => (actor?.samples || []).some(sample => sample?.em || sample?.ef));
 }
 
 export function selectEliteEpisodes(episodes, perScenario = 1, minimumAdvantage = 2.5) {
   const groups = new Map();
   for (const episode of episodes) {
-    if (!hasExploredTrainableTrajectory(episode) || Number(episode.advantage) < minimumAdvantage) continue;
-    const key = `${Number(episode.level) || 0}:${episode.script || "unknown"}:${episode.coop ? "coop" : "solo"}`;
+    if (!hasCompletedIntervention(episode) || Number(episode.advantage) < minimumAdvantage) continue;
+    const key = `${Number(episode.level) || 0}:${episode.script || "unknown"}:${episode.coop ? "coop" : "solo"}:${episode.intervention.kind}`;
     const list = groups.get(key) || [];
     list.push(episode);
     groups.set(key, list);
@@ -211,12 +268,15 @@ export function selectEliteEpisodes(episodes, perScenario = 1, minimumAdvantage 
     list.sort((left, right) => right.advantage - left.advantage || right.score - left.score || left.seed - right.seed);
     selected.push(...list.slice(0, Math.max(1, perScenario)));
   }
-  return selected.sort((left, right) => left.level - right.level || String(left.script).localeCompare(String(right.script)) || Number(left.coop) - Number(right.coop) || right.advantage - left.advantage);
+  return selected.sort((left, right) => left.level - right.level
+    || String(left.script).localeCompare(String(right.script))
+    || Number(left.coop) - Number(right.coop)
+    || String(left.intervention?.kind).localeCompare(String(right.intervention?.kind))
+    || right.advantage - left.advantage);
 }
 
-async function simulateBattle({battleIndex, worldSeed, explorationSeed, durationMs, level, script, coop, movementEpsilon, fireEpsilon, explore}) {
+async function simulateBattle({battleIndex, worldSeed, durationMs, level, script, coop, plan}) {
   return withWorldRandomSeed(worldSeed, async () => {
-    const explorationRandom = seededRandom(explorationSeed);
     const startedAt = 2_000_000 + battleIndex * (durationMs + 5000);
     const server = createServerFreeRoom(startedAt);
     setServerFreePresence(server, "captain", true);
@@ -244,8 +304,8 @@ async function simulateBattle({battleIndex, worldSeed, explorationSeed, duration
         const type = String(event?.type || "");
         if (type === "heavy-bullet-boat-hit" || type === "gun-hit" || type.includes("ram-hit")) enemyHits += 1;
       }
-      if (explore && elapsed >= nextSampleAt) {
-        recordAndExplore(server, trajectories, previousActions, explorationRandom, movementEpsilon, fireEpsilon, elapsed);
+      if (plan && elapsed >= nextSampleAt) {
+        recordWithSingleIntervention(server, trajectories, previousActions, plan, elapsed);
         nextSampleAt = elapsed + SAMPLE_MS;
       }
       if ((snapshot.events || []).some(event => event?.type === "contract-threat-cleared")
@@ -275,22 +335,24 @@ async function simulateBattle({battleIndex, worldSeed, explorationSeed, duration
       boatWater,
       enemyHits,
       diagnostics,
-      actors: explore ? [...trajectories.values()].filter(item => item.samples.length >= 4) : [],
+      intervention: plan ? {...plan} : null,
+      actors: plan ? [...trajectories.values()].filter(item => item.samples.length >= 4) : [],
     };
   });
 }
 
-export async function simulatePairedBattle({battleIndex, durationMs, level, script, coop, movementEpsilon, fireEpsilon}) {
+export async function simulatePairedBattle({battleIndex, durationMs, level, script, coop, movementProbability = 0.72}) {
   const worldSeed = 725_552 + battleIndex * 10_007;
-  const explorationSeed = 1_925_552 + battleIndex * 65_537;
-  const baseline = await simulateBattle({battleIndex, worldSeed, explorationSeed, durationMs, level, script, coop, movementEpsilon: 0, fireEpsilon: 0, explore: false});
-  const explored = await simulateBattle({battleIndex, worldSeed, explorationSeed, durationMs, level, script, coop, movementEpsilon, fireEpsilon, explore: true});
+  const interventionSeed = 1_925_552 + battleIndex * 65_537;
+  const plan = createInterventionPlan(interventionSeed, durationMs, movementProbability);
+  const baseline = await simulateBattle({battleIndex, worldSeed, durationMs, level, script, coop, plan: null});
+  const explored = await simulateBattle({battleIndex, worldSeed, durationMs, level, script, coop, plan});
   const advantage = Math.round((explored.score - baseline.score) * 1000) / 1000;
   return {
     id: `selfplay-${battleIndex}-${worldSeed}`,
     battleIndex,
     seed: worldSeed,
-    explorationSeed,
+    interventionSeed,
     level,
     script,
     coop,
@@ -317,12 +379,12 @@ async function main() {
   const durationMs = Math.max(8_000, integerArgument("duration-ms", 45_000));
   const elitePerScenario = Math.max(1, integerArgument("elite-per-scenario", integerArgument("elite-per-level", 1)));
   const minimumAdvantage = Math.max(0, numberArgument("minimum-advantage", 2.5));
-  const movementEpsilon = Math.max(0, Math.min(0.7, numberArgument("movement-epsilon", 0.24)));
-  const fireEpsilon = Math.max(0, Math.min(0.5, numberArgument("fire-epsilon", 0.10)));
+  const movementProbability = Math.max(0.2, Math.min(0.9, numberArgument("movement-probability", 0.72)));
   const output = argument("output", `training/reports/selfplay-shard-${shard}.json`);
   const candidates = [];
   const exploredOutcomeCounts = {};
   const baselineOutcomeCounts = {};
+  const interventionCounts = {movement: 0, fire: 0, notStarted: 0};
   const endIndex = startIndex + battles;
 
   for (let battleIndex = startIndex + shard; battleIndex < endIndex; battleIndex += shards) {
@@ -330,17 +392,19 @@ async function main() {
     const level = 2 + (relative % 4);
     const script = SCRIPTS[Math.floor(relative / 4) % SCRIPTS.length];
     const coop = relative % 5 === 0;
-    const episode = await simulatePairedBattle({battleIndex, durationMs, level, script, coop, movementEpsilon, fireEpsilon});
+    const episode = await simulatePairedBattle({battleIndex, durationMs, level, script, coop, movementProbability});
     candidates.push(episode);
     exploredOutcomeCounts[episode.outcome] = (exploredOutcomeCounts[episode.outcome] || 0) + 1;
     baselineOutcomeCounts[episode.baseline.outcome] = (baselineOutcomeCounts[episode.baseline.outcome] || 0) + 1;
+    if (episode.intervention?.started) interventionCounts[episode.intervention.kind] += 1;
+    else interventionCounts.notStarted += 1;
   }
 
   const eliteEpisodes = selectEliteEpisodes(candidates, elitePerScenario, minimumAdvantage);
   const advantages = candidates.map(item => item.advantage);
-  const positiveAdvantagePairs = candidates.filter(item => item.advantage >= minimumAdvantage).length;
+  const positiveAdvantagePairs = candidates.filter(item => item.advantage >= minimumAdvantage && hasCompletedIntervention(item)).length;
   const report = {
-    format: "echo-neural-selfplay-elites-v2",
+    format: "echo-neural-selfplay-elites-v3",
     generatedAt: new Date().toISOString(),
     modelVersion: model.version,
     requestedBattles: battles,
@@ -351,13 +415,13 @@ async function main() {
     shard,
     shards,
     durationMs,
-    movementEpsilon,
-    fireEpsilon,
+    movementProbability,
     minimumAdvantage,
     elitePerScenario,
     baselineOutcomeCounts,
     exploredOutcomeCounts,
     outcomeCounts: exploredOutcomeCounts,
+    interventionCounts,
     positiveAdvantagePairs,
     advantageRange: {
       minimum: Math.min(...advantages),
@@ -369,11 +433,11 @@ async function main() {
       maximum: Math.max(...candidates.map(item => item.score)),
     },
     critique: [
-      "Each explored rollout is paired with an unmodified rollout using the same world seed; exploration uses a separate random stream and cannot consume production randomness.",
-      "Only trajectories whose explored score beats their paired baseline by the configured minimum advantage can enter training.",
-      "The score remains a hand-designed proxy for enemy effectiveness and can misvalue tactics; held-out authoritative A/B remains mandatory.",
-      "Elite trajectories are retained separately by threat, script and solo/co-op mode so aggregate pressure cannot erase scenario coverage.",
-      "Only actions explicitly changed by exploration receive meaningful supervised weight in the fine-tuner; unchanged actions remain context, not claimed discoveries.",
+      "Each explored rollout differs from its identical-seed baseline by at most one coherent intervention on one actor.",
+      "Movement interventions last four to ten neural samples, roughly 0.8 to 2.0 seconds; fire interventions are held for the same macro duration.",
+      "A positive pair attributes advantage to one macro rather than hundreds of unrelated random flips, but delayed consequences can still make the hand-designed score imperfect.",
+      "The action space still has only five movement classes and one fire bit, so coherent exploration cannot discover throttle, turn rate, spacing or route planning that the policy cannot express.",
+      "Held-out authoritative A/B and scenario-specific rejection remain mandatory.",
     ],
     eliteEpisodes,
   };
@@ -385,6 +449,7 @@ async function main() {
     authoritativeRollouts: candidates.length * 2,
     positiveAdvantagePairs,
     elites: eliteEpisodes.length,
+    interventionCounts,
     baselineOutcomeCounts,
     exploredOutcomeCounts,
   }, null, 2));
