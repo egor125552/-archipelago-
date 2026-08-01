@@ -27,6 +27,10 @@ export function expectedBattlesForShard(totalBattles, shard, shards) {
   return Math.floor((totalBattles - 1 - shard) / shards) + 1;
 }
 
+function addCounts(target, source) {
+  for (const [name, value] of Object.entries(source || {})) target[name] = (target[name] || 0) + (Number(value) || 0);
+}
+
 export function mergeSelfPlayShards(reports, {expectedBattles, expectedShards, expectedStartIndex}) {
   const failures = [];
   const byShard = new Map();
@@ -40,11 +44,18 @@ export function mergeSelfPlayShards(reports, {expectedBattles, expectedShards, e
     else byShard.set(shard, report);
   }
 
-  const outcomeCounts = {};
+  const exploredOutcomeCounts = {};
+  const baselineOutcomeCounts = {};
   const eliteEpisodes = [];
   let completedBattles = 0;
+  let authoritativeRollouts = 0;
+  let positiveAdvantagePairs = 0;
   let minimumScore = Infinity;
   let maximumScore = -Infinity;
+  let minimumAdvantage = Infinity;
+  let maximumAdvantage = -Infinity;
+  let weightedAdvantage = 0;
+
   for (let shard = 0; shard < expectedShards; shard += 1) {
     const report = byShard.get(shard);
     if (!report) {
@@ -53,22 +64,31 @@ export function mergeSelfPlayShards(reports, {expectedBattles, expectedShards, e
     }
     const expectedLocal = expectedBattlesForShard(expectedBattles, shard, expectedShards);
     const localCompleted = Number(report.completedBattles) || 0;
+    const localRollouts = Number(report.authoritativeRollouts) || 0;
     if (Number(report.requestedBattles) !== expectedBattles) failures.push(`requested-count-mismatch-${shard}`);
     if (Number(report.startIndex) !== expectedStartIndex) failures.push(`start-index-mismatch-${shard}`);
     if (Number(report.endIndex) !== expectedStartIndex + expectedBattles) failures.push(`end-index-mismatch-${shard}`);
     if (Number(report.shards) !== expectedShards) failures.push(`shard-count-mismatch-${shard}`);
     if (localCompleted !== expectedLocal) failures.push(`completed-count-mismatch-${shard}-${localCompleted}-of-${expectedLocal}`);
-    const localOutcomeTotal = Object.values(report.outcomeCounts || {}).reduce((sum, value) => sum + (Number(value) || 0), 0);
-    if (localOutcomeTotal !== localCompleted) failures.push(`outcome-count-mismatch-${shard}`);
+    if (localRollouts !== localCompleted * 2) failures.push(`paired-rollout-count-mismatch-${shard}-${localRollouts}-of-${localCompleted * 2}`);
+    const exploredTotal = Object.values(report.exploredOutcomeCounts || report.outcomeCounts || {}).reduce((sum, value) => sum + (Number(value) || 0), 0);
+    const baselineTotal = Object.values(report.baselineOutcomeCounts || {}).reduce((sum, value) => sum + (Number(value) || 0), 0);
+    if (exploredTotal !== localCompleted) failures.push(`explored-outcome-count-mismatch-${shard}`);
+    if (baselineTotal !== localCompleted) failures.push(`baseline-outcome-count-mismatch-${shard}`);
     completedBattles += localCompleted;
-    for (const [name, value] of Object.entries(report.outcomeCounts || {})) {
-      outcomeCounts[name] = (outcomeCounts[name] || 0) + (Number(value) || 0);
-    }
+    authoritativeRollouts += localRollouts;
+    positiveAdvantagePairs += Number(report.positiveAdvantagePairs) || 0;
+    addCounts(exploredOutcomeCounts, report.exploredOutcomeCounts || report.outcomeCounts);
+    addCounts(baselineOutcomeCounts, report.baselineOutcomeCounts);
     eliteEpisodes.push(...(report.eliteEpisodes || []));
     minimumScore = Math.min(minimumScore, Number(report.scoreRange?.minimum));
     maximumScore = Math.max(maximumScore, Number(report.scoreRange?.maximum));
+    minimumAdvantage = Math.min(minimumAdvantage, Number(report.advantageRange?.minimum));
+    maximumAdvantage = Math.max(maximumAdvantage, Number(report.advantageRange?.maximum));
+    weightedAdvantage += (Number(report.advantageRange?.mean) || 0) * localCompleted;
   }
   if (completedBattles !== expectedBattles) failures.push(`aggregate-completed-${completedBattles}-of-${expectedBattles}`);
+  if (authoritativeRollouts !== expectedBattles * 2) failures.push(`aggregate-rollouts-${authoritativeRollouts}-of-${expectedBattles * 2}`);
 
   const duplicateEliteIds = [];
   const seenEliteIds = new Set();
@@ -76,19 +96,30 @@ export function mergeSelfPlayShards(reports, {expectedBattles, expectedShards, e
     const id = String(episode?.id || "");
     if (!id || seenEliteIds.has(id)) duplicateEliteIds.push(id || "missing-id");
     seenEliteIds.add(id);
+    if (!(Number(episode?.advantage) > 0)) failures.push(`non-positive-elite-${id || "missing-id"}`);
   }
   if (duplicateEliteIds.length) failures.push(`duplicate-elite-ids-${duplicateEliteIds.length}`);
+  if (eliteEpisodes.length < 8) failures.push(`insufficient-positive-elites-${eliteEpisodes.length}`);
 
   return {
-    format: "echo-neural-selfplay-aggregate-v1",
+    format: "echo-neural-selfplay-aggregate-v2",
     generatedAt: new Date().toISOString(),
     expectedBattles,
     completedBattles,
+    authoritativeRollouts,
     startIndex: expectedStartIndex,
     endIndex: expectedStartIndex + expectedBattles,
     expectedShards,
     receivedShards: byShard.size,
-    outcomeCounts,
+    baselineOutcomeCounts,
+    exploredOutcomeCounts,
+    outcomeCounts: exploredOutcomeCounts,
+    positiveAdvantagePairs,
+    advantageRange: {
+      minimum: Number.isFinite(minimumAdvantage) ? minimumAdvantage : null,
+      maximum: Number.isFinite(maximumAdvantage) ? maximumAdvantage : null,
+      mean: completedBattles ? weightedAdvantage / completedBattles : null,
+    },
     scoreRange: {
       minimum: Number.isFinite(minimumScore) ? minimumScore : null,
       maximum: Number.isFinite(maximumScore) ? maximumScore : null,
@@ -97,9 +128,9 @@ export function mergeSelfPlayShards(reports, {expectedBattles, expectedShards, e
     failures,
     verdict: failures.length ? "incomplete" : "complete",
     critique: [
-      "Coverage proves the declared shard counts and index range, not that the scripted distribution represents human play.",
-      "Only elite trajectories are retained in the aggregate; non-elite battle outcomes remain available as counts, not full trajectories.",
-      "A complete batch is still only one campaign range and must not be reported as the full million-target campaign without contiguous range accounting.",
+      "Coverage proves every declared pair and both authoritative rollouts, not that scripted players represent human play.",
+      "The aggregate contains only positive-advantage elite trajectories; losing explorations remain represented in paired counts and advantage statistics.",
+      "A complete batch is still one campaign range and must not be described as a completed million-target campaign without contiguous range accounting.",
     ],
   };
 }
@@ -114,12 +145,20 @@ async function main() {
   const reports = [];
   for (const file of files) {
     const parsed = JSON.parse(await readFile(file, "utf8"));
-    if (parsed?.format === "echo-neural-selfplay-elites-v1") reports.push(parsed);
+    if (["echo-neural-selfplay-elites-v1", "echo-neural-selfplay-elites-v2"].includes(parsed?.format)) reports.push(parsed);
   }
   const aggregate = mergeSelfPlayShards(reports, {expectedBattles, expectedShards, expectedStartIndex});
   await mkdir(output.split("/").slice(0, -1).join("/") || ".", {recursive: true});
   await writeFile(output, `${JSON.stringify(aggregate, null, 2)}\n`);
-  console.log(JSON.stringify({output, verdict: aggregate.verdict, completedBattles: aggregate.completedBattles, failures: aggregate.failures}, null, 2));
+  console.log(JSON.stringify({
+    output,
+    verdict: aggregate.verdict,
+    completedPairs: aggregate.completedBattles,
+    authoritativeRollouts: aggregate.authoritativeRollouts,
+    positiveAdvantagePairs: aggregate.positiveAdvantagePairs,
+    elites: aggregate.eliteEpisodes.length,
+    failures: aggregate.failures,
+  }, null, 2));
   if (aggregate.verdict !== "complete") process.exitCode = 4;
 }
 
