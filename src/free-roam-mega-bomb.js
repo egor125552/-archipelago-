@@ -9,11 +9,12 @@ import {damageEscort} from "../public/src/free-roam-pursuer-squad.js?v=33";
 import {listCombatTargets, resolveCombatTarget} from "../public/src/free-roam-targeting.js?v=35";
 import {notifyThreatBoatDestroyed} from "../public/src/free-roam-threat-director.js?v=3";
 
-export const MEGA_BOMB_START_AMMO = 10;
+export const MEGA_BOMB_START_AMMO = 50;
 export const MEGA_BOMB_RADIUS = 31;
 export const MEGA_BOMB_CORE_RADIUS = 9.5;
 export const MEGA_BOMB_MAX_RANGE = 145;
 
+const AMMO_VERSION = 2;
 const SPEED = 54;
 const COOLDOWN = 1.25;
 const PROXIMITY = 4.8;
@@ -40,26 +41,39 @@ function pointForPlayer(world, playerIndex) {
 function spatial(world, source) {
   return (world.players || []).map((_, index) => {
     const listener = pointForPlayer(world, index);
-    if (!listener || world.freeActivities?.presence?.[index] === false) return {pan: 0, gain: 0, distance: 999};
+    if (!listener || world.freeActivities?.presence?.[index] === false) {
+      return {pan: 0, gain: 0, distance: 999, listenerX: null, listenerY: null, listenerHeading: 0};
+    }
     const metres = distance(listener, source);
     const relative = wrap(bearing(listener, source) - (Number(listener.heading) || 0));
-    return {pan: clamp(Math.sin(relative * Math.PI / 180), -1, 1), gain: clamp(1 - metres / 280, 0.035, 1), distance: Math.round(metres * 10) / 10};
+    return {
+      pan: clamp(Math.sin(relative * Math.PI / 180), -1, 1),
+      gain: clamp(1 - metres / 280, 0.035, 1),
+      distance: Math.round(metres * 10) / 10,
+      listenerX: Number(listener.x) || 0,
+      listenerY: Number(listener.y) || 0,
+      listenerHeading: Number(listener.heading) || 0,
+    };
   });
 }
 
 export function ensureMegaBombState(world) {
   if (!world) return null;
-  world.freeMegaBombs ||= {projectiles: [], nextId: 1};
+  world.freeMegaBombs ||= {projectiles: [], nextId: 1, ammoVersion: AMMO_VERSION};
   const state = world.freeMegaBombs;
   if (!Array.isArray(state.projectiles)) state.projectiles = Object.values(state.projectiles || {});
   if (!Number.isFinite(Number(state.nextId))) state.nextId = 1;
+  const upgradeOldTestAmmo = Number(state.ammoVersion) < AMMO_VERSION;
   for (const player of world.players || []) {
     if (!player?.combat) continue;
     player.combat.weapons ||= {};
     player.combat.weapons.megaBomb = true;
-    if (!Number.isFinite(Number(player.combat.megaBombAmmo))) player.combat.megaBombAmmo = MEGA_BOMB_START_AMMO;
+    const currentAmmo = Number(player.combat.megaBombAmmo);
+    if (!Number.isFinite(currentAmmo)) player.combat.megaBombAmmo = MEGA_BOMB_START_AMMO;
+    else if (upgradeOldTestAmmo && currentAmmo <= 10) player.combat.megaBombAmmo = MEGA_BOMB_START_AMMO;
     if (!Number.isFinite(Number(player.combat.megaBombCooldown))) player.combat.megaBombCooldown = 0;
   }
+  state.ammoVersion = AMMO_VERSION;
   return state;
 }
 
@@ -98,11 +112,17 @@ export function launchMegaBomb(world, playerIndex) {
   const angle = heading * Math.PI / 180;
   const flightTime = clamp(distance(origin, target) / SPEED, 0.7, 2.75);
   const projectile = {
-    id: `mega-bomb-${state.nextId++}`, owner: playerIndex,
+    id: `mega-bomb-${state.nextId++}`,
+    owner: playerIndex,
     x: clamp(origin.x + Math.sin(angle) * 3.2, MIN_X, MAX_X),
     y: clamp(origin.y - Math.cos(angle) * 3.2, MIN_Y, MAX_Y),
-    z: 1.5, heading, vx: Math.sin(angle) * SPEED, vy: -Math.cos(angle) * SPEED,
-    age: 0, flightTime, nextFlightAt: 0,
+    z: 1.5,
+    heading,
+    vx: Math.sin(angle) * SPEED,
+    vy: -Math.cos(angle) * SPEED,
+    age: 0,
+    flightTime,
+    nextFlightAt: 0,
   };
   state.projectiles.push(projectile);
   combat.megaBombAmmo = remaining - 1;
@@ -129,7 +149,12 @@ function push(entity, blast, damage, boat = false) {
 }
 
 function helpers() {
-  return {onEnemyBoatDestroyed(world, boat, sourcePlayer) { releaseCrewFromBoat(world, boat); notifyThreatBoatDestroyed(world, boat, sourcePlayer); }};
+  return {
+    onEnemyBoatDestroyed(world, boat, sourcePlayer) {
+      releaseCrewFromBoat(world, boat);
+      notifyThreatBoatDestroyed(world, boat, sourcePlayer);
+    },
+  };
 }
 
 function damageTarget(world, target, damage, owner) {
@@ -140,7 +165,9 @@ function damageTarget(world, target, damage, owner) {
     boat.hull = clamp((Number(boat.hull) || 72) - damage, 0, 72);
     if (boat.hull <= 0) {
       releaseStolenCargo(world, boat);
-      boat.destroyed = true; boat.active = false; boat.speed = 0;
+      boat.destroyed = true;
+      boat.active = false;
+      boat.speed = 0;
       notifyThreatBoatDestroyed(world, boat, owner);
     }
     push(boat, target.point, damage, true);
@@ -153,7 +180,9 @@ function damageTarget(world, target, damage, owner) {
 
 function explode(world, projectile, reason) {
   const blast = {x: projectile.x, y: projectile.y};
-  let hitCount = 0, destroyedCount = 0, heavyDamage = 0;
+  let hitCount = 0;
+  let destroyedCount = 0;
+  let heavyDamage = 0;
   const unique = new Map();
   for (const target of listCombatTargets(world, projectile.owner, Infinity)) {
     if (["player", "boat", "heavyHull", "heavyEngine", "heavyTurret"].includes(target.kind)) continue;
@@ -179,14 +208,30 @@ function explode(world, projectile, reason) {
     push(heavy, blast, damage, true);
     hitCount += 1;
   }
-  const text = hitCount ? `Взрыв поразил целей: ${hitCount}. Уничтожено: ${destroyedCount}.` : "Взрыв не задел противников.";
-  emit(world, "mega-bomb-explosion", text, [0, 1], {sourcePlayer: projectile.owner, projectileId: projectile.id, reason, x: projectile.x, y: projectile.y, z: 0, radius: MEGA_BOMB_RADIUS, hitCount, destroyedCount, heavyDamage, spatial: spatial(world, projectile)});
+  const text = hitCount
+    ? `Взрыв поразил целей: ${hitCount}. Уничтожено: ${destroyedCount}.`
+    : "Взрыв не задел противников.";
+  emit(world, "mega-bomb-explosion", text, [0, 1], {
+    sourcePlayer: projectile.owner,
+    projectileId: projectile.id,
+    reason,
+    x: projectile.x,
+    y: projectile.y,
+    z: 0,
+    radius: MEGA_BOMB_RADIUS,
+    hitCount,
+    destroyedCount,
+    heavyDamage,
+    spatial: spatial(world, projectile),
+  });
 }
 
 export function stepMegaBombs(world, dt) {
   const state = ensureMegaBombState(world);
   const seconds = clamp(dt, 0, 0.1);
-  for (const player of world.players || []) if (player?.combat) player.combat.megaBombCooldown = Math.max(0, player.combat.megaBombCooldown - seconds);
+  for (const player of world.players || []) {
+    if (player?.combat) player.combat.megaBombCooldown = Math.max(0, player.combat.megaBombCooldown - seconds);
+  }
   const survivors = [];
   for (const projectile of state.projectiles) {
     projectile.age += seconds;
@@ -198,15 +243,20 @@ export function stepMegaBombs(world, dt) {
       projectile.nextFlightAt = projectile.age + 0.12;
       emit(world, "mega-bomb-flight", "", [0, 1], {...projectile, projectileId: projectile.id, progress, spatial: spatial(world, projectile)});
     }
-    const near = projectile.age >= 0.22 && listCombatTargets(world, projectile.owner, Infinity).some(target => !["player", "boat"].includes(target.kind) && distance(projectile, target.point) <= PROXIMITY);
+    const near = projectile.age >= 0.22 && listCombatTargets(world, projectile.owner, Infinity)
+      .some(target => !["player", "boat"].includes(target.kind) && distance(projectile, target.point) <= PROXIMITY);
     const outside = projectile.x < MIN_X || projectile.x > MAX_X || projectile.y < MIN_Y || projectile.y > MAX_Y;
-    if (near || projectile.age >= projectile.flightTime || outside) explode(world, projectile, near ? "proximity" : outside ? "boundary" : "target");
-    else survivors.push(projectile);
+    if (near || projectile.age >= projectile.flightTime || outside) {
+      explode(world, projectile, near ? "proximity" : outside ? "boundary" : "target");
+    } else survivors.push(projectile);
   }
   state.projectiles = survivors;
 }
 
 export function megaBombStatus(world) {
   const state = ensureMegaBombState(world);
-  return {projectiles: state.projectiles.map(({id, owner, x, y, z, age, flightTime}) => ({id, owner, x, y, z, age, flightTime})), ammo: (world.players || []).map(player => Math.max(0, Math.floor(Number(player?.combat?.megaBombAmmo) || 0)))};
+  return {
+    projectiles: state.projectiles.map(({id, owner, x, y, z, age, flightTime}) => ({id, owner, x, y, z, age, flightTime})),
+    ammo: (world.players || []).map(player => Math.max(0, Math.floor(Number(player?.combat?.megaBombAmmo) || 0))),
+  };
 }
