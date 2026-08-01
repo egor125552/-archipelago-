@@ -63,7 +63,8 @@ export function ensureMegaBombState(world) {
   const state = world.freeMegaBombs;
   if (!Array.isArray(state.projectiles)) state.projectiles = Object.values(state.projectiles || {});
   if (!Number.isFinite(Number(state.nextId))) state.nextId = 1;
-  const upgradeOldTestAmmo = Number(state.ammoVersion) < AMMO_VERSION;
+  const storedAmmoVersion = Number(state.ammoVersion);
+  const upgradeOldTestAmmo = !Number.isFinite(storedAmmoVersion) || storedAmmoVersion < AMMO_VERSION;
   for (const player of world.players || []) {
     if (!player?.combat) continue;
     player.combat.weapons ||= {};
