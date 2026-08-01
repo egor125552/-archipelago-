@@ -25,18 +25,30 @@ on:
       - ".github/workflows/neural-real-server-simulations.yml"
   workflow_dispatch:
     inputs:
-      total_battles:
-        description: Total authoritative battles across all shards
+      campaign_total:
+        description: Declared campaign size; one run processes one accountable batch
         required: true
         default: "1000000"
+      batch_size:
+        description: Full episodes to execute in this workflow run
+        required: true
+        default: "10000"
+      batch_index:
+        description: Zero-based batch number inside the campaign
+        required: true
+        default: "0"
       shards:
-        description: Parallel shards
+        description: Parallel shards for this batch
         required: true
         default: "64"
       duration_ms:
-        description: Simulated milliseconds per battle
+        description: Maximum simulated milliseconds per full episode
         required: true
-        default: "24000"
+        default: "90000"
+      profile:
+        description: episode for full fights, window for short mechanical probes
+        required: true
+        default: "episode"
 
 permissions:
   contents: read
@@ -51,24 +63,41 @@ jobs:
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
       total_battles: ${{ steps.plan.outputs.total_battles }}
+      start_index: ${{ steps.plan.outputs.start_index }}
       duration_ms: ${{ steps.plan.outputs.duration_ms }}
       shards: ${{ steps.plan.outputs.shards }}
+      profile: ${{ steps.plan.outputs.profile }}
+      campaign_total: ${{ steps.plan.outputs.campaign_total }}
     steps:
       - id: plan
         env:
-          DISPATCH_TOTAL: ${{ inputs.total_battles }}
+          DISPATCH_CAMPAIGN_TOTAL: ${{ inputs.campaign_total }}
+          DISPATCH_BATCH_SIZE: ${{ inputs.batch_size }}
+          DISPATCH_BATCH_INDEX: ${{ inputs.batch_index }}
           DISPATCH_SHARDS: ${{ inputs.shards }}
           DISPATCH_DURATION: ${{ inputs.duration_ms }}
+          DISPATCH_PROFILE: ${{ inputs.profile }}
         run: |
           node <<'NODE' >> "$GITHUB_OUTPUT"
           const dispatch = process.env.GITHUB_EVENT_NAME === "workflow_dispatch";
-          const total = Math.max(1, Number(dispatch ? process.env.DISPATCH_TOTAL : 1024) || 1024);
-          const shardCount = Math.max(1, Math.min(128, Number(dispatch ? process.env.DISPATCH_SHARDS : 8) || 8));
-          const duration = Math.max(4000, Number(dispatch ? process.env.DISPATCH_DURATION : 12000) || 12000);
+          const campaignTotal = Math.max(1, Math.floor(Number(dispatch ? process.env.DISPATCH_CAMPAIGN_TOTAL : 256) || 256));
+          const requestedBatch = Math.max(1, Math.floor(Number(dispatch ? process.env.DISPATCH_BATCH_SIZE : 256) || 256));
+          const batchIndex = Math.max(0, Math.floor(Number(dispatch ? process.env.DISPATCH_BATCH_INDEX : 0) || 0));
+          const startIndex = batchIndex * requestedBatch;
+          const remaining = campaignTotal - startIndex;
+          if (remaining <= 0) throw new Error(`Batch ${batchIndex} starts after campaign end ${campaignTotal}`);
+          const total = Math.min(requestedBatch, remaining);
+          const requestedShards = Math.max(1, Math.floor(Number(dispatch ? process.env.DISPATCH_SHARDS : 8) || 8));
+          const shardCount = Math.max(1, Math.min(128, total, requestedShards));
+          const duration = Math.max(4000, Math.floor(Number(dispatch ? process.env.DISPATCH_DURATION : 90000) || 90000));
+          const profile = String(dispatch ? process.env.DISPATCH_PROFILE : "episode").toLowerCase() === "window" ? "window" : "episode";
           console.log(`matrix=${JSON.stringify({shard: Array.from({length: shardCount}, (_, index) => index)})}`);
-          console.log(`total_battles=${Math.floor(total)}`);
-          console.log(`duration_ms=${Math.floor(duration)}`);
-          console.log(`shards=${Math.floor(shardCount)}`);
+          console.log(`total_battles=${total}`);
+          console.log(`start_index=${startIndex}`);
+          console.log(`duration_ms=${duration}`);
+          console.log(`shards=${shardCount}`);
+          console.log(`profile=${profile}`);
+          console.log(`campaign_total=${campaignTotal}`);
           NODE
 
   simulate:
@@ -90,10 +119,12 @@ jobs:
       - name: Install project dependencies
         run: npm ci
 
-      - name: Run authoritative server battles
+      - name: Run authoritative server episodes
         run: >-
           node training/run_real_server_simulations.mjs
+          --profile=${{ needs.plan.outputs.profile }}
           --battles=${{ needs.plan.outputs.total_battles }}
+          --start-index=${{ needs.plan.outputs.start_index }}
           --shard=${{ matrix.shard }}
           --shards=${{ needs.plan.outputs.shards }}
           --duration-ms=${{ needs.plan.outputs.duration_ms }}
@@ -135,6 +166,27 @@ jobs:
           --output=training/reports/real-server-aggregate.json
           --critique-output=training/reports/real-server-critique.md
 
+      - name: Write campaign manifest
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const aggregate = JSON.parse(fs.readFileSync('training/reports/real-server-aggregate.json', 'utf8'));
+          const manifest = {
+            format: 'echo-neural-simulation-campaign-batch-v1',
+            campaignTotal: Number('${{ needs.plan.outputs.campaign_total }}'),
+            batchStart: Number('${{ needs.plan.outputs.start_index }}'),
+            batchSize: Number('${{ needs.plan.outputs.total_battles }}'),
+            batchEndExclusive: Number('${{ needs.plan.outputs.start_index }}') + Number('${{ needs.plan.outputs.total_battles }}'),
+            profile: '${{ needs.plan.outputs.profile }}',
+            completedBattles: aggregate.summary.completedBattles,
+            mechanicalVerdict: aggregate.summary.mechanicalVerdict,
+            qualityVerdict: aggregate.summary.qualityVerdict,
+            outcomes: aggregate.summary.byOutcome,
+            generatedAt: aggregate.summary.generatedAt,
+          };
+          fs.writeFileSync('training/reports/campaign-batch-manifest.json', JSON.stringify(manifest, null, 2) + '\n');
+          NODE
+
       - name: Upload aggregate and self-critique
         if: always()
         uses: actions/upload-artifact@v4
@@ -143,5 +195,6 @@ jobs:
           path: |
             training/reports/real-server-aggregate.json
             training/reports/real-server-critique.md
+            training/reports/campaign-batch-manifest.json
           if-no-files-found: warn
           retention-days: 30
