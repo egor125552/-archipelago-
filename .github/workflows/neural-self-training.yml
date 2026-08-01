@@ -1,0 +1,243 @@
+name: Neural self-play candidate
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "src/free-roam-neural-*.js"
+      - "src/generated/free-roam-tactical-policy-v1.js"
+      - "training/generate_neural_selfplay_dataset.mjs"
+      - "training/train_selfplay_policy.py"
+      - "training/compare_selfplay_candidate.mjs"
+      - "tests/free-roam-neural-selfplay.test.mjs"
+      - ".github/workflows/neural-self-training.yml"
+  workflow_dispatch:
+    inputs:
+      campaign_target:
+        description: Declared total campaign target; one run covers only the requested batch
+        required: true
+        default: "1000000"
+      start_index:
+        description: First battle index in this campaign batch
+        required: true
+        default: "0"
+      batch_battles:
+        description: Authoritative exploratory battles in this run
+        required: true
+        default: "16384"
+      shards:
+        description: Parallel shards for this batch
+        required: true
+        default: "128"
+      duration_ms:
+        description: Maximum simulated duration of each exploratory battle
+        required: true
+        default: "60000"
+      elite_per_level:
+        description: Elite trajectories retained per level and shard
+        required: true
+        default: "4"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: neural-selfplay-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      campaign_target: ${{ steps.plan.outputs.campaign_target }}
+      start_index: ${{ steps.plan.outputs.start_index }}
+      batch_battles: ${{ steps.plan.outputs.batch_battles }}
+      shards: ${{ steps.plan.outputs.shards }}
+      duration_ms: ${{ steps.plan.outputs.duration_ms }}
+      elite_per_level: ${{ steps.plan.outputs.elite_per_level }}
+    steps:
+      - id: plan
+        env:
+          DISPATCH_TARGET: ${{ inputs.campaign_target }}
+          DISPATCH_START: ${{ inputs.start_index }}
+          DISPATCH_BATTLES: ${{ inputs.batch_battles }}
+          DISPATCH_SHARDS: ${{ inputs.shards }}
+          DISPATCH_DURATION: ${{ inputs.duration_ms }}
+          DISPATCH_ELITES: ${{ inputs.elite_per_level }}
+        run: |
+          node <<'NODE' >> "$GITHUB_OUTPUT"
+          const manual = process.env.GITHUB_EVENT_NAME === "workflow_dispatch";
+          const target = Math.max(1, Number(manual ? process.env.DISPATCH_TARGET : 256) || 256);
+          const start = Math.max(0, Number(manual ? process.env.DISPATCH_START : 0) || 0);
+          const battles = Math.max(8, Number(manual ? process.env.DISPATCH_BATTLES : 256) || 256);
+          const shards = Math.max(1, Math.min(128, Number(manual ? process.env.DISPATCH_SHARDS : 8) || 8));
+          const duration = Math.max(12000, Number(manual ? process.env.DISPATCH_DURATION : 45000) || 45000);
+          const elites = Math.max(1, Math.min(16, Number(manual ? process.env.DISPATCH_ELITES : 2) || 2));
+          console.log(`matrix=${JSON.stringify({shard: Array.from({length: shards}, (_, index) => index)})}`);
+          console.log(`campaign_target=${Math.floor(target)}`);
+          console.log(`start_index=${Math.floor(start)}`);
+          console.log(`batch_battles=${Math.floor(battles)}`);
+          console.log(`shards=${Math.floor(shards)}`);
+          console.log(`duration_ms=${Math.floor(duration)}`);
+          console.log(`elite_per_level=${Math.floor(elites)}`);
+          NODE
+
+  explore:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      max-parallel: 16
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install project dependencies
+        run: npm ci
+
+      - name: Generate authoritative explored trajectories
+        run: >-
+          node training/generate_neural_selfplay_dataset.mjs
+          --battles=${{ needs.plan.outputs.batch_battles }}
+          --start-index=${{ needs.plan.outputs.start_index }}
+          --shard=${{ matrix.shard }}
+          --shards=${{ needs.plan.outputs.shards }}
+          --duration-ms=${{ needs.plan.outputs.duration_ms }}
+          --elite-per-level=${{ needs.plan.outputs.elite_per_level }}
+          --movement-epsilon=0.18
+          --fire-epsilon=0.08
+          --output=training/reports/selfplay/shard-${{ matrix.shard }}.json
+
+      - name: Upload elite shard
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: neural-selfplay-shard-${{ matrix.shard }}
+          path: training/reports/selfplay/shard-${{ matrix.shard }}.json
+          if-no-files-found: error
+          retention-days: 14
+
+  train-and-gate:
+    if: always()
+    needs:
+      - plan
+      - explore
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install project and CPU trainer
+        run: |
+          npm ci
+          python -m pip install --upgrade pip
+          python -m pip install numpy==2.3.5
+          python -m pip install torch==2.10.0 --index-url https://download.pytorch.org/whl/cpu
+          python -m py_compile training/*.py
+
+      - name: Reject incomplete exploration matrix
+        if: needs.explore.result != 'success'
+        run: |
+          echo "At least one exploration shard failed. No candidate may be trained from an incomplete batch."
+          exit 2
+
+      - name: Download all elite shards
+        uses: actions/download-artifact@v4
+        with:
+          pattern: neural-selfplay-shard-*
+          path: training/reports/selfplay/input
+          merge-multiple: true
+
+      - name: Record truthful campaign range
+        run: |
+          cat > training/reports/selfplay-campaign.json <<JSON
+          {
+            "campaignTarget": ${{ needs.plan.outputs.campaign_target }},
+            "batchStart": ${{ needs.plan.outputs.start_index }},
+            "batchBattles": ${{ needs.plan.outputs.batch_battles }},
+            "batchEndExclusive": $(( ${{ needs.plan.outputs.start_index }} + ${{ needs.plan.outputs.batch_battles }} )),
+            "shards": ${{ needs.plan.outputs.shards }},
+            "note": "This artifact proves one batch only. It must not be reported as the full campaign unless completed ranges cover the target without gaps."
+          }
+          JSON
+
+      - name: Fine-tune a candidate from elite explored trajectories
+        run: >-
+          python training/train_selfplay_policy.py
+          --input training/reports/selfplay/input
+          --base-model src/generated/free-roam-tactical-policy-v1.js
+          --output training/reports/selfplay-candidate-policy.js
+          --report training/reports/selfplay-training.json
+
+      - name: Evaluate unchanged base model on held-out episodes
+        run: >-
+          node training/run_real_server_simulations.mjs
+          --battles=64
+          --start-index=900000000
+          --profile=episode
+          --duration-ms=60000
+          --output=training/reports/selfplay-baseline-evaluation.json
+
+      - name: Install candidate only inside this job
+        run: |
+          cp src/generated/free-roam-tactical-policy-v1.js "$RUNNER_TEMP/base-policy.js"
+          cp training/reports/selfplay-candidate-policy.js src/generated/free-roam-tactical-policy-v1.js
+
+      - name: Verify repository with candidate weights
+        run: npm test
+
+      - name: Evaluate candidate on identical held-out episodes
+        run: >-
+          node training/run_real_server_simulations.mjs
+          --battles=64
+          --start-index=900000000
+          --profile=episode
+          --duration-ms=60000
+          --output=training/reports/selfplay-candidate-evaluation.json
+
+      - name: Reject regressions against the unchanged base model
+        run: >-
+          node training/compare_selfplay_candidate.mjs
+          --base=training/reports/selfplay-baseline-evaluation.json
+          --candidate=training/reports/selfplay-candidate-evaluation.json
+          --output=training/reports/selfplay-candidate-comparison.json
+
+      - name: Restore checked-in model before packaging
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/base-policy.js" ]; then
+            cp "$RUNNER_TEMP/base-policy.js" src/generated/free-roam-tactical-policy-v1.js
+          fi
+
+      - name: Upload candidate, evidence and criticism
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: neural-selfplay-candidate-review
+          path: |
+            training/reports/selfplay-campaign.json
+            training/reports/selfplay-training.json
+            training/reports/selfplay-candidate-policy.js
+            training/reports/selfplay-baseline-evaluation.json
+            training/reports/selfplay-candidate-evaluation.json
+            training/reports/selfplay-candidate-comparison.json
+          if-no-files-found: warn
+          retention-days: 30
