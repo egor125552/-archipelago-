@@ -12,6 +12,8 @@ import {
   mergeSelfPlayShards,
 } from "../training/merge_neural_selfplay_shards.mjs";
 
+const actorSamples = [{samples: [{}, {}, {}, {}]}];
+
 test("self-play score rewards resolved enemy pressure and penalizes guardrails", () => {
   const strong = selfPlayScore({
     outcome: "team-wipe",
@@ -36,14 +38,15 @@ test("self-play score rewards resolved enemy pressure and penalizes guardrails",
   assert.ok(strong > guardedTimeout);
 });
 
-test("elite selection keeps the strongest episodes separately per threat level", () => {
+test("elite selection preserves threat, script and solo/co-op coverage", () => {
   const selected = selectEliteEpisodes([
-    {id: "a", level: 2, score: 1, seed: 1},
-    {id: "b", level: 2, score: 9, seed: 2},
-    {id: "c", level: 3, score: 4, seed: 3},
-    {id: "d", level: 3, score: 7, seed: 4},
+    {id: "a", level: 2, script: "shoreline", coop: false, score: 1, seed: 1, actors: actorSamples},
+    {id: "b", level: 2, script: "shoreline", coop: false, score: 9, seed: 2, actors: actorSamples},
+    {id: "c", level: 2, script: "water-escape", coop: false, score: 4, seed: 3, actors: actorSamples},
+    {id: "d", level: 2, script: "shoreline", coop: true, score: 7, seed: 4, actors: actorSamples},
+    {id: "empty", level: 3, script: "shoreline", coop: false, score: 99, seed: 5, actors: []},
   ], 1);
-  assert.deepEqual(selected.map(item => item.id), ["b", "d"]);
+  assert.deepEqual(new Set(selected.map(item => item.id)), new Set(["b", "c", "d"]));
 });
 
 test("recurrent self-play features use the previous selected action", () => {
@@ -84,6 +87,8 @@ test("candidate gate rejects an unchanged model", () => {
   const report = {
     results: [{
       level: 5,
+      script: "shoreline",
+      coop: false,
       outcome: "timeout",
       result: {playerHealth: 80, boatHull: 90, boatWater: 0},
       metrics: {stationaryRatio: 0.1, invalidWaterRatio: 0},
@@ -95,9 +100,26 @@ test("candidate gate rejects an unchanged model", () => {
   assert.ok(comparison.failures.includes("no-measurable-held-out-improvement"));
 });
 
+test("candidate gate rejects a scenario regression hidden by aggregate gain", () => {
+  const make = (script, pressureHealth) => ({
+    level: 5,
+    script,
+    coop: false,
+    outcome: "timeout",
+    result: {playerHealth: pressureHealth, boatHull: 100, boatWater: 0},
+    metrics: {stationaryRatio: 0, invalidWaterRatio: 0},
+    mechanicalFailures: [],
+  });
+  const base = {results: [make("shoreline", 85), make("water-zigzag", 90)]};
+  const candidate = {results: [make("shoreline", 98), make("water-zigzag", 40)]};
+  const report = compareCandidate(base, candidate);
+  assert.equal(report.verdict, "rejected");
+  assert.ok(report.failures.includes("scenario-pressure-regressed-5:shoreline:solo"));
+});
+
 test("candidate gate rejects water regressions even when pressure increases", () => {
-  const base = {results: [{level: 5, outcome: "timeout", result: {playerHealth: 80, boatHull: 90, boatWater: 0}, metrics: {stationaryRatio: 0.1, invalidWaterRatio: 0}, mechanicalFailures: []}]};
-  const candidate = {results: [{level: 5, outcome: "team-wipe", result: {playerHealth: 0, boatHull: 20, boatWater: 40}, metrics: {stationaryRatio: 0.1, invalidWaterRatio: 0.02}, mechanicalFailures: []}]};
+  const base = {results: [{level: 5, script: "water-zigzag", coop: false, outcome: "timeout", result: {playerHealth: 80, boatHull: 90, boatWater: 0}, metrics: {stationaryRatio: 0.1, invalidWaterRatio: 0}, mechanicalFailures: []}]};
+  const candidate = {results: [{level: 5, script: "water-zigzag", coop: false, outcome: "team-wipe", result: {playerHealth: 0, boatHull: 20, boatWater: 40}, metrics: {stationaryRatio: 0.1, invalidWaterRatio: 0.02}, mechanicalFailures: []}]};
   const report = compareCandidate(base, candidate);
   assert.equal(report.verdict, "rejected");
   assert.ok(report.failures.includes("water-legality-regressed"));
