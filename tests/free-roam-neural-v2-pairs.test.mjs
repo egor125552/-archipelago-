@@ -18,6 +18,41 @@ function validAction(action) {
     && action.fireIndex >= 0 && action.fireIndex < 2;
 }
 
+function validIntegrity(pairs) {
+  return {
+    sampledPairs: 0,
+    sampledFrames: 0,
+    nonZeroHistoryFrames: 0,
+    diagnosticPairs: pairs,
+    invalidDiagnosticPairs: 0,
+    completedInterventions: 0,
+    finalTickProofPairs: 0,
+    invalidFinalTickProofs: 0,
+    waterGuardInterventions: 0,
+  };
+}
+
+function reportFor(shard, total = 10, shards = 3, startIndex = 100) {
+  const pairs = expectedPairsForShard(total, shard, shards);
+  return {
+    format: "echo-neural-v2-pairs-v2",
+    requestedPairs: total,
+    completedPairs: pairs,
+    authoritativeRollouts: pairs * 2,
+    startIndex,
+    endIndex: startIndex + total,
+    shard,
+    shards,
+    minimumAdvantage: 2.5,
+    positivePairs: 0,
+    integrity: validIntegrity(pairs),
+    baselineOutcomes: {victory: pairs},
+    exploredOutcomes: {victory: pairs},
+    advantageRange: {minimum: 0, maximum: 0, mean: 0},
+    elitePairs: [],
+  };
+}
+
 test("v2 pair plans are deterministic, bounded and start early on threat two", () => {
   const first = createNeuralV2PairPlan(125552, 2, 45_000);
   const second = createNeuralV2PairPlan(125552, 2, 45_000);
@@ -56,26 +91,7 @@ test("v2 shard accounting covers uneven pair counts exactly", () => {
 });
 
 test("v2 aggregate rejects a missing shard instead of inventing 512 rollouts", () => {
-  const makeReport = shard => {
-    const pairs = expectedPairsForShard(10, shard, 3);
-    return {
-      format: "echo-neural-v2-pairs-v1",
-      requestedPairs: 10,
-      completedPairs: pairs,
-      authoritativeRollouts: pairs * 2,
-      startIndex: 100,
-      endIndex: 110,
-      shard,
-      shards: 3,
-      minimumAdvantage: 2.5,
-      positivePairs: 0,
-      baselineOutcomes: {victory: pairs},
-      exploredOutcomes: {victory: pairs},
-      advantageRange: {minimum: 0, maximum: 0, mean: 0},
-      elitePairs: [],
-    };
-  };
-  const aggregate = mergeNeuralV2PairShards([makeReport(0), makeReport(2)], {
+  const aggregate = mergeNeuralV2PairShards([reportFor(0), reportFor(2)], {
     expectedPairs: 10,
     expectedShards: 3,
     expectedStartIndex: 100,
@@ -86,26 +102,38 @@ test("v2 aggregate rejects a missing shard instead of inventing 512 rollouts", (
   assert.ok(aggregate.failures.includes("aggregate-rollouts-14-of-20"));
 });
 
-test("v2 aggregate accepts a complete discovery batch with zero positive pairs", () => {
-  const reports = Array.from({length: 3}, (_unused, shard) => {
-    const pairs = expectedPairsForShard(10, shard, 3);
-    return {
-      format: "echo-neural-v2-pairs-v1",
-      requestedPairs: 10,
-      completedPairs: pairs,
-      authoritativeRollouts: pairs * 2,
-      startIndex: 100,
-      endIndex: 110,
-      shard,
-      shards: 3,
-      minimumAdvantage: 2.5,
-      positivePairs: 0,
-      baselineOutcomes: {victory: pairs},
-      exploredOutcomes: {victory: pairs},
-      advantageRange: {minimum: 0, maximum: 0, mean: 0},
-      elitePairs: [],
-    };
+test("v2 aggregate rejects the obsolete discovery format", () => {
+  const reports = Array.from({length: 3}, (_unused, shard) => ({
+    ...reportFor(shard),
+    format: "echo-neural-v2-pairs-v1",
+  }));
+  const aggregate = mergeNeuralV2PairShards(reports, {
+    expectedPairs: 10,
+    expectedShards: 3,
+    expectedStartIndex: 100,
   });
+  assert.equal(aggregate.verdict, "invalid");
+  assert.ok(aggregate.failures.includes("format-mismatch-0"));
+});
+
+test("v2 aggregate rejects nonzero fake history and missing diagnostics", () => {
+  const reports = Array.from({length: 3}, (_unused, shard) => reportFor(shard));
+  reports[1].integrity.nonZeroHistoryFrames = 3;
+  reports[2].integrity.diagnosticPairs -= 1;
+  reports[2].integrity.invalidDiagnosticPairs = 1;
+  const aggregate = mergeNeuralV2PairShards(reports, {
+    expectedPairs: 10,
+    expectedShards: 3,
+    expectedStartIndex: 100,
+  });
+  assert.equal(aggregate.verdict, "invalid");
+  assert.ok(aggregate.failures.includes("nonzero-history-frames-1-3"));
+  assert.ok(aggregate.failures.includes("diagnostic-pairs-mismatch-2"));
+  assert.ok(aggregate.failures.includes("invalid-diagnostic-pairs-2-1"));
+});
+
+test("v2 aggregate accepts a complete discovery batch with zero positive pairs", () => {
+  const reports = Array.from({length: 3}, (_unused, shard) => reportFor(shard));
   const aggregate = mergeNeuralV2PairShards(reports, {
     expectedPairs: 10,
     expectedShards: 3,
@@ -115,4 +143,5 @@ test("v2 aggregate accepts a complete discovery batch with zero positive pairs",
   assert.equal(aggregate.completedPairs, 10);
   assert.equal(aggregate.authoritativeRollouts, 20);
   assert.equal(aggregate.positivePairs, 0);
+  assert.equal(aggregate.integrity.diagnosticPairs, 10);
 });
