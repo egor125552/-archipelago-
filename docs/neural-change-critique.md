@@ -33,6 +33,7 @@ This document is deliberately written as a rejection checklist, not as release m
 - Boat targets located on land are redirected to the production shore-access corridor.
 - A boundary guard prevents neural boats from leaving navigable water and a stuck escape can rotate a blocked actor.
 - The heavy hull and heavy turret are separate neural actors. The turret receives a latched fire permission long enough to finish its production wind-up and burst.
+- If the current model never permits the heavy turret to fire, test mode opens one explicitly marked exploration window after several seconds so the production turret can generate a real aim-and-burst sample instead of remaining permanently silent.
 - A distributed simulator now executes `createServerFreeRoom`, `startServerTrainingBattle`, `applyServerFreeInput` and `tickServerFreeRoom` for every battle.
 - Threat-five reports fail when a healthy heavy turret never winds up or fires.
 - The neural settings panel can finish the current fight and download the persisted ZIP archive.
@@ -42,11 +43,12 @@ This document is deliberately written as a rejection checklist, not as release m
 - The water guard is not learned intelligence. It can make a bad policy look less broken by preventing illegal movement.
 - Shore redirection uses a fixed safe corridor. It does not plan around other boats, projectiles, ramming angles or congestion.
 - The stuck escape is a deterministic emergency turn, not a neural decision.
-- The heavy-turret fire threshold and latch duration are manually calibrated. They repair activation but do not prove good target timing.
+- The heavy-turret fire threshold, latch duration and exploration interval are manually calibrated. The exploration window deliberately overrides a repeatedly negative model decision; it is useful for collecting data but must not be presented as learned skill.
 - Scripted simulation players are repetitive and exploitable. A policy can overfit their turns and still fail against a person.
 - The simulator uses the authoritative server mechanics but does not include WebSocket delay, browser input jitter, speech queues, deployment restarts or Durable Object migration.
 - Running one million evaluations does not retrain the generated model. A separate dataset and training pipeline are still required.
 - Downloading the current fight currently returns the room archive, not a server-produced ZIP containing only one selected episode.
+- The downloaded JSONL records input, world entities and events, but does not yet contain every neural logit, confidence value, guardrail intervention and exploration decision. It is therefore sufficient to replay mechanics, not to fully explain the policy.
 
 ### Automatic rejection conditions
 
