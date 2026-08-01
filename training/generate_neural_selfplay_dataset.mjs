@@ -19,7 +19,7 @@ import {
 const STEP_MS = 40;
 const SAMPLE_MS = Math.max(100, Math.round((Number(model.sampleSeconds) || 0.2) * 1000));
 const MOVEMENTS = Object.freeze(model.movementClasses || ["hold", "approach", "retreat", "flank_left", "flank_right"]);
-const SCRIPTS = Object.freeze(["idle-fire", "water-zigzag", "water-escape", "aggressive", "shoreline", "damage-control"]);
+const SCRIPTS = Object.freeze(["idle-no-fire", "water-zigzag", "water-escape", "aggressive", "shoreline", "damage-control"]);
 
 function argument(name, fallback) {
   const prefix = `--${name}=`;
@@ -89,16 +89,16 @@ function scriptedInput(script, elapsed, server, playerIndex) {
     pump: Number(boat?.water) >= 8,
     repair: Number(boat?.leak) >= 0.7 && Math.abs(Number(boat?.speed) || 0) <= 3,
   };
-  if (script === "idle-fire") return base;
-  if (script === "water-zigzag") return {...base, up: true, left: cycle < 2, right: cycle >= 2};
+  if (script === "idle-no-fire") return {...base, attack: false};
+  if (script === "water-zigzag") return {...base, up: true, left: cycle < 2, right: cycle >= 2, attack: attack && Math.floor(elapsed / 500) % 2 === 0};
   if (script === "water-escape") {
     const safe = Number(player?.combat?.health) > 25 && Number(boat?.hull) > 25;
-    return {...base, up: true, left: cycle === 0 || cycle === 3, right: cycle === 1 || cycle === 2, attack: attack && safe};
+    return {...base, up: true, left: cycle === 0 || cycle === 3, right: cycle === 1 || cycle === 2, attack: attack && safe && Math.floor(elapsed / 700) % 2 === 0};
   }
   if (script === "aggressive") return {...base, up: true, left: cycle === 1, right: cycle === 3};
   if (script === "shoreline") {
     const y = Number(boat?.y) || 160;
-    return {...base, up: y > 92, down: y < 84, left: cycle === 0, right: cycle === 2};
+    return {...base, up: y > 92, down: y < 84, left: cycle === 0, right: cycle === 2, attack: attack && Math.floor(elapsed / 800) % 2 === 0};
   }
   const damaged = Number(boat?.water) >= 6 || Number(boat?.leak) >= 0.7 || Number(boat?.hull) <= 70;
   return {
@@ -107,7 +107,7 @@ function scriptedInput(script, elapsed, server, playerIndex) {
     down: damaged && Math.abs(Number(boat?.speed) || 0) > 1,
     left: !damaged && cycle < 2,
     right: !damaged && cycle >= 2,
-    attack: !damaged && attack,
+    attack: !damaged && attack && Math.floor(elapsed / 600) % 2 === 0,
   };
 }
 
@@ -189,10 +189,15 @@ export function selfPlayScore({outcome, playerHealth, boatHull, boatWater, enemy
   return Math.round((pressure + outcomeScore + speedBonus - guardPenalty) * 1000) / 1000;
 }
 
-export function selectEliteEpisodes(episodes, perLevel = 2) {
+function hasTrainableTrajectory(episode) {
+  return (episode?.actors || []).some(actor => (actor?.samples || []).length >= 4);
+}
+
+export function selectEliteEpisodes(episodes, perScenario = 1) {
   const groups = new Map();
   for (const episode of episodes) {
-    const key = Number(episode.level) || 0;
+    if (!hasTrainableTrajectory(episode)) continue;
+    const key = `${Number(episode.level) || 0}:${episode.script || "unknown"}:${episode.coop ? "coop" : "solo"}`;
     const list = groups.get(key) || [];
     list.push(episode);
     groups.set(key, list);
@@ -200,9 +205,9 @@ export function selectEliteEpisodes(episodes, perLevel = 2) {
   const selected = [];
   for (const list of groups.values()) {
     list.sort((left, right) => right.score - left.score || left.seed - right.seed);
-    selected.push(...list.slice(0, Math.max(1, perLevel)));
+    selected.push(...list.slice(0, Math.max(1, perScenario)));
   }
-  return selected.sort((left, right) => left.level - right.level || right.score - left.score);
+  return selected.sort((left, right) => left.level - right.level || String(left.script).localeCompare(String(right.script)) || Number(left.coop) - Number(right.coop) || right.score - left.score);
 }
 
 async function simulateBattle({battleIndex, seed, durationMs, level, script, coop, movementEpsilon, fireEpsilon}) {
@@ -282,7 +287,7 @@ async function main() {
   const shard = integerArgument("shard", 0);
   const shards = Math.max(1, integerArgument("shards", 1));
   const durationMs = Math.max(8_000, integerArgument("duration-ms", 45_000));
-  const elitePerLevel = Math.max(1, integerArgument("elite-per-level", 2));
+  const elitePerScenario = Math.max(1, integerArgument("elite-per-scenario", integerArgument("elite-per-level", 1)));
   const movementEpsilon = Math.max(0, Math.min(0.7, numberArgument("movement-epsilon", 0.18)));
   const fireEpsilon = Math.max(0, Math.min(0.5, numberArgument("fire-epsilon", 0.08)));
   const output = argument("output", `training/reports/selfplay-shard-${shard}.json`);
@@ -301,7 +306,7 @@ async function main() {
     outcomeCounts[episode.outcome] = (outcomeCounts[episode.outcome] || 0) + 1;
   }
 
-  const eliteEpisodes = selectEliteEpisodes(candidates, elitePerLevel);
+  const eliteEpisodes = selectEliteEpisodes(candidates, elitePerScenario);
   const report = {
     format: "echo-neural-selfplay-elites-v1",
     generatedAt: new Date().toISOString(),
@@ -315,7 +320,7 @@ async function main() {
     durationMs,
     movementEpsilon,
     fireEpsilon,
-    elitePerLevel,
+    elitePerScenario,
     outcomeCounts,
     scoreRange: {
       minimum: Math.min(...candidates.map(item => item.score)),
@@ -325,7 +330,8 @@ async function main() {
       "This is cross-entropy self-play data, not proof of intelligence: the candidate imitates high-scoring explored actions.",
       "Scripted players are repetitive and can be exploited, so a held-out authoritative A/B gate is mandatory.",
       "Guardrail penalties reduce but do not remove the risk that water clamps hide poor navigation.",
-      "Only elite trajectories are retained; unsuccessful exploration is summarized but not stored as negative examples.",
+      "Elite trajectories are retained separately by threat, script and solo/co-op mode so one easy pattern cannot erase scenario coverage.",
+      "Episodes without at least one four-sample actor trajectory are excluded from training rather than counted as useful data.",
       "Recurrent previous-action features are captured before the current explored action is selected; current labels are never copied into their own input fields.",
     ],
     eliteEpisodes,
