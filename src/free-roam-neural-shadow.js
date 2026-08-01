@@ -6,6 +6,9 @@ import {createTacticalPolicyRuntime, verifyTacticalPolicyGolden} from "./free-ro
 const WORLD_WIDTH = 420;
 const WORLD_HEIGHT = 320;
 const SHADOW_INTERVAL_MS = Math.max(100, Math.round((Number(model.sampleSeconds) || 0.2) * 1000));
+const HEAVY_TURRET_FIRE_THRESHOLD = 0.22;
+const HEAVY_TURRET_FIRE_LATCH_STEPS = Math.max(8, Math.ceil(2.4 / Math.max(0.1, Number(model.sampleSeconds) || 0.2)));
+const DEFAULT_FIRE_LATCH_STEPS = 2;
 const runtime = createTacticalPolicyRuntime(model);
 const golden = verifyTacticalPolicyGolden(model);
 if (!golden.ok) throw new Error(`Neural tactical policy failed golden verification: ${golden.maximumError}`);
@@ -47,19 +50,46 @@ function actorId(prefix, entity, index = 0) {
 
 export function collectNeuralActors(world) {
   const result = [];
-  const pushBoat = (prefix, entity, role, index = 0) => {
+  const pushBoat = (prefix, entity, role, index = 0, controls = {}) => {
     if (!activeEntity(entity)) return;
-    result.push({id: actorId(prefix, entity, index), entity, kind: "boat", role});
+    result.push({
+      id: actorId(prefix, entity, index),
+      entity,
+      kind: "boat",
+      role,
+      controlsMovement: controls.movement !== false,
+      controlsFire: controls.fire !== false,
+    });
   };
   const pushFoot = (prefix, entity, index = 0) => {
     if (!activeEntity(entity)) return;
-    result.push({id: actorId(prefix, entity, index), entity, kind: "foot", role: entity?.role || "actor"});
+    result.push({
+      id: actorId(prefix, entity, index),
+      entity,
+      kind: "foot",
+      role: entity?.role || "actor",
+      controlsMovement: true,
+      controlsFire: true,
+    });
   };
 
   pushBoat("marauder", world?.freeActivities?.marauder, "marauder");
   (world?.freePursuerSquad?.escorts || []).forEach((entity, index) => pushBoat("escort", entity, entity?.role || "escort", index));
   (world?.freeEnemyBoats?.boats || []).forEach((entity, index) => pushBoat("threat-boat", entity, entity?.role || "boat", index));
-  pushBoat("heavy", world?.freeHeavyPursuer?.boat, "heavy");
+
+  const heavy = world?.freeHeavyPursuer?.boat;
+  pushBoat("heavy", heavy, "heavy", 0, {fire: false});
+  if (activeEntity(heavy) && !heavy.turretDisabled && Number(heavy.turretHealth) > 0) {
+    result.push({
+      id: `${actorId("heavy", heavy)}:turret`,
+      entity: heavy,
+      kind: "turret",
+      role: "heavy_turret",
+      controlsMovement: false,
+      controlsFire: true,
+    });
+  }
+
   (world?.freeHostileGunners?.gunners || []).forEach((entity, index) => pushFoot("gunner", entity, index));
   (world?.freeHostileActors?.actors || []).forEach((entity, index) => pushFoot("actor", entity, index));
   return result;
@@ -67,12 +97,16 @@ export function collectNeuralActors(world) {
 
 function weaponCode(actor) {
   const raw = String(actor?.entity?.weapon || "").toLowerCase();
-  if (raw.includes("automatic") || raw.includes("rifle") || actor.role === "heavy" || actor.role === "gunboat") return "automatic";
+  if (raw.includes("automatic") || raw.includes("rifle") || actor.role === "heavy" || actor.role === "heavy_turret" || actor.role === "gunboat") return "automatic";
   if (raw.includes("pistol") || raw.includes("gun")) return "pistol";
   return "melee";
 }
 
 function actorHealth(actor) {
+  if (actor.role === "heavy_turret") {
+    const maximum = Number(actor?.entity?.maxTurretHealth) || 240;
+    return clamp((Number(actor?.entity?.turretHealth) || 0) / Math.max(1, maximum), 0, 1);
+  }
   const maximum = Number(actor?.entity?.hullMax ?? actor?.entity?.maxHull ?? actor?.entity?.healthMax ?? actor?.entity?.maxHealth);
   const current = Number(actor?.entity?.hull ?? actor?.entity?.health ?? 100);
   if (Number.isFinite(maximum) && maximum > 0) return clamp(current / maximum, 0, 1);
@@ -90,7 +124,7 @@ function targetMode(player) {
   return "other";
 }
 
-function featureVector(world, actor, state) {
+export function neuralFeatureVector(world, actor, state = null) {
   const entity = actor.entity;
   const targetEntry = neuralTargetForActor(world, actor);
   const target = targetEntry?.player || null;
@@ -154,6 +188,14 @@ function ensureShadowRuntime(serverRoom) {
   return state;
 }
 
+function fireDecision(actor, result, previous) {
+  const threshold = actor.role === "heavy_turret" ? HEAVY_TURRET_FIRE_THRESHOLD : 0.5;
+  const rawFire = result.fireProbability >= threshold;
+  const latchSteps = actor.role === "heavy_turret" ? HEAVY_TURRET_FIRE_LATCH_STEPS : DEFAULT_FIRE_LATCH_STEPS;
+  const fireLatch = rawFire ? latchSteps : Math.max(0, (Number(previous?.fireLatch) || 0) - 1);
+  return {rawFire, fire: rawFire || fireLatch > 0, fireLatch, threshold};
+}
+
 export function updateServerNeuralShadow(serverRoom, now = Date.now()) {
   if (!serverRoom?.world) return null;
   const shadow = ensureShadowRuntime(serverRoom);
@@ -164,26 +206,49 @@ export function updateServerNeuralShadow(serverRoom, now = Date.now()) {
   const actors = collectNeuralActors(serverRoom.world);
   const seen = new Set();
   const movementCounts = Object.fromEntries(model.movementClasses.map(name => [name, 0]));
+  const actorKinds = {};
   let confidenceTotal = 0;
   let fireTotal = 0;
+  let fireAllowedCount = 0;
+  let lowConfidenceCount = 0;
+  let heavyTurretTracked = false;
+  let heavyTurretFire = false;
+  let heavyTurretFireProbability = 0;
+
   for (const actor of actors) {
     seen.add(actor.id);
-    const previous = shadow.actors.get(actor.id) || {hidden: null, movementIndex: 0, fire: false};
-    const result = runtime.step(featureVector(serverRoom.world, actor, previous), previous.hidden);
+    const previous = shadow.actors.get(actor.id) || {hidden: null, movementIndex: 0, fire: false, fireLatch: 0};
+    const result = runtime.step(neuralFeatureVector(serverRoom.world, actor, previous), previous.hidden);
+    const fire = fireDecision(actor, result, previous);
     const next = {
       hidden: result.hidden,
       movementIndex: result.movementIndex,
       movement: result.movement,
       confidence: result.movementConfidence,
-      fire: result.fire,
+      fire: fire.fire,
+      rawFire: fire.rawFire,
+      fireLatch: fire.fireLatch,
+      fireThreshold: fire.threshold,
       fireProbability: result.fireProbability,
       targetPlayer: Number.isInteger(actor.entity?.targetPlayer) ? actor.entity.targetPlayer : null,
+      kind: actor.kind,
+      role: actor.role,
+      controlsMovement: actor.controlsMovement !== false,
+      controlsFire: actor.controlsFire !== false,
       lastSeenAt: now,
     };
     shadow.actors.set(actor.id, next);
     movementCounts[next.movement] = (movementCounts[next.movement] || 0) + 1;
+    actorKinds[actor.kind] = (actorKinds[actor.kind] || 0) + 1;
     confidenceTotal += next.confidence;
     fireTotal += next.fireProbability;
+    if (next.fire && next.controlsFire) fireAllowedCount += 1;
+    if (next.confidence < 0.25) lowConfidenceCount += 1;
+    if (actor.role === "heavy_turret") {
+      heavyTurretTracked = true;
+      heavyTurretFire = next.fire;
+      heavyTurretFireProbability = next.fireProbability;
+    }
   }
   for (const id of shadow.actors.keys()) if (!seen.has(id)) shadow.actors.delete(id);
   const controlEnabled = Boolean(shadow.controlEnabled && (model.controlApproved === true || shadow.testControl));
@@ -193,8 +258,14 @@ export function updateServerNeuralShadow(serverRoom, now = Date.now()) {
     modelFormat: model.format,
     modelVersion: model.version,
     actorCount: actors.length,
+    actorKinds,
     meanMovementConfidence: actors.length ? confidenceTotal / actors.length : 0,
     meanFireProbability: actors.length ? fireTotal / actors.length : 0,
+    fireAllowedCount,
+    lowConfidenceCount,
+    heavyTurretTracked,
+    heavyTurretFire,
+    heavyTurretFireProbability,
     movementCounts,
     updatedAt: now,
   };
@@ -203,6 +274,28 @@ export function updateServerNeuralShadow(serverRoom, now = Date.now()) {
 
 export function neuralDecision(serverRoom, actorId) {
   return serverRoom?.neuralShadowRuntime?.actors?.get(String(actorId || "")) || null;
+}
+
+export function neuralDecisionSnapshot(serverRoom) {
+  const actors = serverRoom?.neuralShadowRuntime?.actors;
+  if (!(actors instanceof Map)) return [];
+  return [...actors.entries()].map(([id, decision]) => ({
+    id,
+    movement: decision.movement,
+    movementIndex: decision.movementIndex,
+    confidence: decision.confidence,
+    fire: decision.fire,
+    rawFire: decision.rawFire,
+    fireProbability: decision.fireProbability,
+    fireThreshold: decision.fireThreshold,
+    fireLatch: decision.fireLatch,
+    targetPlayer: decision.targetPlayer,
+    kind: decision.kind,
+    role: decision.role,
+    controlsMovement: decision.controlsMovement,
+    controlsFire: decision.controlsFire,
+    lastSeenAt: decision.lastSeenAt,
+  }));
 }
 
 export function neuralControlEnabled(serverRoom) {
@@ -226,8 +319,14 @@ export function neuralShadowStatus(serverRoom) {
     modelFormat: model.format,
     modelVersion: model.version,
     actorCount: 0,
+    actorKinds: {},
     meanMovementConfidence: 0,
     meanFireProbability: 0,
+    fireAllowedCount: 0,
+    lowConfidenceCount: 0,
+    heavyTurretTracked: false,
+    heavyTurretFire: false,
+    heavyTurretFireProbability: 0,
     movementCounts: Object.fromEntries(model.movementClasses.map(name => [name, 0])),
     updatedAt: 0,
   };
