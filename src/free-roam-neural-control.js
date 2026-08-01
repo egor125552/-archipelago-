@@ -7,6 +7,7 @@ import {
   neuralPlayerPoint,
   neuralTargetForActor,
 } from "./free-roam-neural-shadow.js";
+import {isolatedServerNeuralV2Head} from "./free-roam-neural-v2-overrides.js";
 
 const WATER_MIN_X = 10;
 const WATER_MAX_X = 410;
@@ -157,9 +158,12 @@ export function prepareServerNeuralControl(serverRoom) {
     const targetEntry = neuralTargetForActor(serverRoom.world, actor);
     const rawTargetPoint = targetEntry?.player ? neuralPlayerPoint(serverRoom.world, targetEntry.player) : null;
     if (!rawTargetPoint) continue;
+    const isolatedHead = isolatedServerNeuralV2Head(serverRoom, actor.id);
 
     if (actor.controlsFire !== false) {
-      if (!decision.fire && suppressFire(actor)) controlRuntime.totals.fireSuppressed = (controlRuntime.totals.fireSuppressed || 0) + 1;
+      if (isolatedHead !== "fire" && !decision.fire && suppressFire(actor)) {
+        controlRuntime.totals.fireSuppressed = (controlRuntime.totals.fireSuppressed || 0) + 1;
+      }
       if (actor.role === "heavy_turret") controlRuntime.totals.heavyTurretControlled = (controlRuntime.totals.heavyTurretControlled || 0) + 1;
     }
     if (actor.controlsMovement === false) continue;
