@@ -157,6 +157,6 @@ try {
   };
 })();
 
-import("./free-roam-neural-test-ui-v1.js?v=1").catch(error => {
+import("./free-roam-neural-test-ui-v1.js?v=2").catch(error => {
   console.error("Unable to load neural test controls", error);
 });
