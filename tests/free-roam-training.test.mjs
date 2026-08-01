@@ -29,6 +29,7 @@ test("quick training invokes the production threat encounter and restores the or
   assert.equal(server.world.freeContracts.encounterActive, true);
   assert.equal(server.world.players[0].combat.weapons.automatic, true);
   assert.ok(server.world.players[0].combat.ammo >= 180);
+  assert.equal(server.world.freeActivities.credits, 180);
   assert.equal(server.world.boats[0].hull, 100);
   assert.equal(server.world.boats[0].water, 0);
 
