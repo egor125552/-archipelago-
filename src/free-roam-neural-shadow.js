@@ -1,0 +1,218 @@
+"use strict";
+
+import model from "./generated/free-roam-tactical-policy-v1.js";
+import {createTacticalPolicyRuntime, verifyTacticalPolicyGolden} from "./free-roam-neural-policy.js";
+
+const WORLD_WIDTH = 420;
+const WORLD_HEIGHT = 320;
+const SHADOW_INTERVAL_MS = Math.max(100, Math.round((Number(model.sampleSeconds) || 0.2) * 1000));
+const runtime = createTacticalPolicyRuntime(model);
+const golden = verifyTacticalPolicyGolden(model);
+if (!golden.ok) throw new Error(`Neural tactical policy failed golden verification: ${golden.maximumError}`);
+
+const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value));
+const distance = (left, right) => Math.hypot((Number(left?.x) || 0) - (Number(right?.x) || 0), (Number(left?.y) || 0) - (Number(right?.y) || 0));
+
+function alivePlayers(world) {
+  return (world?.players || [])
+    .map((player, index) => ({player, index}))
+    .filter(({player, index}) => Boolean(world?.freeActivities?.presence?.[index]) && player?.combat?.alive !== false && player?.mode !== "dead");
+}
+
+function playerPoint(world, player) {
+  if (["boat", "roof"].includes(player?.mode)) return world?.boats?.[player.activeBoat] || player;
+  return player;
+}
+
+function targetForActor(world, actor) {
+  const players = alivePlayers(world);
+  if (!players.length) return null;
+  const requested = Number(actor?.entity?.targetPlayer);
+  const assigned = world?.freeThreatDirector?.assignments?.[actor.id];
+  const explicit = Number.isInteger(requested) ? requested : Number.isInteger(assigned) ? assigned : -1;
+  const direct = players.find(item => item.index === explicit);
+  if (direct) return direct;
+  return players.sort((left, right) => distance(actor.entity, playerPoint(world, left.player)) - distance(actor.entity, playerPoint(world, right.player)))[0];
+}
+
+function activeEntity(entity) {
+  if (!entity || entity.active === false || entity.destroyed || entity.sunk) return false;
+  const health = Number(entity.hull ?? entity.health);
+  return !Number.isFinite(health) || health > 0;
+}
+
+function actorId(prefix, entity, index = 0) {
+  return String(entity?.id || `${prefix}-${index}`);
+}
+
+function collectActors(world) {
+  const result = [];
+  const pushBoat = (prefix, entity, role, index = 0) => {
+    if (!activeEntity(entity)) return;
+    result.push({id: actorId(prefix, entity, index), entity, kind: "boat", role});
+  };
+  const pushFoot = (prefix, entity, index = 0) => {
+    if (!activeEntity(entity)) return;
+    result.push({id: actorId(prefix, entity, index), entity, kind: "foot", role: entity?.role || "actor"});
+  };
+
+  pushBoat("marauder", world?.freeActivities?.marauder, "marauder");
+  (world?.freePursuerSquad?.escorts || []).forEach((entity, index) => pushBoat("escort", entity, entity?.role || "escort", index));
+  (world?.freeEnemyBoats?.boats || []).forEach((entity, index) => pushBoat("threat-boat", entity, entity?.role || "boat", index));
+  pushBoat("heavy", world?.freeHeavyPursuer?.boat, "heavy");
+  (world?.freeHostileGunners?.gunners || []).forEach((entity, index) => pushFoot("gunner", entity, index));
+  (world?.freeHostileActors?.actors || []).forEach((entity, index) => pushFoot("actor", entity, index));
+  return result;
+}
+
+function weaponCode(actor) {
+  const raw = String(actor?.entity?.weapon || "").toLowerCase();
+  if (raw.includes("automatic") || raw.includes("rifle") || actor.role === "heavy" || actor.role === "gunboat") return "automatic";
+  if (raw.includes("pistol") || raw.includes("gun")) return "pistol";
+  return "melee";
+}
+
+function actorHealth(actor) {
+  const maximum = Number(actor?.entity?.hullMax ?? actor?.entity?.maxHull ?? actor?.entity?.healthMax ?? actor?.entity?.maxHealth);
+  const current = Number(actor?.entity?.hull ?? actor?.entity?.health ?? 100);
+  if (Number.isFinite(maximum) && maximum > 0) return clamp(current / maximum, 0, 1);
+  if (actor.kind === "boat") return clamp(current / Math.max(100, current), 0, 1);
+  return clamp(current / 100, 0, 1);
+}
+
+function targetHealth(player) {
+  return clamp((Number(player?.combat?.health) || 0) / 100, 0, 1);
+}
+
+function targetMode(player) {
+  if (["boat", "roof"].includes(player?.mode)) return "boat";
+  if (["foot", "swim"].includes(player?.mode)) return "foot";
+  return "other";
+}
+
+function featureVector(world, actor, state) {
+  const entity = actor.entity;
+  const targetEntry = targetForActor(world, actor);
+  const target = targetEntry?.player || null;
+  const targetPoint = target ? playerPoint(world, target) : null;
+  const x = Number(entity?.x) || 0;
+  const y = Number(entity?.y) || 0;
+  const heading = Number(entity?.heading) || 0;
+  const radians = heading * Math.PI / 180;
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  const dx = targetPoint ? (Number(targetPoint.x) || 0) - x : 0;
+  const dy = targetPoint ? (Number(targetPoint.y) || 0) - y : 0;
+  const localX = dx * cos + dy * sin;
+  const localY = -dx * sin + dy * cos;
+  const targetDistance = Math.hypot(dx, dy);
+  const bearing = Math.atan2(localX, -localY);
+  const players = alivePlayers(world);
+  const nearPlayers = players.filter(item => distance(entity, playerPoint(world, item.player)) <= 40).length;
+  const heavy = world?.freeHeavyPursuer?.boat;
+  const heavyActive = activeEntity(heavy);
+  const weapon = weaponCode(actor);
+  const modeBoat = actor.kind === "boat";
+  const modeFoot = actor.kind === "foot";
+  const modeSwim = actor.kind === "swim";
+  const targetKind = targetMode(target);
+  const ammoRaw = Number(entity?.ammo ?? entity?.rounds ?? entity?.magazine);
+  const ammo = Number.isFinite(ammoRaw) ? clamp(ammoRaw / 240, 0, 1) : 0.5;
+  const hull = actor.kind === "boat" ? actorHealth(actor) : 1;
+  const water = actor.kind === "boat" ? clamp((Number(entity?.water) || 0) / 100, 0, 1) : 0;
+  const leak = actor.kind === "boat" ? clamp((Number(entity?.leak) || 0) / 8, 0, 1) : 0;
+  const fuel = actor.kind === "boat" ? clamp((Number(entity?.fuel) || 100) / 100, 0, 1) : 0;
+  const values = [
+    1, actorHealth(actor), Number(modeBoat), Number(modeFoot), Number(modeSwim), Number(!modeBoat && !modeFoot && !modeSwim),
+    x / WORLD_WIDTH, y / WORLD_HEIGHT, Math.sin(radians), Math.cos(radians), clamp((Number(entity?.speed) || 0) / 22, -1, 1),
+    x / WORLD_WIDTH, (WORLD_WIDTH - x) / WORLD_WIDTH, y / WORLD_HEIGHT, (WORLD_HEIGHT - y) / WORLD_HEIGHT,
+    hull, water, leak, fuel,
+    Number(weapon === "melee"), Number(weapon === "pistol"), Number(weapon === "automatic"), ammo,
+    clamp(localX / 160, -1.5, 1.5), clamp(localY / 160, -1.5, 1.5), clamp(targetDistance / 160, 0, 2),
+    Math.sin(bearing), Math.cos(bearing), targetHealth(target) * 0.3333333333,
+    Number(targetKind === "boat"), Number(targetKind === "foot"), Number(targetKind === "other" && Boolean(target)),
+    clamp(players.length / 16, 0, 1), clamp(nearPlayers / 8, 0, 1), Number(heavyActive), clamp((Number(heavy?.hull ?? heavy?.health) || 0) / 600, 0, 2),
+    clamp((Number(world?.freeThreatDirector?.level) || 0) / 5, 0, 1), clamp((Number(world?.time) || 0) / 360, 0, 1), Number(Boolean(state?.fire)), (Number(state?.movementIndex) || 0) / 4,
+  ];
+  if (values.length !== model.inputSize) throw new RangeError(`Neural shadow feature count ${values.length} does not match ${model.inputSize}`);
+  return values;
+}
+
+function ensureShadowRuntime(serverRoom) {
+  if (!serverRoom.neuralShadowRuntime) {
+    Object.defineProperty(serverRoom, "neuralShadowRuntime", {
+      value: {nextAt: 0, lastAt: 0, actors: new Map(), summary: null},
+      writable: true,
+      configurable: true,
+      enumerable: false,
+    });
+  }
+  const state = serverRoom.neuralShadowRuntime;
+  if (!(state.actors instanceof Map)) state.actors = new Map();
+  return state;
+}
+
+export function updateServerNeuralShadow(serverRoom, now = Date.now()) {
+  if (!serverRoom?.world) return null;
+  const shadow = ensureShadowRuntime(serverRoom);
+  if (now < shadow.nextAt) return neuralShadowStatus(serverRoom);
+  shadow.nextAt = now + SHADOW_INTERVAL_MS;
+  shadow.lastAt = now;
+
+  const actors = collectActors(serverRoom.world);
+  const seen = new Set();
+  const movementCounts = Object.fromEntries(model.movementClasses.map(name => [name, 0]));
+  let confidenceTotal = 0;
+  let fireTotal = 0;
+  for (const actor of actors) {
+    seen.add(actor.id);
+    const previous = shadow.actors.get(actor.id) || {hidden: null, movementIndex: 0, fire: false};
+    const result = runtime.step(featureVector(serverRoom.world, actor, previous), previous.hidden);
+    const next = {
+      hidden: result.hidden,
+      movementIndex: result.movementIndex,
+      movement: result.movement,
+      confidence: result.movementConfidence,
+      fire: result.fire,
+      fireProbability: result.fireProbability,
+      targetPlayer: Number.isInteger(actor.entity?.targetPlayer) ? actor.entity.targetPlayer : null,
+      lastSeenAt: now,
+    };
+    shadow.actors.set(actor.id, next);
+    movementCounts[next.movement] = (movementCounts[next.movement] || 0) + 1;
+    confidenceTotal += next.confidence;
+    fireTotal += next.fireProbability;
+  }
+  for (const id of shadow.actors.keys()) if (!seen.has(id)) shadow.actors.delete(id);
+  shadow.summary = {
+    enabled: true,
+    controlEnabled: false,
+    modelFormat: model.format,
+    modelVersion: model.version,
+    actorCount: actors.length,
+    meanMovementConfidence: actors.length ? confidenceTotal / actors.length : 0,
+    meanFireProbability: actors.length ? fireTotal / actors.length : 0,
+    movementCounts,
+    updatedAt: now,
+  };
+  return neuralShadowStatus(serverRoom);
+}
+
+export function neuralShadowStatus(serverRoom) {
+  const shadow = serverRoom?.neuralShadowRuntime;
+  return shadow?.summary ? structuredClone(shadow.summary) : {
+    enabled: true,
+    controlEnabled: false,
+    modelFormat: model.format,
+    modelVersion: model.version,
+    actorCount: 0,
+    meanMovementConfidence: 0,
+    meanFireProbability: 0,
+    movementCounts: Object.fromEntries(model.movementClasses.map(name => [name, 0])),
+    updatedAt: 0,
+  };
+}
+
+export function clearServerNeuralShadow(serverRoom) {
+  if (serverRoom) delete serverRoom.neuralShadowRuntime;
+}
