@@ -1,0 +1,170 @@
+name: Neural v2 short-horizon head diagnostics
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "src/free-roam-neural-v2-*.js"
+      - "src/free-roam-neural-control.js"
+      - "src/free-roam-server.js"
+      - "training/generate_neural_v2_head_pairs.mjs"
+      - "training/generate_neural_v2_head_windows.mjs"
+      - "training/merge_neural_v2_head_windows.mjs"
+      - "tests/free-roam-neural-v2*.test.mjs"
+      - ".github/workflows/neural-v2-head-windows.yml"
+  workflow_dispatch:
+    inputs:
+      start_index:
+        description: First pair index in this short-horizon batch
+        required: true
+        default: "0"
+      batch_pairs:
+        description: Identical-seed baseline/explored window pairs
+        required: true
+        default: "2048"
+      shards:
+        description: Parallel shards
+        required: true
+        default: "32"
+      maximum_ms:
+        description: Maximum simulated time before the paired window must start
+        required: true
+        default: "30000"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: neural-v2-head-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      start_index: ${{ steps.plan.outputs.start_index }}
+      batch_pairs: ${{ steps.plan.outputs.batch_pairs }}
+      shards: ${{ steps.plan.outputs.shards }}
+      maximum_ms: ${{ steps.plan.outputs.maximum_ms }}
+    steps:
+      - id: plan
+        env:
+          DISPATCH_START: ${{ inputs.start_index }}
+          DISPATCH_PAIRS: ${{ inputs.batch_pairs }}
+          DISPATCH_SHARDS: ${{ inputs.shards }}
+          DISPATCH_MAXIMUM: ${{ inputs.maximum_ms }}
+        run: |
+          node <<'NODE' >> "$GITHUB_OUTPUT"
+          const manual = process.env.GITHUB_EVENT_NAME === "workflow_dispatch";
+          const start = Math.max(0, Number(manual ? process.env.DISPATCH_START : 0) || 0);
+          const pairs = Math.max(20, Number(manual ? process.env.DISPATCH_PAIRS : 256) || 256);
+          const shards = Math.max(1, Math.min(64, Number(manual ? process.env.DISPATCH_SHARDS : 8) || 8));
+          const maximum = Math.max(8000, Number(manual ? process.env.DISPATCH_MAXIMUM : 30000) || 30000);
+          console.log(`matrix=${JSON.stringify({shard: Array.from({length: shards}, (_, index) => index)})}`);
+          console.log(`start_index=${Math.floor(start)}`);
+          console.log(`batch_pairs=${Math.floor(pairs)}`);
+          console.log(`shards=${Math.floor(shards)}`);
+          console.log(`maximum_ms=${Math.floor(maximum)}`);
+          NODE
+
+  diagnose:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      max-parallel: 16
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install project dependencies
+        run: npm ci
+
+      - name: Compare identical short-horizon actor windows
+        run: >-
+          node training/generate_neural_v2_head_windows.mjs
+          --battles=${{ needs.plan.outputs.batch_pairs }}
+          --start-index=${{ needs.plan.outputs.start_index }}
+          --shard=${{ matrix.shard }}
+          --shards=${{ needs.plan.outputs.shards }}
+          --maximum-ms=${{ needs.plan.outputs.maximum_ms }}
+          --output=training/reports/v2-head-windows/shard-${{ matrix.shard }}.json
+
+      - name: Upload short-horizon shard
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: neural-v2-head-windows-shard-${{ matrix.shard }}
+          path: training/reports/v2-head-windows/shard-${{ matrix.shard }}.json
+          if-no-files-found: error
+          retention-days: 14
+
+  aggregate:
+    if: always()
+    needs:
+      - plan
+      - diagnose
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Reject incomplete window matrix
+        if: needs.diagnose.result != 'success'
+        run: |
+          echo "At least one short-horizon shard failed."
+          exit 2
+
+      - name: Download short-horizon shards
+        uses: actions/download-artifact@v4
+        with:
+          pattern: neural-v2-head-windows-shard-*
+          path: training/reports/v2-head-windows/input
+          merge-multiple: true
+
+      - name: Verify actor identity, features and pair coverage
+        run: >-
+          node training/merge_neural_v2_head_windows.mjs
+          --input=training/reports/v2-head-windows/input
+          --expected-pairs=${{ needs.plan.outputs.batch_pairs }}
+          --expected-shards=${{ needs.plan.outputs.shards }}
+          --expected-start-index=${{ needs.plan.outputs.start_index }}
+          --output=training/reports/v2-head-windows-aggregate.json
+
+      - name: Write diagnostic manifest
+        run: |
+          cat > training/reports/v2-head-windows-manifest.json <<JSON
+          {
+            "batchStartPair": ${{ needs.plan.outputs.start_index }},
+            "batchPairs": ${{ needs.plan.outputs.batch_pairs }},
+            "batchEndPairExclusive": $(( ${{ needs.plan.outputs.start_index }} + ${{ needs.plan.outputs.batch_pairs }} )),
+            "authoritativeRollouts": $(( ${{ needs.plan.outputs.batch_pairs }} * 2 )),
+            "shards": ${{ needs.plan.outputs.shards }},
+            "maximumMs": ${{ needs.plan.outputs.maximum_ms }},
+            "method": "same actor, same seed, fixed short horizon, one isolated head",
+            "trainingAllowed": false,
+            "note": "Immediate semantic objectives are diagnostics only. No result from this workflow is a training label."
+          }
+          JSON
+
+      - name: Upload short-horizon evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: neural-v2-short-horizon-head-diagnostics
+          path: |
+            training/reports/v2-head-windows-aggregate.json
+            training/reports/v2-head-windows-manifest.json
+          if-no-files-found: warn
+          retention-days: 30
