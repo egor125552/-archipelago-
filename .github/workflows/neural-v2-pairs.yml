@@ -1,4 +1,4 @@
-name: Neural v2 paired discovery
+name: Neural v2 single-head discovery
 
 on:
   pull_request:
@@ -6,9 +6,10 @@ on:
       - main
     paths:
       - "src/free-roam-neural-v2-*.js"
+      - "src/free-roam-neural-control.js"
       - "src/free-roam-server.js"
-      - "training/generate_neural_v2_pairs.mjs"
-      - "training/merge_neural_v2_pairs.mjs"
+      - "training/generate_neural_v2_head_pairs.mjs"
+      - "training/merge_neural_v2_head_pairs.mjs"
       - "tests/free-roam-neural-v2*.test.mjs"
       - ".github/workflows/neural-v2-pairs.yml"
   workflow_dispatch:
@@ -22,7 +23,7 @@ on:
         required: true
         default: "0"
       batch_pairs:
-        description: Identical-seed baseline/v2 pairs in this batch
+        description: Identical-seed baseline/single-head pairs in this batch
         required: true
         default: "16384"
       shards:
@@ -34,7 +35,7 @@ on:
         required: true
         default: "60000"
       elite_per_group:
-        description: Positive pairs retained per threat/script/mode/actor-role group and shard
+        description: Positive pairs retained per scenario, role, head and tested value
         required: true
         default: "4"
 
@@ -42,7 +43,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: neural-v2-pairs-${{ github.ref }}
+  group: neural-v2-head-pairs-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -70,7 +71,7 @@ jobs:
           const manual = process.env.GITHUB_EVENT_NAME === "workflow_dispatch";
           const target = Math.max(1, Number(manual ? process.env.DISPATCH_TARGET : 256) || 256);
           const start = Math.max(0, Number(manual ? process.env.DISPATCH_START : 0) || 0);
-          const pairs = Math.max(8, Number(manual ? process.env.DISPATCH_PAIRS : 256) || 256);
+          const pairs = Math.max(10, Number(manual ? process.env.DISPATCH_PAIRS : 256) || 256);
           const shards = Math.max(1, Math.min(128, Number(manual ? process.env.DISPATCH_SHARDS : 8) || 8));
           const duration = Math.max(8000, Number(manual ? process.env.DISPATCH_DURATION : 45000) || 45000);
           const elites = Math.max(1, Math.min(16, Number(manual ? process.env.DISPATCH_ELITES : 2) || 2));
@@ -102,9 +103,9 @@ jobs:
       - name: Install project dependencies
         run: npm ci
 
-      - name: Run identical-seed authoritative v1 versus v2 pairs
+      - name: Run identical-seed v1 versus one isolated v2 head
         run: >-
-          node training/generate_neural_v2_pairs.mjs
+          node training/generate_neural_v2_head_pairs.mjs
           --battles=${{ needs.plan.outputs.batch_pairs }}
           --start-index=${{ needs.plan.outputs.start_index }}
           --shard=${{ matrix.shard }}
@@ -112,14 +113,14 @@ jobs:
           --duration-ms=${{ needs.plan.outputs.duration_ms }}
           --minimum-advantage=2.5
           --elite-per-group=${{ needs.plan.outputs.elite_per_group }}
-          --output=training/reports/v2-pairs/shard-${{ matrix.shard }}.json
+          --output=training/reports/v2-head-pairs/shard-${{ matrix.shard }}.json
 
-      - name: Upload v2 pair shard
+      - name: Upload isolated-head pair shard
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: neural-v2-pairs-shard-${{ matrix.shard }}
-          path: training/reports/v2-pairs/shard-${{ matrix.shard }}.json
+          name: neural-v2-head-pairs-shard-${{ matrix.shard }}
+          path: training/reports/v2-head-pairs/shard-${{ matrix.shard }}.json
           if-no-files-found: error
           retention-days: 14
 
@@ -139,28 +140,28 @@ jobs:
       - name: Reject an incomplete discovery matrix
         if: needs.discover.result != 'success'
         run: |
-          echo "At least one v2 pair shard failed. No aggregate may claim complete coverage."
+          echo "At least one isolated-head shard failed. No aggregate may claim complete coverage."
           exit 2
 
-      - name: Download all v2 pair shards
+      - name: Download all isolated-head shards
         uses: actions/download-artifact@v4
         with:
-          pattern: neural-v2-pairs-shard-*
-          path: training/reports/v2-pairs/input
+          pattern: neural-v2-head-pairs-shard-*
+          path: training/reports/v2-head-pairs/input
           merge-multiple: true
 
-      - name: Verify pair, rollout, feature and action integrity
+      - name: Verify pair, head-label and server-tick integrity
         run: >-
-          node training/merge_neural_v2_pairs.mjs
-          --input=training/reports/v2-pairs/input
+          node training/merge_neural_v2_head_pairs.mjs
+          --input=training/reports/v2-head-pairs/input
           --expected-pairs=${{ needs.plan.outputs.batch_pairs }}
           --expected-shards=${{ needs.plan.outputs.shards }}
           --expected-start-index=${{ needs.plan.outputs.start_index }}
-          --output=training/reports/v2-pairs-aggregate.json
+          --output=training/reports/v2-head-pairs-aggregate.json
 
       - name: Write truthful campaign manifest
         run: |
-          cat > training/reports/v2-pairs-campaign.json <<JSON
+          cat > training/reports/v2-head-pairs-campaign.json <<JSON
           {
             "campaignTargetPairs": ${{ needs.plan.outputs.campaign_target_pairs }},
             "batchStartPair": ${{ needs.plan.outputs.start_index }},
@@ -168,17 +169,18 @@ jobs:
             "batchEndPairExclusive": $(( ${{ needs.plan.outputs.start_index }} + ${{ needs.plan.outputs.batch_pairs }} )),
             "authoritativeRollouts": $(( ${{ needs.plan.outputs.batch_pairs }} * 2 )),
             "shards": ${{ needs.plan.outputs.shards }},
-            "note": "This artifact proves one discovery range only. It does not train a v2 model and must not be presented as the completed campaign target."
+            "method": "one isolated action head over unchanged v1 per explored rollout",
+            "note": "This artifact proves one causal discovery range only. It does not train a v2 model and must not be presented as the completed campaign target."
           }
           JSON
 
-      - name: Upload v2 discovery evidence
+      - name: Upload isolated-head discovery evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: neural-v2-paired-discovery
+          name: neural-v2-single-head-discovery
           path: |
-            training/reports/v2-pairs-aggregate.json
-            training/reports/v2-pairs-campaign.json
+            training/reports/v2-head-pairs-aggregate.json
+            training/reports/v2-head-pairs-campaign.json
           if-no-files-found: warn
           retention-days: 30
