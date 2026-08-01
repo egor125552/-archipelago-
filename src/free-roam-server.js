@@ -17,7 +17,7 @@ import {
   persistedWorldForServerRoom,
   serializeTrainingEpisode,
   setServerTrainingRecording,
-  startServerTrainingBattle,
+  startServerTrainingBattle as startServerTrainingBattleBase,
   trainingRuntimeStatus,
   updateTrainingRecorder,
 } from "./free-roam-training.js";
@@ -25,6 +25,7 @@ import {
 export const FREE_TICK_MS = 40;
 const MAX_ELAPSED_SECONDS = 0.2;
 const MAX_STEP_SECONDS = 0.05;
+const TRAINING_CREDIT_FLOOR = 180;
 const INPUT_KEYS = Object.freeze([
   "up", "down", "left", "right", "run", "pump", "repair", "action",
   "jump", "attack", "weapon", "sonar", "guide",
@@ -190,12 +191,18 @@ export function tickServerFreeRoom(serverRoom, now = Date.now()) {
   return snapshotServerFreeRoom(serverRoom, now, events);
 }
 
+export function startServerTrainingBattle(serverRoom, requestedLevel, record = true, now = Date.now()) {
+  const status = startServerTrainingBattleBase(serverRoom, requestedLevel, record, now);
+  const activities = serverRoom?.world?.freeActivities;
+  if (activities) activities.credits = Math.max(TRAINING_CREDIT_FLOOR, Number(activities.credits) || 0);
+  return status;
+}
+
 export {
   consumeCompletedTrainingEpisodes,
   finishServerTrainingBattle,
   persistedWorldForServerRoom,
   serializeTrainingEpisode,
   setServerTrainingRecording,
-  startServerTrainingBattle,
   trainingRuntimeStatus,
 };
