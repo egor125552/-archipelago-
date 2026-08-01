@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  previousActionFeatureState,
   selectEliteEpisodes,
   selfPlayScore,
 } from "../training/generate_neural_selfplay_dataset.mjs";
@@ -39,6 +40,16 @@ test("elite selection keeps the strongest episodes separately per threat level",
     {id: "d", level: 3, score: 7, seed: 4},
   ], 1);
   assert.deepEqual(selected.map(item => item.id), ["b", "d"]);
+});
+
+test("recurrent self-play features use the previous selected action", () => {
+  const previous = new Map();
+  assert.deepEqual(previousActionFeatureState(previous, "actor"), {movementIndex: 0, fire: false});
+  previous.set("actor", {movementIndex: 3, fire: true});
+  const captured = previousActionFeatureState(previous, "actor");
+  assert.deepEqual(captured, {movementIndex: 3, fire: true});
+  const currentLabel = {movementIndex: 1, fire: false};
+  assert.notDeepEqual(captured, currentLabel);
 });
 
 test("candidate gate rejects water regressions even when pressure increases", () => {
