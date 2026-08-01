@@ -36,6 +36,31 @@ const headingTo = (from, to) => Math.atan2(
   -((Number(to?.y) || 0) - (Number(from?.y) || 0)),
 ) * 180 / Math.PI;
 
+function v1RoleSpeed(actor) {
+  if (actor?.kind === "foot") return 7.4;
+  if (actor?.role === "heavy") return 11.5;
+  if (actor?.role === "rammer") return 18.5;
+  if (actor?.role === "interceptor") return 17;
+  if (actor?.role === "gunboat") return 13.5;
+  if (actor?.role === "landing") return 14;
+  if (actor?.role === "observer") return 12;
+  return 15;
+}
+
+function v1DesiredMotion(actor, targetPoint, decision) {
+  const entity = actor?.entity || actor || {};
+  const targetHeading = headingTo(entity, targetPoint);
+  const metres = distance(entity, targetPoint);
+  const maximum = v1RoleSpeed(actor);
+  const movement = String(decision?.movement || "hold");
+  if (movement === "hold") return {heading: Number(entity.heading) || targetHeading, speed: 0};
+  if (movement === "retreat") return {heading: wrapDeg(targetHeading + 180), speed: maximum * 0.92};
+  if (movement === "flank_left") return {heading: wrapDeg(targetHeading - 78), speed: maximum * 0.82};
+  if (movement === "flank_right") return {heading: wrapDeg(targetHeading + 78), speed: maximum * 0.82};
+  const closeScale = metres < 14 ? 0.25 : metres < 28 ? 0.58 : 1;
+  return {heading: targetHeading, speed: maximum * closeScale};
+}
+
 function blankHeadEffect() {
   return {
     frames: 0,
@@ -166,9 +191,10 @@ export function prepareServerNeuralV2Overrides(serverRoom) {
       runtime.diagnostics.missingTargetFrames += 1;
       continue;
     }
+    const baseDecision = neuralDecision(serverRoom, id);
     if (action.isolated && action.head === "fire" && actor.controlsFire !== false) {
       const effect = runtime.diagnostics.isolatedHeadEffects.fire;
-      const baseFire = Boolean(neuralDecision(serverRoom, id)?.fire);
+      const baseFire = Boolean(baseDecision?.fire);
       runtime.diagnostics.isolatedHeadFrames.fire += 1;
       effect.frames += 1;
       if (baseFire !== action.fire) effect.changedFrames += 1;
@@ -185,6 +211,7 @@ export function prepareServerNeuralV2Overrides(serverRoom) {
       actor,
       entity: actor.entity,
       action,
+      baseDecision,
       x: Number(actor.entity?.x) || 0,
       y: Number(actor.entity?.y) || 0,
       heading: Number(actor.entity?.heading) || 0,
@@ -197,20 +224,19 @@ export function prepareServerNeuralV2Overrides(serverRoom) {
   return frames;
 }
 
-function isolatedMotion(frame, entity, seconds) {
+function isolatedMotion(frame, seconds) {
   const action = frame.action;
   const head = action.head;
-  const baseHeading = Number(entity.heading) || frame.heading;
-  const baseSpeed = Number(entity.speed) || 0;
+  const v1Intent = v1DesiredMotion(frame.actor, frame.targetPoint, frame.baseDecision);
   const turnRate = frame.actor.kind === "foot" ? 280 : frame.actor.role === "heavy" ? 75 : 125;
   const acceleration = frame.actor.kind === "foot" ? 30 : frame.actor.role === "heavy" ? 8 : 16;
-  let desiredHeading = baseHeading;
-  let desiredSpeed = baseSpeed;
+  let desiredHeading = v1Intent.heading;
+  let desiredSpeed = v1Intent.speed;
 
   if (head === "throttle") {
     desiredSpeed = neuralV2RoleSpeed(frame.actor) * neuralV2ThrottleScale(action);
   } else if (head === "steering") {
-    desiredHeading = wrapDeg(baseHeading + neuralV2SteeringOffset(action));
+    desiredHeading = wrapDeg(v1Intent.heading + neuralV2SteeringOffset(action));
   } else if (head === "range") {
     const metres = distance(frame, frame.targetPoint);
     const preferred = neuralV2PreferredRange(action);
@@ -226,8 +252,8 @@ function isolatedMotion(frame, entity, seconds) {
   }
 
   return {
-    heading: wrapDeg(baseHeading + clamp(wrapDeg(desiredHeading - baseHeading), -turnRate * seconds, turnRate * seconds)),
-    speed: baseSpeed + clamp(desiredSpeed - baseSpeed, -acceleration * seconds, acceleration * seconds),
+    heading: wrapDeg(frame.heading + clamp(wrapDeg(desiredHeading - frame.heading), -turnRate * seconds, turnRate * seconds)),
+    speed: frame.speed + clamp(desiredSpeed - frame.speed, -acceleration * seconds, acceleration * seconds),
   };
 }
 
@@ -284,7 +310,7 @@ export function finishServerNeuralV2Overrides(serverRoom, frames, dt) {
     if (frame.action.isolated) {
       runtime.diagnostics.isolatedHeadFrames[frame.action.head] += frame.action.head === "fire" ? 0 : 1;
       if (frame.action.head !== "fire" && frame.actor.controlsMovement !== false) {
-        applyMotion(frame, isolatedMotion(frame, entity, seconds), seconds, runtime, frame.action.head);
+        applyMotion(frame, isolatedMotion(frame, seconds), seconds, runtime, frame.action.head);
       }
       controlled += 1;
       continue;
