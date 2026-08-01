@@ -1,0 +1,235 @@
+name: Build real mega-bomb audio
+
+on:
+  push:
+    branches:
+      - build/real-mega-bomb-audio-final
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    if: ${{ !contains(github.event.head_commit.message, 'Finish real mega-bomb audio') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: build/real-mega-bomb-audio-final
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Download matching original recordings and build real-only assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import array
+          import json
+          import math
+          import re
+          import subprocess
+          import wave
+          from pathlib import Path
+          from urllib.request import Request, urlopen
+
+          report = json.loads(Path("sounddino-bomb-audio-discovery.json").read_text())
+          expected = {
+              "drawn": 7.728,
+              "fragments": 1.593469,
+              "wentoff": 3.918367,
+              "bombdrop": 11.964082,
+          }
+
+          def probe_duration(record):
+              try:
+                  payload = json.loads(record.get("ffprobe") or "{}")
+                  return float(payload["format"]["duration"])
+              except Exception:
+                  return None
+
+          records = []
+          for record in report.get("candidates", []):
+              duration = probe_duration(record)
+              if record.get("looks_like_audio") and duration is not None:
+                  records.append((duration, record["url"]))
+          if len(records) < 4:
+              raise SystemExit(f"Expected at least four verified audio candidates, got {records!r}")
+
+          selected = {}
+          used = set()
+          for name, wanted in expected.items():
+              choices = sorted((abs(duration - wanted), duration, url) for duration, url in records if url not in used)
+              error, duration, url = choices[0]
+              if error > 0.16:
+                  raise SystemExit(f"No duration match for {name}: wanted {wanted}, closest {duration} {url}")
+              selected[name] = (duration, url)
+              used.add(url)
+
+          source_dir = Path("/tmp/mega-bomb-sources")
+          source_dir.mkdir(parents=True, exist_ok=True)
+          for name, (_, url) in selected.items():
+              request = Request(url, headers={"User-Agent": "Mozilla/5.0 GitHub-Actions audio builder"})
+              with urlopen(request, timeout=60) as response:
+                  body = response.read()
+              path = source_dir / f"{name}.mp3"
+              path.write_bytes(body)
+              probe = subprocess.run(
+                  ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", str(path)],
+                  text=True, capture_output=True, check=True,
+              )
+              actual = float(probe.stdout.strip())
+              if abs(actual - expected[name]) > 0.16:
+                  raise SystemExit(f"Downloaded {name} duration changed: {actual}")
+
+          sample_rate = 48_000
+          def decode(name):
+              raw = subprocess.check_output([
+                  "ffmpeg", "-v", "error", "-i", str(source_dir / f"{name}.mp3"),
+                  "-ac", "1", "-ar", str(sample_rate), "-f", "f32le", "-",
+              ])
+              values = array.array("f")
+              values.frombytes(raw)
+              return list(values)
+
+          def rms_peak(samples, minimum_seconds):
+              window = int(sample_rate * 0.025)
+              hop = int(sample_rate * 0.005)
+              start = max(0, int(minimum_seconds * sample_rate))
+              best_index = start
+              best_energy = -1.0
+              stop = max(start + 1, len(samples) - window)
+              for index in range(start, stop, hop):
+                  chunk = samples[index:index + window]
+                  energy = sum(value * value for value in chunk) / max(1, len(chunk))
+                  if energy > best_energy:
+                      best_energy = energy
+                      best_index = index
+              return best_index
+
+          def normalise(samples, target=0.92):
+              peak = max((abs(value) for value in samples), default=1.0)
+              scale = target / max(peak, 1e-6)
+              return [value * scale for value in samples]
+
+          def extract(samples, centre, duration=2.95, pre=0.055):
+              length = int(duration * sample_rate)
+              start = max(0, centre - int(pre * sample_rate))
+              segment = samples[start:start + length]
+              if len(segment) < length:
+                  segment += [0.0] * (length - len(segment))
+              return normalise(segment)
+
+          decoded = {name: decode(name) for name in expected}
+
+          flight_length = int(1.78 * sample_rate)
+          flight = normalise(decoded["drawn"][:flight_length], 0.88)
+          fade_in = int(0.025 * sample_rate)
+          fade_out = int(0.18 * sample_rate)
+          for index in range(min(fade_in, len(flight))):
+              flight[index] *= index / max(1, fade_in)
+          for offset in range(min(fade_out, len(flight))):
+              flight[-1 - offset] *= offset / max(1, fade_out)
+
+          centres = {
+              "drawn": rms_peak(decoded["drawn"], 1.15),
+              "fragments": rms_peak(decoded["fragments"], 0.0),
+              "wentoff": rms_peak(decoded["wentoff"], 0.0),
+              "bombdrop": rms_peak(decoded["bombdrop"], 1.0),
+          }
+          layers = {name: extract(decoded[name], centres[name]) for name in centres}
+          weights = {"drawn": 0.50, "bombdrop": 0.43, "wentoff": 0.34, "fragments": 0.24}
+          explosion = []
+          length = max(len(layer) for layer in layers.values())
+          for index in range(length):
+              mixed = sum(layers[name][index] * weights[name] for name in layers)
+              explosion.append(math.tanh(mixed * 1.18) / math.tanh(1.18))
+          fade = int(0.48 * sample_rate)
+          for offset in range(min(fade, len(explosion))):
+              explosion[-1 - offset] *= offset / max(1, fade)
+          explosion = normalise(explosion, 0.94)
+
+          def write_wav(path, samples):
+              pcm = array.array("h", (max(-32768, min(32767, round(value * 32767))) for value in samples))
+              with wave.open(str(path), "wb") as output:
+                  output.setnchannels(1)
+                  output.setsampwidth(2)
+                  output.setframerate(sample_rate)
+                  output.writeframes(pcm.tobytes())
+
+          output_dir = Path("public/audio/mega-bomb-real-v2")
+          output_dir.mkdir(parents=True, exist_ok=True)
+          write_wav("/tmp/flight.wav", flight)
+          write_wav("/tmp/explosion.wav", explosion)
+          subprocess.run([
+              "ffmpeg", "-y", "-v", "error", "-i", "/tmp/flight.wav",
+              "-ac", "1", "-ar", str(sample_rate), "-b:a", "128k", str(output_dir / "flight.mp3"),
+          ], check=True)
+          subprocess.run([
+              "ffmpeg", "-y", "-v", "error", "-i", "/tmp/explosion.wav",
+              "-ac", "1", "-ar", str(sample_rate), "-b:a", "128k", str(output_dir / "explosion.mp3"),
+          ], check=True)
+
+          for path in [output_dir / "flight.mp3", output_dir / "explosion.mp3"]:
+              probe = subprocess.run([
+                  "ffprobe", "-v", "error", "-show_entries", "format=duration,bit_rate,size",
+                  "-of", "default=nw=1", str(path),
+              ], text=True, capture_output=True, check=True)
+              print(path, probe.stdout)
+          Path("real-mega-bomb-source-selection.json").write_text(json.dumps(selected, ensure_ascii=False, indent=2))
+          PY
+      - name: Patch ammo, listener geometry and cache versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new, count=1):
+              file = Path(path)
+              text = file.read_text()
+              actual = text.count(old)
+              if actual != count:
+                  raise SystemExit(f"{path}: expected {count}, found {actual}: {old[:90]!r}")
+              file.write_text(text.replace(old, new))
+
+          server = "src/free-roam-mega-bomb.js"
+          replace(server, "export const MEGA_BOMB_START_AMMO = 10;", "export const MEGA_BOMB_START_AMMO = 50;\nconst AMMO_VERSION = 2;")
+          replace(server, "if (!listener || world.freeActivities?.presence?.[index] === false) return {pan: 0, gain: 0, distance: 999};", "if (!listener || world.freeActivities?.presence?.[index] === false) return {pan: 0, gain: 0, distance: 999, listenerX: null, listenerY: null, listenerHeading: 0};")
+          replace(server, "return {pan: clamp(Math.sin(relative * Math.PI / 180), -1, 1), gain: clamp(1 - metres / 280, 0.035, 1), distance: Math.round(metres * 10) / 10};", "return {pan: clamp(Math.sin(relative * Math.PI / 180), -1, 1), gain: clamp(1 - metres / 280, 0.035, 1), distance: Math.round(metres * 10) / 10, listenerX: Number(listener.x) || 0, listenerY: Number(listener.y) || 0, listenerHeading: Number(listener.heading) || 0};")
+          replace(server, "world.freeMegaBombs ||= {projectiles: [], nextId: 1};", "world.freeMegaBombs ||= {projectiles: [], nextId: 1, ammoVersion: AMMO_VERSION};")
+          replace(server, "if (!Number.isFinite(Number(state.nextId))) state.nextId = 1;", "if (!Number.isFinite(Number(state.nextId))) state.nextId = 1;\n  const upgradeTestAmmo = Number(state.ammoVersion) < AMMO_VERSION;")
+          replace(server, "if (!Number.isFinite(Number(player.combat.megaBombAmmo))) player.combat.megaBombAmmo = MEGA_BOMB_START_AMMO;", "const ammo = Number(player.combat.megaBombAmmo);\n    if (!Number.isFinite(ammo) || (upgradeTestAmmo && ammo <= 10)) player.combat.megaBombAmmo = MEGA_BOMB_START_AMMO;")
+          replace(server, "  return state;\n}", "  state.ammoVersion = AMMO_VERSION;\n  return state;\n}", 1)
+
+          client = "public/src/free-roam-mega-bomb-client.js"
+          replace(client, "x: Number(spatial.listenerX),", "x: spatial.listenerX == null ? null : Number(spatial.listenerX),")
+          replace(client, "y: Number(spatial.listenerY),", "y: spatial.listenerY == null ? null : Number(spatial.listenerY),")
+          replace(client, "listenerX: Number(value.listenerX),", "listenerX: value.listenerX == null ? null : Number(value.listenerX),")
+          replace(client, "listenerY: Number(value.listenerY),", "listenerY: value.listenerY == null ? null : Number(value.listenerY),")
+
+          replace("public/src/free-roam-startup-v1.js", 'import("./free-roam-mega-bomb-client.js?v=2")', 'import("./free-roam-mega-bomb-client.js?v=3")')
+          for path in ["public/free-roam.html", "tests/free-roam-release-regressions.test.mjs", "tests/free-roam-target-reconnect-v154.test.mjs"]:
+              replace(path, "free-roam-startup-v1.js?v=8", "free-roam-startup-v1.js?v=9")
+          PY
+      - name: Verify game and generated assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm test
+          grep -q 'MEGA_BOMB_START_AMMO = 50' src/free-roam-mega-bomb.js
+          ! grep -Eq 'createOscillator|Math\.random|createConvolver|createDelay' public/src/free-roam-mega-bomb-client.js
+          ffprobe -v error public/audio/mega-bomb-real-v2/flight.mp3
+          ffprobe -v error public/audio/mega-bomb-real-v2/explosion.mp3
+      - name: Commit finished real audio
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/build-real-mega-bomb-audio.yml
+          rm -f sounddino-bomb-audio-discovery.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Finish real mega-bomb audio"
+          git push origin HEAD:build/real-mega-bomb-audio-final
