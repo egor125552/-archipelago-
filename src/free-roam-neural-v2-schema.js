@@ -129,7 +129,8 @@ export function normalizeNeuralV2Action(raw = {}) {
   });
 }
 
-export function neuralV2ActionFeatureState(raw = {}) {
+export function neuralV2ActionFeatureState(raw = null) {
+  if (!raw || typeof raw !== "object" || Object.keys(raw).length === 0) return [0, 0, 0, 0, 0];
   const action = normalizeNeuralV2Action(raw);
   return [
     action.throttleIndex / Math.max(1, NEURAL_V2_THROTTLE_CLASSES.length - 1),
