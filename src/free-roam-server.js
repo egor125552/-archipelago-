@@ -11,9 +11,11 @@ import {applyCombatDamage} from "../public/src/free-roam-combat-v2.js?v=5";
 import {applyCombatAiHotfixV163} from "../public/src/free-roam-combat-ai-hotfix-v163.js?v=1";
 import {replicatedFreeWorld} from "../public/src/free-roam-replication.js";
 import {reserveUnconnectedBoats} from "../public/src/free-roam-reserve-boats.js";
+import {finishServerNeuralControl, prepareServerNeuralControl} from "./free-roam-neural-control.js";
 import {
   clearServerNeuralShadow,
   neuralShadowStatus,
+  setServerNeuralControlForTest,
   updateServerNeuralShadow,
 } from "./free-roam-neural-shadow.js";
 import {
@@ -151,22 +153,20 @@ export function applyServerFreeInput(serverRoom, role, input, rawSequence) {
   serverRoom.receivedInputs[playerIndex] = normalized;
 
   setPlayerPresence(serverRoom.world, playerIndex, true);
-  // Continuous controls apply immediately. One-shot commands are held in a
-  // server-side latch until an authoritative tick consumes them, so a quick
-  // true/false pair cannot disappear during Worker cold start or event-loop load.
   setPlayerInput(serverRoom.world, playerIndex, withoutPulseInputs(normalized));
   return true;
 }
 
-function stepInChunks(world, elapsedSeconds) {
+function stepInChunks(serverRoom, elapsedSeconds) {
+  const world = serverRoom.world;
   let remaining = Math.min(MAX_ELAPSED_SECONDS, Math.max(0, Number(elapsedSeconds) || 0));
   while (remaining > 0.0001) {
     const chunk = Math.min(MAX_STEP_SECONDS, remaining);
-    // The first pass snapshots roof exposure before projectiles move. The
-    // second pass reacts to the authoritative results of this exact tick.
     applyAuthoritativeCombatHotfix(world, 0);
+    const neuralFrames = prepareServerNeuralControl(serverRoom);
     stepFreeWorld(world, chunk);
     applyAuthoritativeCombatHotfix(world, chunk);
+    finishServerNeuralControl(serverRoom, neuralFrames, chunk);
     remaining -= chunk;
   }
 }
@@ -186,35 +186,48 @@ export function tickServerFreeRoom(serverRoom, now = Date.now()) {
   if (!serverRoom?.world) return null;
   const elapsedSeconds = Math.max(0, (now - serverRoom.lastTickAt) / 1_000);
   serverRoom.lastTickAt = now;
+  updateServerNeuralShadow(serverRoom, now);
   if (elapsedSeconds > 0.0001) {
     deliverPendingPulses(serverRoom);
-    stepInChunks(serverRoom.world, elapsedSeconds);
+    stepInChunks(serverRoom, elapsedSeconds);
     clearDeliveredPulses(serverRoom);
   }
   const events = drainEvents(serverRoom.world);
   updateTrainingRecorder(serverRoom, now, events);
-  updateServerNeuralShadow(serverRoom, now);
   return snapshotServerFreeRoom(serverRoom, now, events);
 }
 
 export function startServerTrainingBattle(serverRoom, requestedLevel, record = true, now = Date.now()) {
+  const request = requestedLevel && typeof requestedLevel === "object"
+    ? requestedLevel
+    : {level: requestedLevel, neuralOnly: false};
+  const level = request.level;
+  const neuralOnly = request.neuralOnly === true;
+
   clearServerNeuralShadow(serverRoom);
-  const status = startServerTrainingBattleBase(serverRoom, requestedLevel, record, now);
+  startServerTrainingBattleBase(serverRoom, level, record, now);
   const activities = serverRoom?.world?.freeActivities;
   if (activities) activities.credits = Math.max(TRAINING_CREDIT_FLOOR, Number(activities.credits) || 0);
-  return status;
+  if (neuralOnly) {
+    setServerNeuralControlForTest(serverRoom, true);
+    updateServerNeuralShadow(serverRoom, now);
+  }
+  return trainingRuntimeStatus(serverRoom);
 }
 
 export function finishServerTrainingBattle(serverRoom, outcome = "manual", options = {}) {
-  const status = finishServerTrainingBattleBase(serverRoom, outcome, options);
+  finishServerTrainingBattleBase(serverRoom, outcome, options);
   clearServerNeuralShadow(serverRoom);
-  return status;
+  return trainingRuntimeStatus(serverRoom);
 }
 
 export function trainingRuntimeStatus(serverRoom) {
+  const base = trainingRuntimeStatusBase(serverRoom);
+  const neuralShadow = neuralShadowStatus(serverRoom);
   return {
-    ...trainingRuntimeStatusBase(serverRoom),
-    neuralShadow: neuralShadowStatus(serverRoom),
+    ...base,
+    neuralOnly: Boolean(base.trainingActive && neuralShadow.controlEnabled),
+    neuralShadow,
   };
 }
 
@@ -222,5 +235,6 @@ export {
   consumeCompletedTrainingEpisodes,
   persistedWorldForServerRoom,
   serializeTrainingEpisode,
+  setServerNeuralControlForTest,
   setServerTrainingRecording,
 };
