@@ -13,32 +13,46 @@ function pressure(result) {
     + (Number(state.boatWater) || 0) * 0.35;
 }
 
+function addGroup(groups, key, result, value) {
+  groups[key] ||= {battles: 0, victories: 0, timeouts: 0, teamWipes: 0, pressure: 0};
+  const group = groups[key];
+  group.battles += 1;
+  if (result.outcome === "victory") group.victories += 1;
+  if (result.outcome === "timeout") group.timeouts += 1;
+  if (result.outcome === "team-wipe") group.teamWipes += 1;
+  group.pressure += value;
+}
+
+function finishGroups(groups) {
+  for (const group of Object.values(groups)) group.meanPressure = group.battles ? group.pressure / group.battles : 0;
+  return groups;
+}
+
 function metrics(report) {
   const results = report?.results || [];
   const byLevel = {};
+  const byScenario = {};
   let pressureTotal = 0;
   let stationaryTotal = 0;
   let invalidWaterTotal = 0;
   let mechanicalFailures = 0;
   for (const result of results) {
     const level = Number(result.level) || 0;
-    byLevel[level] ||= {battles: 0, victories: 0, timeouts: 0, teamWipes: 0, pressure: 0};
-    const group = byLevel[level];
-    group.battles += 1;
-    if (result.outcome === "victory") group.victories += 1;
-    if (result.outcome === "timeout") group.timeouts += 1;
-    if (result.outcome === "team-wipe") group.teamWipes += 1;
     const value = pressure(result);
-    group.pressure += value;
+    addGroup(byLevel, String(level), result, value);
+    const scenarioKey = `${level}:${result.script || "unknown"}:${result.coop ? "coop" : "solo"}`;
+    addGroup(byScenario, scenarioKey, result, value);
     pressureTotal += value;
     stationaryTotal += Number(result.metrics?.stationaryRatio) || 0;
     invalidWaterTotal += Number(result.metrics?.invalidWaterRatio) || 0;
     if (result.mechanicalFailures?.length) mechanicalFailures += 1;
   }
-  for (const group of Object.values(byLevel)) group.meanPressure = group.battles ? group.pressure / group.battles : 0;
+  finishGroups(byLevel);
+  finishGroups(byScenario);
   return {
     battles: results.length,
     byLevel,
+    byScenario,
     mechanicalFailures,
     meanPressure: results.length ? pressureTotal / results.length : 0,
     meanStationaryRatio: results.length ? stationaryTotal / results.length : 0,
@@ -67,6 +81,19 @@ export function compareCandidate(baseReport, candidateReport) {
     const beforeWipeRate = before.teamWipes / before.battles;
     const afterWipeRate = after.teamWipes / after.battles;
     if (afterWipeRate > beforeWipeRate + 0.16) failures.push(`lower-threat-overlethal-${level}`);
+  }
+
+  for (const [key, before] of Object.entries(base.byScenario)) {
+    const after = candidate.byScenario[key];
+    if (!after || after.battles !== before.battles) {
+      failures.push(`scenario-missing-${key}`);
+      continue;
+    }
+    if (after.timeouts > before.timeouts) failures.push(`scenario-timeouts-increased-${key}`);
+    const pressureDrop = before.meanPressure - after.meanPressure;
+    if (before.meanPressure >= 4 && pressureDrop >= 3 && after.meanPressure < before.meanPressure * 0.75) {
+      failures.push(`scenario-pressure-regressed-${key}`);
+    }
   }
 
   const levelFiveBefore = base.byLevel[5];
@@ -98,8 +125,8 @@ export function compareCandidate(baseReport, candidateReport) {
     candidate,
     critique: [
       "Passing this gate does not enable the model in ordinary play; it requires a measurable held-out improvement while respecting mechanics and fairness limits.",
+      "Aggregate gains cannot hide a large pressure loss in one threat/script/solo-or-co-op scenario.",
       "The same scripted-player family is used for generation and evaluation, although held-out seeds are separate, so strategic overfitting remains possible.",
-      "Mean pressure can hide uneven difficulty. Lower threat levels therefore have a separate over-lethality rejection rule.",
       "Human battles and a room archive remain necessary before any final promotion decision.",
     ],
   };
