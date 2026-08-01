@@ -33,10 +33,22 @@ A test-only authoritative server override translates a selected five-head action
 - Boolean `fire: true` was initially converted to hold fire because it passed through string-class lookup. Fixed and tested.
 - `safe_water` was initially replaced implicitly by `shore_gate` for a land target. Fixed so route heads are executed literally.
 - Override diagnostics were initially deleted when a macro ended. Action removal now preserves diagnostics until scoring.
-- The final recorded macro sample was initially removed before the following authoritative tick. Removal now happens after that tick.
-- Water clamps were recorded as `waterClampFrames` but the shared score expected `waterGuardInterventions`. v2 now exposes the compatible alias so clamps reduce the score.
+- The final recorded macro sample was initially removed before the following authoritative tick. Removal now happens after that tick and the before/after controlled-frame counters are stored.
+- Water clamps were recorded as `waterClampFrames` but the shared score expected `waterGuardInterventions`. v2 now exposes the compatible counter so clamps reduce the score.
 - Missing previous-action history initially looked like the default `cruise/straight/medium/safe_water` action. Missing history now encodes as five zeros and has dedicated tests.
+- Metadata-only history such as `{source: "no-action"}` also initially triggered the default manoeuvre. Only actual action-head fields now establish previous history.
 - The discovery generator initially passed the current v2 action into the previous-action slots. Current labels are now excluded from their own inputs.
+
+## Rejected first v2 discovery artifact
+
+The first completed discovery workflow reported 256 identical-seed pairs and 512 authoritative rollouts, with two pairs above the 2.5-point advantage threshold. That artifact is **rejected and must never be used for training**.
+
+The numerical pair and shard counts were real, but semantic inspection found two invalid properties:
+
+- every retained sample encoded the fake default previous action instead of absent history;
+- explored override diagnostics were empty, so water clamps did not receive the intended score penalty.
+
+The two apparent positive pairs therefore do not establish useful v2 behaviour. The shard format has been advanced from `echo-neural-v2-pairs-v1` to `echo-neural-v2-pairs-v2`; the aggregate now rejects the obsolete format and requires semantic integrity summaries from every shard.
 
 ## What remains heuristic or weak
 
@@ -56,9 +68,12 @@ A discovery batch is valid only when:
 - completed pair counts match the exact indexed range;
 - authoritative rollout count is exactly twice the pair count;
 - baseline and explored outcome totals each equal the local pair count;
+- every pair has finite override diagnostics, including the water-guard counter used by scoring;
+- all recorded previous-action feature slots are zero in this one-macro discovery format;
+- every fully completed intervention proves that controlled frames increased after its last recorded sample;
 - every retained sample has exactly 53 finite features;
 - every retained action has five in-range head indices;
-- water and route interventions survive action removal and affect scoring;
+- the obsolete `echo-neural-v2-pairs-v1` format is rejected;
 - zero positive pairs is accepted as a truthful result instead of lowering the advantage threshold.
 
 A pull-request batch uses 256 identical-seed pairs, which means 512 authoritative server rollouts. The manual workflow can cover larger indexed ranges, but each artifact proves only its own range. A declared target of one million pairs is not a completed million-pair campaign.
