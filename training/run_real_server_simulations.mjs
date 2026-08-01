@@ -12,10 +12,11 @@ import {
 import {collectNeuralActors} from "../src/free-roam-neural-shadow.js";
 
 export const STEP_MS = 40;
-export const DEFAULT_DURATION_MS = 24_000;
+export const DEFAULT_WINDOW_DURATION_MS = 12_000;
+export const DEFAULT_EPISODE_DURATION_MS = 90_000;
 export const DEFAULT_BATTLES = 256;
 export const PLAYER_SCRIPTS = Object.freeze([
-  "idle",
+  "idle-fire",
   "water-zigzag",
   "water-escape",
   "aggressive",
@@ -33,6 +34,10 @@ function integerArgument(name, fallback) {
 function stringArgument(name, fallback) {
   const prefix = `--${name}=`;
   return process.argv.find(value => value.startsWith(prefix))?.slice(prefix.length) || fallback;
+}
+
+function normalizeProfile(value) {
+  return String(value || "episode").toLowerCase() === "window" ? "window" : "episode";
 }
 
 export function seededRandom(seed) {
@@ -70,10 +75,13 @@ function nearestEnemyId(server, playerIndex) {
     : player;
   if (!point) return null;
   const candidates = collectNeuralActors(server.world)
-    .filter(actor => actor.controlsMovement !== false && actor.entity?.active !== false && !actor.entity?.destroyed)
+    .filter(actor => actor.entity?.active !== false && !actor.entity?.destroyed)
     .map(actor => ({
       id: actor.id,
-      distance: Math.hypot((Number(actor.entity?.x) || 0) - (Number(point.x) || 0), (Number(actor.entity?.y) || 0) - (Number(point.y) || 0)),
+      distance: Math.hypot(
+        (Number(actor.entity?.x) || 0) - (Number(point.x) || 0),
+        (Number(actor.entity?.y) || 0) - (Number(point.y) || 0),
+      ),
     }))
     .sort((left, right) => left.distance - right.distance);
   return candidates[0]?.id || null;
@@ -84,14 +92,16 @@ function scriptedInput(script, elapsed, server, playerIndex) {
   const player = server.world.players?.[playerIndex];
   const cycle = Math.floor(elapsed / 1800) % 4;
   const targetId = nearestEnemyId(server, playerIndex);
+  const canAttack = Boolean(targetId) && player?.combat?.alive !== false;
   const input = {
     targetId,
     navigationTargetId: "objective",
     pump: Number(boat?.water) >= 12,
     repair: Number(boat?.leak) >= 1.1 && Math.abs(Number(boat?.speed) || 0) <= 3,
+    attack: canAttack,
   };
 
-  if (script === "idle") return input;
+  if (script === "idle-fire") return input;
   if (script === "water-zigzag") {
     return {...input, up: true, left: cycle < 2, right: cycle >= 2};
   }
@@ -103,17 +113,11 @@ function scriptedInput(script, elapsed, server, playerIndex) {
       up: true,
       left: cycle === 0 || cycle === 3,
       right: cycle === 1 || cycle === 2,
-      attack: health > 35 && hull > 35 && Boolean(targetId),
+      attack: canAttack && health > 25 && hull > 25,
     };
   }
   if (script === "aggressive") {
-    return {
-      ...input,
-      up: true,
-      left: cycle === 1,
-      right: cycle === 3,
-      attack: Boolean(targetId),
-    };
+    return {...input, up: true, left: cycle === 1, right: cycle === 3};
   }
   if (script === "shoreline") {
     const y = Number(boat?.y) || 160;
@@ -123,7 +127,6 @@ function scriptedInput(script, elapsed, server, playerIndex) {
       down: y < 84,
       left: cycle === 0,
       right: cycle === 2,
-      attack: Boolean(targetId),
     };
   }
   if (script === "damage-control") {
@@ -134,7 +137,7 @@ function scriptedInput(script, elapsed, server, playerIndex) {
       down: damaged && Math.abs(Number(boat?.speed) || 0) > 1,
       left: !damaged && cycle < 2,
       right: !damaged && cycle >= 2,
-      attack: !damaged && Boolean(targetId),
+      attack: !damaged && canAttack,
       pump: Number(boat?.water) >= 5,
       repair: Number(boat?.leak) >= 0.6 && Math.abs(Number(boat?.speed) || 0) <= 3,
     };
@@ -159,6 +162,17 @@ function invalidWaterActors(world) {
     .map(actor => actor.id);
 }
 
+function presentPlayerIndices(world) {
+  return (world.players || [])
+    .map((_player, index) => index)
+    .filter(index => Boolean(world.freeActivities?.presence?.[index]));
+}
+
+function allPresentPlayersDown(world) {
+  const indices = presentPlayerIndices(world);
+  return indices.length > 0 && indices.every(index => world.players?.[index]?.combat?.alive === false);
+}
+
 function countEvent(metrics, event) {
   const type = String(event?.type || "");
   metrics.events[type] = (metrics.events[type] || 0) + 1;
@@ -166,17 +180,19 @@ function countEvent(metrics, event) {
   if (type === "heavy-gun-shot") metrics.heavyTurretShots += 1;
   if (type === "heavy-bullet-boat-hit" || type === "gun-hit") metrics.enemyHits += 1;
   if (type.includes("death") || type.includes("dead")) metrics.deathEvents += 1;
-  if (type.includes("victory") || type === "threat-defeated") metrics.victoryEvents += 1;
+  if (type === "contract-threat-cleared") metrics.victoryEvents += 1;
 }
 
 export async function simulateAuthoritativeBattle({
   battleIndex = 0,
   seed = 125_552,
-  durationMs = DEFAULT_DURATION_MS,
+  durationMs = DEFAULT_EPISODE_DURATION_MS,
   level = 2,
   script = "water-zigzag",
   coop = false,
+  profile = "episode",
 } = {}) {
+  const normalizedProfile = normalizeProfile(profile);
   return withSeed(seed, async () => {
     const startedAt = 1_000_000 + battleIndex * (durationMs + 10_000);
     const server = createServerFreeRoom(startedAt);
@@ -203,8 +219,11 @@ export async function simulateAuthoritativeBattle({
     let previousPositions = activeActorPositions(server.world);
     let captainSequence = 1;
     let crewSequence = 1;
+    let elapsedMs = 0;
+    let outcome = normalizedProfile === "window" ? "window-complete" : "timeout";
 
     for (let elapsed = STEP_MS; elapsed <= durationMs; elapsed += STEP_MS) {
+      elapsedMs = elapsed;
       applyServerFreeInput(server, "captain", scriptedInput(script, elapsed, server, 0), captainSequence++);
       if (coop) {
         const crewScript = PLAYER_SCRIPTS[(PLAYER_SCRIPTS.indexOf(script) + 2) % PLAYER_SCRIPTS.length];
@@ -239,6 +258,18 @@ export async function simulateAuthoritativeBattle({
         metrics.heavyActiveSamples += 1;
         if (!heavy.turretDisabled && Number(heavy.turretHealth) > 0) metrics.heavyTurretReadySamples += 1;
       }
+
+      if (normalizedProfile === "episode") {
+        if ((state.events || []).some(event => event?.type === "contract-threat-cleared")
+          || (!server.world.freeThreatDirector?.active && server.world.freeThreatDirector?.cleared)) {
+          outcome = "victory";
+          break;
+        }
+        if (allPresentPlayersDown(server.world)) {
+          outcome = "team-wipe";
+          break;
+        }
+      }
     }
 
     const player = server.world.players?.[0];
@@ -249,6 +280,16 @@ export async function simulateAuthoritativeBattle({
       && metrics.heavyTurretReadySamples >= 20
       && metrics.heavyTurretWindups === 0
       && metrics.heavyTurretShots === 0;
+    const mechanicalFailures = [
+      ...(metrics.neuralControlMissingSamples ? ["neural-control-missing"] : []),
+      ...(metrics.invalidWaterSamples ? ["water-boundary-violation"] : []),
+      ...(stationaryRatio > 0.82 ? ["neural-actors-mostly-stationary"] : []),
+      ...(heavyTurretFailed ? ["heavy-turret-never-activated"] : []),
+    ];
+    const qualityFindings = [
+      ...(normalizedProfile === "episode" && outcome === "timeout" ? ["episode-timeout"] : []),
+      ...(normalizedProfile === "episode" && outcome === "team-wipe" ? ["team-wipe"] : []),
+    ];
 
     return {
       battleIndex,
@@ -256,7 +297,10 @@ export async function simulateAuthoritativeBattle({
       level,
       script,
       coop,
+      profile: normalizedProfile,
       durationMs,
+      elapsedMs,
+      outcome,
       ticks: metrics.ticks,
       result: {
         playerHealth: Number(player?.combat?.health) || 0,
@@ -273,99 +317,127 @@ export async function simulateAuthoritativeBattle({
         invalidWaterRatio,
         heavyTurretFailed,
       },
-      failedChecks: [
-        ...(metrics.neuralControlMissingSamples ? ["neural-control-missing"] : []),
-        ...(metrics.invalidWaterSamples ? ["water-boundary-violation"] : []),
-        ...(stationaryRatio > 0.82 ? ["neural-actors-mostly-stationary"] : []),
-        ...(heavyTurretFailed ? ["heavy-turret-never-activated"] : []),
-      ],
+      mechanicalFailures,
+      qualityFindings,
+      failedChecks: [...mechanicalFailures, ...qualityFindings],
     };
   });
 }
 
 export function summarizeBattles(results, requestedBattles = results.length) {
   const byFailure = {};
+  const byQualityFinding = {};
+  const byOutcome = {};
   const byLevel = {};
   const byScript = {};
   let heavyLevelFiveBattles = 0;
   let heavyTurretFailedBattles = 0;
   let totalStationaryRatio = 0;
   let totalInvalidWaterRatio = 0;
+  let totalElapsedMs = 0;
   for (const result of results) {
-    byLevel[result.level] ||= {battles: 0, failed: 0};
-    byScript[result.script] ||= {battles: 0, failed: 0};
+    byLevel[result.level] ||= {battles: 0, mechanicalFailed: 0, victories: 0, timeouts: 0, teamWipes: 0};
+    byScript[result.script] ||= {battles: 0, mechanicalFailed: 0, victories: 0, timeouts: 0, teamWipes: 0};
     byLevel[result.level].battles += 1;
     byScript[result.script].battles += 1;
-    if (result.failedChecks.length) {
-      byLevel[result.level].failed += 1;
-      byScript[result.script].failed += 1;
+    const suffix = result.outcome === "victory" ? "victories" : result.outcome === "timeout" ? "timeouts" : result.outcome === "team-wipe" ? "teamWipes" : null;
+    if (suffix) {
+      byLevel[result.level][suffix] += 1;
+      byScript[result.script][suffix] += 1;
     }
-    for (const failure of result.failedChecks) byFailure[failure] = (byFailure[failure] || 0) + 1;
+    if (result.mechanicalFailures?.length) {
+      byLevel[result.level].mechanicalFailed += 1;
+      byScript[result.script].mechanicalFailed += 1;
+    }
+    for (const failure of result.mechanicalFailures || []) byFailure[failure] = (byFailure[failure] || 0) + 1;
+    for (const finding of result.qualityFindings || []) byQualityFinding[finding] = (byQualityFinding[finding] || 0) + 1;
+    byOutcome[result.outcome] = (byOutcome[result.outcome] || 0) + 1;
     if (result.level === 5) {
       heavyLevelFiveBattles += 1;
       if (result.metrics.heavyTurretFailed) heavyTurretFailedBattles += 1;
     }
     totalStationaryRatio += result.metrics.stationaryRatio;
     totalInvalidWaterRatio += result.metrics.invalidWaterRatio;
+    totalElapsedMs += Number(result.elapsedMs) || 0;
   }
   const completedBattles = results.length;
+  const mechanicalFailedBattles = results.filter(result => result.mechanicalFailures?.length).length;
   const critique = [
-    "These battles execute the authoritative server tick and production threat entry point, but they do not include WebSocket latency, Durable Object restarts or browser audio timing.",
+    "These episodes execute the authoritative server tick and production threat entry point, but they do not include WebSocket latency, Durable Object restarts or browser audio timing.",
     "The players are deterministic scripts rather than humans, so the distribution can expose mechanical failures but cannot prove that combat feels intelligent or fair.",
     "A water safety filter can prevent illegal movement while still hiding a weak neural policy; guardrail interventions must be counted separately from policy quality.",
     "The current generated model was validated on only 1,472 frames. Evaluation at large scale does not itself retrain that model or create new weights.",
-    "A million-battle request is a distributed compute target. The report must distinguish requested battles from battles actually completed and must never imply unfinished shards were run.",
+    "Short combat windows and full episodes are different evidence. Window completion must never be reported as a victory, and full-episode timeouts must remain visible.",
+    "A million full episodes cannot honestly be represented by one ordinary GitHub Actions run; it requires a multi-batch campaign or dedicated compute, with every completed range accounted for.",
   ];
   return {
-    format: "echo-authoritative-neural-simulation-v1",
+    format: "echo-authoritative-neural-simulation-v2",
     generatedAt: new Date().toISOString(),
+    profile: results[0]?.profile || "unknown",
     requestedBattles,
     completedBattles,
-    failedBattles: results.filter(result => result.failedChecks.length).length,
+    mechanicalFailedBattles,
+    qualityFindingBattles: results.filter(result => result.qualityFindings?.length).length,
+    meanElapsedMs: completedBattles ? totalElapsedMs / completedBattles : 0,
     meanStationaryRatio: completedBattles ? totalStationaryRatio / completedBattles : 0,
     meanInvalidWaterRatio: completedBattles ? totalInvalidWaterRatio / completedBattles : 0,
     heavyLevelFiveBattles,
     heavyTurretFailedBattles,
     byFailure,
+    byQualityFinding,
+    byOutcome,
     byLevel,
     byScript,
     critique,
-    verdict: completedBattles > 0
+    mechanicalVerdict: completedBattles > 0
       && !byFailure["neural-control-missing"]
       && !byFailure["water-boundary-violation"]
-      && heavyTurretFailedBattles === 0
+      && !byFailure["heavy-turret-never-activated"]
       ? "mechanically-acceptable-for-more-simulation"
       : "rejected",
+    qualityVerdict: (byOutcome.timeout || 0) === 0 && (byOutcome["team-wipe"] || 0) === 0
+      ? "all-full-episodes-resolved"
+      : "policy-needs-more-work",
   };
 }
 
 async function main() {
+  const profile = normalizeProfile(stringArgument("profile", "episode"));
   const totalBattles = Math.max(1, integerArgument("battles", DEFAULT_BATTLES));
+  const startIndex = integerArgument("start-index", 0);
   const shard = integerArgument("shard", 0);
   const shards = Math.max(1, integerArgument("shards", 1));
-  const durationMs = Math.max(4_000, integerArgument("duration-ms", DEFAULT_DURATION_MS));
+  const defaultDuration = profile === "episode" ? DEFAULT_EPISODE_DURATION_MS : DEFAULT_WINDOW_DURATION_MS;
+  const durationMs = Math.max(4_000, integerArgument("duration-ms", defaultDuration));
   const output = stringArgument("output", `training/reports/real-server-shard-${shard}.json`);
   const results = [];
-  for (let battleIndex = shard; battleIndex < totalBattles; battleIndex += shards) {
-    const level = 2 + (battleIndex % 4);
-    const script = PLAYER_SCRIPTS[Math.floor(battleIndex / 4) % PLAYER_SCRIPTS.length];
-    const coop = battleIndex % 5 === 0;
+  const endIndex = startIndex + totalBattles;
+  for (let battleIndex = startIndex + shard; battleIndex < endIndex; battleIndex += shards) {
+    const relativeIndex = battleIndex - startIndex;
+    const level = 2 + (relativeIndex % 4);
+    const script = PLAYER_SCRIPTS[Math.floor(relativeIndex / 4) % PLAYER_SCRIPTS.length];
+    const coop = relativeIndex % 5 === 0;
     const seed = 125_552 + battleIndex * 7_919;
-    results.push(await simulateAuthoritativeBattle({battleIndex, seed, durationMs, level, script, coop}));
+    results.push(await simulateAuthoritativeBattle({battleIndex, seed, durationMs, level, script, coop, profile}));
   }
   const summary = summarizeBattles(results, totalBattles);
-  const report = {summary, shard, shards, results};
+  const report = {summary, startIndex, endIndex, shard, shards, results};
   await mkdir(output.split("/").slice(0, -1).join("/") || ".", {recursive: true});
   await writeFile(output, `${JSON.stringify(report, null, 2)}\n`);
   console.log(JSON.stringify({
     output,
+    profile,
+    startIndex,
+    endIndex,
     shard,
     shards,
     completedBattles: summary.completedBattles,
-    failedBattles: summary.failedBattles,
-    verdict: summary.verdict,
+    mechanicalFailedBattles: summary.mechanicalFailedBattles,
+    qualityFindingBattles: summary.qualityFindingBattles,
+    mechanicalVerdict: summary.mechanicalVerdict,
+    qualityVerdict: summary.qualityVerdict,
   }, null, 2));
-  if (summary.verdict === "rejected") process.exitCode = 4;
+  if (summary.mechanicalVerdict === "rejected") process.exitCode = 4;
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
