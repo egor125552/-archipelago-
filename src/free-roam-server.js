@@ -11,9 +11,14 @@ import {applyCombatDamage} from "../public/src/free-roam-combat-v2.js?v=5";
 import {applyCombatAiHotfixV163} from "../public/src/free-roam-combat-ai-hotfix-v163.js?v=1";
 import {replicatedFreeWorld} from "../public/src/free-roam-replication.js";
 import {reserveUnconnectedBoats} from "../public/src/free-roam-reserve-boats.js";
-import {finishServerNeuralControl, prepareServerNeuralControl} from "./free-roam-neural-control.js";
+import {
+  finishServerNeuralControl,
+  neuralControlDiagnostics,
+  prepareServerNeuralControl,
+} from "./free-roam-neural-control.js";
 import {
   clearServerNeuralShadow,
+  neuralDecisionSnapshot,
   neuralShadowStatus,
   setServerNeuralControlForTest,
   updateServerNeuralShadow,
@@ -44,6 +49,11 @@ const PULSE_INPUT_KEYS = Object.freeze([
   "shopPrevious", "shopNext", "shopBuy", "shopClose",
   "boardPrevious", "boardNext", "boardAccept", "boardClose",
 ]);
+
+const round = (value, digits = 4) => {
+  const scale = 10 ** digits;
+  return Math.round((Number(value) || 0) * scale) / scale;
+};
 
 export function freePlayerIndex(role) {
   return role === "captain" ? 0 : role === "crew" ? 1 : -1;
@@ -171,6 +181,49 @@ function stepInChunks(serverRoom, elapsedSeconds) {
   }
 }
 
+function attachTrainingNeuralDiagnostics(serverRoom) {
+  const episode = serverRoom?.trainingRuntime?.episode;
+  const frame = episode?.frames?.at(-1);
+  if (!frame || frame.neural) return;
+  const shadow = neuralShadowStatus(serverRoom);
+  const decisions = neuralDecisionSnapshot(serverRoom).map(decision => [
+    decision.id,
+    decision.role,
+    decision.kind,
+    Number(decision.movementIndex) || 0,
+    round(decision.confidence),
+    decision.fire ? 1 : 0,
+    decision.rawFire ? 1 : 0,
+    round(decision.fireProbability),
+    round(decision.fireThreshold),
+    Number(decision.fireLatch) || 0,
+    decision.forcedExploration ? 1 : 0,
+    decision.controlsMovement === false ? 0 : 1,
+    decision.controlsFire === false ? 0 : 1,
+  ]);
+  frame.neural = {
+    model: [shadow.modelFormat || null, shadow.modelVersion || null],
+    controlEnabled: shadow.controlEnabled ? 1 : 0,
+    meanMovementConfidence: round(shadow.meanMovementConfidence),
+    meanFireProbability: round(shadow.meanFireProbability),
+    lowConfidenceCount: Number(shadow.lowConfidenceCount) || 0,
+    forcedExplorationCount: Number(shadow.forcedExplorationCount) || 0,
+    heavyTurret: [
+      shadow.heavyTurretTracked ? 1 : 0,
+      shadow.heavyTurretFire ? 1 : 0,
+      round(shadow.heavyTurretFireProbability),
+      shadow.heavyTurretForcedExploration ? 1 : 0,
+    ],
+    decisions,
+    guardrails: neuralControlDiagnostics(serverRoom),
+    decisionSchema: [
+      "id", "role", "kind", "movementIndex", "confidence", "fire", "rawFire",
+      "fireProbability", "fireThreshold", "fireLatch", "forcedExploration",
+      "controlsMovement", "controlsFire",
+    ],
+  };
+}
+
 export function snapshotServerFreeRoom(serverRoom, now = Date.now(), events = []) {
   serverRoom.sequence += 1;
   return {
@@ -194,6 +247,7 @@ export function tickServerFreeRoom(serverRoom, now = Date.now()) {
   }
   const events = drainEvents(serverRoom.world);
   updateTrainingRecorder(serverRoom, now, events);
+  attachTrainingNeuralDiagnostics(serverRoom);
   return snapshotServerFreeRoom(serverRoom, now, events);
 }
 
@@ -228,6 +282,7 @@ export function trainingRuntimeStatus(serverRoom) {
     ...base,
     neuralOnly: Boolean(base.trainingActive && neuralShadow.controlEnabled),
     neuralShadow,
+    neuralGuardrails: neuralControlDiagnostics(serverRoom),
   };
 }
 
