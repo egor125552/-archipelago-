@@ -3,8 +3,10 @@ import test from "node:test";
 
 import {
   applyServerFreeInput,
+  consumeCompletedTrainingEpisodes,
   createServerFreeRoom,
   finishServerTrainingBattle,
+  serializeTrainingEpisode,
   setServerFreePresence,
   startServerTrainingBattle,
   tickServerFreeRoom,
@@ -88,4 +90,30 @@ test("finishing a neural-only threat restores the ordinary world and disables co
   assert.equal(status.battleActive, false);
   assert.equal(status.neuralOnly, false);
   assert.equal(status.neuralShadow.controlEnabled, false);
+});
+
+test("recorded neural battle frames include decisions, confidence, fire and guardrail diagnostics", () => {
+  const startedAt = 20_000;
+  const server = createServerFreeRoom(startedAt);
+  setServerFreePresence(server, "captain", true);
+  startServerTrainingBattle(server, {level: 5, neuralOnly: true}, true, startedAt + 40);
+  for (let index = 1; index <= 60; index += 1) {
+    applyServerFreeInput(server, "captain", {up: true, attack: true}, index);
+    tickServerFreeRoom(server, startedAt + 40 + index * 40);
+  }
+  finishServerTrainingBattle(server, "test", {restore: true, now: startedAt + 3_000});
+  const [episode] = consumeCompletedTrainingEpisodes(server);
+  assert.ok(episode);
+  const diagnosticFrames = episode.frames.filter(frame => frame.neural);
+  assert.ok(diagnosticFrames.length > 0);
+  const diagnostic = diagnosticFrames.at(-1).neural;
+  assert.equal(diagnostic.controlEnabled, 1);
+  assert.ok(Array.isArray(diagnostic.decisions));
+  assert.ok(diagnostic.decisions.length > 0);
+  assert.ok(Array.isArray(diagnostic.decisionSchema));
+  assert.equal(typeof diagnostic.guardrails.waterGuardInterventions, "number");
+  const jsonl = serializeTrainingEpisode(episode);
+  assert.match(jsonl, /"decisionSchema"/);
+  assert.match(jsonl, /"fireProbability"/);
+  assert.match(jsonl, /"guardrails"/);
 });
