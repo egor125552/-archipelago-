@@ -82,6 +82,47 @@ This document is deliberately written as a rejection checklist, not as release m
 - A short window is presented as a completed full battle.
 - The report omits timeouts, team wipes or the limitations above.
 
+## 2026-08-01 — Exploratory self-play candidate training
+
+### Exact behaviour changed
+
+- Authoritative server battles can now perturb a small fraction of movement and fire decisions only inside the offline self-play generator.
+- Every explored action stores the exact forty-value policy input, the base action, the selected action, confidence, fire probability, actor role and timestamp.
+- Each shard retains its highest-scoring complete trajectories separately for threats two, three, four and five instead of saving millions of nearly duplicate frames.
+- The candidate is fine-tuned from the checked-in quantized GRU rather than initialized randomly.
+- A parameter anchor penalizes large weight drift from the current model.
+- The unchanged base model and candidate are evaluated in separate processes on identical held-out authoritative episodes.
+- The candidate is rejected for mechanical failures, water regression, increased stationary behaviour, more timeouts, reduced pressure, excessive lethality in threats two or three, or worse threat-five resolution.
+- The old archive-training workflow no longer has write permission and no longer pushes a model directly to `main`.
+
+### Defect in the previous version
+
+- The simulation pipeline evaluated the same fixed policy repeatedly. A million evaluations could measure the policy but could not change a single weight.
+- The original trainer learned from player input in room archives, while the deployed tactical GRU was being used to control enemy actors. That domain mismatch could reward labels that were irrelevant to enemy navigation.
+- Offline imitation metrics were treated as sufficient for publishing a candidate. They did not establish that server combat improved.
+- Automatic pushing to `main` made a validation mistake capable of changing production weights without a held-out battle comparison.
+
+### New tests and their blind spots
+
+- Unit tests verify scoring, per-level elite selection and mandatory rejection of water regressions.
+- The self-play workflow runs repository tests with candidate weights installed only in the temporary CI checkout.
+- Held-out evaluation uses different battle indices and random seeds from trajectory collection.
+- The blind spot remains that generation and evaluation share the same family of scripted players. A candidate can learn their rhythm without becoming generally intelligent.
+- Elite-only cross-entropy training is not a full reinforcement-learning objective. Failed exploratory actions are summarized but are not used as explicit negative samples.
+
+### Metrics that can become better or worse
+
+- Better: fewer full-episode timeouts, lower stationary ratio, fewer guardrail interventions, higher threat-five resolution and useful pressure without lower-level over-lethality.
+- Worse: a candidate may imitate lucky aggressive actions, increase difficulty unevenly, depend more heavily on water clamps, or reduce tactical diversity despite higher average pressure.
+- A successful CI verdict means only `candidate-acceptable-for-manual-review`; it is intentionally not called trained, promoted or production-ready.
+
+### Remaining reason not to enable the model in ordinary play
+
+- No self-play candidate has yet passed the new end-to-end workflow.
+- Human battle archives remain too small, especially for swimming, shoreline congestion, damaged boats and heavy-turret component play.
+- The five movement classes are still coarse and cannot express throttle, turn rate, formation spacing, collision forecast or landing plans independently.
+- Million-scale training is an indexed multi-batch campaign. A declared target of one million is not completion evidence until artifacts cover every range without gaps.
+
 ## Required format for the next change
 
 Add another dated section with:
