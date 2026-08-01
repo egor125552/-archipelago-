@@ -32,16 +32,19 @@ test("boat target on land is redirected to the production shore access", () => {
   });
 });
 
-test("threat five exposes the heavy hull and turret as separate neural actors", () => {
-  const server = createServerFreeRoom(1_000);
+test("threat five exposes the delayed heavy hull and turret as separate neural actors", () => {
+  const startedAt = 1_000;
+  const server = createServerFreeRoom(startedAt);
   setServerFreePresence(server, "captain", true);
-  startServerTrainingBattle(server, {level: 5, neuralOnly: true}, false, 1_040);
-  tickServerFreeRoom(server, 1_240);
+  startServerTrainingBattle(server, {level: 5, neuralOnly: true}, false, startedAt + 40);
+  for (let tick = 1; tick <= 205; tick += 1) {
+    tickServerFreeRoom(server, startedAt + 40 + tick * 40);
+  }
   const actors = collectNeuralActors(server.world);
   const heavy = actors.find(actor => actor.role === "heavy");
   const turret = actors.find(actor => actor.role === "heavy_turret");
-  assert.ok(heavy);
-  assert.ok(turret);
+  assert.ok(heavy, "heavy hull did not arrive after the production seven-second delay");
+  assert.ok(turret, "heavy turret was not exposed as its own actor");
   assert.equal(heavy.controlsMovement, true);
   assert.equal(heavy.controlsFire, false);
   assert.equal(turret.controlsMovement, false);
@@ -58,10 +61,10 @@ test("authoritative level-five simulation rejects a silent heavy turret", async 
     script: "water-zigzag",
     coop: false,
   });
-  assert.equal(result.metrics.invalidWaterSamples, 0);
-  assert.equal(result.metrics.neuralControlMissingSamples, 0);
-  assert.equal(result.metrics.heavyTurretFailed, false);
-  assert.ok(result.metrics.heavyTurretWindups > 0 || result.metrics.heavyTurretShots > 0);
+  assert.equal(result.metrics.invalidWaterSamples, 0, JSON.stringify(result.metrics));
+  assert.equal(result.metrics.neuralControlMissingSamples, 0, JSON.stringify(result.metrics));
+  assert.equal(result.metrics.heavyTurretFailed, false, JSON.stringify(result.metrics));
+  assert.ok(result.metrics.heavyTurretWindups > 0 || result.metrics.heavyTurretShots > 0, JSON.stringify(result.metrics));
   assert.doesNotMatch(result.failedChecks.join(","), /heavy-turret-never-activated|water-boundary-violation/);
 });
 
