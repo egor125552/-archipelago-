@@ -3,7 +3,9 @@ import test from "node:test";
 
 import {
   createServerFreeRoom,
+  neuralV2OverrideStatus,
   setServerFreePresence,
+  setServerNeuralV2Override,
   startServerTrainingBattle,
   tickServerFreeRoom,
 } from "../src/free-roam-server.js";
@@ -69,6 +71,33 @@ test("v2 separates throttle, steering and preferred range", () => {
   assert.equal(slowLeft.preferredRange, fullRight.preferredRange);
   assert.equal(slowLeft.fire, false);
   assert.equal(fullRight.fire, true);
+});
+
+test("v2 override controls an actor inside the authoritative 40 ms server tick", () => {
+  const startedAt = 5_000;
+  const server = createServerFreeRoom(startedAt);
+  setServerFreePresence(server, "captain", true);
+  startServerTrainingBattle(server, {level: 3, neuralOnly: true}, false, startedAt + 40);
+  tickServerFreeRoom(server, startedAt + 80);
+  const actor = collectNeuralActors(server.world).find(item => item.controlsMovement !== false && item.kind === "boat");
+  assert.ok(actor);
+  const before = {x: actor.entity.x, y: actor.entity.y, heading: actor.entity.heading};
+  setServerNeuralV2Override(server, actor.id, {
+    throttle: "full",
+    steering: "hard_right",
+    range: "far",
+    route: "safe_water",
+    fire: false,
+    source: "unit-test",
+  });
+  for (let step = 2; step <= 30; step += 1) tickServerFreeRoom(server, startedAt + 40 + step * 40);
+  const status = neuralV2OverrideStatus(server);
+  assert.equal(status.enabled, true);
+  assert.equal(status.actionCount, 1);
+  assert.ok(status.diagnostics.controlledFrames > 0);
+  assert.ok(status.diagnostics.movementFrames > 0);
+  assert.ok(Math.hypot(actor.entity.x - before.x, actor.entity.y - before.y) > 0.1);
+  assert.notEqual(actor.entity.heading, before.heading);
 });
 
 test("v2 produces finite 53-value features for every production threat actor", () => {
