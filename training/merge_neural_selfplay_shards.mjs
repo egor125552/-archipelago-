@@ -46,6 +46,7 @@ export function mergeSelfPlayShards(reports, {expectedBattles, expectedShards, e
 
   const exploredOutcomeCounts = {};
   const baselineOutcomeCounts = {};
+  const interventionCounts = {};
   const eliteEpisodes = [];
   let completedBattles = 0;
   let authoritativeRollouts = 0;
@@ -73,13 +74,16 @@ export function mergeSelfPlayShards(reports, {expectedBattles, expectedShards, e
     if (localRollouts !== localCompleted * 2) failures.push(`paired-rollout-count-mismatch-${shard}-${localRollouts}-of-${localCompleted * 2}`);
     const exploredTotal = Object.values(report.exploredOutcomeCounts || report.outcomeCounts || {}).reduce((sum, value) => sum + (Number(value) || 0), 0);
     const baselineTotal = Object.values(report.baselineOutcomeCounts || {}).reduce((sum, value) => sum + (Number(value) || 0), 0);
+    const interventionTotal = Object.values(report.interventionCounts || {}).reduce((sum, value) => sum + (Number(value) || 0), 0);
     if (exploredTotal !== localCompleted) failures.push(`explored-outcome-count-mismatch-${shard}`);
     if (baselineTotal !== localCompleted) failures.push(`baseline-outcome-count-mismatch-${shard}`);
+    if (report.format === "echo-neural-selfplay-elites-v3" && interventionTotal !== localCompleted) failures.push(`intervention-count-mismatch-${shard}`);
     completedBattles += localCompleted;
     authoritativeRollouts += localRollouts;
     positiveAdvantagePairs += Number(report.positiveAdvantagePairs) || 0;
     addCounts(exploredOutcomeCounts, report.exploredOutcomeCounts || report.outcomeCounts);
     addCounts(baselineOutcomeCounts, report.baselineOutcomeCounts);
+    addCounts(interventionCounts, report.interventionCounts);
     eliteEpisodes.push(...(report.eliteEpisodes || []));
     minimumScore = Math.min(minimumScore, Number(report.scoreRange?.minimum));
     maximumScore = Math.max(maximumScore, Number(report.scoreRange?.maximum));
@@ -97,12 +101,15 @@ export function mergeSelfPlayShards(reports, {expectedBattles, expectedShards, e
     if (!id || seenEliteIds.has(id)) duplicateEliteIds.push(id || "missing-id");
     seenEliteIds.add(id);
     if (!(Number(episode?.advantage) > 0)) failures.push(`non-positive-elite-${id || "missing-id"}`);
+    if (episode?.intervention && !(episode.intervention.started && Number(episode.intervention.appliedSamples) >= 2)) {
+      failures.push(`incomplete-elite-intervention-${id || "missing-id"}`);
+    }
   }
   if (duplicateEliteIds.length) failures.push(`duplicate-elite-ids-${duplicateEliteIds.length}`);
   if (eliteEpisodes.length < 8) failures.push(`insufficient-positive-elites-${eliteEpisodes.length}`);
 
   return {
-    format: "echo-neural-selfplay-aggregate-v2",
+    format: "echo-neural-selfplay-aggregate-v3",
     generatedAt: new Date().toISOString(),
     expectedBattles,
     completedBattles,
@@ -114,6 +121,7 @@ export function mergeSelfPlayShards(reports, {expectedBattles, expectedShards, e
     baselineOutcomeCounts,
     exploredOutcomeCounts,
     outcomeCounts: exploredOutcomeCounts,
+    interventionCounts,
     positiveAdvantagePairs,
     advantageRange: {
       minimum: Number.isFinite(minimumAdvantage) ? minimumAdvantage : null,
@@ -129,7 +137,8 @@ export function mergeSelfPlayShards(reports, {expectedBattles, expectedShards, e
     verdict: failures.length ? "incomplete" : "complete",
     critique: [
       "Coverage proves every declared pair and both authoritative rollouts, not that scripted players represent human play.",
-      "The aggregate contains only positive-advantage elite trajectories; losing explorations remain represented in paired counts and advantage statistics.",
+      "Version-three pairs contain at most one coherent intervention, allowing a positive advantage to be assigned to one macro instead of hundreds of random actions.",
+      "The aggregate contains only positive-advantage elite trajectories; losing interventions remain represented in counts and advantage statistics.",
       "A complete batch is still one campaign range and must not be described as a completed million-target campaign without contiguous range accounting.",
     ],
   };
@@ -145,7 +154,7 @@ async function main() {
   const reports = [];
   for (const file of files) {
     const parsed = JSON.parse(await readFile(file, "utf8"));
-    if (["echo-neural-selfplay-elites-v1", "echo-neural-selfplay-elites-v2"].includes(parsed?.format)) reports.push(parsed);
+    if (["echo-neural-selfplay-elites-v1", "echo-neural-selfplay-elites-v2", "echo-neural-selfplay-elites-v3"].includes(parsed?.format)) reports.push(parsed);
   }
   const aggregate = mergeSelfPlayShards(reports, {expectedBattles, expectedShards, expectedStartIndex});
   await mkdir(output.split("/").slice(0, -1).join("/") || ".", {recursive: true});
@@ -156,6 +165,7 @@ async function main() {
     completedPairs: aggregate.completedBattles,
     authoritativeRollouts: aggregate.authoritativeRollouts,
     positiveAdvantagePairs: aggregate.positiveAdvantagePairs,
+    interventions: aggregate.interventionCounts,
     elites: aggregate.eliteEpisodes.length,
     failures: aggregate.failures,
   }, null, 2));
