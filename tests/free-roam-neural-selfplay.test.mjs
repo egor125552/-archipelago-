@@ -3,8 +3,10 @@ import test from "node:test";
 
 import {
   previousActionFeatureState,
+  seededRandom,
   selectEliteEpisodes,
   selfPlayScore,
+  withWorldRandomSeed,
 } from "../training/generate_neural_selfplay_dataset.mjs";
 import {compareCandidate} from "../training/compare_selfplay_candidate.mjs";
 import {
@@ -12,7 +14,7 @@ import {
   mergeSelfPlayShards,
 } from "../training/merge_neural_selfplay_shards.mjs";
 
-const actorSamples = [{samples: [{}, {}, {}, {}]}];
+const actorSamples = [{samples: [{em: 1}, {}, {}, {}]}];
 
 test("self-play score rewards resolved enemy pressure and penalizes guardrails", () => {
   const strong = selfPlayScore({
@@ -25,8 +27,8 @@ test("self-play score rewards resolved enemy pressure and penalizes guardrails",
     durationMs: 60_000,
     diagnostics: {waterGuardInterventions: 0, stuckEscapes: 0, shorelineRedirects: 0},
   });
-  const guardedTimeout = selfPlayScore({
-    outcome: "timeout",
+  const guardedVictory = selfPlayScore({
+    outcome: "victory",
     playerHealth: 65,
     boatHull: 70,
     boatWater: 8,
@@ -35,17 +37,29 @@ test("self-play score rewards resolved enemy pressure and penalizes guardrails",
     durationMs: 60_000,
     diagnostics: {waterGuardInterventions: 300, stuckEscapes: 8, shorelineRedirects: 200},
   });
-  assert.ok(strong > guardedTimeout);
+  assert.ok(strong > guardedVictory);
 });
 
-test("elite selection preserves threat, script and solo/co-op coverage", () => {
+test("exploration random numbers do not consume production random numbers", async () => {
+  const expected = seededRandom(77);
+  const expectedValues = [expected(), expected()];
+  const actualValues = await withWorldRandomSeed(77, async () => {
+    const first = Math.random();
+    const exploration = seededRandom(999);
+    for (let index = 0; index < 20; index += 1) exploration();
+    return [first, Math.random()];
+  });
+  assert.deepEqual(actualValues, expectedValues);
+});
+
+test("elite selection preserves scenario coverage and requires paired advantage", () => {
   const selected = selectEliteEpisodes([
-    {id: "a", level: 2, script: "shoreline", coop: false, score: 1, seed: 1, actors: actorSamples},
-    {id: "b", level: 2, script: "shoreline", coop: false, score: 9, seed: 2, actors: actorSamples},
-    {id: "c", level: 2, script: "water-escape", coop: false, score: 4, seed: 3, actors: actorSamples},
-    {id: "d", level: 2, script: "shoreline", coop: true, score: 7, seed: 4, actors: actorSamples},
-    {id: "empty", level: 3, script: "shoreline", coop: false, score: 99, seed: 5, actors: []},
-  ], 1);
+    {id: "a", level: 2, script: "shoreline", coop: false, advantage: 1, score: 100, seed: 1, actors: actorSamples},
+    {id: "b", level: 2, script: "shoreline", coop: false, advantage: 9, score: 9, seed: 2, actors: actorSamples},
+    {id: "c", level: 2, script: "water-escape", coop: false, advantage: 4, score: 4, seed: 3, actors: actorSamples},
+    {id: "d", level: 2, script: "shoreline", coop: true, advantage: 7, score: 7, seed: 4, actors: actorSamples},
+    {id: "no-explore", level: 3, script: "shoreline", coop: false, advantage: 99, score: 99, seed: 5, actors: [{samples: [{}, {}, {}, {}]}]},
+  ], 1, 2.5);
   assert.deepEqual(new Set(selected.map(item => item.id)), new Set(["b", "c", "d"]));
 });
 
@@ -59,21 +73,28 @@ test("recurrent self-play features use the previous selected action", () => {
   assert.notDeepEqual(captured, currentLabel);
 });
 
-test("self-play aggregate rejects a missing shard instead of inventing completion", () => {
+test("paired aggregate rejects a missing shard instead of inventing completion", () => {
   assert.equal(expectedBattlesForShard(10, 0, 3), 4);
   assert.equal(expectedBattlesForShard(10, 1, 3), 3);
-  const makeReport = shard => ({
-    format: "echo-neural-selfplay-elites-v1",
-    requestedBattles: 10,
-    completedBattles: expectedBattlesForShard(10, shard, 3),
-    startIndex: 50,
-    endIndex: 60,
-    shard,
-    shards: 3,
-    outcomeCounts: {victory: expectedBattlesForShard(10, shard, 3)},
-    scoreRange: {minimum: 1, maximum: 2},
-    eliteEpisodes: [{id: `elite-${shard}`}],
-  });
+  const makeReport = shard => {
+    const completed = expectedBattlesForShard(10, shard, 3);
+    return {
+      format: "echo-neural-selfplay-elites-v2",
+      requestedBattles: 10,
+      completedBattles: completed,
+      authoritativeRollouts: completed * 2,
+      startIndex: 50,
+      endIndex: 60,
+      shard,
+      shards: 3,
+      baselineOutcomeCounts: {victory: completed},
+      exploredOutcomeCounts: {victory: completed},
+      positiveAdvantagePairs: completed,
+      advantageRange: {minimum: 3, maximum: 5, mean: 4},
+      scoreRange: {minimum: 1, maximum: 2},
+      eliteEpisodes: [{id: `elite-${shard}`, advantage: 3}],
+    };
+  };
   const incomplete = mergeSelfPlayShards([makeReport(0), makeReport(2)], {
     expectedBattles: 10,
     expectedShards: 3,
@@ -81,6 +102,7 @@ test("self-play aggregate rejects a missing shard instead of inventing completio
   });
   assert.equal(incomplete.verdict, "incomplete");
   assert.ok(incomplete.failures.includes("missing-shard-1"));
+  assert.ok(incomplete.failures.some(item => item.startsWith("aggregate-rollouts-")));
 });
 
 test("candidate gate rejects an unchanged model", () => {
