@@ -7,6 +7,10 @@ import {
   selfPlayScore,
 } from "../training/generate_neural_selfplay_dataset.mjs";
 import {compareCandidate} from "../training/compare_selfplay_candidate.mjs";
+import {
+  expectedBattlesForShard,
+  mergeSelfPlayShards,
+} from "../training/merge_neural_selfplay_shards.mjs";
 
 test("self-play score rewards resolved enemy pressure and penalizes guardrails", () => {
   const strong = selfPlayScore({
@@ -50,6 +54,30 @@ test("recurrent self-play features use the previous selected action", () => {
   assert.deepEqual(captured, {movementIndex: 3, fire: true});
   const currentLabel = {movementIndex: 1, fire: false};
   assert.notDeepEqual(captured, currentLabel);
+});
+
+test("self-play aggregate rejects a missing shard instead of inventing completion", () => {
+  assert.equal(expectedBattlesForShard(10, 0, 3), 4);
+  assert.equal(expectedBattlesForShard(10, 1, 3), 3);
+  const makeReport = shard => ({
+    format: "echo-neural-selfplay-elites-v1",
+    requestedBattles: 10,
+    completedBattles: expectedBattlesForShard(10, shard, 3),
+    startIndex: 50,
+    endIndex: 60,
+    shard,
+    shards: 3,
+    outcomeCounts: {victory: expectedBattlesForShard(10, shard, 3)},
+    scoreRange: {minimum: 1, maximum: 2},
+    eliteEpisodes: [{id: `elite-${shard}`}],
+  });
+  const incomplete = mergeSelfPlayShards([makeReport(0), makeReport(2)], {
+    expectedBattles: 10,
+    expectedShards: 3,
+    expectedStartIndex: 50,
+  });
+  assert.equal(incomplete.verdict, "incomplete");
+  assert.ok(incomplete.failures.includes("missing-shard-1"));
 });
 
 test("candidate gate rejects water regressions even when pressure increases", () => {
