@@ -5,6 +5,7 @@ import {
   applyServerFreeInput,
   clearServerNeuralV2Overrides,
   createServerFreeRoom,
+  neuralV2OverrideStatus,
   setServerFreePresence,
   setServerNeuralV2Override,
   startServerTrainingBattle,
@@ -24,11 +25,7 @@ import {
   NEURAL_V2_THROTTLE_CLASSES,
   normalizeNeuralV2Action,
 } from "../src/free-roam-neural-v2-schema.js";
-import {
-  seededRandom,
-  selfPlayScore,
-  withWorldRandomSeed,
-} from "./generate_neural_selfplay_dataset.mjs";
+import {seededRandom, selfPlayScore, withWorldRandomSeed} from "./generate_neural_selfplay_dataset.mjs";
 
 const STEP_MS = 40;
 const SAMPLE_MS = 200;
@@ -70,7 +67,10 @@ function nearestEnemyId(server, playerIndex) {
   return collectNeuralActors(server.world)
     .map(actor => ({
       id: actor.id,
-      metres: Math.hypot((Number(actor.entity?.x) || 0) - (Number(point.x) || 0), (Number(actor.entity?.y) || 0) - (Number(point.y) || 0)),
+      metres: Math.hypot(
+        (Number(actor.entity?.x) || 0) - (Number(point.x) || 0),
+        (Number(actor.entity?.y) || 0) - (Number(point.y) || 0),
+      ),
     }))
     .sort((left, right) => left.metres - right.metres)[0]?.id || null;
 }
@@ -132,20 +132,19 @@ function classIndex(random, classes) {
 export function createNeuralV2PairPlan(seed, level, durationMs) {
   const random = seededRandom(seed);
   const maximumStart = threatAwareStartWindow(level, durationMs);
-  const action = normalizeNeuralV2Action({
-    throttleIndex: classIndex(random, NEURAL_V2_THROTTLE_CLASSES),
-    steeringIndex: classIndex(random, NEURAL_V2_STEERING_CLASSES),
-    rangeIndex: classIndex(random, NEURAL_V2_RANGE_CLASSES),
-    routeIndex: classIndex(random, NEURAL_V2_ROUTE_CLASSES),
-    fireIndex: classIndex(random, NEURAL_V2_FIRE_CLASSES),
-    source: "paired-v2-macro",
-  });
   return {
     startAtMs: 400 + Math.floor(random() * Math.max(1, maximumStart - 400)),
     durationSamples: 4 + Math.floor(random() * 8),
     actorUnit: random(),
     preferTurret: random() < 0.12,
-    action,
+    action: normalizeNeuralV2Action({
+      throttleIndex: classIndex(random, NEURAL_V2_THROTTLE_CLASSES),
+      steeringIndex: classIndex(random, NEURAL_V2_STEERING_CLASSES),
+      rangeIndex: classIndex(random, NEURAL_V2_RANGE_CLASSES),
+      routeIndex: classIndex(random, NEURAL_V2_ROUTE_CLASSES),
+      fireIndex: classIndex(random, NEURAL_V2_FIRE_CLASSES),
+      source: "paired-v2-macro",
+    }),
     started: false,
     completed: false,
     actorId: null,
@@ -191,10 +190,9 @@ function samplePlan(server, plan, elapsedMs, samples) {
     role: actor.role,
     kind: actor.kind,
     target: targetPoint ? [targetPoint.x, targetPoint.y, targetEntry.index] : null,
-    features: neuralV2FeatureVector(server.world, actor, {
-      previousAction: plan.action,
-      stuckMs: 0,
-    }),
+    // Previous-action heads are deliberately zero here. The current v2 label
+    // must never be copied into its own recurrent input fields.
+    features: neuralV2FeatureVector(server.world, actor, {stuckMs: 0}),
     action: [
       plan.action.throttleIndex,
       plan.action.steeringIndex,
@@ -254,6 +252,7 @@ async function simulateRollout({battleIndex, worldSeed, durationMs, level, scrip
       }
     }
 
+    const overrideDiagnostics = neuralV2OverrideStatus(server).diagnostics;
     clearServerNeuralV2Overrides(server);
     const player = server.world.players?.[0];
     const boat = playerBoat(server, 0);
@@ -268,9 +267,19 @@ async function simulateRollout({battleIndex, worldSeed, durationMs, level, scrip
       enemyHits,
       elapsedMs,
       durationMs,
-      diagnostics: server.neuralV2OverrideRuntime?.diagnostics || {},
+      diagnostics: overrideDiagnostics,
     });
-    return {outcome, elapsedMs, playerHealth, boatHull, boatWater, enemyHits, score, samples};
+    return {
+      outcome,
+      elapsedMs,
+      playerHealth,
+      boatHull,
+      boatWater,
+      enemyHits,
+      score,
+      diagnostics: overrideDiagnostics,
+      samples,
+    };
   });
 }
 
@@ -376,9 +385,10 @@ async function main() {
     },
     critique: [
       "The unchanged rollout and v2-macro rollout share one world seed; only the explicit v2 override differs.",
+      "The current v2 label is excluded from its own recurrent input fields; those five feature slots are zero in this discovery batch.",
+      "Override diagnostics are captured before cleanup, so water clamps and fire suppression contribute to the score and remain auditable.",
       "A full five-head action is held for 0.8 to 2.2 seconds, which is more expressive but makes attribution between heads imperfect.",
       "This batch discovers causal action candidates; it does not yet train or enable a v2 neural model.",
-      "The hand-designed score and scripted players remain potential sources of bias, so only positive paired data is retained for inspection.",
     ],
     elitePairs,
   };
