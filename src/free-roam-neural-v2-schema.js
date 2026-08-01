@@ -100,12 +100,20 @@ const indexOfClass = (classes, value, fallback = 0) => {
   return index >= 0 ? index : fallback;
 };
 
+function fireClassIndex(raw = {}) {
+  const value = raw.fireIndex ?? raw.fire;
+  if (typeof value === "boolean") return value ? 1 : 0;
+  if (value === 1 || value === "1") return 1;
+  if (value === 0 || value === "0") return 0;
+  return indexOfClass(NEURAL_V2_FIRE_CLASSES, value, 0);
+}
+
 export function normalizeNeuralV2Action(raw = {}) {
   const throttleIndex = indexOfClass(NEURAL_V2_THROTTLE_CLASSES, raw.throttleIndex ?? raw.throttle, 2);
   const steeringIndex = indexOfClass(NEURAL_V2_STEERING_CLASSES, raw.steeringIndex ?? raw.steering, 2);
   const rangeIndex = indexOfClass(NEURAL_V2_RANGE_CLASSES, raw.rangeIndex ?? raw.range, 1);
   const routeIndex = indexOfClass(NEURAL_V2_ROUTE_CLASSES, raw.routeIndex ?? raw.route, 1);
-  const fireIndex = indexOfClass(NEURAL_V2_FIRE_CLASSES, raw.fireIndex ?? raw.fire, 0);
+  const fireIndex = fireClassIndex(raw);
   return Object.freeze({
     throttleIndex,
     throttle: NEURAL_V2_THROTTLE_CLASSES[throttleIndex],
