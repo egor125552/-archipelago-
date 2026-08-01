@@ -5,35 +5,55 @@ import {
   neuralPlayerPoint,
   neuralTargetForActor,
 } from "./free-roam-neural-shadow.js";
-import {neuralV2DesiredMotion} from "./free-roam-neural-v2-control.js";
-import {normalizeNeuralV2Action} from "./free-roam-neural-v2-schema.js";
+import {
+  neuralV2DesiredMotion,
+  neuralV2RoleSpeed,
+  neuralV2RoutePoint,
+} from "./free-roam-neural-v2-control.js";
+import {
+  neuralV2PreferredRange,
+  neuralV2SteeringOffset,
+  neuralV2ThrottleScale,
+  normalizeNeuralV2Action,
+} from "./free-roam-neural-v2-schema.js";
 
 const WATER_MIN_X = 10;
 const WATER_MAX_X = 410;
 const WATER_MIN_Y = 82;
 const WATER_MAX_Y = 310;
+const ISOLATED_HEADS = Object.freeze(["throttle", "steering", "range", "route", "fire"]);
 
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, Number(value) || 0));
 const wrapDeg = value => ((Number(value) + 180) % 360 + 360) % 360 - 180;
 const rad = degrees => Number(degrees) * Math.PI / 180;
+const distance = (left, right) => Math.hypot(
+  (Number(left?.x) || 0) - (Number(right?.x) || 0),
+  (Number(left?.y) || 0) - (Number(right?.y) || 0),
+);
+const headingTo = (from, to) => Math.atan2(
+  (Number(to?.x) || 0) - (Number(from?.x) || 0),
+  -((Number(to?.y) || 0) - (Number(from?.y) || 0)),
+) * 180 / Math.PI;
+
+function blankDiagnostics() {
+  return {
+    preparedFrames: 0,
+    controlledFrames: 0,
+    movementFrames: 0,
+    fireAllowedFrames: 0,
+    fireSuppressedFrames: 0,
+    waterClampFrames: 0,
+    waterGuardInterventions: 0,
+    missingActorFrames: 0,
+    missingTargetFrames: 0,
+    isolatedHeadFrames: Object.fromEntries(ISOLATED_HEADS.map(head => [head, 0])),
+  };
+}
 
 function ensureRuntime(serverRoom) {
   if (!serverRoom.neuralV2OverrideRuntime) {
     Object.defineProperty(serverRoom, "neuralV2OverrideRuntime", {
-      value: {
-        actions: new Map(),
-        diagnostics: {
-          preparedFrames: 0,
-          controlledFrames: 0,
-          movementFrames: 0,
-          fireAllowedFrames: 0,
-          fireSuppressedFrames: 0,
-          waterClampFrames: 0,
-          waterGuardInterventions: 0,
-          missingActorFrames: 0,
-          missingTargetFrames: 0,
-        },
-      },
+      value: {actions: new Map(), diagnostics: blankDiagnostics()},
       writable: true,
       configurable: true,
       enumerable: false,
@@ -41,7 +61,7 @@ function ensureRuntime(serverRoom) {
   }
   const runtime = serverRoom.neuralV2OverrideRuntime;
   if (!(runtime.actions instanceof Map)) runtime.actions = new Map();
-  runtime.diagnostics ||= {};
+  runtime.diagnostics ||= blankDiagnostics();
   for (const key of [
     "preparedFrames",
     "controlledFrames",
@@ -55,7 +75,19 @@ function ensureRuntime(serverRoom) {
   ]) {
     if (!Number.isFinite(Number(runtime.diagnostics[key]))) runtime.diagnostics[key] = 0;
   }
+  runtime.diagnostics.isolatedHeadFrames ||= {};
+  for (const head of ISOLATED_HEADS) {
+    if (!Number.isFinite(Number(runtime.diagnostics.isolatedHeadFrames[head]))) {
+      runtime.diagnostics.isolatedHeadFrames[head] = 0;
+    }
+  }
   return runtime;
+}
+
+function normalizeOverride(rawAction = {}) {
+  const action = normalizeNeuralV2Action({...rawAction, source: rawAction.source || "server-test"});
+  const head = ISOLATED_HEADS.includes(rawAction.head) ? rawAction.head : null;
+  return Object.freeze({...action, head, isolated: Boolean(head)});
 }
 
 export function setServerNeuralV2Override(serverRoom, actorId, rawAction) {
@@ -65,8 +97,13 @@ export function setServerNeuralV2Override(serverRoom, actorId, rawAction) {
     runtime.actions.delete(String(actorId));
     return true;
   }
-  runtime.actions.set(String(actorId), normalizeNeuralV2Action({...rawAction, source: rawAction.source || "server-test"}));
+  runtime.actions.set(String(actorId), normalizeOverride(rawAction));
   return true;
+}
+
+export function isolatedServerNeuralV2Head(serverRoom, actorId) {
+  const action = serverRoom?.neuralV2OverrideRuntime?.actions?.get(String(actorId || ""));
+  return action?.isolated ? action.head : null;
 }
 
 export function clearServerNeuralV2Overrides(serverRoom) {
@@ -99,14 +136,19 @@ export function prepareServerNeuralV2Overrides(serverRoom) {
   for (const [id, action] of runtime.actions) {
     const actor = actors.get(id);
     if (!actor) {
-      runtime.diagnostics.missingActorFrames = (runtime.diagnostics.missingActorFrames || 0) + 1;
+      runtime.diagnostics.missingActorFrames += 1;
       continue;
     }
     const targetEntry = neuralTargetForActor(serverRoom.world, actor);
     const targetPoint = targetEntry?.player ? neuralPlayerPoint(serverRoom.world, targetEntry.player) : null;
     if (!targetPoint) {
-      runtime.diagnostics.missingTargetFrames = (runtime.diagnostics.missingTargetFrames || 0) + 1;
+      runtime.diagnostics.missingTargetFrames += 1;
       continue;
+    }
+    if (action.isolated && action.head === "fire" && actor.controlsFire !== false) {
+      runtime.diagnostics.isolatedHeadFrames.fire += 1;
+      if (action.fire) runtime.diagnostics.fireAllowedFrames += 1;
+      else if (suppressFire(actor.entity)) runtime.diagnostics.fireSuppressedFrames += 1;
     }
     frames.push({
       id,
@@ -121,8 +163,67 @@ export function prepareServerNeuralV2Overrides(serverRoom) {
       targetPoint: {x: Number(targetPoint.x) || 0, y: Number(targetPoint.y) || 0},
     });
   }
-  runtime.diagnostics.preparedFrames = (runtime.diagnostics.preparedFrames || 0) + frames.length;
+  runtime.diagnostics.preparedFrames += frames.length;
   return frames;
+}
+
+function isolatedMotion(frame, entity, seconds) {
+  const action = frame.action;
+  const head = action.head;
+  const baseHeading = Number(entity.heading) || frame.heading;
+  const baseSpeed = Number(entity.speed) || 0;
+  const turnRate = frame.actor.kind === "foot" ? 280 : frame.actor.role === "heavy" ? 75 : 125;
+  const acceleration = frame.actor.kind === "foot" ? 30 : frame.actor.role === "heavy" ? 8 : 16;
+  let desiredHeading = baseHeading;
+  let desiredSpeed = baseSpeed;
+
+  if (head === "throttle") {
+    desiredSpeed = neuralV2RoleSpeed(frame.actor) * neuralV2ThrottleScale(action);
+  } else if (head === "steering") {
+    desiredHeading = wrapDeg(baseHeading + neuralV2SteeringOffset(action));
+  } else if (head === "range") {
+    const metres = distance(frame, frame.targetPoint);
+    const preferred = neuralV2PreferredRange(action);
+    const tolerance = Math.max(5, preferred * 0.16);
+    if (action.range === "disengage" || metres < preferred - tolerance) {
+      desiredHeading = wrapDeg(headingTo(frame, frame.targetPoint) + 180);
+    } else if (metres > preferred + tolerance) {
+      desiredHeading = headingTo(frame, frame.targetPoint);
+    }
+  } else if (head === "route") {
+    const routePoint = neuralV2RoutePoint(frame.actor, frame.targetPoint, action);
+    desiredHeading = headingTo(frame, routePoint);
+  }
+
+  return {
+    heading: wrapDeg(baseHeading + clamp(wrapDeg(desiredHeading - baseHeading), -turnRate * seconds, turnRate * seconds)),
+    speed: baseSpeed + clamp(desiredSpeed - baseSpeed, -acceleration * seconds, acceleration * seconds),
+  };
+}
+
+function applyMotion(frame, desired, seconds, runtime) {
+  let nextX = frame.x + Math.sin(rad(desired.heading)) * desired.speed * seconds;
+  let nextY = frame.y - Math.cos(rad(desired.heading)) * desired.speed * seconds;
+  let waterClamped = false;
+  if (frame.actor.kind === "boat") {
+    const safeX = clamp(nextX, WATER_MIN_X, WATER_MAX_X);
+    const safeY = clamp(nextY, WATER_MIN_Y, WATER_MAX_Y);
+    waterClamped = safeX !== nextX || safeY !== nextY;
+    nextX = safeX;
+    nextY = safeY;
+  } else {
+    nextX = clamp(nextX, 5, 415);
+    nextY = clamp(nextY, 5, 315);
+  }
+  frame.entity.heading = desired.heading;
+  frame.entity.speed = desired.speed;
+  frame.entity.x = nextX;
+  frame.entity.y = nextY;
+  runtime.diagnostics.movementFrames += 1;
+  if (waterClamped) {
+    runtime.diagnostics.waterClampFrames += 1;
+    runtime.diagnostics.waterGuardInterventions += 1;
+  }
 }
 
 export function finishServerNeuralV2Overrides(serverRoom, frames, dt) {
@@ -133,63 +234,32 @@ export function finishServerNeuralV2Overrides(serverRoom, frames, dt) {
     const entity = frame.entity;
     if (!entity || entity.active === false || entity.destroyed || entity.sunk) continue;
     if (frame.actor.kind === "foot" && frame.state != null && entity.state !== frame.state) continue;
-    const desired = neuralV2DesiredMotion(frame.actor, frame.targetPoint, frame.action);
+    const seconds = Math.max(0, Number(dt) || 0);
 
-    if (frame.actor.controlsFire !== false) {
-      if (desired.fire) runtime.diagnostics.fireAllowedFrames = (runtime.diagnostics.fireAllowedFrames || 0) + 1;
-      else if (suppressFire(entity)) runtime.diagnostics.fireSuppressedFrames = (runtime.diagnostics.fireSuppressedFrames || 0) + 1;
-    }
-
-    if (frame.actor.controlsMovement === false) {
+    if (frame.action.isolated) {
+      runtime.diagnostics.isolatedHeadFrames[frame.action.head] += frame.action.head === "fire" ? 0 : 1;
+      if (frame.action.head !== "fire" && frame.actor.controlsMovement !== false) {
+        applyMotion(frame, isolatedMotion(frame, entity, seconds), seconds, runtime);
+      }
       controlled += 1;
       continue;
     }
-    const seconds = Math.max(0, Number(dt) || 0);
-    const turnRate = frame.actor.kind === "foot" ? 280 : frame.actor.role === "heavy" ? 75 : 125;
-    const acceleration = frame.actor.kind === "foot" ? 30 : frame.actor.role === "heavy" ? 8 : 16;
-    const nextHeading = wrapDeg(frame.heading + clamp(wrapDeg(desired.heading - frame.heading), -turnRate * seconds, turnRate * seconds));
-    const nextSpeed = frame.speed + clamp(desired.speed - frame.speed, -acceleration * seconds, acceleration * seconds);
-    let nextX = frame.x + Math.sin(rad(nextHeading)) * nextSpeed * seconds;
-    let nextY = frame.y - Math.cos(rad(nextHeading)) * nextSpeed * seconds;
-    let waterClamped = false;
-    if (frame.actor.kind === "boat") {
-      const safeX = clamp(nextX, WATER_MIN_X, WATER_MAX_X);
-      const safeY = clamp(nextY, WATER_MIN_Y, WATER_MAX_Y);
-      waterClamped = safeX !== nextX || safeY !== nextY;
-      nextX = safeX;
-      nextY = safeY;
-    } else {
-      nextX = clamp(nextX, 5, 415);
-      nextY = clamp(nextY, 5, 315);
+
+    const desired = neuralV2DesiredMotion(frame.actor, frame.targetPoint, frame.action);
+    if (frame.actor.controlsFire !== false) {
+      if (desired.fire) runtime.diagnostics.fireAllowedFrames += 1;
+      else if (suppressFire(entity)) runtime.diagnostics.fireSuppressedFrames += 1;
     }
-    entity.heading = nextHeading;
-    entity.speed = nextSpeed;
-    entity.x = nextX;
-    entity.y = nextY;
-    runtime.diagnostics.movementFrames = (runtime.diagnostics.movementFrames || 0) + 1;
-    if (waterClamped) {
-      runtime.diagnostics.waterClampFrames = (runtime.diagnostics.waterClampFrames || 0) + 1;
-      runtime.diagnostics.waterGuardInterventions = (runtime.diagnostics.waterGuardInterventions || 0) + 1;
-    }
+    if (frame.actor.controlsMovement !== false) applyMotion(frame, desired, seconds, runtime);
     controlled += 1;
   }
-  runtime.diagnostics.controlledFrames = (runtime.diagnostics.controlledFrames || 0) + controlled;
+  runtime.diagnostics.controlledFrames += controlled;
   return {controlled};
 }
 
 export function neuralV2OverrideStatus(serverRoom) {
   const runtime = serverRoom?.neuralV2OverrideRuntime;
-  const diagnostics = runtime ? structuredClone(ensureRuntime(serverRoom).diagnostics) : {
-    preparedFrames: 0,
-    controlledFrames: 0,
-    movementFrames: 0,
-    fireAllowedFrames: 0,
-    fireSuppressedFrames: 0,
-    waterClampFrames: 0,
-    waterGuardInterventions: 0,
-    missingActorFrames: 0,
-    missingTargetFrames: 0,
-  };
+  const diagnostics = runtime ? structuredClone(ensureRuntime(serverRoom).diagnostics) : blankDiagnostics();
   return {
     enabled: Boolean(runtime?.actions?.size),
     actionCount: runtime?.actions?.size || 0,
