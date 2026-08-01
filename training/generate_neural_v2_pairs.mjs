@@ -147,6 +147,7 @@ export function createNeuralV2PairPlan(seed, level, durationMs) {
     }),
     started: false,
     completed: false,
+    finishAfterTick: false,
     actorId: null,
     actorRole: null,
     actorKind: null,
@@ -174,12 +175,12 @@ function startPlanIfReady(server, plan, elapsedMs) {
 }
 
 function samplePlan(server, plan, elapsedMs, samples) {
-  if (!plan?.started || plan.completed || !plan.actorId) return;
+  if (!plan?.started || plan.completed || plan.finishAfterTick || !plan.actorId) return;
   const actor = collectNeuralActors(server.world).find(item => item.id === plan.actorId);
   if (!actor) {
     plan.completed = true;
     plan.endedAtMs = elapsedMs;
-    clearServerNeuralV2Overrides(server);
+    setServerNeuralV2Override(server, plan.actorId, null);
     return;
   }
   const targetEntry = neuralTargetForActor(server.world, actor);
@@ -190,8 +191,8 @@ function samplePlan(server, plan, elapsedMs, samples) {
     role: actor.role,
     kind: actor.kind,
     target: targetPoint ? [targetPoint.x, targetPoint.y, targetEntry.index] : null,
-    // Previous-action heads are deliberately zero here. The current v2 label
-    // must never be copied into its own recurrent input fields.
+    // No prior action exists in this one-macro discovery batch. The current
+    // five-head label must never appear in its own recurrent feature slots.
     features: neuralV2FeatureVector(server.world, actor, {stuckMs: 0}),
     action: [
       plan.action.throttleIndex,
@@ -202,11 +203,15 @@ function samplePlan(server, plan, elapsedMs, samples) {
     ],
   });
   plan.appliedSamples += 1;
-  if (plan.appliedSamples >= plan.durationSamples) {
-    plan.completed = true;
-    plan.endedAtMs = elapsedMs;
-    clearServerNeuralV2Overrides(server);
-  }
+  if (plan.appliedSamples >= plan.durationSamples) plan.finishAfterTick = true;
+}
+
+function finishPlanAfterTick(server, plan, elapsedMs) {
+  if (!plan?.finishAfterTick || plan.completed || !plan.actorId) return;
+  plan.finishAfterTick = false;
+  plan.completed = true;
+  plan.endedAtMs = elapsedMs;
+  setServerNeuralV2Override(server, plan.actorId, null);
 }
 
 async function simulateRollout({battleIndex, worldSeed, durationMs, level, script, coop, plan}) {
@@ -237,6 +242,7 @@ async function simulateRollout({battleIndex, worldSeed, durationMs, level, scrip
         nextSampleAt = elapsed + SAMPLE_MS;
       }
       const snapshot = tickServerFreeRoom(server, startedAt + STEP_MS + elapsed);
+      if (plan) finishPlanAfterTick(server, plan, elapsed);
       for (const event of snapshot.events || []) {
         const type = String(event?.type || "");
         if (type === "heavy-bullet-boat-hit" || type === "gun-hit" || type.includes("ram-hit")) enemyHits += 1;
@@ -307,6 +313,8 @@ export async function simulateNeuralV2Pair({battleIndex, durationMs, level, scri
 function usablePair(pair, minimumAdvantage) {
   return pair.advantage >= minimumAdvantage
     && pair.intervention?.started
+    && pair.intervention?.completed
+    && !pair.intervention?.finishAfterTick
     && pair.intervention?.appliedSamples >= 2
     && pair.explored?.samples?.length >= 2;
 }
@@ -386,6 +394,7 @@ async function main() {
     critique: [
       "The unchanged rollout and v2-macro rollout share one world seed; only the explicit v2 override differs.",
       "The current v2 label is excluded from its own recurrent input fields; those five feature slots are zero in this discovery batch.",
+      "Every retained sample is followed by one authoritative server tick before its override is removed.",
       "Override diagnostics are captured before cleanup, so water clamps and fire suppression contribute to the score and remain auditable.",
       "A full five-head action is held for 0.8 to 2.2 seconds, which is more expressive but makes attribution between heads imperfect.",
       "This batch discovers causal action candidates; it does not yet train or enable a v2 neural model.",
