@@ -1,0 +1,1 @@
+Binary upload uses GitHub blobs; this marker is temporary on validation branch.
