@@ -19,12 +19,12 @@ function alivePlayers(world) {
     .filter(({player, index}) => Boolean(world?.freeActivities?.presence?.[index]) && player?.combat?.alive !== false && player?.mode !== "dead");
 }
 
-function playerPoint(world, player) {
+export function neuralPlayerPoint(world, player) {
   if (["boat", "roof"].includes(player?.mode)) return world?.boats?.[player.activeBoat] || player;
   return player;
 }
 
-function targetForActor(world, actor) {
+export function neuralTargetForActor(world, actor) {
   const players = alivePlayers(world);
   if (!players.length) return null;
   const requested = Number(actor?.entity?.targetPlayer);
@@ -32,7 +32,7 @@ function targetForActor(world, actor) {
   const explicit = Number.isInteger(requested) ? requested : Number.isInteger(assigned) ? assigned : -1;
   const direct = players.find(item => item.index === explicit);
   if (direct) return direct;
-  return players.sort((left, right) => distance(actor.entity, playerPoint(world, left.player)) - distance(actor.entity, playerPoint(world, right.player)))[0];
+  return players.sort((left, right) => distance(actor.entity, neuralPlayerPoint(world, left.player)) - distance(actor.entity, neuralPlayerPoint(world, right.player)))[0];
 }
 
 function activeEntity(entity) {
@@ -45,7 +45,7 @@ function actorId(prefix, entity, index = 0) {
   return String(entity?.id || `${prefix}-${index}`);
 }
 
-function collectActors(world) {
+export function collectNeuralActors(world) {
   const result = [];
   const pushBoat = (prefix, entity, role, index = 0) => {
     if (!activeEntity(entity)) return;
@@ -92,9 +92,9 @@ function targetMode(player) {
 
 function featureVector(world, actor, state) {
   const entity = actor.entity;
-  const targetEntry = targetForActor(world, actor);
+  const targetEntry = neuralTargetForActor(world, actor);
   const target = targetEntry?.player || null;
-  const targetPoint = target ? playerPoint(world, target) : null;
+  const targetPoint = target ? neuralPlayerPoint(world, target) : null;
   const x = Number(entity?.x) || 0;
   const y = Number(entity?.y) || 0;
   const heading = Number(entity?.heading) || 0;
@@ -108,7 +108,7 @@ function featureVector(world, actor, state) {
   const targetDistance = Math.hypot(dx, dy);
   const bearing = Math.atan2(localX, -localY);
   const players = alivePlayers(world);
-  const nearPlayers = players.filter(item => distance(entity, playerPoint(world, item.player)) <= 40).length;
+  const nearPlayers = players.filter(item => distance(entity, neuralPlayerPoint(world, item.player)) <= 40).length;
   const heavy = world?.freeHeavyPursuer?.boat;
   const heavyActive = activeEntity(heavy);
   const weapon = weaponCode(actor);
@@ -141,7 +141,7 @@ function featureVector(world, actor, state) {
 function ensureShadowRuntime(serverRoom) {
   if (!serverRoom.neuralShadowRuntime) {
     Object.defineProperty(serverRoom, "neuralShadowRuntime", {
-      value: {nextAt: 0, lastAt: 0, actors: new Map(), summary: null},
+      value: {nextAt: 0, lastAt: 0, actors: new Map(), summary: null, controlEnabled: false, testControl: false},
       writable: true,
       configurable: true,
       enumerable: false,
@@ -149,6 +149,8 @@ function ensureShadowRuntime(serverRoom) {
   }
   const state = serverRoom.neuralShadowRuntime;
   if (!(state.actors instanceof Map)) state.actors = new Map();
+  if (typeof state.controlEnabled !== "boolean") state.controlEnabled = false;
+  if (typeof state.testControl !== "boolean") state.testControl = false;
   return state;
 }
 
@@ -159,7 +161,7 @@ export function updateServerNeuralShadow(serverRoom, now = Date.now()) {
   shadow.nextAt = now + SHADOW_INTERVAL_MS;
   shadow.lastAt = now;
 
-  const actors = collectActors(serverRoom.world);
+  const actors = collectNeuralActors(serverRoom.world);
   const seen = new Set();
   const movementCounts = Object.fromEntries(model.movementClasses.map(name => [name, 0]));
   let confidenceTotal = 0;
@@ -184,9 +186,10 @@ export function updateServerNeuralShadow(serverRoom, now = Date.now()) {
     fireTotal += next.fireProbability;
   }
   for (const id of shadow.actors.keys()) if (!seen.has(id)) shadow.actors.delete(id);
+  const controlEnabled = Boolean(shadow.controlEnabled && (model.controlApproved === true || shadow.testControl));
   shadow.summary = {
     enabled: true,
-    controlEnabled: false,
+    controlEnabled,
     modelFormat: model.format,
     modelVersion: model.version,
     actorCount: actors.length,
@@ -198,11 +201,28 @@ export function updateServerNeuralShadow(serverRoom, now = Date.now()) {
   return neuralShadowStatus(serverRoom);
 }
 
+export function neuralDecision(serverRoom, actorId) {
+  return serverRoom?.neuralShadowRuntime?.actors?.get(String(actorId || "")) || null;
+}
+
+export function neuralControlEnabled(serverRoom) {
+  const shadow = serverRoom?.neuralShadowRuntime;
+  return Boolean(shadow?.controlEnabled && (model.controlApproved === true || shadow.testControl));
+}
+
+export function setServerNeuralControlForTest(serverRoom, enabled) {
+  const shadow = ensureShadowRuntime(serverRoom);
+  shadow.controlEnabled = Boolean(enabled);
+  shadow.testControl = Boolean(enabled);
+  shadow.nextAt = 0;
+  return neuralControlEnabled(serverRoom);
+}
+
 export function neuralShadowStatus(serverRoom) {
   const shadow = serverRoom?.neuralShadowRuntime;
   return shadow?.summary ? structuredClone(shadow.summary) : {
     enabled: true,
-    controlEnabled: false,
+    controlEnabled: neuralControlEnabled(serverRoom),
     modelFormat: model.format,
     modelVersion: model.version,
     actorCount: 0,

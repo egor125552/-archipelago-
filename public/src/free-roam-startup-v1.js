@@ -156,3 +156,7 @@ try {
     touchGameplay,
   };
 })();
+
+import("./free-roam-neural-test-ui-v1.js?v=1").catch(error => {
+  console.error("Unable to load neural test controls", error);
+});

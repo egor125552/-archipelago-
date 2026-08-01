@@ -65,11 +65,12 @@ test("reconnect policy accepts an automatically recreated exact room", () => {
   assert.equal(shouldExpireSilentConnection({now: 15_000, lastServerMessageAt: 500, gameVisible: false}), false);
 });
 
-test("live gesture and reconnect code routes combat sonar and force-expires stalled sockets", async () => {
-  const [client, html, startup] = await Promise.all([
+test("live gesture and reconnect code routes combat sonar and restores server-owned worlds", async () => {
+  const [client, html, startup, savedWorld] = await Promise.all([
     readFile(new URL("../public/src/free-roam-v4.js", import.meta.url), "utf8"),
     readFile(new URL("../public/free-roam.html", import.meta.url), "utf8"),
     readFile(new URL("../public/src/free-roam-startup-v1.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/src/free-roam-saved-world-v1.js", import.meta.url), "utf8"),
   ]);
   assert.match(client, /command === "sonar"\) useSonarOrCombatTargets\(\)/);
   assert.match(client, /command === "targets"\) targetMenu\.open\(\)/);
@@ -77,7 +78,10 @@ test("live gesture and reconnect code routes combat sonar and force-expires stal
   assert.match(client, /targetMenu\.reportCurrent\(\)/);
   assert.match(client, /socket = null;[\s\S]*connection\.close\(4104, reason\)/);
   assert.match(client, /state-load-timeout/);
-  assert.match(startup, /message\.recreatedRoom === true/);
+  assert.match(savedWorld, /message\?\.type === "lobby-ready"/);
+  assert.match(savedWorld, /saveWorld\(message\.room, message\.role\)/);
+  assert.match(savedWorld, /rewriteSavedWorldUrl/);
+  assert.doesNotMatch(startup, /message\.recreatedRoom === true/);
   assert.match(html, /free-roam-startup-v1\.js\?v=7/);
   assert.match(html, /free-roam-v4\.js\?v=52/);
 });
