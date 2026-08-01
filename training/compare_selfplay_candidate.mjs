@@ -71,21 +71,33 @@ export function compareCandidate(baseReport, candidateReport) {
 
   const levelFiveBefore = base.byLevel[5];
   const levelFiveAfter = candidate.byLevel[5];
+  let threatFiveResolutionImproved = false;
   if (levelFiveBefore && levelFiveAfter) {
     const beforeResolved = (levelFiveBefore.victories + levelFiveBefore.teamWipes) / Math.max(1, levelFiveBefore.battles);
     const afterResolved = (levelFiveAfter.victories + levelFiveAfter.teamWipes) / Math.max(1, levelFiveAfter.battles);
     if (afterResolved + 0.02 < beforeResolved) failures.push("threat-five-resolution-regressed");
+    threatFiveResolutionImproved = afterResolved >= beforeResolved + 0.04
+      || levelFiveAfter.teamWipes > levelFiveBefore.teamWipes;
   }
+
+  const improvement = {
+    fewerTimeouts: candidate.timeouts < base.timeouts,
+    pressureAtLeastTwoPercentHigher: candidate.meanPressure >= Math.max(base.meanPressure * 1.02, base.meanPressure + 0.5),
+    threatFiveResolutionImproved,
+  };
+  improvement.measurable = Object.values(improvement).some(Boolean);
+  if (!improvement.measurable) failures.push("no-measurable-held-out-improvement");
 
   return {
     format: "echo-neural-selfplay-candidate-comparison-v1",
     generatedAt: new Date().toISOString(),
     verdict: failures.length ? "rejected" : "candidate-acceptable-for-manual-review",
     failures,
+    improvement,
     base,
     candidate,
     critique: [
-      "Passing this gate does not enable the model in ordinary play; it only means the candidate did not regress the selected held-out mechanics and outcome limits.",
+      "Passing this gate does not enable the model in ordinary play; it requires a measurable held-out improvement while respecting mechanics and fairness limits.",
       "The same scripted-player family is used for generation and evaluation, although held-out seeds are separate, so strategic overfitting remains possible.",
       "Mean pressure can hide uneven difficulty. Lower threat levels therefore have a separate over-lethality rejection rule.",
       "Human battles and a room archive remain necessary before any final promotion decision.",
@@ -101,7 +113,7 @@ async function main() {
   const candidate = JSON.parse(await readFile(candidatePath, "utf8"));
   const report = compareCandidate(base, candidate);
   await writeFile(output, `${JSON.stringify(report, null, 2)}\n`);
-  console.log(JSON.stringify({output, verdict: report.verdict, failures: report.failures}, null, 2));
+  console.log(JSON.stringify({output, verdict: report.verdict, failures: report.failures, improvement: report.improvement}, null, 2));
   if (report.verdict === "rejected") process.exitCode = 4;
 }
 
