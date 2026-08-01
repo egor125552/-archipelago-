@@ -45,11 +45,6 @@ function suppressFire(entity) {
   if (Number.isFinite(entity.aimRemaining)) entity.aimRemaining = 0;
   if (Number.isFinite(entity.burstRemaining)) entity.burstRemaining = 0;
   if (Number.isFinite(entity.burstShotsRemaining)) entity.burstShotsRemaining = 0;
-  entity.neuralFireSuppressed = true;
-}
-
-function clearFireSuppression(entity) {
-  if (entity) delete entity.neuralFireSuppressed;
 }
 
 export function prepareServerNeuralControl(serverRoom) {
@@ -61,8 +56,7 @@ export function prepareServerNeuralControl(serverRoom) {
     const targetEntry = neuralTargetForActor(serverRoom.world, actor);
     const targetPoint = targetEntry?.player ? neuralPlayerPoint(serverRoom.world, targetEntry.player) : null;
     if (!targetPoint) continue;
-    if (decision.fire) clearFireSuppression(actor.entity);
-    else suppressFire(actor.entity);
+    if (!decision.fire) suppressFire(actor.entity);
     frames.push({
       id: actor.id,
       entity: actor.entity,
