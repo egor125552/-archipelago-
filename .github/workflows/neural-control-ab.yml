@@ -1,0 +1,47 @@
+name: Neural control A/B
+
+on:
+  push:
+    branches:
+      - agent/neural-control-ab
+    paths:
+      - "src/free-roam-neural-*.js"
+      - "src/free-roam-server.js"
+      - "src/generated/free-roam-tactical-policy-v1.js"
+      - "training/compare_policy.mjs"
+      - "tests/free-roam-neural-*.test.mjs"
+      - ".github/workflows/neural-control-ab.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: neural-control-ab-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Run all repository tests
+        run: npm test
+
+      - name: Compare legacy and neural tactics on identical seeds
+        run: node training/compare_policy.mjs
+
+      - name: Upload A/B critique
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: neural-control-ab-report
+          path: training/reports/latest-ab.json
+          if-no-files-found: warn
