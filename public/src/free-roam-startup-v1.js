@@ -5,10 +5,6 @@ const SPEECH_DEFAULT_MIGRATION_KEY = "echo-free-roam-speech-default-v2";
 
 try {
   if (localStorage.getItem(SPEECH_DEFAULT_MIGRATION_KEY) !== "done") {
-    // An older VoiceOver workaround could mistake an accessibility-generated
-    // keyboard-style click for a request to disable game speech. That stale
-    // value survived after the workaround itself was removed. Reset only that
-    // old disabled value once; later explicit choices remain persistent.
     if (localStorage.getItem(SPEECH_PREFERENCE_KEY) === "off") {
       localStorage.removeItem(SPEECH_PREFERENCE_KEY);
     }
@@ -144,8 +140,6 @@ try {
   new MutationObserver(removeReleaseDebugButton).observe(document.documentElement, {childList: true, subtree: true});
   removeReleaseDebugButton();
 
-  // Kept as a compatibility surface for older modules. World/session identity is
-  // deliberately never persisted in the browser anymore.
   globalThis.__freeRoamSessionGuard = {
     active: () => null,
     autoResumeEnabled: () => false,
@@ -156,3 +150,7 @@ try {
     touchGameplay,
   };
 })();
+
+import("./free-roam-neural-test-ui-v1.js?v=1").catch(error => {
+  console.error("Unable to load neural test controls", error);
+});
