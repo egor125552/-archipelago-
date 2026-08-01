@@ -1,0 +1,137 @@
+name: Neural real-server simulations
+
+on:
+  push:
+    branches:
+      - main
+      - agent/neural-real-simulations-v2
+    paths:
+      - "src/free-roam-neural-*.js"
+      - "src/free-roam-server.js"
+      - "src/generated/free-roam-tactical-policy-v1.js"
+      - "training/run_real_server_simulations.mjs"
+      - "training/merge_real_server_simulations.mjs"
+      - "tests/free-roam-neural-*.test.mjs"
+      - ".github/workflows/neural-real-server-simulations.yml"
+  workflow_dispatch:
+    inputs:
+      total_battles:
+        description: Total authoritative battles across all shards
+        required: true
+        default: "1000000"
+      shards:
+        description: Parallel shards
+        required: true
+        default: "64"
+      duration_ms:
+        description: Simulated milliseconds per battle
+        required: true
+        default: "24000"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: neural-real-server-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      total_battles: ${{ steps.plan.outputs.total_battles }}
+      duration_ms: ${{ steps.plan.outputs.duration_ms }}
+      shards: ${{ steps.plan.outputs.shards }}
+    steps:
+      - id: plan
+        env:
+          DISPATCH_TOTAL: ${{ inputs.total_battles }}
+          DISPATCH_SHARDS: ${{ inputs.shards }}
+          DISPATCH_DURATION: ${{ inputs.duration_ms }}
+        run: |
+          node <<'NODE' >> "$GITHUB_OUTPUT"
+          const dispatch = process.env.GITHUB_EVENT_NAME === "workflow_dispatch";
+          const total = Math.max(1, Number(dispatch ? process.env.DISPATCH_TOTAL : 1024) || 1024);
+          const shardCount = Math.max(1, Math.min(128, Number(dispatch ? process.env.DISPATCH_SHARDS : 8) || 8));
+          const duration = Math.max(4000, Number(dispatch ? process.env.DISPATCH_DURATION : 12000) || 12000);
+          console.log(`matrix=${JSON.stringify({shard: Array.from({length: shardCount}, (_, index) => index)})}`);
+          console.log(`total_battles=${Math.floor(total)}`);
+          console.log(`duration_ms=${Math.floor(duration)}`);
+          console.log(`shards=${Math.floor(shardCount)}`);
+          NODE
+
+  simulate:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      max-parallel: 16
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install project dependencies
+        run: npm ci
+
+      - name: Run authoritative server battles
+        run: >-
+          node training/run_real_server_simulations.mjs
+          --battles=${{ needs.plan.outputs.total_battles }}
+          --shard=${{ matrix.shard }}
+          --shards=${{ needs.plan.outputs.shards }}
+          --duration-ms=${{ needs.plan.outputs.duration_ms }}
+          --output=training/reports/shard-${{ matrix.shard }}.json
+
+      - name: Upload shard report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: neural-real-server-shard-${{ matrix.shard }}
+          path: training/reports/shard-${{ matrix.shard }}.json
+          if-no-files-found: error
+          retention-days: 14
+
+  aggregate:
+    if: always()
+    needs:
+      - plan
+      - simulate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Download all shard reports
+        uses: actions/download-artifact@v4
+        with:
+          pattern: neural-real-server-shard-*
+          path: training/reports/shards
+          merge-multiple: true
+
+      - name: Merge reports and enforce truthful completion
+        run: >-
+          node training/merge_real_server_simulations.mjs
+          --input=training/reports/shards
+          --output=training/reports/real-server-aggregate.json
+          --critique-output=training/reports/real-server-critique.md
+
+      - name: Upload aggregate and self-critique
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: neural-real-server-aggregate
+          path: |
+            training/reports/real-server-aggregate.json
+            training/reports/real-server-critique.md
+          if-no-files-found: warn
+          retention-days: 30
