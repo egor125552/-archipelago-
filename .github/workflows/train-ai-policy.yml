@@ -1,0 +1,102 @@
+name: Train tactical neural policy
+
+on:
+  workflow_dispatch:
+    inputs:
+      archive_url:
+        description: Full URL of /api/training/archive?room=...
+        required: false
+        type: string
+      epochs:
+        description: Maximum training epochs
+        required: false
+        default: "100"
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tactical-neural-policy
+  cancel-in-progress: false
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      TRAINING_ARCHIVE_URL: ${{ inputs.archive_url || vars.TRAINING_ARCHIVE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Require a private server archive
+        run: |
+          if [ -z "$TRAINING_ARCHIVE_URL" ]; then
+            echo "Provide archive_url or configure the TRAINING_ARCHIVE_URL repository variable."
+            exit 2
+          fi
+
+      - name: Install CPU trainer
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install numpy==2.3.5
+          python -m pip install torch==2.10.0 --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Train, criticize and quantize
+        id: train_model
+        continue-on-error: true
+        run: |
+          python -m py_compile training/*.py
+          python training/train_policy.py \
+            --url "$TRAINING_ARCHIVE_URL" \
+            --epochs "${{ inputs.epochs || '100' }}" \
+            --replay "$RUNNER_TEMP/tactical-replay.json" \
+            --output src/generated/free-roam-tactical-policy-v1.js \
+            --report training/reports/latest.json
+          python training/review_policy.py \
+            --report training/reports/latest.json \
+            --model src/generated/free-roam-tactical-policy-v1.js \
+            --output training/reports/latest-review.md
+
+      - name: Verify JavaScript inference and repository tests
+        id: verify_repository
+        if: always()
+        continue-on-error: true
+        run: npm test
+
+      - name: Upload review even when rejected
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tactical-policy-review
+          path: |
+            training/reports/latest.json
+            training/reports/latest-review.md
+            src/generated/free-roam-tactical-policy-v1.js
+          if-no-files-found: error
+
+      - name: Commit accepted shadow model and critique
+        if: steps.train_model.outcome == 'success' && steps.verify_repository.outcome == 'success'
+        run: |
+          if git diff --quiet -- training/reports src/generated/free-roam-tactical-policy-v1.js; then
+            echo "No new accepted model changes."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add training/reports src/generated/free-roam-tactical-policy-v1.js
+          git commit -m "Train tactical neural policy"
+          git push origin HEAD:main
+
+      - name: Reject failed model or repository checks
+        if: steps.train_model.outcome != 'success' || steps.verify_repository.outcome != 'success'
+        run: |
+          echo "Training, self-review, or repository tests rejected the candidate. The existing model remains active in shadow mode."
+          exit 1
