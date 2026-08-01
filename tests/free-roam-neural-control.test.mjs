@@ -4,8 +4,8 @@ import test from "node:test";
 import {
   applyServerFreeInput,
   createServerFreeRoom,
+  finishServerTrainingBattle,
   setServerFreePresence,
-  setServerNeuralControlForTest,
   startServerTrainingBattle,
   tickServerFreeRoom,
   trainingRuntimeStatus,
@@ -29,8 +29,12 @@ function run(controlEnabled) {
     const startedAt = 1_000;
     const server = createServerFreeRoom(startedAt);
     setServerFreePresence(server, "captain", true);
-    startServerTrainingBattle(server, 3, false, startedAt + 40);
-    if (controlEnabled) setServerNeuralControlForTest(server, true);
+    startServerTrainingBattle(
+      server,
+      controlEnabled ? {level: 3, neuralOnly: true} : 3,
+      false,
+      startedAt + 40,
+    );
     for (let index = 1; index <= 100; index += 1) {
       applyServerFreeInput(server, "captain", {up: true, right: index % 50 < 25, left: index % 50 >= 25}, index);
       tickServerFreeRoom(server, startedAt + 40 + index * 40);
@@ -52,24 +56,36 @@ function actorPositions(world) {
   ].filter(Boolean).map(entity => [entity.id || "unknown", Number(entity.x), Number(entity.y)]);
 }
 
-test("neural control remains disabled by default", () => {
+test("neural control remains disabled in an ordinary quick threat", () => {
   const server = run(false);
-  assert.equal(trainingRuntimeStatus(server).neuralShadow.controlEnabled, false);
+  const status = trainingRuntimeStatus(server);
+  assert.equal(status.neuralOnly, false);
+  assert.equal(status.neuralShadow.controlEnabled, false);
   for (const [, x, y] of actorPositions(server.world)) {
     assert.equal(Number.isFinite(x), true);
     assert.equal(Number.isFinite(y), true);
   }
 });
 
-test("test-only neural control changes tactics without leaving world bounds", () => {
+test("neural-only request changes tactics without leaving world bounds", () => {
   const legacy = run(false);
   const neural = run(true);
-  const status = trainingRuntimeStatus(neural).neuralShadow;
-  assert.equal(status.controlEnabled, true);
-  assert.ok(status.actorCount > 0);
+  const status = trainingRuntimeStatus(neural);
+  assert.equal(status.neuralOnly, true);
+  assert.equal(status.neuralShadow.controlEnabled, true);
+  assert.ok(status.neuralShadow.actorCount > 0);
   assert.notDeepEqual(actorPositions(neural.world), actorPositions(legacy.world));
   for (const [, x, y] of actorPositions(neural.world)) {
     assert.ok(x >= -1 && x <= 421, `x ${x} outside world`);
     assert.ok(y >= -1 && y <= 321, `y ${y} outside world`);
   }
+});
+
+test("finishing a neural-only threat restores the ordinary world and disables control", () => {
+  const server = run(true);
+  const status = finishServerTrainingBattle(server, "manual", {restore: true, now: 8_000});
+  assert.equal(status.trainingActive, false);
+  assert.equal(status.battleActive, false);
+  assert.equal(status.neuralOnly, false);
+  assert.equal(status.neuralShadow.controlEnabled, false);
 });
