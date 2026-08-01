@@ -31,6 +31,8 @@ const STEP_MS = 40;
 const SAMPLE_MS = 200;
 const FORMAT = "echo-neural-v2-head-windows-v1";
 const HEADS = Object.freeze(["throttle", "steering", "range", "route", "fire"]);
+const DIRECTIONAL_HEADS = new Set(["steering", "range", "route"]);
+const DIAGNOSTIC_ASSIST_SCALE = 0.55;
 const PLAYER_SCRIPTS = Object.freeze([
   "idle-no-fire",
   "water-zigzag",
@@ -119,11 +121,9 @@ function scriptedInput(script, elapsed, server, playerIndex) {
 function candidatesForHead(server, head) {
   const actors = collectNeuralActors(server.world);
   if (head === "fire") return actors.filter(actor => actor.controlsFire !== false);
-  const moving = actors.filter(actor => actor.controlsMovement !== false
-    && String(neuralDecision(server, actor.id)?.movement || "hold") !== "hold");
-  if (head === "route") return moving.filter(actor => actor.kind === "boat");
-  if (["steering", "range"].includes(head)) return moving;
-  return actors.filter(actor => actor.controlsMovement !== false);
+  const movable = actors.filter(actor => actor.controlsMovement !== false);
+  if (head === "route") return movable.filter(actor => actor.kind === "boat");
+  return movable;
 }
 
 function gatePoint(targetPoint) {
@@ -204,7 +204,18 @@ function clonePlan(plan, observeOnly) {
     endedAtMs: null,
     initialState: null,
     finalState: null,
+    diagnosticAssistFrames: 0,
   };
+}
+
+function applyDiagnosticMotionAssist(server, plan) {
+  if (!plan?.started || !DIRECTIONAL_HEADS.has(plan.head) || !plan.actorId) return false;
+  const actor = collectNeuralActors(server.world).find(item => item.id === plan.actorId);
+  if (!actor || actor.controlsMovement === false) return false;
+  const assistedSpeed = neuralV2RoleSpeed(actor) * DIAGNOSTIC_ASSIST_SCALE;
+  if (Math.abs(Number(actor.entity?.speed) || 0) < assistedSpeed) actor.entity.speed = assistedSpeed;
+  plan.diagnosticAssistFrames += 1;
+  return true;
 }
 
 async function simulateWindow({battleIndex, worldSeed, level, script, coop, plan, maximumMs}) {
@@ -241,7 +252,10 @@ async function simulateWindow({battleIndex, worldSeed, level, script, coop, plan
       }
 
       const snapshot = tickServerFreeRoom(server, startedAt + STEP_MS + elapsed);
-      if (plan.started) eventCounters(snapshot.events, events);
+      if (plan.started) {
+        applyDiagnosticMotionAssist(server, plan);
+        eventCounters(snapshot.events, events);
+      }
       if (plan.started && elapsed >= plan.startedAtMs + windowMs) {
         plan.finalState = captureState(server, plan.actorId);
         plan.completed = Boolean(plan.initialState && plan.finalState);
@@ -260,6 +274,7 @@ async function simulateWindow({battleIndex, worldSeed, level, script, coop, plan
       actorKind: plan.actorKind,
       startedAtMs: plan.startedAtMs,
       endedAtMs: plan.endedAtMs,
+      diagnosticAssistFrames: plan.diagnosticAssistFrames,
       initialState: plan.initialState,
       finalState: plan.finalState,
       events,
@@ -279,6 +294,11 @@ export function compareNeuralV2HeadWindow(plan, baseline, explored) {
   if (!explored?.completed) failures.push("explored-window-incomplete");
   if (baseline?.actorId !== explored?.actorId) failures.push("actor-id-mismatch");
   if (baseline?.actorRole !== explored?.actorRole || baseline?.actorKind !== explored?.actorKind) failures.push("actor-shape-mismatch");
+  if (DIRECTIONAL_HEADS.has(plan.head)) {
+    if (!(Number(baseline?.diagnosticAssistFrames) > 0)) failures.push("baseline-motion-assist-missing");
+    if (!(Number(explored?.diagnosticAssistFrames) > 0)) failures.push("explored-motion-assist-missing");
+    if (Number(baseline?.diagnosticAssistFrames) !== Number(explored?.diagnosticAssistFrames)) failures.push("motion-assist-frame-mismatch");
+  }
   if (failures.length) return {valid: false, failures};
 
   const base = baseline.finalState;
@@ -334,6 +354,7 @@ export function compareNeuralV2HeadWindow(plan, baseline, explored) {
     pressureDelta,
     playerDamageDelta,
     boatDamageDelta,
+    diagnosticAssistFrames: Number(explored.diagnosticAssistFrames) || 0,
     waterGuardDelta: Number(explored.diagnostics?.waterGuardInterventions || 0)
       - Number(baseline.diagnostics?.waterGuardInterventions || 0),
   };
@@ -439,6 +460,7 @@ async function main() {
     trainingEligiblePairs: [],
     critique: [
       "Baseline and explored select the same actor before their worlds diverge and observe the same fixed short window.",
+      "Directional heads receive the same explicitly diagnostic neutral speed in baseline and explored; only the tested heading objective differs.",
       "Objective deltas test immediate head semantics and geometry; they are diagnostics, not reinforcement-learning rewards.",
       "The workflow cannot emit training labels or enable a model.",
       "Full-episode acceptance still requires the unchanged 2.5 threshold and separate fairness gates.",
