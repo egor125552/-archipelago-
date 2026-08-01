@@ -39,7 +39,7 @@ export function neuralV2RoutePoint(actor, rawTargetPoint, rawAction) {
   if (actor?.kind !== "boat") return {...target, redirected: false, route: action.route};
 
   const targetOnLand = target.y < WATER_MIN_Y;
-  if (action.route === "shore_gate" || (targetOnLand && action.route !== "direct")) {
+  if (action.route === "shore_gate") {
     return {
       x: clamp(target.x, SHORE_GATE_MIN_X, SHORE_GATE_MAX_X),
       y: SHORE_GATE_Y,
