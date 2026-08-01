@@ -24,7 +24,8 @@ class Example:
     features: np.ndarray
     movement: np.ndarray
     fire: np.ndarray
-    weights: np.ndarray
+    movement_weights: np.ndarray
+    fire_weights: np.ndarray
     mask: np.ndarray
 
 
@@ -41,7 +42,8 @@ class SequenceDataset(Dataset):
             torch.from_numpy(item.features),
             torch.from_numpy(item.movement),
             torch.from_numpy(item.fire),
-            torch.from_numpy(item.weights),
+            torch.from_numpy(item.movement_weights),
+            torch.from_numpy(item.fire_weights),
             torch.from_numpy(item.mask),
         )
 
@@ -98,39 +100,47 @@ def load_elites(inputs: list[str]) -> list[dict]:
         parsed = json.loads(path.read_text(encoding="utf-8"))
         for episode in parsed.get("eliteEpisodes") or []:
             by_id[str(episode.get("id") or f"{path}:{len(by_id)}")] = episode
-    return sorted(by_id.values(), key=lambda item: (int(item.get("level") or 0), -float(item.get("score") or 0)))
+    return sorted(by_id.values(), key=lambda item: (int(item.get("level") or 0), -float(item.get("advantage") or 0)))
 
 
-def make_examples(episodes: list[dict], sequence_length: int, stride: int) -> list[Example]:
-    if not episodes:
-        return []
-    scores = np.asarray([float(item.get("score") or 0) for item in episodes], dtype=np.float32)
-    minimum, maximum = float(scores.min()), float(scores.max())
-    scale = max(1e-6, maximum - minimum)
+def make_examples(episodes: list[dict], sequence_length: int, stride: int) -> tuple[list[Example], dict]:
     examples: list[Example] = []
+    statistics = {
+        "movementExplorationFrames": 0,
+        "fireExplorationFrames": 0,
+        "contextFrames": 0,
+        "skippedActorsWithoutExploration": 0,
+    }
     for episode in episodes:
-        normalized_score = (float(episode.get("score") or 0) - minimum) / scale
-        episode_weight = 0.55 + normalized_score * 1.45
-        outcome = str(episode.get("outcome") or "timeout")
-        if outcome == "team-wipe":
-            episode_weight *= 1.2
-        elif outcome == "timeout":
-            episode_weight *= 0.65
+        advantage = max(0.0, float(episode.get("advantage") or 0))
+        if advantage <= 0:
+            continue
+        advantage_weight = min(4.0, 0.55 + advantage / 18.0)
+        if str(episode.get("outcome") or "") == "team-wipe" and str((episode.get("baseline") or {}).get("outcome") or "") != "team-wipe":
+            advantage_weight *= 1.35
         for actor in episode.get("actors") or []:
             samples = actor.get("samples") or []
             if len(samples) < 4:
                 continue
+            movement_explored = np.asarray([1.0 if int(item.get("em") or 0) else 0.0 for item in samples], dtype=np.float32)
+            fire_explored = np.asarray([1.0 if int(item.get("ef") or 0) else 0.0 for item in samples], dtype=np.float32)
+            if not movement_explored.any() and not fire_explored.any():
+                statistics["skippedActorsWithoutExploration"] += 1
+                continue
             features = np.asarray([item["f"] for item in samples], dtype=np.float32)
             movement = np.asarray([int(item.get("m") or 0) for item in samples], dtype=np.int64)
             fire = np.asarray([int(item.get("fire") or 0) for item in samples], dtype=np.int64)
-            explored = np.asarray([
-                1.0 if int(item.get("em") or 0) or int(item.get("ef") or 0) else 0.0
-                for item in samples
-            ], dtype=np.float32)
-            weights = np.full(len(samples), episode_weight * 0.38, dtype=np.float32)
-            weights += explored * episode_weight * 1.25
+            context_weight = 0.008
+            move_weights = np.full(len(samples), context_weight, dtype=np.float32)
+            fire_weights = np.full(len(samples), context_weight, dtype=np.float32)
+            move_weights += movement_explored * advantage_weight
+            fire_weights += fire_explored * advantage_weight
             if str(actor.get("role") or "") == "heavy_turret":
-                weights *= 1.2
+                fire_weights *= 1.2
+            statistics["movementExplorationFrames"] += int(movement_explored.sum())
+            statistics["fireExplorationFrames"] += int(fire_explored.sum())
+            statistics["contextFrames"] += len(samples)
+
             starts = [0] if len(samples) <= sequence_length else list(range(0, len(samples) - sequence_length + 1, stride))
             if len(samples) > sequence_length and starts[-1] != len(samples) - sequence_length:
                 starts.append(len(samples) - sequence_length)
@@ -140,26 +150,30 @@ def make_examples(episodes: list[dict], sequence_length: int, stride: int) -> li
                 x = np.zeros((sequence_length, FEATURE_COUNT), dtype=np.float32)
                 y_move = np.zeros(sequence_length, dtype=np.int64)
                 y_fire = np.zeros(sequence_length, dtype=np.int64)
-                y_weight = np.zeros(sequence_length, dtype=np.float32)
+                w_move = np.zeros(sequence_length, dtype=np.float32)
+                w_fire = np.zeros(sequence_length, dtype=np.float32)
                 mask = np.zeros(sequence_length, dtype=np.float32)
                 x[:count] = features[start:end]
                 y_move[:count] = movement[start:end]
                 y_fire[:count] = fire[start:end]
-                y_weight[:count] = weights[start:end]
+                w_move[:count] = move_weights[start:end]
+                w_fire[:count] = fire_weights[start:end]
                 mask[:count] = 1.0
-                examples.append(Example(str(episode.get("id")), x, y_move, y_fire, y_weight, mask))
-    return examples
+                examples.append(Example(str(episode.get("id")), x, y_move, y_fire, w_move, w_fire, mask))
+    return examples, statistics
 
 
 def split_examples(examples: list[Example], seed: int) -> tuple[list[Example], list[Example]]:
     episode_ids = sorted({item.episode_id for item in examples})
+    if len(episode_ids) < 2:
+        raise ValueError("paired self-play requires at least two positive-advantage elite episodes")
     random.Random(seed).shuffle(episode_ids)
     validation_count = max(1, len(episode_ids) // 5)
     validation_ids = set(episode_ids[:validation_count])
     train = [item for item in examples if item.episode_id not in validation_ids]
     validation = [item for item in examples if item.episode_id in validation_ids]
     if not train or not validation:
-        raise ValueError("self-play split requires at least two distinct elite episodes")
+        raise ValueError("self-play split requires non-empty train and validation sets")
     return train, validation
 
 
@@ -176,21 +190,23 @@ def evaluate(model, loader):
     move_criterion = nn.CrossEntropyLoss(reduction="none")
     fire_criterion = nn.CrossEntropyLoss(reduction="none")
     with torch.no_grad():
-        for inputs, movement, fire, weights, mask in loader:
+        for inputs, movement, fire, move_weights, fire_weights, mask in loader:
             move_logits, fire_logits, _ = model(inputs)
-            loss = weighted_loss(move_logits, movement, weights, mask, move_criterion)
-            loss += 0.65 * weighted_loss(fire_logits, fire, weights, mask, fire_criterion)
-            losses.append(float(loss))
-            active = mask.bool()
-            move_correct += int((move_logits.argmax(-1)[active] == movement[active]).sum())
-            move_total += int(active.sum())
-            fire_correct += int((fire_logits.argmax(-1)[active] == fire[active]).sum())
-            fire_total += int(active.sum())
+            move_loss = weighted_loss(move_logits, movement, move_weights, mask, move_criterion)
+            fire_loss = weighted_loss(fire_logits, fire, fire_weights, mask, fire_criterion)
+            losses.append(float(move_loss + 0.65 * fire_loss))
+            move_active = (move_weights > 0.05) & mask.bool()
+            fire_active = (fire_weights > 0.05) & mask.bool()
+            move_correct += int((move_logits.argmax(-1)[move_active] == movement[move_active]).sum())
+            move_total += int(move_active.sum())
+            fire_correct += int((fire_logits.argmax(-1)[fire_active] == fire[fire_active]).sum())
+            fire_total += int(fire_active.sum())
     return {
         "loss": float(np.mean(losses)) if losses else math.inf,
-        "movementAccuracy": move_correct / max(1, move_total),
-        "fireAccuracy": fire_correct / max(1, fire_total),
-        "frames": move_total,
+        "movementExplorationAccuracy": move_correct / max(1, move_total),
+        "fireExplorationAccuracy": fire_correct / max(1, fire_total),
+        "movementExplorationFrames": move_total,
+        "fireExplorationFrames": fire_total,
     }
 
 
@@ -200,21 +216,22 @@ def main():
     parser.add_argument("--base-model", default="src/generated/free-roam-tactical-policy-v1.js")
     parser.add_argument("--output", default="training/reports/selfplay-candidate-policy.js")
     parser.add_argument("--report", default="training/reports/selfplay-training.json")
-    parser.add_argument("--epochs", type=int, default=28)
-    parser.add_argument("--patience", type=int, default=6)
+    parser.add_argument("--epochs", type=int, default=20)
+    parser.add_argument("--patience", type=int, default=5)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--sequence-length", type=int, default=32)
     parser.add_argument("--stride", type=int, default=8)
-    parser.add_argument("--learning-rate", type=float, default=0.00055)
-    parser.add_argument("--anchor", type=float, default=0.018)
+    parser.add_argument("--learning-rate", type=float, default=0.0003)
+    parser.add_argument("--anchor", type=float, default=0.05)
+    parser.add_argument("--maximum-drift", type=float, default=9.0)
     parser.add_argument("--seed", type=int, default=125552)
     args = parser.parse_args()
 
     seed_everything(args.seed)
     episodes = load_elites(args.input)
     if len(episodes) < 8:
-        raise SystemExit(f"Need at least 8 elite episodes; found {len(episodes)}")
-    examples = make_examples(episodes, args.sequence_length, args.stride)
+        raise SystemExit(f"Need at least 8 positive-advantage elite episodes; found {len(episodes)}")
+    examples, data_statistics = make_examples(episodes, args.sequence_length, args.stride)
     train_examples, validation_examples = split_examples(examples, args.seed)
     train_loader = DataLoader(SequenceDataset(train_examples), batch_size=args.batch_size, shuffle=True)
     validation_loader = DataLoader(SequenceDataset(validation_examples), batch_size=args.batch_size)
@@ -232,15 +249,15 @@ def main():
     for epoch in range(1, args.epochs + 1):
         model.train()
         losses = []
-        for inputs, movement, fire, weights, mask in train_loader:
+        for inputs, movement, fire, move_weights, fire_weights, mask in train_loader:
             optimizer.zero_grad(set_to_none=True)
             move_logits, fire_logits, _ = model(inputs)
-            loss = weighted_loss(move_logits, movement, weights, mask, move_criterion)
-            loss += 0.65 * weighted_loss(fire_logits, fire, weights, mask, fire_criterion)
+            move_loss = weighted_loss(move_logits, movement, move_weights, mask, move_criterion)
+            fire_loss = weighted_loss(fire_logits, fire, fire_weights, mask, fire_criterion)
             anchor_loss = sum((parameter - base_state[name]).pow(2).mean() for name, parameter in model.named_parameters())
-            loss += args.anchor * anchor_loss
+            loss = move_loss + 0.65 * fire_loss + args.anchor * anchor_loss
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 0.8)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 0.7)
             optimizer.step()
             losses.append(float(loss.detach()))
         validation = evaluate(model, validation_loader)
@@ -255,13 +272,13 @@ def main():
             break
 
     if best_state is None:
-        raise SystemExit("Self-play fine-tuning did not produce a candidate")
+        raise SystemExit("Paired self-play fine-tuning did not produce a candidate")
     model.load_state_dict(best_state)
     validation = evaluate(model, validation_loader)
     train_metrics = evaluate(model, DataLoader(SequenceDataset(train_examples), batch_size=args.batch_size))
     drift = math.sqrt(sum(float((model.state_dict()[name] - base_state[name]).pow(2).sum()) for name in base_state))
     report = {
-        "format": "echo-neural-selfplay-training-v1",
+        "format": "echo-neural-paired-selfplay-training-v2",
         "baseModelVersion": base_payload.get("version"),
         "episodes": len(episodes),
         "actors": sum(len(item.get("actors") or []) for item in episodes),
@@ -269,18 +286,23 @@ def main():
         "validationSequences": len(validation_examples),
         "bestValidationLoss": best_loss,
         "parameterL2Drift": drift,
+        "maximumAllowedDrift": args.maximum_drift,
+        "data": data_statistics,
         "train": train_metrics,
         "validation": validation,
         "history": history,
         "critique": [
-            "The candidate learns from elite explored trajectories, not from a mathematically exact policy-gradient objective.",
-            "Validation accuracy measures imitation of held-out elite actions, not combat quality.",
-            "The base-weight anchor limits catastrophic drift but can also prevent a necessary large improvement.",
-            "Promotion is forbidden until the candidate beats the base model on held-out authoritative server episodes without worse water or timeout metrics.",
+            "The candidate is trained only on actions explicitly changed by exploration in rollouts that beat their identical-seed baseline.",
+            "This is advantage-weighted behavioural cloning, not policy-gradient reinforcement learning; credit assignment is still approximate.",
+            "Tiny context weights preserve recurrent sequence shape but are not treated as discovered actions.",
+            "The base-weight anchor and maximum drift limit reduce catastrophic changes but may reject a genuinely useful large policy change.",
+            "Authoritative held-out A/B remains the only promotion gate; exploration accuracy cannot prove combat improvement.",
         ],
     }
     Path(args.report).parent.mkdir(parents=True, exist_ok=True)
     Path(args.report).write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    if drift > args.maximum_drift:
+        raise SystemExit(f"Candidate parameter drift {drift:.4f} exceeds maximum {args.maximum_drift:.4f}")
     export_model(model, Path(args.output), {"validation": validation}, args.seed)
     print(json.dumps({"output": args.output, "episodes": len(episodes), "validation": validation, "drift": drift}))
 
