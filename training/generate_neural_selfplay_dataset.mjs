@@ -130,10 +130,19 @@ function chooseDifferentMovement(current, random) {
   return (current + offset) % MOVEMENTS.length;
 }
 
-function recordAndExplore(server, trajectories, random, movementEpsilon, fireEpsilon, elapsedMs) {
+export function previousActionFeatureState(previousActions, actorId) {
+  const previous = previousActions.get(actorId);
+  return previous
+    ? {movementIndex: previous.movementIndex, fire: previous.fire}
+    : {movementIndex: 0, fire: false};
+}
+
+function recordAndExplore(server, trajectories, previousActions, random, movementEpsilon, fireEpsilon, elapsedMs) {
   for (const actor of collectNeuralActors(server.world)) {
     const decision = neuralDecision(server, actor.id);
     if (!decision) continue;
+    const recurrentState = previousActionFeatureState(previousActions, actor.id);
+    const features = roundedFeatures(neuralFeatureVector(server.world, actor, recurrentState));
     const policyMovement = Math.max(0, Math.min(MOVEMENTS.length - 1, Number(decision.movementIndex) || 0));
     const policyFire = Boolean(decision.fire);
     const movementExplored = actor.controlsMovement !== false && random() < movementEpsilon;
@@ -148,6 +157,7 @@ function recordAndExplore(server, trajectories, random, movementEpsilon, fireEps
       decision.rawFire = selectedFire;
       if (selectedFire) decision.fireLatch = Math.max(Number(decision.fireLatch) || 0, actor.role === "heavy_turret" ? 12 : 2);
     }
+    previousActions.set(actor.id, {movementIndex: selectedMovement, fire: selectedFire});
 
     let trajectory = trajectories.get(actor.id);
     if (!trajectory) {
@@ -156,7 +166,7 @@ function recordAndExplore(server, trajectories, random, movementEpsilon, fireEps
     }
     trajectory.samples.push({
       t: elapsedMs,
-      f: roundedFeatures(neuralFeatureVector(server.world, actor, decision)),
+      f: features,
       m: selectedMovement,
       fire: Number(selectedFire),
       pm: policyMovement,
@@ -204,6 +214,7 @@ async function simulateBattle({battleIndex, seed, durationMs, level, script, coo
     startServerTrainingBattle(server, {level, neuralOnly: true}, false, startedAt + STEP_MS);
 
     const trajectories = new Map();
+    const previousActions = new Map();
     let nextSampleAt = 0;
     let enemyHits = 0;
     let elapsedMs = 0;
@@ -224,7 +235,7 @@ async function simulateBattle({battleIndex, seed, durationMs, level, script, coo
         if (type === "heavy-bullet-boat-hit" || type === "gun-hit" || type.includes("ram-hit")) enemyHits += 1;
       }
       if (elapsed >= nextSampleAt) {
-        recordAndExplore(server, trajectories, random, movementEpsilon, fireEpsilon, elapsed);
+        recordAndExplore(server, trajectories, previousActions, random, movementEpsilon, fireEpsilon, elapsed);
         nextSampleAt = elapsed + SAMPLE_MS;
       }
       if ((snapshot.events || []).some(event => event?.type === "contract-threat-cleared")
@@ -315,6 +326,7 @@ async function main() {
       "Scripted players are repetitive and can be exploited, so a held-out authoritative A/B gate is mandatory.",
       "Guardrail penalties reduce but do not remove the risk that water clamps hide poor navigation.",
       "Only elite trajectories are retained; unsuccessful exploration is summarized but not stored as negative examples.",
+      "Recurrent previous-action features are captured before the current explored action is selected; current labels are never copied into their own input fields.",
     ],
     eliteEpisodes,
   };
