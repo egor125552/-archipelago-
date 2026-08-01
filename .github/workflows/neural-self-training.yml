@@ -16,27 +16,27 @@ on:
   workflow_dispatch:
     inputs:
       campaign_target:
-        description: Declared total campaign target; one run covers only the requested batch
+        description: Declared target of explored/baseline pairs; one run covers only one indexed batch
         required: true
         default: "1000000"
       start_index:
-        description: First battle index in this campaign batch
+        description: First pair index in this campaign batch
         required: true
         default: "0"
       batch_battles:
-        description: Authoritative exploratory battles in this run
+        description: Paired seeds in this run; authoritative rollouts equal twice this number
         required: true
         default: "16384"
       shards:
-        description: Parallel shards for this batch
+        description: Parallel shards for this pair batch
         required: true
         default: "128"
       duration_ms:
-        description: Maximum simulated duration of each exploratory battle
+        description: Maximum simulated duration of each baseline or explored rollout
         required: true
         default: "60000"
-      elite_per_level:
-        description: Elite trajectories retained per level and shard
+      elite_per_scenario:
+        description: Positive-advantage trajectories retained per threat/script/solo-or-co-op group and shard
         required: true
         default: "4"
 
@@ -57,7 +57,7 @@ jobs:
       batch_battles: ${{ steps.plan.outputs.batch_battles }}
       shards: ${{ steps.plan.outputs.shards }}
       duration_ms: ${{ steps.plan.outputs.duration_ms }}
-      elite_per_level: ${{ steps.plan.outputs.elite_per_level }}
+      elite_per_scenario: ${{ steps.plan.outputs.elite_per_scenario }}
     steps:
       - id: plan
         env:
@@ -66,7 +66,7 @@ jobs:
           DISPATCH_BATTLES: ${{ inputs.batch_battles }}
           DISPATCH_SHARDS: ${{ inputs.shards }}
           DISPATCH_DURATION: ${{ inputs.duration_ms }}
-          DISPATCH_ELITES: ${{ inputs.elite_per_level }}
+          DISPATCH_ELITES: ${{ inputs.elite_per_scenario }}
         run: |
           node <<'NODE' >> "$GITHUB_OUTPUT"
           const manual = process.env.GITHUB_EVENT_NAME === "workflow_dispatch";
@@ -82,7 +82,7 @@ jobs:
           console.log(`batch_battles=${Math.floor(battles)}`);
           console.log(`shards=${Math.floor(shards)}`);
           console.log(`duration_ms=${Math.floor(duration)}`);
-          console.log(`elite_per_level=${Math.floor(elites)}`);
+          console.log(`elite_per_scenario=${Math.floor(elites)}`);
           NODE
 
   explore:
@@ -104,7 +104,7 @@ jobs:
       - name: Install project dependencies
         run: npm ci
 
-      - name: Generate authoritative explored trajectories
+      - name: Generate paired authoritative trajectories
         run: >-
           node training/generate_neural_selfplay_dataset.mjs
           --battles=${{ needs.plan.outputs.batch_battles }}
@@ -112,12 +112,13 @@ jobs:
           --shard=${{ matrix.shard }}
           --shards=${{ needs.plan.outputs.shards }}
           --duration-ms=${{ needs.plan.outputs.duration_ms }}
-          --elite-per-level=${{ needs.plan.outputs.elite_per_level }}
-          --movement-epsilon=0.18
-          --fire-epsilon=0.08
+          --elite-per-scenario=${{ needs.plan.outputs.elite_per_scenario }}
+          --minimum-advantage=2.5
+          --movement-epsilon=0.24
+          --fire-epsilon=0.10
           --output=training/reports/selfplay/shard-${{ matrix.shard }}.json
 
-      - name: Upload elite shard
+      - name: Upload paired shard
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -132,7 +133,7 @@ jobs:
       - plan
       - explore
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
 
@@ -156,17 +157,17 @@ jobs:
       - name: Reject incomplete exploration matrix
         if: needs.explore.result != 'success'
         run: |
-          echo "At least one exploration shard failed. No candidate may be trained from an incomplete batch."
+          echo "At least one paired exploration shard failed. No candidate may be trained from an incomplete batch."
           exit 2
 
-      - name: Download all elite shards
+      - name: Download all paired shards
         uses: actions/download-artifact@v4
         with:
           pattern: neural-selfplay-shard-*
           path: training/reports/selfplay/input
           merge-multiple: true
 
-      - name: Verify and merge exact shard coverage
+      - name: Verify pair, rollout and shard coverage
         run: >-
           node training/merge_neural_selfplay_shards.mjs
           --input=training/reports/selfplay/input
@@ -179,23 +180,25 @@ jobs:
         run: |
           cat > training/reports/selfplay-campaign.json <<JSON
           {
-            "campaignTarget": ${{ needs.plan.outputs.campaign_target }},
-            "batchStart": ${{ needs.plan.outputs.start_index }},
-            "batchBattles": ${{ needs.plan.outputs.batch_battles }},
-            "batchEndExclusive": $(( ${{ needs.plan.outputs.start_index }} + ${{ needs.plan.outputs.batch_battles }} )),
+            "campaignTargetPairs": ${{ needs.plan.outputs.campaign_target }},
+            "batchStartPair": ${{ needs.plan.outputs.start_index }},
+            "batchPairs": ${{ needs.plan.outputs.batch_battles }},
+            "batchEndPairExclusive": $(( ${{ needs.plan.outputs.start_index }} + ${{ needs.plan.outputs.batch_battles }} )),
+            "authoritativeRollouts": $(( ${{ needs.plan.outputs.batch_battles }} * 2 )),
             "shards": ${{ needs.plan.outputs.shards }},
             "coverageReport": "selfplay-aggregate.json",
-            "note": "This artifact proves one batch only. It must not be reported as the full campaign unless completed ranges cover the target without gaps."
+            "note": "Every pair contains an unchanged and explored rollout with the same world seed. This artifact proves one pair range only, not the full campaign."
           }
           JSON
 
-      - name: Fine-tune a candidate from elite explored trajectories
+      - name: Fine-tune only positive-advantage explored actions
         run: >-
           python training/train_selfplay_policy.py
           --input training/reports/selfplay-aggregate.json
           --base-model src/generated/free-roam-tactical-policy-v1.js
           --output training/reports/selfplay-candidate-policy.js
           --report training/reports/selfplay-training.json
+          --maximum-drift=9.0
 
       - name: Evaluate unchanged base model on held-out episodes
         run: >-
