@@ -210,6 +210,22 @@ def evaluate(model, loader):
     }
 
 
+def parameter_drift(model, base_state: dict[str, torch.Tensor]) -> float:
+    return math.sqrt(sum(float((parameter.detach() - base_state[name]).pow(2).sum()) for name, parameter in model.named_parameters()))
+
+
+@torch.no_grad()
+def project_to_trust_region(model, base_state: dict[str, torch.Tensor], maximum_drift: float) -> tuple[float, bool]:
+    drift = parameter_drift(model, base_state)
+    if drift <= maximum_drift:
+        return drift, False
+    target = maximum_drift * 0.995
+    scale = target / max(drift, 1e-12)
+    for name, parameter in model.named_parameters():
+        parameter.copy_(base_state[name] + (parameter - base_state[name]) * scale)
+    return parameter_drift(model, base_state), True
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", action="append", default=[])
@@ -243,12 +259,15 @@ def main():
     fire_criterion = nn.CrossEntropyLoss(reduction="none")
     best_state = None
     best_loss = math.inf
+    best_drift = 0.0
     stale = 0
     history = []
+    projection_count = 0
 
     for epoch in range(1, args.epochs + 1):
         model.train()
         losses = []
+        epoch_projections = 0
         for inputs, movement, fire, move_weights, fire_weights, mask in train_loader:
             optimizer.zero_grad(set_to_none=True)
             move_logits, fire_logits, _ = model(inputs)
@@ -259,11 +278,23 @@ def main():
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 0.7)
             optimizer.step()
+            _drift, projected = project_to_trust_region(model, base_state, args.maximum_drift)
+            if projected:
+                projection_count += 1
+                epoch_projections += 1
             losses.append(float(loss.detach()))
         validation = evaluate(model, validation_loader)
-        history.append({"epoch": epoch, "trainLoss": float(np.mean(losses)), **validation})
+        drift = parameter_drift(model, base_state)
+        history.append({
+            "epoch": epoch,
+            "trainLoss": float(np.mean(losses)),
+            "parameterL2Drift": drift,
+            "trustRegionProjections": epoch_projections,
+            **validation,
+        })
         if validation["loss"] < best_loss - 1e-5:
             best_loss = validation["loss"]
+            best_drift = drift
             best_state = {name: value.detach().clone() for name, value in model.state_dict().items()}
             stale = 0
         else:
@@ -272,13 +303,13 @@ def main():
             break
 
     if best_state is None:
-        raise SystemExit("Paired self-play fine-tuning did not produce a candidate")
+        raise SystemExit("Paired self-play fine-tuning did not produce a candidate inside the trust region")
     model.load_state_dict(best_state)
     validation = evaluate(model, validation_loader)
     train_metrics = evaluate(model, DataLoader(SequenceDataset(train_examples), batch_size=args.batch_size))
-    drift = math.sqrt(sum(float((model.state_dict()[name] - base_state[name]).pow(2).sum()) for name in base_state))
+    drift = parameter_drift(model, base_state)
     report = {
-        "format": "echo-neural-paired-selfplay-training-v2",
+        "format": "echo-neural-paired-selfplay-training-v3",
         "baseModelVersion": base_payload.get("version"),
         "episodes": len(episodes),
         "actors": sum(len(item.get("actors") or []) for item in episodes),
@@ -286,7 +317,9 @@ def main():
         "validationSequences": len(validation_examples),
         "bestValidationLoss": best_loss,
         "parameterL2Drift": drift,
+        "bestCheckpointDrift": best_drift,
         "maximumAllowedDrift": args.maximum_drift,
+        "trustRegionProjectionCount": projection_count,
         "data": data_statistics,
         "train": train_metrics,
         "validation": validation,
@@ -295,16 +328,22 @@ def main():
             "The candidate is trained only on actions explicitly changed by exploration in rollouts that beat their identical-seed baseline.",
             "This is advantage-weighted behavioural cloning, not policy-gradient reinforcement learning; credit assignment is still approximate.",
             "Tiny context weights preserve recurrent sequence shape but are not treated as discovered actions.",
-            "The base-weight anchor and maximum drift limit reduce catastrophic changes but may reject a genuinely useful large policy change.",
+            "Every optimizer step is projected into a hard L2 trust region around the checked-in policy; frequent projections mean the requested update is too aggressive.",
             "Authoritative held-out A/B remains the only promotion gate; exploration accuracy cannot prove combat improvement.",
         ],
     }
     Path(args.report).parent.mkdir(parents=True, exist_ok=True)
     Path(args.report).write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    if drift > args.maximum_drift:
-        raise SystemExit(f"Candidate parameter drift {drift:.4f} exceeds maximum {args.maximum_drift:.4f}")
+    if drift > args.maximum_drift + 1e-5:
+        raise SystemExit(f"Trust-region bug: candidate drift {drift:.4f} exceeds maximum {args.maximum_drift:.4f}")
     export_model(model, Path(args.output), {"validation": validation}, args.seed)
-    print(json.dumps({"output": args.output, "episodes": len(episodes), "validation": validation, "drift": drift}))
+    print(json.dumps({
+        "output": args.output,
+        "episodes": len(episodes),
+        "validation": validation,
+        "drift": drift,
+        "trustRegionProjectionCount": projection_count,
+    }))
 
 
 if __name__ == "__main__":
