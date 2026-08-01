@@ -21,9 +21,15 @@ const PROXIMITY = 5.4;
 const MIN_X = 4, MAX_X = 416, MIN_Y = 4, MAX_Y = 316;
 const LAND_RECT = Object.freeze({minX: 118, maxX: 302, minY: 8, maxY: 76});
 const clamp = (value, min, max) => Math.max(min, Math.min(max, Number(value) || 0));
-const distance = (a, b) => Math.hypot((Number(a?.x) || 0) - (Number(b?.x) || 0), (Number(a?.y) || 0) - (Number(b?.y) || 0));
+const distance = (a, b) => Math.hypot(
+  (Number(a?.x) || 0) - (Number(b?.x) || 0),
+  (Number(a?.y) || 0) - (Number(b?.y) || 0),
+);
 const wrap = value => ((Number(value) + 180) % 360 + 360) % 360 - 180;
-const bearing = (a, b) => Math.atan2((Number(b?.x) || 0) - (Number(a?.x) || 0), -((Number(b?.y) || 0) - (Number(a?.y) || 0))) * 180 / Math.PI;
+const bearing = (a, b) => Math.atan2(
+  (Number(b?.x) || 0) - (Number(a?.x) || 0),
+  -((Number(b?.y) || 0) - (Number(a?.y) || 0)),
+) * 180 / Math.PI;
 
 function emit(world, type, text = "", targets = [0, 1], extra = {}) {
   world.events ||= [];
@@ -74,7 +80,9 @@ function pointForPlayer(world, playerIndex) {
   const player = world.players?.[playerIndex];
   if (!player) return null;
   return ["boat", "roof"].includes(player.mode)
-    ? world.boats?.find(boat => boat?.id === player.activeBoat) || world.boats?.[player.activeBoat] || player
+    ? world.boats?.find(boat => boat?.id === player.activeBoat)
+      || world.boats?.[player.activeBoat]
+      || player
     : player;
 }
 
@@ -82,7 +90,14 @@ function spatial(world, source) {
   return (world.players || []).map((_, index) => {
     const listener = pointForPlayer(world, index);
     if (!listener || world.freeActivities?.presence?.[index] === false) {
-      return {pan: 0, gain: 0, distance: 999, listenerX: null, listenerY: null, listenerHeading: 0};
+      return {
+        pan: 0,
+        gain: 0,
+        distance: 999,
+        listenerX: null,
+        listenerY: null,
+        listenerHeading: 0,
+      };
     }
     const metres = distance(listener, source);
     const relative = wrap(bearing(listener, source) - (Number(listener.heading) || 0));
@@ -97,22 +112,132 @@ function spatial(world, source) {
   });
 }
 
+function seededUnit(seed) {
+  const raw = Math.sin((Number(seed) || 0) * 12.9898 + 78.233) * 43758.5453;
+  return raw - Math.floor(raw);
+}
+
+function trajectoryFields(start, target, sequence) {
+  const dx = target.x - start.x;
+  const dy = target.y - start.y;
+  const pathDistance = Math.max(0.001, Math.hypot(dx, dy));
+  const side = seededUnit(sequence * 4 + 1) < 0.5 ? -1 : 1;
+  const maximumCurve = Math.max(0.8, Math.min(12, pathDistance * 0.18));
+  const curve = side * clamp(
+    2.8 + seededUnit(sequence * 4 + 2) * 9.2,
+    0.8,
+    maximumCurve,
+  );
+  const normalX = -dy / pathDistance;
+  const normalY = dx / pathDistance;
+  return {
+    startX: start.x,
+    startY: start.y,
+    targetX: target.x,
+    targetY: target.y,
+    controlX: clamp((start.x + target.x) / 2 + normalX * curve, MIN_X, MAX_X),
+    controlY: clamp((start.y + target.y) / 2 + normalY * curve, MIN_Y, MAX_Y),
+    arcHeight: 13.5 + seededUnit(sequence * 4 + 3) * 7,
+    arcSkew: 0.88 + seededUnit(sequence * 4 + 4) * 0.24,
+    pathDistance,
+    speedScale: 0.94 + seededUnit(sequence * 4 + 5) * 0.16,
+  };
+}
+
+function hasTrajectory(projectile) {
+  return [
+    projectile?.startX,
+    projectile?.startY,
+    projectile?.targetX,
+    projectile?.targetY,
+    projectile?.controlX,
+    projectile?.controlY,
+    projectile?.arcHeight,
+    projectile?.arcSkew,
+  ].every(value => Number.isFinite(Number(value)));
+}
+
+function restoreLegacyTrajectory(projectile) {
+  if (hasTrajectory(projectile)) return projectile;
+  const remaining = Math.max(
+    0.12,
+    (Number(projectile?.flightTime) || 1) - (Number(projectile?.age) || 0),
+  );
+  const start = {
+    x: clamp(projectile?.x, MIN_X, MAX_X),
+    y: clamp(projectile?.y, MIN_Y, MAX_Y),
+  };
+  const target = {
+    x: clamp(start.x + (Number(projectile?.vx) || 0) * remaining, MIN_X, MAX_X),
+    y: clamp(start.y + (Number(projectile?.vy) || 0) * remaining, MIN_Y, MAX_Y),
+  };
+  Object.assign(
+    projectile,
+    trajectoryFields(start, target, Number(projectile?.id?.match(/\d+$/)?.[0]) || 1),
+  );
+  projectile.age = 0;
+  projectile.flightTime = remaining;
+  projectile.nextFlightAt = 0;
+  return projectile;
+}
+
+export function megaBombTrajectoryPoint(projectile, progress) {
+  const t = clamp(progress, 0, 1);
+  const inverse = 1 - t;
+  const startX = Number(projectile.startX) || 0;
+  const startY = Number(projectile.startY) || 0;
+  const controlX = Number(projectile.controlX) || startX;
+  const controlY = Number(projectile.controlY) || startY;
+  const targetX = Number(projectile.targetX) || startX;
+  const targetY = Number(projectile.targetY) || startY;
+  const x = inverse * inverse * startX
+    + 2 * inverse * t * controlX
+    + t * t * targetX;
+  const y = inverse * inverse * startY
+    + 2 * inverse * t * controlY
+    + t * t * targetY;
+  const derivativeX = 2 * inverse * (controlX - startX)
+    + 2 * t * (targetX - controlX);
+  const derivativeY = 2 * inverse * (controlY - startY)
+    + 2 * t * (targetY - controlY);
+  const flightTime = Math.max(0.12, Number(projectile.flightTime) || 1);
+  const verticalProgress = Math.pow(t, clamp(projectile.arcSkew, 0.75, 1.25));
+  return {
+    x,
+    y,
+    z: 1.6 + Math.sin(verticalProgress * Math.PI) * clamp(projectile.arcHeight, 8, 24),
+    vx: derivativeX / flightTime,
+    vy: derivativeY / flightTime,
+    heading: bearing({x, y}, {x: x + derivativeX, y: y + derivativeY}),
+  };
+}
+
 export function ensureMegaBombState(world) {
   if (!world) return null;
   world.freeMegaBombs ||= {projectiles: [], nextId: 1, ammoVersion: AMMO_VERSION};
   const state = world.freeMegaBombs;
-  if (!Array.isArray(state.projectiles)) state.projectiles = Object.values(state.projectiles || {});
+  if (!Array.isArray(state.projectiles)) {
+    state.projectiles = Object.values(state.projectiles || {});
+  }
   if (!Number.isFinite(Number(state.nextId))) state.nextId = 1;
+  for (const projectile of state.projectiles) restoreLegacyTrajectory(projectile);
+
   const storedAmmoVersion = Number(state.ammoVersion);
-  const upgradeOldTestAmmo = !Number.isFinite(storedAmmoVersion) || storedAmmoVersion < AMMO_VERSION;
+  const upgradeOldTestAmmo = !Number.isFinite(storedAmmoVersion)
+    || storedAmmoVersion < AMMO_VERSION;
   for (const player of world.players || []) {
     if (!player?.combat) continue;
     player.combat.weapons ||= {};
     player.combat.weapons.megaBomb = true;
     const currentAmmo = Number(player.combat.megaBombAmmo);
-    if (!Number.isFinite(currentAmmo)) player.combat.megaBombAmmo = MEGA_BOMB_START_AMMO;
-    else if (upgradeOldTestAmmo && currentAmmo <= 50) player.combat.megaBombAmmo = MEGA_BOMB_START_AMMO;
-    if (!Number.isFinite(Number(player.combat.megaBombCooldown))) player.combat.megaBombCooldown = 0;
+    if (!Number.isFinite(currentAmmo)) {
+      player.combat.megaBombAmmo = MEGA_BOMB_START_AMMO;
+    } else if (upgradeOldTestAmmo && currentAmmo <= 50) {
+      player.combat.megaBombAmmo = MEGA_BOMB_START_AMMO;
+    }
+    if (!Number.isFinite(Number(player.combat.megaBombCooldown))) {
+      player.combat.megaBombCooldown = 0;
+    }
   }
   state.ammoVersion = AMMO_VERSION;
   return state;
@@ -120,15 +245,26 @@ export function ensureMegaBombState(world) {
 
 export function reportMegaBombStatus(world, playerIndex) {
   ensureMegaBombState(world);
-  const remaining = Math.max(0, Math.floor(Number(world.players?.[playerIndex]?.combat?.megaBombAmmo) || 0));
-  emit(world, "mega-bomb-status", "", [playerIndex], {sourcePlayer: playerIndex, remaining});
+  const remaining = Math.max(
+    0,
+    Math.floor(Number(world.players?.[playerIndex]?.combat?.megaBombAmmo) || 0),
+  );
+  emit(world, "mega-bomb-status", "", [playerIndex], {
+    sourcePlayer: playerIndex,
+    remaining,
+  });
   return remaining;
 }
 
 function chosenTarget(world, playerIndex, origin) {
   const id = world.players?.[playerIndex]?.combat?.lockedTargetId;
   const locked = resolveCombatTarget(world, playerIndex, id, MEGA_BOMB_MAX_RANGE);
-  if (locked?.point) return locked.point;
+  if (locked?.point) {
+    return {
+      x: clamp(locked.point.x, MIN_X, MAX_X),
+      y: clamp(locked.point.y, MIN_Y, MAX_Y),
+    };
+  }
   const angle = (Number(origin.heading) || 0) * Math.PI / 180;
   return {
     x: clamp(origin.x + Math.sin(angle) * 104, MIN_X, MAX_X),
@@ -142,24 +278,48 @@ export function launchMegaBomb(world, playerIndex) {
   const combat = player?.combat;
   const origin = pointForPlayer(world, playerIndex);
   if (!state || !origin || !combat?.alive || combat.knockedDown) return false;
+
   const remaining = Math.max(0, Math.floor(Number(combat.megaBombAmmo) || 0));
   if (state.projectiles.some(item => item.owner === playerIndex)) {
-    emit(world, "mega-bomb-denied", "Предыдущая мега-бомба ещё летит.", [playerIndex], {remaining});
+    emit(
+      world,
+      "mega-bomb-denied",
+      "Предыдущая мега-бомба ещё летит.",
+      [playerIndex],
+      {remaining},
+    );
     return false;
   }
   if (combat.megaBombCooldown > 0 || remaining <= 0) {
-    emit(world, "mega-bomb-denied", remaining ? "Пусковая система ещё перезаряжается." : "Мега-бомбы закончились.", [playerIndex], {remaining});
+    emit(
+      world,
+      "mega-bomb-denied",
+      remaining ? "Пусковая система ещё перезаряжается." : "Мега-бомбы закончились.",
+      [playerIndex],
+      {remaining},
+    );
     return false;
   }
+
   const target = chosenTarget(world, playerIndex, origin);
   const heading = bearing(origin, target);
   const angle = heading * Math.PI / 180;
-  const flightTime = clamp(distance(origin, target) / SPEED, 0.72, 2.85);
-  const projectile = {
-    id: `mega-bomb-${state.nextId++}`,
-    owner: playerIndex,
+  const start = {
     x: clamp(origin.x + Math.sin(angle) * 3.2, MIN_X, MAX_X),
     y: clamp(origin.y - Math.cos(angle) * 3.2, MIN_Y, MAX_Y),
+  };
+  const sequence = state.nextId++;
+  const trajectory = trajectoryFields(start, target, sequence);
+  const flightTime = clamp(
+    trajectory.pathDistance / SPEED * trajectory.speedScale,
+    0.78,
+    3.15,
+  );
+  const projectile = {
+    id: `mega-bomb-${sequence}`,
+    owner: playerIndex,
+    x: start.x,
+    y: start.y,
     z: 1.6,
     heading,
     vx: Math.sin(angle) * SPEED,
@@ -167,12 +327,25 @@ export function launchMegaBomb(world, playerIndex) {
     age: 0,
     flightTime,
     nextFlightAt: 0,
+    ...trajectory,
   };
+  Object.assign(projectile, megaBombTrajectoryPoint(projectile, 0));
+
   state.projectiles.push(projectile);
   combat.megaBombAmmo = remaining - 1;
   combat.megaBombCooldown = COOLDOWN;
-  emit(world, "mega-bomb-launch", "", [0, 1], {...projectile, projectileId: projectile.id, spatial: spatial(world, projectile)});
-  emit(world, "mega-bomb-launched-status", `Мега-бомба запущена. Осталось ${combat.megaBombAmmo}.`, [playerIndex], {remaining: combat.megaBombAmmo});
+  emit(world, "mega-bomb-launch", "", [0, 1], {
+    ...projectile,
+    projectileId: projectile.id,
+    spatial: spatial(world, projectile),
+  });
+  emit(
+    world,
+    "mega-bomb-launched-status",
+    `Мега-бомба запущена. Осталось ${combat.megaBombAmmo}.`,
+    [playerIndex],
+    {remaining: combat.megaBombAmmo},
+  );
   return true;
 }
 
@@ -180,7 +353,12 @@ function damageAt(metres) {
   if (metres <= MEGA_BOMB_CORE_RADIUS) {
     return 230 + 62 * (1 - metres / MEGA_BOMB_CORE_RADIUS);
   }
-  const amount = clamp(1 - (metres - MEGA_BOMB_CORE_RADIUS) / (MEGA_BOMB_RADIUS - MEGA_BOMB_CORE_RADIUS), 0, 1);
+  const amount = clamp(
+    1 - (metres - MEGA_BOMB_CORE_RADIUS)
+      / (MEGA_BOMB_RADIUS - MEGA_BOMB_CORE_RADIUS),
+    0,
+    1,
+  );
   return 18 + 212 * Math.pow(amount, 1.22);
 }
 
@@ -215,21 +393,40 @@ function damageTarget(world, target, damage, owner) {
       boat.active = false;
       boat.speed = 0;
       notifyThreatBoatDestroyed(world, boat, owner);
-      emit(world, "pursuer-destroyed", "Катер-преследователь уничтожен взрывом.", [0, 1], {
-        sourcePlayer: owner,
-        pursuerId: boat.id || "pursuer-1",
-        x: boat.x,
-        y: boat.y,
-      });
+      emit(
+        world,
+        "pursuer-destroyed",
+        "Катер-преследователь уничтожен взрывом.",
+        [0, 1],
+        {
+          sourcePlayer: owner,
+          pursuerId: boat.id || "pursuer-1",
+          x: boat.x,
+          y: boat.y,
+        },
+      );
     }
   } else if (target.kind === "escort") {
     damageEscort(world, target.pursuerId, damage, owner, h, {weapon: "mega-bomb"});
   } else if (target.kind === "gunner") {
     damageHostileGunner(world, target.gunnerId, damage * 1.12, owner);
   } else if (["hostileActor", "elite"].includes(target.kind)) {
-    damageHostileActor(world, target.actorId, damage * 1.18, owner, {weapon: "mega-bomb"});
+    damageHostileActor(
+      world,
+      target.actorId,
+      damage * 1.18,
+      owner,
+      {weapon: "mega-bomb"},
+    );
   } else if (target.kind === "enemyBoat") {
-    damageEnemyBoat(world, target.enemyBoatId, damage, owner, h, {weapon: "mega-bomb"});
+    damageEnemyBoat(
+      world,
+      target.enemyBoatId,
+      damage,
+      owner,
+      h,
+      {weapon: "mega-bomb"},
+    );
   }
   return !wasDestroyed && Boolean(target.point?.destroyed);
 }
@@ -241,10 +438,14 @@ function explode(world, projectile, reason) {
   let heavyDamage = 0;
   let blockedCount = 0;
   const unique = new Map();
+
   for (const target of listCombatTargets(world, projectile.owner, Infinity)) {
-    if (["player", "boat", "heavyHull", "heavyEngine", "heavyTurret"].includes(target.kind)) continue;
+    if (["player", "boat", "heavyHull", "heavyEngine", "heavyTurret"].includes(target.kind)) {
+      continue;
+    }
     if (!unique.has(target.id)) unique.set(target.id, target);
   }
+
   for (const target of unique.values()) {
     const metres = distance(blast, target.point);
     if (metres > MEGA_BOMB_RADIUS) continue;
@@ -254,9 +455,15 @@ function explode(world, projectile, reason) {
     }
     const damage = damageAt(metres);
     if (damageTarget(world, target, damage, projectile.owner)) destroyedCount += 1;
-    push(target.point, blast, damage, ["marauder", "escort", "enemyBoat"].includes(target.kind));
+    push(
+      target.point,
+      blast,
+      damage,
+      ["marauder", "escort", "enemyBoat"].includes(target.kind),
+    );
     hitCount += 1;
   }
+
   const heavy = world.freeHeavyPursuer?.boat;
   if (heavy?.active && !heavy.destroyed && distance(blast, heavy) <= MEGA_BOMB_RADIUS) {
     if (megaBombPathBlocked(blast, heavy)) {
@@ -264,15 +471,37 @@ function explode(world, projectile, reason) {
     } else {
       const damage = damageAt(distance(blast, heavy));
       const before = heavy.destroyed;
-      damageHeavyPursuer(world, "turret", damage * 1.25, projectile.owner, helpers(), {weapon: "mega-bomb"});
-      damageHeavyPursuer(world, "engine", damage * 0.72, projectile.owner, helpers(), {weapon: "mega-bomb"});
-      damageHeavyPursuer(world, "hull", damage * 0.82, projectile.owner, helpers(), {weapon: "mega-bomb"});
+      damageHeavyPursuer(
+        world,
+        "turret",
+        damage * 1.25,
+        projectile.owner,
+        helpers(),
+        {weapon: "mega-bomb"},
+      );
+      damageHeavyPursuer(
+        world,
+        "engine",
+        damage * 0.72,
+        projectile.owner,
+        helpers(),
+        {weapon: "mega-bomb"},
+      );
+      damageHeavyPursuer(
+        world,
+        "hull",
+        damage * 0.82,
+        projectile.owner,
+        helpers(),
+        {weapon: "mega-bomb"},
+      );
       heavyDamage = Math.round(damage * 2.79);
       if (!before && heavy.destroyed) destroyedCount += 1;
       push(heavy, blast, damage, true);
       hitCount += 1;
     }
   }
+
   const text = hitCount
     ? `Взрыв поразил целей: ${hitCount}. Уничтожено: ${destroyedCount}.`
     : blockedCount
@@ -300,27 +529,42 @@ export function stepMegaBombs(world, dt) {
   const state = ensureMegaBombState(world);
   const seconds = clamp(dt, 0, 0.1);
   for (const player of world.players || []) {
-    if (player?.combat) player.combat.megaBombCooldown = Math.max(0, player.combat.megaBombCooldown - seconds);
+    if (player?.combat) {
+      player.combat.megaBombCooldown = Math.max(
+        0,
+        player.combat.megaBombCooldown - seconds,
+      );
+    }
   }
+
   const survivors = [];
   for (const projectile of state.projectiles) {
+    restoreLegacyTrajectory(projectile);
     const previous = {x: projectile.x, y: projectile.y, z: projectile.z};
     projectile.age += seconds;
-    projectile.x += projectile.vx * seconds;
-    projectile.y += projectile.vy * seconds;
     const progress = clamp(projectile.age / projectile.flightTime, 0, 1);
-    projectile.z = 1.6 + Math.sin(progress * Math.PI) * 15.5;
+    Object.assign(projectile, megaBombTrajectoryPoint(projectile, progress));
+
     if (projectile.age >= projectile.nextFlightAt) {
       projectile.nextFlightAt = projectile.age + 0.1;
-      emit(world, "mega-bomb-flight", "", [0, 1], {...projectile, projectileId: projectile.id, progress, spatial: spatial(world, projectile)});
+      emit(world, "mega-bomb-flight", "", [0, 1], {
+        ...projectile,
+        projectileId: projectile.id,
+        progress,
+        spatial: spatial(world, projectile),
+      });
     }
+
     const targets = listCombatTargets(world, projectile.owner, Infinity);
     const near = projectile.age >= 0.2 && targets.some(target => {
       if (["player", "boat"].includes(target.kind)) return false;
       if (distance(projectile, target.point) > PROXIMITY) return false;
       return !megaBombPathBlocked(projectile, target.point);
     });
-    const outside = projectile.x < MIN_X || projectile.x > MAX_X || projectile.y < MIN_Y || projectile.y > MAX_Y;
+    const outside = projectile.x < MIN_X
+      || projectile.x > MAX_X
+      || projectile.y < MIN_Y
+      || projectile.y > MAX_Y;
     const descendingGroundImpact = progress > 0.62
       && pointInsideRect(projectile, LAND_RECT)
       && projectile.z <= 2.25;
@@ -329,10 +573,21 @@ export function stepMegaBombs(world, dt) {
       && !pointInsideRect(previous, LAND_RECT)
       && pointInsideRect(projectile, LAND_RECT)
       && segmentIntersectsRect(previous, projectile);
-    if (near || descendingGroundImpact || hitSolidEdge || projectile.age >= projectile.flightTime || outside) {
-      const reason = near ? "proximity"
-        : descendingGroundImpact || hitSolidEdge ? "terrain"
-          : outside ? "boundary" : "target";
+
+    if (
+      near
+      || descendingGroundImpact
+      || hitSolidEdge
+      || projectile.age >= projectile.flightTime
+      || outside
+    ) {
+      const reason = near
+        ? "proximity"
+        : descendingGroundImpact || hitSolidEdge
+          ? "terrain"
+          : outside
+            ? "boundary"
+            : "target";
       explode(world, projectile, reason);
     } else {
       survivors.push(projectile);
@@ -344,7 +599,34 @@ export function stepMegaBombs(world, dt) {
 export function megaBombStatus(world) {
   const state = ensureMegaBombState(world);
   return {
-    projectiles: state.projectiles.map(({id, owner, x, y, z, age, flightTime}) => ({id, owner, x, y, z, age, flightTime})),
-    ammo: (world.players || []).map(player => Math.max(0, Math.floor(Number(player?.combat?.megaBombAmmo) || 0))),
+    projectiles: state.projectiles.map(({
+      id,
+      owner,
+      x,
+      y,
+      z,
+      age,
+      flightTime,
+      targetX,
+      targetY,
+      controlX,
+      controlY,
+    }) => ({
+      id,
+      owner,
+      x,
+      y,
+      z,
+      age,
+      flightTime,
+      targetX,
+      targetY,
+      controlX,
+      controlY,
+    })),
+    ammo: (world.players || []).map(player => Math.max(
+      0,
+      Math.floor(Number(player?.combat?.megaBombAmmo) || 0),
+    )),
   };
 }

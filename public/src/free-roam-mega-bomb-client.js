@@ -26,9 +26,15 @@ export const KILL_EVENT_TYPES = Object.freeze(new Set([
 ]));
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, Number(value) || 0));
-const distance = (a, b) => Math.hypot((Number(a?.x) || 0) - (Number(b?.x) || 0), (Number(a?.y) || 0) - (Number(b?.y) || 0));
+const distance = (a, b) => Math.hypot(
+  (Number(a?.x) || 0) - (Number(b?.x) || 0),
+  (Number(a?.y) || 0) - (Number(b?.y) || 0),
+);
 const wrap = value => ((Number(value) + 180) % 360 + 360) % 360 - 180;
-const bearing = (a, b) => Math.atan2((Number(b?.x) || 0) - (Number(a?.x) || 0), -((Number(b?.y) || 0) - (Number(a?.y) || 0))) * 180 / Math.PI;
+const bearing = (a, b) => Math.atan2(
+  (Number(b?.x) || 0) - (Number(a?.x) || 0),
+  -((Number(b?.y) || 0) - (Number(a?.y) || 0)),
+) * 180 / Math.PI;
 
 function pointInsideRect(point, rect = LAND_RECT) {
   const x = Number(point?.x);
@@ -91,7 +97,10 @@ function nearestDiffraction(source, listener) {
     {surface: "south-east", x: LAND_RECT.maxX, y: LAND_RECT.maxY},
   ];
   return corners
-    .map(corner => ({...corner, pathDistance: distance(source, corner) + distance(corner, listener)}))
+    .map(corner => ({
+      ...corner,
+      pathDistance: distance(source, corner) + distance(corner, listener),
+    }))
     .sort((left, right) => left.pathDistance - right.pathDistance)[0];
 }
 
@@ -107,37 +116,49 @@ export function outdoorReflectionPlan(event = {}, spatial = {}) {
     heading: Number(spatial.listenerHeading) || 0,
   };
   const hasGeometry = Number.isFinite(listener.x) && Number.isFinite(listener.y);
-  const directDistance = Math.max(0, Number(spatial.distance) || (hasGeometry ? distance(source, listener) : 0));
+  const directDistance = Math.max(
+    0,
+    Number(spatial.distance) || (hasGeometry ? distance(source, listener) : 0),
+  );
   const directPan = clamp(spatial.pan, -1, 1);
   const directGain = clamp(spatial.gain, 0, 1);
   const directDelay = clamp(directDistance / SPEED_OF_SOUND, 0, 1.35);
   const occluded = hasGeometry && pathOccludedByLand(source, listener);
 
+  // The direct path owns the one complete explosion transient. Every reflected
+  // path starts inside the supplied recording, after its attack, so the player
+  // never hears a second centred "boom" layered over the spatial explosion.
   const dry = {
     kind: "direct",
     delay: directDelay,
     pan: directPan,
-    gain: directGain * (occluded ? 0.075 : 1),
-    lowpass: occluded ? 680 : airLowpass(directDistance),
-    highpass: occluded ? 80 : 28,
+    gain: directGain * (occluded ? 0.018 : 1),
+    lowpass: occluded ? 520 : airLowpass(directDistance),
+    highpass: occluded ? 95 : 28,
     occluded,
-    duration: occluded ? 1.2 : null,
+    offset: 0,
+    attack: 0.003,
+    fadeOut: 0.08,
   };
 
   const sourceHeight = Math.max(0.2, Number(event.z) || 0.35);
   const listenerHeight = 1.45;
   const horizontal = Math.max(0.01, directDistance);
-  const direct3d = Math.hypot(horizontal, listenerHeight - sourceHeight);
   const reflected3d = Math.hypot(horizontal, listenerHeight + sourceHeight);
-  const waterCoefficient = event.surface === "ground" ? 0.07 : 0.16;
+  const waterCoefficient = event.surface === "ground" ? 0.045 : 0.12;
   const water = {
-    kind: "water",
-    delay: clamp(reflected3d / SPEED_OF_SOUND, directDelay + 0.0005, 1.38),
-    pan: directPan,
-    gain: directGain * waterCoefficient * (occluded ? 0.18 : 1),
-    lowpass: event.surface === "ground" ? 4300 : 7600,
-    highpass: 70,
-    duration: 0.48,
+    kind: "water-tail",
+    delay: Math.max(
+      directDelay + clamp(0.045 + directDistance / 5000, 0.045, 0.11),
+      reflected3d / SPEED_OF_SOUND + 0.025,
+    ),
+    pan: clamp(directPan * 0.92, -1, 1),
+    gain: directGain * waterCoefficient * (occluded ? 0.08 : 1),
+    lowpass: event.surface === "ground" ? 3300 : 6800,
+    highpass: 85,
+    offset: 0.16,
+    attack: 0.022,
+    fadeOut: 0.2,
   };
 
   let shores;
@@ -148,7 +169,7 @@ export function outdoorReflectionPlan(event = {}, spatial = {}) {
         const extraDistance = Math.max(0, pathDistance - directDistance);
         return {
           surface: image.surface,
-          delay: clamp(pathDistance / SPEED_OF_SOUND, directDelay + 0.018, 1.65),
+          delay: pathDistance / SPEED_OF_SOUND,
           pan: panFor(listener, image),
           extraDistance,
           pathDistance,
@@ -158,43 +179,63 @@ export function outdoorReflectionPlan(event = {}, spatial = {}) {
       .slice(0, 2);
   } else {
     shores = [
-      {surface: "near", delay: directDelay + 0.15, pan: clamp(-directPan * 0.5, -1, 1), extraDistance: 48},
-      {surface: "far", delay: directDelay + 0.29, pan: clamp(directPan * 0.35, -1, 1), extraDistance: 92},
+      {
+        surface: "near",
+        delay: directDelay + 0.13,
+        pan: clamp(-directPan * 0.45, -1, 1),
+        extraDistance: 48,
+      },
+      {
+        surface: "far",
+        delay: directDelay + 0.29,
+        pan: clamp(directPan * 0.32, -1, 1),
+        extraDistance: 92,
+      },
     ];
   }
 
   const shoreNear = {
-    kind: "shore-near",
+    kind: "shore-near-tail",
     surface: shores[0].surface,
-    delay: shores[0].delay,
+    delay: Math.max(shores[0].delay, directDelay + 0.095),
     pan: shores[0].pan,
-    gain: directGain * 0.18 * clamp(1 / (1 + shores[0].extraDistance / 105), 0.16, 1),
-    lowpass: 4600,
-    highpass: 58,
-    duration: 1.05,
+    gain: directGain * 0.12 * clamp(1 / (1 + shores[0].extraDistance / 105), 0.13, 1),
+    lowpass: 4300,
+    highpass: 62,
+    offset: 0.14,
+    attack: 0.028,
+    fadeOut: 0.24,
   };
   const shoreFar = {
-    kind: "shore-far",
+    kind: "shore-far-tail",
     surface: shores[1].surface,
-    delay: Math.max(shores[1].delay, shoreNear.delay + 0.035),
+    delay: Math.max(shores[1].delay, shoreNear.delay + 0.085),
     pan: shores[1].pan,
-    gain: directGain * 0.105 * clamp(1 / (1 + shores[1].extraDistance / 135), 0.12, 1),
-    lowpass: 2900,
-    highpass: 52,
-    duration: 0.78,
+    gain: directGain * 0.065 * clamp(1 / (1 + shores[1].extraDistance / 135), 0.1, 1),
+    lowpass: 2600,
+    highpass: 58,
+    offset: 0.22,
+    attack: 0.035,
+    fadeOut: 0.28,
   };
 
   const corner = hasGeometry ? nearestDiffraction(source, listener) : null;
   const diffractionExtra = corner ? Math.max(0, corner.pathDistance - directDistance) : 0;
   const diffraction = {
-    kind: "diffraction",
+    kind: "diffraction-tail",
     surface: corner?.surface || "none",
-    delay: corner ? clamp(corner.pathDistance / SPEED_OF_SOUND, directDelay + 0.02, 1.8) : directDelay,
+    delay: corner
+      ? Math.max(corner.pathDistance / SPEED_OF_SOUND, directDelay + 0.065)
+      : directDelay,
     pan: corner ? panFor(listener, corner) : directPan,
-    gain: occluded ? directGain * 0.3 * clamp(1 / (1 + diffractionExtra / 85), 0.18, 1) : 0,
-    lowpass: 1850,
-    highpass: 72,
-    duration: 1.25,
+    gain: occluded
+      ? directGain * 0.38 * clamp(1 / (1 + diffractionExtra / 85), 0.18, 1)
+      : 0,
+    lowpass: 1750,
+    highpass: 78,
+    offset: 0.11,
+    attack: 0.022,
+    fadeOut: 0.3,
   };
 
   return {dry, water, shoreNear, shoreFar, diffraction};
@@ -216,8 +257,18 @@ function eventIdentity(event) {
   return [
     event?.type,
     Number(event?.at) || 0,
-    event?.actorId || event?.gunnerId || event?.pursuerId || event?.sourcePursuerId || event?.projectileId || "",
+    event?.actorId
+      || event?.gunnerId
+      || event?.pursuerId
+      || event?.sourcePursuerId
+      || event?.projectileId
+      || "",
   ].join(":");
+}
+
+function flightGain(spatial, occluded) {
+  const distanceScale = Math.pow(clamp(spatial.gain, 0, 1), 1.25);
+  return (0.018 + distanceScale * 0.58) * (occluded ? 0.13 : 1);
 }
 
 class MegaBombAudio {
@@ -247,17 +298,38 @@ class MegaBombAudio {
     if (this.ctx.state === "suspended") await this.ctx.resume().catch(() => {});
     if (!this.loading) this.loading = this.loadBuffers();
     await this.loading;
-    return this.buffers.size === Object.keys(AUDIO_URLS).length + 1;
+    return this.buffers.has("flight") && this.buffers.has("explosion");
   }
 
-  async loadBuffers() {
+  toMono(buffer) {
+    if (!buffer || buffer.numberOfChannels <= 1) return buffer;
+    const mono = this.ctx.createBuffer(1, buffer.length, buffer.sampleRate);
+    const output = mono.getChannelData(0);
+    const channels = [];
+    for (let channel = 0; channel < buffer.numberOfChannels; channel += 1) {
+      channels.push(buffer.getChannelData(channel));
+    }
+    for (let index = 0; index < output.length; index += 1) {
+      let sum = 0;
+      for (const input of channels) sum += input[index] || 0;
+      output[index] = sum / channels.length;
+    }
+    return mono;
+  }
+
+  async loadRecording(name, url, positional = false) {
     try {
-      const entries = await Promise.all(Object.entries(AUDIO_URLS).map(async ([name, url]) => {
-        const response = await fetch(url, {cache: "force-cache"});
-        if (!response.ok) throw new Error(`Game audio ${name}: ${response.status}`);
-        const decoded = await this.ctx.decodeAudioData((await response.arrayBuffer()).slice(0));
-        return [name, decoded];
-      }));
+      const response = await fetch(url, {cache: "force-cache"});
+      if (!response.ok) throw new Error(`Game audio ${name}: ${response.status}`);
+      const decoded = await this.ctx.decodeAudioData((await response.arrayBuffer()).slice(0));
+      this.buffers.set(name, positional ? this.toMono(decoded) : decoded);
+    } catch (error) {
+      console.warn(`Не удалось загрузить звук ${name}`, error);
+    }
+  }
+
+  async loadKillRecording() {
+    try {
       const encodedParts = await Promise.all(KILL_AUDIO_PARTS.map(async url => {
         const response = await fetch(url, {cache: "force-cache"});
         if (!response.ok) throw new Error(`Kill audio part: ${response.status}`);
@@ -265,41 +337,89 @@ class MegaBombAudio {
       }));
       const binary = atob(encodedParts.join(""));
       const bytes = new Uint8Array(binary.length);
-      for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-      entries.push(["kill", await this.ctx.decodeAudioData(bytes.buffer.slice(0))]);
-      for (const [name, buffer] of entries) this.buffers.set(name, buffer);
+      for (let index = 0; index < binary.length; index += 1) {
+        bytes[index] = binary.charCodeAt(index);
+      }
+      this.buffers.set("kill", await this.ctx.decodeAudioData(bytes.buffer.slice(0)));
     } catch (error) {
-      console.warn("Не удалось загрузить реальные записи мегабомбы или подтверждения убийства", error);
+      // A missing confirmation recording must never silence flight or explosion.
+      console.warn("Не удалось загрузить подтверждение уничтожения", error);
     }
+  }
+
+  async loadBuffers() {
+    await Promise.all([
+      this.loadRecording("flight", AUDIO_URLS.flight, true),
+      this.loadRecording("explosion", AUDIO_URLS.explosion, true),
+      this.loadKillRecording(),
+    ]);
   }
 
   playRecording(name, options = {}) {
     const buffer = this.buffers.get(name);
-    if (!buffer || !this.ctx || !this.master || Number(options.gain) <= 0) return null;
+    const targetGain = clamp(options.gain ?? 1, 0, 1.4);
+    if (!buffer || !this.ctx || !this.master || targetGain <= 0) return null;
+
     const source = this.ctx.createBufferSource();
     source.buffer = buffer;
     source.playbackRate.value = clamp(options.playbackRate ?? 1, 0.55, 1.55);
+
     const high = this.ctx.createBiquadFilter();
     high.type = "highpass";
     high.frequency.value = Math.max(20, Number(options.highpass) || 28);
+
     const low = this.ctx.createBiquadFilter();
     low.type = "lowpass";
     low.frequency.value = Math.max(200, Number(options.lowpass) || 15500);
+
     const gain = this.ctx.createGain();
-    gain.gain.value = clamp(options.gain ?? 1, 0, 1.4);
     const panner = this.ctx.createStereoPanner();
     panner.pan.value = clamp(options.pan, -1, 1);
+
     source.connect(high).connect(low).connect(gain).connect(panner).connect(this.master);
+
     const offset = clamp(options.offset, 0, Math.max(0, buffer.duration - 0.02));
     const delay = Math.max(0, Number(options.delay) || 0);
-    const maximumDuration = Math.max(0.02, buffer.duration - offset);
+    const attack = Math.max(0, Number(options.attack) || 0);
+    const fadeOut = Math.max(0, Number(options.fadeOut) || 0);
+    const startsAt = this.ctx.currentTime + delay;
+    const maximumSourceDuration = Math.max(0.02, buffer.duration - offset);
     const requestedDuration = Number(options.duration);
-    if (Number.isFinite(requestedDuration) && requestedDuration > 0) {
-      source.start(this.ctx.currentTime + delay, offset, Math.min(maximumDuration, requestedDuration));
+    const sourceDuration = Number.isFinite(requestedDuration) && requestedDuration > 0
+      ? Math.min(maximumSourceDuration, requestedDuration)
+      : maximumSourceDuration;
+    const playbackDuration = sourceDuration / source.playbackRate.value;
+    const endsAt = startsAt + playbackDuration;
+
+    if (attack > 0) {
+      gain.gain.setValueAtTime(0.0001, startsAt);
+      gain.gain.linearRampToValueAtTime(targetGain, Math.min(endsAt, startsAt + attack));
     } else {
-      source.start(this.ctx.currentTime + delay, offset);
+      gain.gain.setValueAtTime(targetGain, startsAt);
     }
-    return {source, gain, panner, high, low, buffer, baseRate: source.playbackRate.value};
+    if (fadeOut > 0 && playbackDuration > fadeOut + attack) {
+      const fadeAt = Math.max(startsAt + attack, endsAt - fadeOut);
+      gain.gain.setValueAtTime(targetGain, fadeAt);
+      gain.gain.linearRampToValueAtTime(0.0001, endsAt);
+    }
+
+    if (sourceDuration < maximumSourceDuration - 0.001) {
+      source.start(startsAt, offset, sourceDuration);
+    } else {
+      source.start(startsAt, offset);
+    }
+
+    return {
+      source,
+      gain,
+      panner,
+      high,
+      low,
+      buffer,
+      baseRate: source.playbackRate.value,
+      startsAt,
+      endsAt,
+    };
   }
 
   flightOccluded(event, spatial) {
@@ -313,25 +433,31 @@ class MegaBombAudio {
     this.stopFlight(event.projectileId);
     const buffer = this.buffers.get("flight");
     if (!buffer) return;
+
     const spatial = spatialFor(event, playerIndex);
-    const flightTime = clamp(event.flightTime, 0.7, 2.75);
+    const flightTime = clamp(event.flightTime, 0.72, 3.3);
     const ratio = clamp(progress, 0, 0.96);
     const remaining = Math.max(0.12, flightTime * (1 - ratio));
     const offset = buffer.duration * ratio;
     const occluded = this.flightOccluded(event, spatial);
     const voice = this.playRecording("flight", {
       pan: spatial.pan,
-      gain: (0.12 + spatial.gain * 0.44) * (occluded ? 0.18 : 1),
+      gain: flightGain(spatial, occluded),
       highpass: occluded ? 120 : 75,
-      lowpass: occluded ? 900 : airLowpass(spatial.distance),
+      lowpass: occluded ? 850 : airLowpass(spatial.distance),
       playbackRate: clamp((buffer.duration - offset) / remaining, 0.55, 1.55),
       offset,
+      attack: 0.014,
+      fadeOut: 0.045,
     });
     if (!voice) return;
+
     voice.lastDistance = spatial.distance;
     voice.lastAt = this.ctx.currentTime;
     voice.source.onended = () => {
-      if (this.flights.get(event.projectileId)?.source === voice.source) this.flights.delete(event.projectileId);
+      if (this.flights.get(event.projectileId)?.source === voice.source) {
+        this.flights.delete(event.projectileId);
+      }
     };
     this.flights.set(event.projectileId, voice);
   }
@@ -346,6 +472,7 @@ class MegaBombAudio {
       if (!await this.ensure()) return;
       this.startFlight(event, playerIndex, clamp(event.progress, 0, 1));
     }
+
     const voice = this.flights.get(event.projectileId);
     if (!voice) return;
     const spatial = spatialFor(event, playerIndex);
@@ -353,11 +480,24 @@ class MegaBombAudio {
     const occluded = this.flightOccluded(event, spatial);
     const elapsed = Math.max(0.02, now - (voice.lastAt || now));
     const radialSpeed = ((voice.lastDistance ?? spatial.distance) - spatial.distance) / elapsed;
-    const doppler = clamp(SPEED_OF_SOUND / Math.max(260, SPEED_OF_SOUND - radialSpeed), 0.88, 1.14);
-    voice.panner.pan.setTargetAtTime(spatial.pan, now, 0.04);
-    voice.gain.gain.setTargetAtTime((0.1 + spatial.gain * 0.48) * (occluded ? 0.18 : 1), now, 0.05);
-    voice.low.frequency.setTargetAtTime(occluded ? 900 : airLowpass(spatial.distance), now, 0.05);
-    voice.source.playbackRate.setTargetAtTime(clamp(voice.baseRate * doppler, 0.55, 1.55), now, 0.06);
+    const doppler = clamp(
+      SPEED_OF_SOUND / Math.max(260, SPEED_OF_SOUND - radialSpeed),
+      0.88,
+      1.14,
+    );
+
+    voice.panner.pan.setTargetAtTime(spatial.pan, now, 0.055);
+    voice.gain.gain.setTargetAtTime(flightGain(spatial, occluded), now, 0.065);
+    voice.low.frequency.setTargetAtTime(
+      occluded ? 850 : airLowpass(spatial.distance),
+      now,
+      0.065,
+    );
+    voice.source.playbackRate.setTargetAtTime(
+      clamp(voice.baseRate * doppler, 0.55, 1.55),
+      now,
+      0.075,
+    );
     voice.lastDistance = spatial.distance;
     voice.lastAt = now;
   }
@@ -367,8 +507,9 @@ class MegaBombAudio {
     if (!voice) return;
     try {
       const now = this.ctx?.currentTime || 0;
-      voice.gain.gain.setTargetAtTime(0, now, 0.018);
-      voice.source.stop(now + 0.065);
+      voice.gain.gain.cancelScheduledValues(now);
+      voice.gain.gain.setTargetAtTime(0.0001, now, 0.018);
+      voice.source.stop(now + 0.07);
     } catch (_) {}
     this.flights.delete(id);
   }
@@ -377,6 +518,9 @@ class MegaBombAudio {
     this.stopFlight(event?.projectileId);
     if (!await this.ensure()) return;
     const plan = outdoorReflectionPlan(event, spatialFor(event, playerIndex));
+
+    // One full, truly positional impact. The remaining calls contain only the
+    // tail of the recording, so reflections add space without duplicating boom.
     this.playRecording("explosion", plan.dry);
     this.playRecording("explosion", plan.water);
     this.playRecording("explosion", plan.shoreNear);
@@ -385,7 +529,8 @@ class MegaBombAudio {
   }
 
   async confirmKills(count = 1) {
-    if (!await this.ensure()) return;
+    await this.ensure();
+    if (!this.buffers.has("kill")) return;
     const voices = Math.min(3, Math.max(1, Math.floor(Number(count) || 1)));
     for (let index = 0; index < voices; index += 1) {
       this.playRecording("kill", {
@@ -394,6 +539,8 @@ class MegaBombAudio {
         gain: index === 0 ? 0.98 : 0.78,
         highpass: 45,
         lowpass: 15500,
+        attack: 0.004,
+        fadeOut: 0.04,
       });
     }
   }
@@ -417,16 +564,24 @@ function install() {
       requestAnimationFrame(() => { live.textContent = text; });
     }
   };
+
   const update = () => {
     if (!button) return;
     button.textContent = `Мега-бомба: ${remaining}`;
-    button.setAttribute("aria-label", `Запустить мега-бомбу. Бесплатный тестовый запас: ${remaining}. Клавиша B.`);
+    button.setAttribute(
+      "aria-label",
+      `Запустить мега-бомбу. Бесплатный тестовый запас: ${remaining}. Клавиша B.`,
+    );
     button.disabled = remaining <= 0;
   };
+
   const fire = async () => {
     await audio.ensure();
-    if (globalThis.__freeRoamMegaBombBridge?.fire?.() !== true) report("Сначала подключись к свободному миру.");
+    if (globalThis.__freeRoamMegaBombBridge?.fire?.() !== true) {
+      report("Сначала подключись к свободному миру.");
+    }
   };
+
   const addButton = () => {
     if (button?.isConnected) return;
     const controls = document.getElementById("controls");
@@ -436,18 +591,26 @@ function install() {
     button.className = "danger";
     button.dataset.key = "B";
     button.setAttribute("aria-keyshortcuts", "B");
-    button.addEventListener("click", event => { event.preventDefault(); fire(); });
+    button.addEventListener("click", event => {
+      event.preventDefault();
+      fire();
+    });
     controls.append(button);
     update();
   };
 
-  document.addEventListener("pointerdown", () => audio.ensure().catch(() => {}), {capture: true, once: true});
+  document.addEventListener(
+    "pointerdown",
+    () => audio.ensure().catch(() => {}),
+    {capture: true, once: true},
+  );
   document.addEventListener("keydown", event => {
     if (event.repeat || event.altKey || event.ctrlKey || event.metaKey) return;
     if (!["b", "и"].includes(String(event.key).toLowerCase())) return;
     event.preventDefault();
     fire();
   }, true);
+
   globalThis.addEventListener(EVENT_NAME, event => {
     const message = event.detail;
     if (!message || typeof message !== "object") return;
@@ -457,19 +620,30 @@ function install() {
       return;
     }
     if (message.type !== "free-state" || !Array.isArray(message.events)) return;
+
     let killCount = 0;
     for (const gameEvent of message.events) {
-      if (Number.isFinite(Number(gameEvent.remaining)) && gameEvent?.targets?.includes(playerIndex)) {
+      if (
+        Number.isFinite(Number(gameEvent.remaining))
+        && gameEvent?.targets?.includes(playerIndex)
+      ) {
         remaining = Math.max(0, Math.floor(Number(gameEvent.remaining)));
         update();
       }
+
       if (gameEvent?.targets?.includes(playerIndex)) {
         if (gameEvent.type === "mega-bomb-launch") audio.launch(gameEvent, playerIndex);
         else if (gameEvent.type === "mega-bomb-flight") audio.flight(gameEvent, playerIndex);
         else if (gameEvent.type === "mega-bomb-explosion") audio.explode(gameEvent, playerIndex);
-        else if (gameEvent.type === "mega-bomb-denied") report(gameEvent.text || "Пуск недоступен.");
+        else if (gameEvent.type === "mega-bomb-denied") {
+          report(gameEvent.text || "Пуск недоступен.");
+        }
       }
-      if (KILL_EVENT_TYPES.has(gameEvent?.type) && Number(gameEvent.sourcePlayer) === playerIndex) {
+
+      if (
+        KILL_EVENT_TYPES.has(gameEvent?.type)
+        && Number(gameEvent.sourcePlayer) === playerIndex
+      ) {
         const identity = eventIdentity(gameEvent);
         if (!seenKillEvents.has(identity)) {
           seenKillEvents.add(identity);
@@ -477,6 +651,7 @@ function install() {
         }
       }
     }
+
     if (seenKillEvents.size > 160) {
       const keep = [...seenKillEvents].slice(-96);
       seenKillEvents.clear();
@@ -484,7 +659,11 @@ function install() {
     }
     if (killCount > 0) audio.confirmKills(killCount);
   });
-  new MutationObserver(addButton).observe(document.documentElement, {childList: true, subtree: true});
+
+  new MutationObserver(addButton).observe(
+    document.documentElement,
+    {childList: true, subtree: true},
+  );
   addButton();
 }
 

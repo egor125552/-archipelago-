@@ -105,7 +105,9 @@ try {
     };
 
     socket.addEventListener = function addGuardedListener(type, listener, options) {
-      if (type !== "message" || !listener) return nativeAddEventListener(type, listener, options);
+      if (type !== "message" || !listener) {
+        return nativeAddEventListener(type, listener, options);
+      }
       const wrapped = event => {
         const data = localizeMessageData(event.data);
         const transformed = messageEventWithData(event, data);
@@ -132,11 +134,25 @@ try {
   globalThis.__freeRoamMegaBombBridge = {
     fire() {
       if (typeof NativeWebSocket !== "function") return false;
-      if (!activeGameSocket || !activeNativeSend || activeGameSocket.readyState !== NativeWebSocket.OPEN) return false;
+      if (
+        !activeGameSocket
+        || !activeNativeSend
+        || activeGameSocket.readyState !== NativeWebSocket.OPEN
+      ) {
+        return false;
+      }
       const baseInput = {...lastFreeInput, megaBomb: false};
       try {
-        activeNativeSend(JSON.stringify({type: "free-input", sequence: 0, input: {...baseInput, megaBomb: true}}));
-        activeNativeSend(JSON.stringify({type: "free-input", sequence: 0, input: baseInput}));
+        activeNativeSend(JSON.stringify({
+          type: "free-input",
+          sequence: 0,
+          input: {...baseInput, megaBomb: true},
+        }));
+        activeNativeSend(JSON.stringify({
+          type: "free-input",
+          sequence: 0,
+          input: baseInput,
+        }));
         return true;
       } catch (_) {
         return false;
@@ -163,7 +179,9 @@ try {
   }
 
   document.addEventListener("click", event => {
-    const leaveButton = event.target instanceof Element ? event.target.closest("#leaveButton") : null;
+    const leaveButton = event.target instanceof Element
+      ? event.target.closest("#leaveButton")
+      : null;
     if (!leaveButton) return;
     const gestureMode = document.body.classList.contains("gesture-mode");
     const directPointerClick = Number(event.detail) > 0;
@@ -178,7 +196,12 @@ try {
 
   document.addEventListener("touchmove", event => {
     const game = document.getElementById("game");
-    if (game && !game.hidden && document.body.classList.contains("gesture-mode") && game.contains(event.target)) {
+    if (
+      game
+      && !game.hidden
+      && document.body.classList.contains("gesture-mode")
+      && game.contains(event.target)
+    ) {
       event.preventDefault();
     }
   }, {capture: true, passive: false});
@@ -188,7 +211,10 @@ try {
     document.getElementById("gestureReportButton")?.remove();
   }
 
-  new MutationObserver(removeReleaseDebugButton).observe(document.documentElement, {childList: true, subtree: true});
+  new MutationObserver(removeReleaseDebugButton).observe(
+    document.documentElement,
+    {childList: true, subtree: true},
+  );
   removeReleaseDebugButton();
 
   globalThis.__freeRoamSessionGuard = {
@@ -202,4 +228,4 @@ try {
   };
 })();
 
-import("./free-roam-mega-bomb-client.js?v=4").catch(() => {});
+import("./free-roam-mega-bomb-client.js?v=5").catch(() => {});
