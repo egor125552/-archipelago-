@@ -6,6 +6,8 @@ import {
   simulateNeuralV2HeadWindowPair,
 } from "../training/generate_neural_v2_head_windows.mjs";
 
+const HEADS = ["throttle", "steering", "range", "route", "fire"];
+
 function state(overrides = {}) {
   return {
     actorId: "enemy-1",
@@ -135,25 +137,45 @@ test("fire objective uses immediate enemy pressure without inventing movement", 
   assert.equal(result.positionSeparation, 0);
 });
 
-test("one real short-horizon pair keeps actor identity and zero recurrent history", async () => {
-  let pair = null;
-  for (let attempt = 0; attempt < 8 && !pair; attempt += 1) {
+async function findValidHeadWindow(headIndex) {
+  const attempts = [];
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const battleIndex = 15_000 + headIndex + attempt * HEADS.length;
     const candidate = await simulateNeuralV2HeadWindowPair({
-      battleIndex: 12_000 + attempt,
-      level: 4,
-      script: "water-zigzag",
+      battleIndex,
+      level: 5,
+      script: "idle-no-fire",
       coop: false,
-      maximumMs: 18_000,
+      maximumMs: 24_000,
     });
-    if (candidate.comparison.valid) pair = candidate;
+    attempts.push({
+      battleIndex,
+      head: candidate.head,
+      baselineStarted: candidate.baseline.started,
+      baselineCompleted: candidate.baseline.completed,
+      exploredStarted: candidate.explored.started,
+      exploredCompleted: candidate.explored.completed,
+      baselineActor: candidate.baseline.actorId,
+      exploredActor: candidate.explored.actorId,
+      failures: candidate.comparison.failures,
+    });
+    if (candidate.comparison.valid) return {candidate, attempts};
   }
-  assert.ok(pair, "expected at least one valid paired short-horizon window");
-  assert.equal(pair.baseline.actorId, pair.explored.actorId);
-  assert.equal(pair.baseline.actorRole, pair.explored.actorRole);
-  assert.equal(pair.baseline.actorKind, pair.explored.actorKind);
-  assert.equal(pair.baseline.initialState.actorId, pair.explored.initialState.actorId);
-  assert.deepEqual(pair.baseline.initialState.features.slice(-5), [0, 0, 0, 0, 0]);
-  assert.deepEqual(pair.explored.initialState.features.slice(-5), [0, 0, 0, 0, 0]);
-  assert.equal(Number.isFinite(pair.comparison.objectiveDelta), true);
-  assert.equal(Number.isFinite(pair.comparison.positionSeparation), true);
+  return {candidate: null, attempts};
+}
+
+test("every v2 head can produce one identity-matched short-horizon window", async () => {
+  for (let headIndex = 0; headIndex < HEADS.length; headIndex += 1) {
+    const {candidate, attempts} = await findValidHeadWindow(headIndex);
+    assert.ok(candidate, `${HEADS[headIndex]} had no valid window: ${JSON.stringify(attempts)}`);
+    assert.equal(candidate.head, HEADS[headIndex]);
+    assert.equal(candidate.baseline.actorId, candidate.explored.actorId);
+    assert.equal(candidate.baseline.actorRole, candidate.explored.actorRole);
+    assert.equal(candidate.baseline.actorKind, candidate.explored.actorKind);
+    assert.equal(candidate.baseline.initialState.actorId, candidate.explored.initialState.actorId);
+    assert.deepEqual(candidate.baseline.initialState.features.slice(-5), [0, 0, 0, 0, 0]);
+    assert.deepEqual(candidate.explored.initialState.features.slice(-5), [0, 0, 0, 0, 0]);
+    assert.equal(Number.isFinite(candidate.comparison.objectiveDelta), true);
+    assert.equal(Number.isFinite(candidate.comparison.positionSeparation), true);
+  }
 });
