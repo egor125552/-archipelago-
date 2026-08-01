@@ -66,10 +66,9 @@ test("reconnect policy accepts an automatically recreated exact room", () => {
 });
 
 test("live gesture and reconnect code routes combat sonar and force-expires stalled sockets", async () => {
-  const [client, html, startup] = await Promise.all([
+  const [client, html] = await Promise.all([
     readFile(new URL("../public/src/free-roam-v4.js", import.meta.url), "utf8"),
     readFile(new URL("../public/free-roam.html", import.meta.url), "utf8"),
-    readFile(new URL("../public/src/free-roam-startup-v1.js", import.meta.url), "utf8"),
   ]);
   assert.match(client, /command === "sonar"\) useSonarOrCombatTargets\(\)/);
   assert.match(client, /command === "targets"\) targetMenu\.open\(\)/);
@@ -77,7 +76,7 @@ test("live gesture and reconnect code routes combat sonar and force-expires stal
   assert.match(client, /targetMenu\.reportCurrent\(\)/);
   assert.match(client, /socket = null;[\s\S]*connection\.close\(4104, reason\)/);
   assert.match(client, /state-load-timeout/);
-  assert.match(startup, /message\.recreatedRoom === true/);
+  assert.match(client, /message\.recreatedRoom === true/);
   assert.match(html, /free-roam-startup-v1\.js\?v=7/);
   assert.match(html, /free-roam-v4\.js\?v=52/);
 });
