@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  createInterventionPlan,
   previousActionFeatureState,
   seededRandom,
   selectEliteEpisodes,
@@ -15,6 +16,7 @@ import {
 } from "../training/merge_neural_selfplay_shards.mjs";
 
 const actorSamples = [{samples: [{em: 1}, {}, {}, {}]}];
+const movementIntervention = {kind: "movement", started: true, appliedSamples: 4};
 
 test("self-play score rewards resolved enemy pressure and penalizes guardrails", () => {
   const strong = selfPlayScore({
@@ -52,13 +54,25 @@ test("exploration random numbers do not consume production random numbers", asyn
   assert.deepEqual(actualValues, expectedValues);
 });
 
-test("elite selection preserves scenario coverage and requires paired advantage", () => {
+test("an intervention plan describes one bounded coherent macro", () => {
+  const first = createInterventionPlan(125552, 45_000, 0.72);
+  const second = createInterventionPlan(125552, 45_000, 0.72);
+  assert.deepEqual(first, second);
+  assert.ok(["movement", "fire"].includes(first.kind));
+  assert.ok(first.durationSamples >= 4 && first.durationSamples <= 10);
+  assert.ok(first.startAtMs >= 1000 && first.startAtMs <= 39_000);
+  assert.equal(first.actorId, null);
+  assert.equal(first.appliedSamples, 0);
+});
+
+test("elite selection preserves scenario coverage and requires one completed positive macro", () => {
   const selected = selectEliteEpisodes([
-    {id: "a", level: 2, script: "shoreline", coop: false, advantage: 1, score: 100, seed: 1, actors: actorSamples},
-    {id: "b", level: 2, script: "shoreline", coop: false, advantage: 9, score: 9, seed: 2, actors: actorSamples},
-    {id: "c", level: 2, script: "water-escape", coop: false, advantage: 4, score: 4, seed: 3, actors: actorSamples},
-    {id: "d", level: 2, script: "shoreline", coop: true, advantage: 7, score: 7, seed: 4, actors: actorSamples},
-    {id: "no-explore", level: 3, script: "shoreline", coop: false, advantage: 99, score: 99, seed: 5, actors: [{samples: [{}, {}, {}, {}]}]},
+    {id: "a", level: 2, script: "shoreline", coop: false, advantage: 1, score: 100, seed: 1, actors: actorSamples, intervention: movementIntervention},
+    {id: "b", level: 2, script: "shoreline", coop: false, advantage: 9, score: 9, seed: 2, actors: actorSamples, intervention: movementIntervention},
+    {id: "c", level: 2, script: "water-escape", coop: false, advantage: 4, score: 4, seed: 3, actors: actorSamples, intervention: movementIntervention},
+    {id: "d", level: 2, script: "shoreline", coop: true, advantage: 7, score: 7, seed: 4, actors: actorSamples, intervention: movementIntervention},
+    {id: "no-explore", level: 3, script: "shoreline", coop: false, advantage: 99, score: 99, seed: 5, actors: [{samples: [{}, {}, {}, {}]}], intervention: movementIntervention},
+    {id: "too-short", level: 3, script: "shoreline", coop: false, advantage: 99, score: 99, seed: 6, actors: actorSamples, intervention: {kind: "movement", started: true, appliedSamples: 1}},
   ], 1, 2.5);
   assert.deepEqual(new Set(selected.map(item => item.id)), new Set(["b", "c", "d"]));
 });
@@ -79,7 +93,7 @@ test("paired aggregate rejects a missing shard instead of inventing completion",
   const makeReport = shard => {
     const completed = expectedBattlesForShard(10, shard, 3);
     return {
-      format: "echo-neural-selfplay-elites-v2",
+      format: "echo-neural-selfplay-elites-v3",
       requestedBattles: 10,
       completedBattles: completed,
       authoritativeRollouts: completed * 2,
@@ -89,10 +103,11 @@ test("paired aggregate rejects a missing shard instead of inventing completion",
       shards: 3,
       baselineOutcomeCounts: {victory: completed},
       exploredOutcomeCounts: {victory: completed},
+      interventionCounts: {movement: completed, fire: 0, notStarted: 0},
       positiveAdvantagePairs: completed,
       advantageRange: {minimum: 3, maximum: 5, mean: 4},
       scoreRange: {minimum: 1, maximum: 2},
-      eliteEpisodes: [{id: `elite-${shard}`, advantage: 3}],
+      eliteEpisodes: [{id: `elite-${shard}`, advantage: 3, intervention: movementIntervention}],
     };
   };
   const incomplete = mergeSelfPlayShards([makeReport(0), makeReport(2)], {
