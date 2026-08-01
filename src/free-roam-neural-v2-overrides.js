@@ -2,6 +2,7 @@
 
 import {
   collectNeuralActors,
+  neuralDecision,
   neuralPlayerPoint,
   neuralTargetForActor,
 } from "./free-roam-neural-shadow.js";
@@ -35,6 +36,18 @@ const headingTo = (from, to) => Math.atan2(
   -((Number(to?.y) || 0) - (Number(from?.y) || 0)),
 ) * 180 / Math.PI;
 
+function blankHeadEffect() {
+  return {
+    frames: 0,
+    changedFrames: 0,
+    headingDeltaTotal: 0,
+    speedDeltaTotal: 0,
+    positionDeltaTotal: 0,
+    fireAllowedFrames: 0,
+    fireSuppressedFrames: 0,
+  };
+}
+
 function blankDiagnostics() {
   return {
     preparedFrames: 0,
@@ -47,6 +60,7 @@ function blankDiagnostics() {
     missingActorFrames: 0,
     missingTargetFrames: 0,
     isolatedHeadFrames: Object.fromEntries(ISOLATED_HEADS.map(head => [head, 0])),
+    isolatedHeadEffects: Object.fromEntries(ISOLATED_HEADS.map(head => [head, blankHeadEffect()])),
   };
 }
 
@@ -76,9 +90,16 @@ function ensureRuntime(serverRoom) {
     if (!Number.isFinite(Number(runtime.diagnostics[key]))) runtime.diagnostics[key] = 0;
   }
   runtime.diagnostics.isolatedHeadFrames ||= {};
+  runtime.diagnostics.isolatedHeadEffects ||= {};
   for (const head of ISOLATED_HEADS) {
     if (!Number.isFinite(Number(runtime.diagnostics.isolatedHeadFrames[head]))) {
       runtime.diagnostics.isolatedHeadFrames[head] = 0;
+    }
+    runtime.diagnostics.isolatedHeadEffects[head] ||= blankHeadEffect();
+    for (const key of Object.keys(blankHeadEffect())) {
+      if (!Number.isFinite(Number(runtime.diagnostics.isolatedHeadEffects[head][key]))) {
+        runtime.diagnostics.isolatedHeadEffects[head][key] = 0;
+      }
     }
   }
   return runtime;
@@ -146,9 +167,18 @@ export function prepareServerNeuralV2Overrides(serverRoom) {
       continue;
     }
     if (action.isolated && action.head === "fire" && actor.controlsFire !== false) {
+      const effect = runtime.diagnostics.isolatedHeadEffects.fire;
+      const baseFire = Boolean(neuralDecision(serverRoom, id)?.fire);
       runtime.diagnostics.isolatedHeadFrames.fire += 1;
-      if (action.fire) runtime.diagnostics.fireAllowedFrames += 1;
-      else if (suppressFire(actor.entity)) runtime.diagnostics.fireSuppressedFrames += 1;
+      effect.frames += 1;
+      if (baseFire !== action.fire) effect.changedFrames += 1;
+      if (action.fire) {
+        runtime.diagnostics.fireAllowedFrames += 1;
+        effect.fireAllowedFrames += 1;
+      } else if (suppressFire(actor.entity)) {
+        runtime.diagnostics.fireSuppressedFrames += 1;
+        effect.fireSuppressedFrames += 1;
+      }
     }
     frames.push({
       id,
@@ -201,7 +231,11 @@ function isolatedMotion(frame, entity, seconds) {
   };
 }
 
-function applyMotion(frame, desired, seconds, runtime) {
+function applyMotion(frame, desired, seconds, runtime, isolatedHead = null) {
+  const baseX = Number(frame.entity.x) || frame.x;
+  const baseY = Number(frame.entity.y) || frame.y;
+  const baseHeading = Number(frame.entity.heading) || frame.heading;
+  const baseSpeed = Number(frame.entity.speed) || 0;
   let nextX = frame.x + Math.sin(rad(desired.heading)) * desired.speed * seconds;
   let nextY = frame.y - Math.cos(rad(desired.heading)) * desired.speed * seconds;
   let waterClamped = false;
@@ -214,6 +248,17 @@ function applyMotion(frame, desired, seconds, runtime) {
   } else {
     nextX = clamp(nextX, 5, 415);
     nextY = clamp(nextY, 5, 315);
+  }
+  if (isolatedHead) {
+    const effect = runtime.diagnostics.isolatedHeadEffects[isolatedHead];
+    const headingDelta = Math.abs(wrapDeg(desired.heading - baseHeading));
+    const speedDelta = Math.abs(desired.speed - baseSpeed);
+    const positionDelta = Math.hypot(nextX - baseX, nextY - baseY);
+    effect.frames += 1;
+    effect.headingDeltaTotal += headingDelta;
+    effect.speedDeltaTotal += speedDelta;
+    effect.positionDeltaTotal += positionDelta;
+    if (headingDelta > 0.001 || speedDelta > 0.001 || positionDelta > 0.0001) effect.changedFrames += 1;
   }
   frame.entity.heading = desired.heading;
   frame.entity.speed = desired.speed;
@@ -239,7 +284,7 @@ export function finishServerNeuralV2Overrides(serverRoom, frames, dt) {
     if (frame.action.isolated) {
       runtime.diagnostics.isolatedHeadFrames[frame.action.head] += frame.action.head === "fire" ? 0 : 1;
       if (frame.action.head !== "fire" && frame.actor.controlsMovement !== false) {
-        applyMotion(frame, isolatedMotion(frame, entity, seconds), seconds, runtime);
+        applyMotion(frame, isolatedMotion(frame, entity, seconds), seconds, runtime, frame.action.head);
       }
       controlled += 1;
       continue;
