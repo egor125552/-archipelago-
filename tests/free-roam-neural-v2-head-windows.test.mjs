@@ -38,6 +38,7 @@ function rollout(initial, final, overrides = {}) {
     actorId: "enemy-1",
     actorRole: "interceptor",
     actorKind: "boat",
+    diagnosticAssistFrames: 0,
     initialState: initial,
     finalState: final,
     enemyPressureEvents: 0,
@@ -55,13 +56,17 @@ function rollout(initial, final, overrides = {}) {
   };
 }
 
+function assistedRollout(initial, final, overrides = {}) {
+  return rollout(initial, final, {diagnosticAssistFrames: 4, ...overrides});
+}
+
 function plan(head, value, action = {}) {
   return {head, value, action};
 }
 
 test("short-horizon comparison rejects mismatched actors", () => {
-  const baseline = rollout(state(), state());
-  const explored = {...rollout(state(), state()), actorId: "enemy-2"};
+  const baseline = assistedRollout(state(), state());
+  const explored = {...assistedRollout(state(), state()), actorId: "enemy-2"};
   const result = compareNeuralV2HeadWindow(plan("steering", "right"), baseline, explored);
   assert.equal(result.valid, false);
   assert.ok(result.failures.includes("actor-id-mismatch"));
@@ -83,8 +88,8 @@ test("throttle objective rewards movement toward the requested speed", () => {
 });
 
 test("steering objective rewards the requested turn direction", () => {
-  const baseline = rollout(state(), state({heading: 5}));
-  const explored = rollout(state(), state({heading: 40, x: 101}), {
+  const baseline = assistedRollout(state(), state({heading: 5}));
+  const explored = assistedRollout(state(), state({heading: 40, x: 101}), {
     diagnostics: {
       waterGuardInterventions: 0,
       isolatedHeadEffects: {steering: {changedFrames: 4}},
@@ -94,11 +99,12 @@ test("steering objective rewards the requested turn direction", () => {
   assert.equal(result.valid, true);
   assert.ok(result.objectiveDelta > 0);
   assert.ok(result.headingSeparation > 0);
+  assert.equal(result.diagnosticAssistFrames, 4);
 });
 
 test("range objective rewards getting closer to the requested range", () => {
-  const baseline = rollout(state(), state({targetDistance: 80}));
-  const explored = rollout(state(), state({targetDistance: 42, x: 102}), {
+  const baseline = assistedRollout(state(), state({targetDistance: 80}));
+  const explored = assistedRollout(state(), state({targetDistance: 42, x: 102}), {
     diagnostics: {
       waterGuardInterventions: 0,
       isolatedHeadEffects: {range: {changedFrames: 4}},
@@ -110,8 +116,8 @@ test("range objective rewards getting closer to the requested range", () => {
 });
 
 test("safe-water route rewards a larger water-boundary margin", () => {
-  const baseline = rollout(state(), state({boundaryMargin: 8}));
-  const explored = rollout(state(), state({boundaryMargin: 19, x: 103}), {
+  const baseline = assistedRollout(state(), state({boundaryMargin: 8}));
+  const explored = assistedRollout(state(), state({boundaryMargin: 19, x: 103}), {
     diagnostics: {
       waterGuardInterventions: 0,
       isolatedHeadEffects: {route: {changedFrames: 4}},
@@ -120,6 +126,14 @@ test("safe-water route rewards a larger water-boundary margin", () => {
   const result = compareNeuralV2HeadWindow(plan("route", "safe_water", {route: "safe_water"}), baseline, explored);
   assert.equal(result.valid, true);
   assert.equal(result.objectiveDelta, 11);
+});
+
+test("directional comparison rejects asymmetric diagnostic motion", () => {
+  const baseline = assistedRollout(state(), state({heading: 5}));
+  const explored = assistedRollout(state(), state({heading: 40}), {diagnosticAssistFrames: 3});
+  const result = compareNeuralV2HeadWindow(plan("steering", "right", {steering: "right"}), baseline, explored);
+  assert.equal(result.valid, false);
+  assert.ok(result.failures.includes("motion-assist-frame-mismatch"));
 });
 
 test("fire objective uses immediate enemy pressure without inventing movement", () => {
@@ -157,6 +171,8 @@ async function findValidHeadWindow(headIndex) {
       exploredCompleted: candidate.explored.completed,
       baselineActor: candidate.baseline.actorId,
       exploredActor: candidate.explored.actorId,
+      baselineAssist: candidate.baseline.diagnosticAssistFrames,
+      exploredAssist: candidate.explored.diagnosticAssistFrames,
       failures: candidate.comparison.failures,
     });
     if (candidate.comparison.valid) return {candidate, attempts};
@@ -177,5 +193,9 @@ test("every v2 head can produce one identity-matched short-horizon window", asyn
     assert.deepEqual(candidate.explored.initialState.features.slice(-5), [0, 0, 0, 0, 0]);
     assert.equal(Number.isFinite(candidate.comparison.objectiveDelta), true);
     assert.equal(Number.isFinite(candidate.comparison.positionSeparation), true);
+    if (["steering", "range", "route"].includes(candidate.head)) {
+      assert.ok(candidate.baseline.diagnosticAssistFrames > 0);
+      assert.equal(candidate.baseline.diagnosticAssistFrames, candidate.explored.diagnosticAssistFrames);
+    }
   }
 });
