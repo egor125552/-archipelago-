@@ -1,0 +1,41 @@
+{
+  "format": "echo-tactical-training-report-v1",
+  "episodes": 8,
+  "incomingEpisodes": 8,
+  "replayPath": "temporary runner storage",
+  "trainEpisodes": 6,
+  "validationEpisodes": 2,
+  "trainSequences": 880,
+  "validationSequences": 46,
+  "featureCount": 40,
+  "hiddenSize": 32,
+  "parameterCount": 7335,
+  "bestEpoch": 7,
+  "baseline": {
+    "movementMajorityClass": "hold",
+    "movementMacroF1": 0.13900709219858157,
+    "fireMajorityClass": 0,
+    "fireF1": 0.0
+  },
+  "train": {
+    "loss": 0.7544331359011787,
+    "movementBalancedAccuracy": 0.7053237182877378,
+    "movementMacroF1": 0.7227756006375614,
+    "fireBalancedAccuracy": 0.8845313961373837,
+    "fireF1": 0.8454844101204542,
+    "frames": 28160
+  },
+  "validation": {
+    "loss": 1.259435623884201,
+    "movementBalancedAccuracy": 0.6212991066284466,
+    "movementMacroF1": 0.6030095952807277,
+    "fireBalancedAccuracy": 0.8711129619544906,
+    "fireF1": 0.8236559139784946,
+    "frames": 1472
+  },
+  "history": [],
+  "critique": [
+    "Offline thresholds passed, but simulator head-to-head validation is still required before control is enabled."
+  ],
+  "promotedToShadow": true
+}
