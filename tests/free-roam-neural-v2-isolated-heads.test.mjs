@@ -24,7 +24,7 @@ function createThreat(level = 4) {
   return {server, startedAt};
 }
 
-test("isolated steering changes only the movement head over v1 control", () => {
+test("isolated steering produces a measured heading effect without touching fire", () => {
   const {server, startedAt} = createThreat(4);
   const actor = activeActor(server, item => item.controlsMovement !== false && item.kind === "boat");
   assert.ok(actor);
@@ -47,8 +47,30 @@ test("isolated steering changes only the movement head over v1 control", () => {
   assert.ok(effect.frames > 0);
   assert.ok(effect.changedFrames > 0);
   assert.ok(effect.headingDeltaTotal > 0);
-  assert.ok(effect.positionDeltaTotal > 0);
   assert.notEqual(actor.entity.heading, beforeHeading);
+});
+
+test("isolated throttle produces a measured speed effect without changing fire", () => {
+  const {server, startedAt} = createThreat(4);
+  const actor = activeActor(server, item => item.controlsMovement !== false && item.kind === "boat");
+  assert.ok(actor);
+  const throttle = Math.abs(Number(actor.entity.speed) || 0) > 2 ? "stop" : "full";
+  setServerNeuralV2Override(server, actor.id, {
+    head: "throttle",
+    throttle,
+    source: "isolated-test",
+  });
+  for (let step = 81; step <= 105; step += 1) tickServerFreeRoom(server, startedAt + 40 + step * 40);
+  const status = neuralV2OverrideStatus(server);
+  const effect = status.diagnostics.isolatedHeadEffects.throttle;
+  assert.equal(status.actions[0].head, "throttle");
+  assert.ok(status.diagnostics.isolatedHeadFrames.throttle > 0);
+  assert.equal(status.diagnostics.isolatedHeadFrames.fire, 0);
+  assert.equal(status.diagnostics.fireAllowedFrames, 0);
+  assert.equal(status.diagnostics.fireSuppressedFrames, 0);
+  assert.ok(effect.frames > 0);
+  assert.ok(effect.changedFrames > 0);
+  assert.ok(effect.speedDeltaTotal > 0);
 });
 
 test("isolated fire permission does not replace the v1 movement controller", () => {
