@@ -9,6 +9,19 @@ import {
   NEURAL_V2_THROTTLE_CLASSES,
 } from "../src/free-roam-neural-v2-schema.js";
 
+const PAIR_FORMAT = "echo-neural-v2-pairs-v2";
+const DIAGNOSTIC_KEYS = Object.freeze([
+  "preparedFrames",
+  "controlledFrames",
+  "movementFrames",
+  "fireAllowedFrames",
+  "fireSuppressedFrames",
+  "waterClampFrames",
+  "waterGuardInterventions",
+  "missingActorFrames",
+  "missingTargetFrames",
+]);
+
 function argument(name, fallback) {
   const prefix = `--${name}=`;
   return process.argv.find(value => value.startsWith(prefix))?.slice(prefix.length) || fallback;
@@ -51,6 +64,24 @@ function validActionTuple(action) {
   return action.every((value, index) => Number.isInteger(value) && value >= 0 && value < sizes[index]);
 }
 
+function zeroHistory(features) {
+  return Array.isArray(features)
+    && features.length === 53
+    && features.slice(-5).every(value => Number(value) === 0);
+}
+
+function validDiagnostics(diagnostics) {
+  return DIAGNOSTIC_KEYS.every(key => Number.isFinite(Number(diagnostics?.[key])) && Number(diagnostics[key]) >= 0);
+}
+
+function finalTickProved(intervention) {
+  return intervention?.completed === true
+    && intervention?.finishAfterTick === false
+    && Number.isFinite(Number(intervention?.controlledFramesBeforeLastSample))
+    && Number.isFinite(Number(intervention?.controlledFramesAtEnd))
+    && Number(intervention.controlledFramesAtEnd) > Number(intervention.controlledFramesBeforeLastSample);
+}
+
 function countAction(distribution, action) {
   const names = ["throttle", "steering", "range", "route", "fire"];
   for (let index = 0; index < names.length; index += 1) {
@@ -75,6 +106,12 @@ export function mergeNeuralV2PairShards(reports, {expectedPairs, expectedShards,
   let completedPairs = 0;
   let authoritativeRollouts = 0;
   let positivePairs = 0;
+  let sampledPairs = 0;
+  let sampledFrames = 0;
+  let diagnosticPairs = 0;
+  let completedInterventions = 0;
+  let finalTickProofPairs = 0;
+  let waterGuardInterventions = 0;
   let advantageWeightedTotal = 0;
   let minimumAdvantage = Infinity;
   let maximumAdvantage = -Infinity;
@@ -92,7 +129,7 @@ export function mergeNeuralV2PairShards(reports, {expectedPairs, expectedShards,
     const expectedLocal = expectedPairsForShard(expectedPairs, shard, expectedShards);
     const localPairs = Number(report.completedPairs) || 0;
     const localRollouts = Number(report.authoritativeRollouts) || 0;
-    if (report.format !== "echo-neural-v2-pairs-v1") failures.push(`format-mismatch-${shard}`);
+    if (report.format !== PAIR_FORMAT) failures.push(`format-mismatch-${shard}`);
     if (Number(report.requestedPairs) !== expectedPairs) failures.push(`requested-pairs-mismatch-${shard}`);
     if (Number(report.startIndex) !== expectedStartIndex) failures.push(`start-index-mismatch-${shard}`);
     if (Number(report.endIndex) !== expectedStartIndex + expectedPairs) failures.push(`end-index-mismatch-${shard}`);
@@ -104,9 +141,23 @@ export function mergeNeuralV2PairShards(reports, {expectedPairs, expectedShards,
     if (baselineTotal !== localPairs) failures.push(`baseline-outcomes-mismatch-${shard}`);
     if (exploredTotal !== localPairs) failures.push(`explored-outcomes-mismatch-${shard}`);
 
+    const integrity = report.integrity || {};
+    if (Number(integrity.diagnosticPairs) !== localPairs) failures.push(`diagnostic-pairs-mismatch-${shard}`);
+    if (Number(integrity.nonZeroHistoryFrames) !== 0) failures.push(`nonzero-history-frames-${shard}-${Number(integrity.nonZeroHistoryFrames) || 0}`);
+    if (Number(integrity.invalidDiagnosticPairs) !== 0) failures.push(`invalid-diagnostic-pairs-${shard}-${Number(integrity.invalidDiagnosticPairs) || 0}`);
+    if (Number(integrity.invalidFinalTickProofs) !== 0) failures.push(`invalid-final-tick-proofs-${shard}-${Number(integrity.invalidFinalTickProofs) || 0}`);
+    if (Number(integrity.finalTickProofPairs) !== Number(integrity.completedInterventions)) failures.push(`final-tick-proof-count-mismatch-${shard}`);
+    if (Number(integrity.sampledFrames) < Number(integrity.sampledPairs) * 2) failures.push(`insufficient-sampled-frames-${shard}`);
+
     completedPairs += localPairs;
     authoritativeRollouts += localRollouts;
     positivePairs += Number(report.positivePairs) || 0;
+    sampledPairs += Number(integrity.sampledPairs) || 0;
+    sampledFrames += Number(integrity.sampledFrames) || 0;
+    diagnosticPairs += Number(integrity.diagnosticPairs) || 0;
+    completedInterventions += Number(integrity.completedInterventions) || 0;
+    finalTickProofPairs += Number(integrity.finalTickProofPairs) || 0;
+    waterGuardInterventions += Number(integrity.waterGuardInterventions) || 0;
     addCounts(baselineOutcomes, report.baselineOutcomes);
     addCounts(exploredOutcomes, report.exploredOutcomes);
     advantageWeightedTotal += (Number(report.advantageRange?.mean) || 0) * localPairs;
@@ -117,7 +168,13 @@ export function mergeNeuralV2PairShards(reports, {expectedPairs, expectedShards,
       const id = String(pair?.id || "");
       if (!id) failures.push(`elite-without-id-${shard}`);
       if (!(Number(pair?.advantage) >= Number(report.minimumAdvantage))) failures.push(`elite-below-threshold-${id || shard}`);
-      if (!(pair?.intervention?.started && Number(pair.intervention.appliedSamples) >= 2)) failures.push(`elite-incomplete-intervention-${id || shard}`);
+      if (!(pair?.intervention?.started && Number(pair.intervention.appliedSamples) >= 2 && finalTickProved(pair.intervention))) {
+        failures.push(`elite-incomplete-intervention-${id || shard}`);
+      }
+      if (!validDiagnostics(pair?.explored?.diagnostics)) failures.push(`elite-invalid-diagnostics-${id || shard}`);
+      if (Number(pair?.explored?.diagnostics?.controlledFrames) < Number(pair?.intervention?.controlledFramesAtEnd)) {
+        failures.push(`elite-diagnostics-before-final-tick-${id || shard}`);
+      }
       if (!Array.isArray(pair?.explored?.samples) || pair.explored.samples.length < 2) failures.push(`elite-missing-samples-${id || shard}`);
       const tuple = pair?.explored?.samples?.[0]?.action;
       if (!validActionTuple(tuple)) failures.push(`elite-invalid-action-${id || shard}`);
@@ -125,6 +182,10 @@ export function mergeNeuralV2PairShards(reports, {expectedPairs, expectedShards,
       for (const sample of pair?.explored?.samples || []) {
         if (!Array.isArray(sample.features) || sample.features.length !== 53 || !sample.features.every(Number.isFinite)) {
           failures.push(`elite-invalid-features-${id || shard}`);
+          break;
+        }
+        if (!zeroHistory(sample.features)) {
+          failures.push(`elite-nonzero-history-${id || shard}`);
           break;
         }
         if (!validActionTuple(sample.action)) {
@@ -138,11 +199,13 @@ export function mergeNeuralV2PairShards(reports, {expectedPairs, expectedShards,
 
   if (completedPairs !== expectedPairs) failures.push(`aggregate-pairs-${completedPairs}-of-${expectedPairs}`);
   if (authoritativeRollouts !== expectedPairs * 2) failures.push(`aggregate-rollouts-${authoritativeRollouts}-of-${expectedPairs * 2}`);
+  if (diagnosticPairs !== completedPairs) failures.push(`aggregate-diagnostic-pairs-${diagnosticPairs}-of-${completedPairs}`);
+  if (finalTickProofPairs !== completedInterventions) failures.push(`aggregate-final-tick-proofs-${finalTickProofPairs}-of-${completedInterventions}`);
   const ids = elitePairs.map(pair => String(pair.id || ""));
   if (new Set(ids).size !== ids.length) failures.push("duplicate-elite-pair-id");
 
   return {
-    format: "echo-neural-v2-pair-aggregate-v1",
+    format: "echo-neural-v2-pair-aggregate-v2",
     generatedAt: new Date().toISOString(),
     expectedPairs,
     completedPairs,
@@ -153,6 +216,14 @@ export function mergeNeuralV2PairShards(reports, {expectedPairs, expectedShards,
     receivedShards: byShard.size,
     positivePairs,
     positivePairRate: completedPairs ? positivePairs / completedPairs : 0,
+    integrity: {
+      sampledPairs,
+      sampledFrames,
+      diagnosticPairs,
+      completedInterventions,
+      finalTickProofPairs,
+      waterGuardInterventions,
+    },
     baselineOutcomes,
     exploredOutcomes,
     advantageRange: {
@@ -165,7 +236,7 @@ export function mergeNeuralV2PairShards(reports, {expectedPairs, expectedShards,
     failures,
     verdict: failures.length ? "invalid" : "complete-discovery-batch",
     critique: [
-      "A complete discovery batch proves pair and data integrity, not that enough useful v2 actions were found.",
+      "A complete discovery batch proves pair, history, diagnostic and final-tick integrity, not that enough useful v2 actions were found.",
       "Zero or few positive pairs are valid evidence that the random multi-head proposal distribution is weak; the threshold must not be lowered merely to manufacture training data.",
       "The five heads are held together, so a positive pair cannot yet isolate which head caused the gain.",
       "No v2 model is trained or enabled by this aggregate.",
@@ -182,7 +253,7 @@ async function main() {
   const reports = [];
   for (const file of await jsonFiles(input)) {
     const parsed = JSON.parse(await readFile(file, "utf8"));
-    if (parsed?.format === "echo-neural-v2-pairs-v1") reports.push(parsed);
+    if (parsed?.format === PAIR_FORMAT) reports.push(parsed);
   }
   const aggregate = mergeNeuralV2PairShards(reports, {expectedPairs, expectedShards, expectedStartIndex});
   await mkdir(output.split("/").slice(0, -1).join("/") || ".", {recursive: true});
