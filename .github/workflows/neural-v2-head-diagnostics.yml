@@ -11,6 +11,7 @@ on:
       - "training/generate_neural_v2_head_pairs.mjs"
       - "training/diagnose_neural_v2_head_pairs.mjs"
       - "training/merge_neural_v2_head_diagnostics.mjs"
+      - "training/assess_neural_v2_training_readiness.mjs"
       - "tests/free-roam-neural-v2*.test.mjs"
       - ".github/workflows/neural-v2-head-diagnostics.yml"
   workflow_dispatch:
@@ -142,6 +143,12 @@ jobs:
           --expected-start-index=${{ needs.plan.outputs.start_index }}
           --output=training/reports/v2-head-diagnostics-aggregate.json
 
+      - name: Assess whether masked trainer development is allowed
+        run: >-
+          node training/assess_neural_v2_training_readiness.mjs
+          --input=training/reports/v2-head-diagnostics-aggregate.json
+          --output=training/reports/v2-training-readiness.json
+
       - name: Write diagnostic manifest
         run: |
           cat > training/reports/v2-head-diagnostics-manifest.json <<JSON
@@ -154,7 +161,7 @@ jobs:
             "acceptanceThreshold": 2.5,
             "method": "one isolated action head over unchanged v1 per explored rollout",
             "trainingAllowed": false,
-            "note": "Near misses are retained for diagnosis only. This workflow cannot produce training labels or enable a model."
+            "note": "Near misses are retained for diagnosis only. Readiness is assessed separately and this workflow cannot enable a model."
           }
           JSON
 
@@ -166,5 +173,6 @@ jobs:
           path: |
             training/reports/v2-head-diagnostics-aggregate.json
             training/reports/v2-head-diagnostics-manifest.json
+            training/reports/v2-training-readiness.json
           if-no-files-found: warn
           retention-days: 30
