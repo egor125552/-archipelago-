@@ -14,7 +14,7 @@ on:
         type: string
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: tactical-neural-policy
@@ -36,6 +36,11 @@ jobs:
           python-version: "3.12"
           cache: pip
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
       - name: Require a private server archive
         run: |
           if [ -z "$TRAINING_ARCHIVE_URL" ]; then
@@ -43,60 +48,47 @@ jobs:
             exit 2
           fi
 
-      - name: Install CPU trainer
+      - name: Install CPU trainer and project dependencies
         run: |
+          npm ci
           python -m pip install --upgrade pip
           python -m pip install numpy==2.3.5
           python -m pip install torch==2.10.0 --index-url https://download.pytorch.org/whl/cpu
 
-      - name: Train, criticize and quantize
-        id: train_model
-        continue-on-error: true
+      - name: Train, criticize and quantize a candidate
         run: |
           python -m py_compile training/*.py
           python training/train_policy.py \
             --url "$TRAINING_ARCHIVE_URL" \
             --epochs "${{ inputs.epochs || '100' }}" \
             --replay "$RUNNER_TEMP/tactical-replay.json" \
-            --output src/generated/free-roam-tactical-policy-v1.js \
+            --output training/reports/archive-candidate-policy.js \
             --report training/reports/latest.json
           python training/review_policy.py \
             --report training/reports/latest.json \
-            --model src/generated/free-roam-tactical-policy-v1.js \
+            --model training/reports/archive-candidate-policy.js \
             --output training/reports/latest-review.md
 
-      - name: Verify JavaScript inference and repository tests
-        id: verify_repository
-        if: always()
-        continue-on-error: true
-        run: npm test
+      - name: Verify candidate JavaScript inference and repository tests
+        run: |
+          cp src/generated/free-roam-tactical-policy-v1.js "$RUNNER_TEMP/base-policy.js"
+          cp training/reports/archive-candidate-policy.js src/generated/free-roam-tactical-policy-v1.js
+          npm test
+          cp "$RUNNER_TEMP/base-policy.js" src/generated/free-roam-tactical-policy-v1.js
 
-      - name: Upload review even when rejected
+      - name: Upload candidate and review
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: tactical-policy-review
+          name: tactical-policy-candidate-review
           path: |
             training/reports/latest.json
             training/reports/latest-review.md
-            src/generated/free-roam-tactical-policy-v1.js
-          if-no-files-found: error
+            training/reports/archive-candidate-policy.js
+          if-no-files-found: warn
+          retention-days: 30
 
-      - name: Commit accepted shadow model and critique
-        if: steps.train_model.outcome == 'success' && steps.verify_repository.outcome == 'success'
+      - name: Require authoritative A/B before promotion
         run: |
-          if git diff --quiet -- training/reports src/generated/free-roam-tactical-policy-v1.js; then
-            echo "No new accepted model changes."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add training/reports src/generated/free-roam-tactical-policy-v1.js
-          git commit -m "Train tactical neural policy"
-          git push origin HEAD:main
-
-      - name: Reject failed model or repository checks
-        if: steps.train_model.outcome != 'success' || steps.verify_repository.outcome != 'success'
-        run: |
-          echo "Training, self-review, or repository tests rejected the candidate. The existing model remains active in shadow mode."
-          exit 1
+          echo "Candidate produced successfully. It was not pushed to main."
+          echo "Promotion requires held-out authoritative server A/B evidence and manual review."
