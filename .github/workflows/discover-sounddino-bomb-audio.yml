@@ -1,0 +1,133 @@
+name: Discover SoundDino bomb audio
+
+on:
+  push:
+    branches:
+      - build/real-mega-bomb-audio-v2
+
+permissions:
+  contents: write
+
+jobs:
+  discover:
+    if: ${{ !contains(github.event.head_commit.message, 'Record SoundDino audio discovery') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: build/real-mega-bomb-audio-v2
+          fetch-depth: 0
+      - name: Inspect page and referenced scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import html
+          import json
+          import re
+          import subprocess
+          from pathlib import Path
+          from urllib.parse import urljoin
+          from urllib.request import Request, urlopen
+
+          PAGE = "https://sounddino.com/en/effects/bomb/"
+          TARGETS = [
+              "Dropped a bomb and it exploded",
+              "Bomb explosion with flying fragments",
+              "The sound when the bomb went off",
+              "Bomb drop and explosion",
+          ]
+
+          def fetch(url):
+              req = Request(url, headers={"User-Agent": "Mozilla/5.0 GitHub-Actions audio verifier"})
+              with urlopen(req, timeout=30) as response:
+                  return response.read(), response.headers.get("content-type", "")
+
+          raw, content_type = fetch(PAGE)
+          text = raw.decode("utf-8", "replace")
+          decoded = html.unescape(text).replace("\\/", "/")
+          candidates = set()
+          script_urls = set()
+
+          attr_pattern = re.compile(r'''(?:href|src|data-src|data-url|data-file|data-download|data-audio)\s*=\s*["']([^"']+)["']''', re.I)
+          for value in attr_pattern.findall(decoded):
+              absolute = urljoin(PAGE, value)
+              if value.lower().endswith(".js") or ".js?" in value.lower():
+                  script_urls.add(absolute)
+              if ".mp3" in value.lower() or "download" in value.lower() or "audio" in value.lower():
+                  candidates.add(absolute)
+
+          for value in re.findall(r'''https?://[^\s"'<>\\]+''', decoded):
+              if ".mp3" in value.lower() or "download" in value.lower():
+                  candidates.add(value.rstrip(");,]"))
+          for value in re.findall(r'''/[A-Za-z0-9_./?=&%+\-]+''', decoded):
+              if ".mp3" in value.lower() or "download" in value.lower():
+                  candidates.add(urljoin(PAGE, value))
+
+          script_notes = []
+          for script_url in sorted(script_urls):
+              try:
+                  body, _ = fetch(script_url)
+                  script = html.unescape(body.decode("utf-8", "replace")).replace("\\/", "/")
+              except Exception as exc:
+                  script_notes.append(f"SCRIPT ERROR {script_url}: {exc}")
+                  continue
+              for value in re.findall(r'''https?://[^\s"'<>\\]+''', script):
+                  if ".mp3" in value.lower() or "download" in value.lower() or "ajax" in value.lower():
+                      candidates.add(value.rstrip(");,]"))
+              for value in re.findall(r'''/[A-Za-z0-9_./?=&%+\-]+''', script):
+                  if ".mp3" in value.lower() or "download" in value.lower() or "ajax" in value.lower():
+                      candidates.add(urljoin(PAGE, value))
+
+          snippets = []
+          lower = decoded.lower()
+          for target in TARGETS:
+              cursor = 0
+              needle = target.lower()
+              while True:
+                  index = lower.find(needle, cursor)
+                  if index < 0:
+                      break
+                  snippets.append(decoded[max(0, index - 900): min(len(decoded), index + 1600)])
+                  cursor = index + len(needle)
+
+          results = []
+          for index, url in enumerate(sorted(candidates)):
+              record = {"url": url}
+              try:
+                  body, ctype = fetch(url)
+                  record.update({"status": "ok", "bytes": len(body), "content_type": ctype})
+                  if body.startswith(b"ID3") or body[:2] in (b"\xff\xfb", b"\xff\xf3", b"\xff\xf2") or "audio" in ctype.lower():
+                      path = Path(f"/tmp/candidate-{index}.bin")
+                      path.write_bytes(body)
+                      probe = subprocess.run(
+                          ["ffprobe", "-v", "error", "-show_entries", "format=duration,bit_rate,size", "-of", "json", str(path)],
+                          text=True, capture_output=True,
+                      )
+                      record["ffprobe"] = probe.stdout.strip() or probe.stderr.strip()
+                      record["looks_like_audio"] = True
+              except Exception as exc:
+                  record.update({"status": "error", "error": repr(exc)})
+              results.append(record)
+
+          report = {
+              "page": PAGE,
+              "page_bytes": len(raw),
+              "page_content_type": content_type,
+              "scripts": sorted(script_urls),
+              "candidates": results,
+              "target_snippets": snippets,
+              "script_notes": script_notes,
+          }
+          Path("sounddino-bomb-audio-discovery.json").write_text(json.dumps(report, ensure_ascii=False, indent=2))
+          PY
+      - name: Commit discovery and remove one-time workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/discover-sounddino-bomb-audio.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Record SoundDino audio discovery"
+          git push origin HEAD:build/real-mega-bomb-audio-v2
