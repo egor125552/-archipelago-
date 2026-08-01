@@ -3,6 +3,7 @@ import process from "node:process";
 
 const FORMAT = "echo-neural-v2-head-windows-v1";
 const HEADS = Object.freeze(["throttle", "steering", "range", "route", "fire"]);
+const DIRECTIONAL_HEADS = new Set(["steering", "range", "route"]);
 
 function argument(name, fallback) {
   const prefix = `--${name}=`;
@@ -64,12 +65,24 @@ function finiteState(state) {
     && state.features.slice(-5).every(value => Number(value) === 0);
 }
 
+function symmetricDirectionalAssist(pair) {
+  if (!DIRECTIONAL_HEADS.has(pair.head)) return true;
+  const baselineFrames = Number(pair?.baseline?.diagnosticAssistFrames);
+  const exploredFrames = Number(pair?.explored?.diagnosticAssistFrames);
+  const comparisonFrames = Number(pair?.comparison?.diagnosticAssistFrames);
+  return Number.isFinite(baselineFrames)
+    && baselineFrames > 0
+    && baselineFrames === exploredFrames
+    && exploredFrames === comparisonFrames;
+}
+
 function validDiagnosticPair(pair) {
   if (!pair?.comparison?.valid) return false;
   if (!HEADS.includes(pair.head)) return false;
   if (!pair?.baseline?.completed || !pair?.explored?.completed) return false;
   if (!pair.baseline.actorId || pair.baseline.actorId !== pair.explored.actorId) return false;
   if (pair.baseline.actorRole !== pair.explored.actorRole || pair.baseline.actorKind !== pair.explored.actorKind) return false;
+  if (!symmetricDirectionalAssist(pair)) return false;
   if (!finiteState(pair.baseline.initialState) || !finiteState(pair.baseline.finalState)) return false;
   if (!finiteState(pair.explored.initialState) || !finiteState(pair.explored.finalState)) return false;
   for (const key of [
@@ -220,6 +233,7 @@ export function mergeNeuralV2HeadWindows(reports, {expectedPairs, expectedShards
     verdict: failures.length ? "invalid" : "complete-short-horizon-diagnostics",
     critique: [
       "Short-horizon objective deltas verify immediate semantics and geometry only; they are not full-episode rewards.",
+      "Directional evidence is accepted only when baseline and explored use the same positive number of diagnostic motion-assist frames.",
       "A positive short-window result cannot become a training label until it also passes full-episode fairness and non-regression gates.",
       "Baseline and explored must retain the same actor identity and finite 53-value states.",
       "This aggregate cannot train, export or enable a model.",
