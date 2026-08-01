@@ -11,6 +11,16 @@ import {applyCombatDamage} from "../public/src/free-roam-combat-v2.js?v=5";
 import {applyCombatAiHotfixV163} from "../public/src/free-roam-combat-ai-hotfix-v163.js?v=1";
 import {replicatedFreeWorld} from "../public/src/free-roam-replication.js";
 import {reserveUnconnectedBoats} from "../public/src/free-roam-reserve-boats.js";
+import {
+  consumeCompletedTrainingEpisodes,
+  finishServerTrainingBattle,
+  persistedWorldForServerRoom,
+  serializeTrainingEpisode,
+  setServerTrainingRecording,
+  startServerTrainingBattle,
+  trainingRuntimeStatus,
+  updateTrainingRecorder,
+} from "./free-roam-training.js";
 
 export const FREE_TICK_MS = 40;
 const MAX_ELAPSED_SECONDS = 0.2;
@@ -176,5 +186,16 @@ export function tickServerFreeRoom(serverRoom, now = Date.now()) {
     clearDeliveredPulses(serverRoom);
   }
   const events = drainEvents(serverRoom.world);
+  updateTrainingRecorder(serverRoom, now, events);
   return snapshotServerFreeRoom(serverRoom, now, events);
 }
+
+export {
+  consumeCompletedTrainingEpisodes,
+  finishServerTrainingBattle,
+  persistedWorldForServerRoom,
+  serializeTrainingEpisode,
+  setServerTrainingRecording,
+  startServerTrainingBattle,
+  trainingRuntimeStatus,
+};
