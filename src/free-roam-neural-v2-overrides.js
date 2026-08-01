@@ -29,6 +29,7 @@ function ensureRuntime(serverRoom) {
           fireAllowedFrames: 0,
           fireSuppressedFrames: 0,
           waterClampFrames: 0,
+          waterGuardInterventions: 0,
           missingActorFrames: 0,
           missingTargetFrames: 0,
         },
@@ -41,6 +42,19 @@ function ensureRuntime(serverRoom) {
   const runtime = serverRoom.neuralV2OverrideRuntime;
   if (!(runtime.actions instanceof Map)) runtime.actions = new Map();
   runtime.diagnostics ||= {};
+  for (const key of [
+    "preparedFrames",
+    "controlledFrames",
+    "movementFrames",
+    "fireAllowedFrames",
+    "fireSuppressedFrames",
+    "waterClampFrames",
+    "waterGuardInterventions",
+    "missingActorFrames",
+    "missingTargetFrames",
+  ]) {
+    if (!Number.isFinite(Number(runtime.diagnostics[key]))) runtime.diagnostics[key] = 0;
+  }
   return runtime;
 }
 
@@ -153,7 +167,10 @@ export function finishServerNeuralV2Overrides(serverRoom, frames, dt) {
     entity.x = nextX;
     entity.y = nextY;
     runtime.diagnostics.movementFrames = (runtime.diagnostics.movementFrames || 0) + 1;
-    if (waterClamped) runtime.diagnostics.waterClampFrames = (runtime.diagnostics.waterClampFrames || 0) + 1;
+    if (waterClamped) {
+      runtime.diagnostics.waterClampFrames = (runtime.diagnostics.waterClampFrames || 0) + 1;
+      runtime.diagnostics.waterGuardInterventions = (runtime.diagnostics.waterGuardInterventions || 0) + 1;
+    }
     controlled += 1;
   }
   runtime.diagnostics.controlledFrames = (runtime.diagnostics.controlledFrames || 0) + controlled;
@@ -162,10 +179,21 @@ export function finishServerNeuralV2Overrides(serverRoom, frames, dt) {
 
 export function neuralV2OverrideStatus(serverRoom) {
   const runtime = serverRoom?.neuralV2OverrideRuntime;
+  const diagnostics = runtime ? structuredClone(ensureRuntime(serverRoom).diagnostics) : {
+    preparedFrames: 0,
+    controlledFrames: 0,
+    movementFrames: 0,
+    fireAllowedFrames: 0,
+    fireSuppressedFrames: 0,
+    waterClampFrames: 0,
+    waterGuardInterventions: 0,
+    missingActorFrames: 0,
+    missingTargetFrames: 0,
+  };
   return {
     enabled: Boolean(runtime?.actions?.size),
     actionCount: runtime?.actions?.size || 0,
     actions: neuralV2OverrideSnapshot(serverRoom),
-    diagnostics: structuredClone(runtime?.diagnostics || {}),
+    diagnostics,
   };
 }
