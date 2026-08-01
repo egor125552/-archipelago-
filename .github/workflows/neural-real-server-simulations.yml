@@ -4,7 +4,17 @@ on:
   push:
     branches:
       - main
-      - agent/neural-real-simulations-v2
+    paths:
+      - "src/free-roam-neural-*.js"
+      - "src/free-roam-server.js"
+      - "src/generated/free-roam-tactical-policy-v1.js"
+      - "training/run_real_server_simulations.mjs"
+      - "training/merge_real_server_simulations.mjs"
+      - "tests/free-roam-neural-*.test.mjs"
+      - ".github/workflows/neural-real-server-simulations.yml"
+  pull_request:
+    branches:
+      - main
     paths:
       - "src/free-roam-neural-*.js"
       - "src/free-roam-server.js"
