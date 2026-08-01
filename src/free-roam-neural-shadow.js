@@ -5,9 +5,11 @@ import {createTacticalPolicyRuntime, verifyTacticalPolicyGolden} from "./free-ro
 
 const WORLD_WIDTH = 420;
 const WORLD_HEIGHT = 320;
-const SHADOW_INTERVAL_MS = Math.max(100, Math.round((Number(model.sampleSeconds) || 0.2) * 1000));
+const SAMPLE_SECONDS = Math.max(0.1, Number(model.sampleSeconds) || 0.2);
+const SHADOW_INTERVAL_MS = Math.max(100, Math.round(SAMPLE_SECONDS * 1000));
 const HEAVY_TURRET_FIRE_THRESHOLD = 0.22;
-const HEAVY_TURRET_FIRE_LATCH_STEPS = Math.max(8, Math.ceil(2.4 / Math.max(0.1, Number(model.sampleSeconds) || 0.2)));
+const HEAVY_TURRET_FIRE_LATCH_STEPS = Math.max(8, Math.ceil(2.4 / SAMPLE_SECONDS));
+const HEAVY_TURRET_EXPLORATION_WAIT_STEPS = Math.max(12, Math.ceil(3 / SAMPLE_SECONDS));
 const DEFAULT_FIRE_LATCH_STEPS = 2;
 const runtime = createTacticalPolicyRuntime(model);
 const golden = verifyTacticalPolicyGolden(model);
@@ -191,9 +193,21 @@ function ensureShadowRuntime(serverRoom) {
 function fireDecision(actor, result, previous) {
   const threshold = actor.role === "heavy_turret" ? HEAVY_TURRET_FIRE_THRESHOLD : 0.5;
   const rawFire = result.fireProbability >= threshold;
+  const waitSteps = rawFire ? 0 : (Number(previous?.fireWaitSteps) || 0) + 1;
+  const forcedExploration = actor.role === "heavy_turret"
+    && !rawFire
+    && waitSteps >= HEAVY_TURRET_EXPLORATION_WAIT_STEPS;
+  const permissionStarted = rawFire || forcedExploration;
   const latchSteps = actor.role === "heavy_turret" ? HEAVY_TURRET_FIRE_LATCH_STEPS : DEFAULT_FIRE_LATCH_STEPS;
-  const fireLatch = rawFire ? latchSteps : Math.max(0, (Number(previous?.fireLatch) || 0) - 1);
-  return {rawFire, fire: rawFire || fireLatch > 0, fireLatch, threshold};
+  const fireLatch = permissionStarted ? latchSteps : Math.max(0, (Number(previous?.fireLatch) || 0) - 1);
+  return {
+    rawFire,
+    fire: permissionStarted || fireLatch > 0,
+    fireLatch,
+    fireWaitSteps: permissionStarted ? 0 : waitSteps,
+    forcedExploration,
+    threshold,
+  };
 }
 
 export function updateServerNeuralShadow(serverRoom, now = Date.now()) {
@@ -210,14 +224,16 @@ export function updateServerNeuralShadow(serverRoom, now = Date.now()) {
   let confidenceTotal = 0;
   let fireTotal = 0;
   let fireAllowedCount = 0;
+  let forcedExplorationCount = 0;
   let lowConfidenceCount = 0;
   let heavyTurretTracked = false;
   let heavyTurretFire = false;
   let heavyTurretFireProbability = 0;
+  let heavyTurretForcedExploration = false;
 
   for (const actor of actors) {
     seen.add(actor.id);
-    const previous = shadow.actors.get(actor.id) || {hidden: null, movementIndex: 0, fire: false, fireLatch: 0};
+    const previous = shadow.actors.get(actor.id) || {hidden: null, movementIndex: 0, fire: false, fireLatch: 0, fireWaitSteps: 0};
     const result = runtime.step(neuralFeatureVector(serverRoom.world, actor, previous), previous.hidden);
     const fire = fireDecision(actor, result, previous);
     const next = {
@@ -228,6 +244,8 @@ export function updateServerNeuralShadow(serverRoom, now = Date.now()) {
       fire: fire.fire,
       rawFire: fire.rawFire,
       fireLatch: fire.fireLatch,
+      fireWaitSteps: fire.fireWaitSteps,
+      forcedExploration: fire.forcedExploration,
       fireThreshold: fire.threshold,
       fireProbability: result.fireProbability,
       targetPlayer: Number.isInteger(actor.entity?.targetPlayer) ? actor.entity.targetPlayer : null,
@@ -243,11 +261,13 @@ export function updateServerNeuralShadow(serverRoom, now = Date.now()) {
     confidenceTotal += next.confidence;
     fireTotal += next.fireProbability;
     if (next.fire && next.controlsFire) fireAllowedCount += 1;
+    if (next.forcedExploration) forcedExplorationCount += 1;
     if (next.confidence < 0.25) lowConfidenceCount += 1;
     if (actor.role === "heavy_turret") {
       heavyTurretTracked = true;
       heavyTurretFire = next.fire;
       heavyTurretFireProbability = next.fireProbability;
+      heavyTurretForcedExploration = next.forcedExploration;
     }
   }
   for (const id of shadow.actors.keys()) if (!seen.has(id)) shadow.actors.delete(id);
@@ -262,10 +282,12 @@ export function updateServerNeuralShadow(serverRoom, now = Date.now()) {
     meanMovementConfidence: actors.length ? confidenceTotal / actors.length : 0,
     meanFireProbability: actors.length ? fireTotal / actors.length : 0,
     fireAllowedCount,
+    forcedExplorationCount,
     lowConfidenceCount,
     heavyTurretTracked,
     heavyTurretFire,
     heavyTurretFireProbability,
+    heavyTurretForcedExploration,
     movementCounts,
     updatedAt: now,
   };
@@ -289,6 +311,8 @@ export function neuralDecisionSnapshot(serverRoom) {
     fireProbability: decision.fireProbability,
     fireThreshold: decision.fireThreshold,
     fireLatch: decision.fireLatch,
+    fireWaitSteps: decision.fireWaitSteps,
+    forcedExploration: decision.forcedExploration,
     targetPlayer: decision.targetPlayer,
     kind: decision.kind,
     role: decision.role,
@@ -323,10 +347,12 @@ export function neuralShadowStatus(serverRoom) {
     meanMovementConfidence: 0,
     meanFireProbability: 0,
     fireAllowedCount: 0,
+    forcedExplorationCount: 0,
     lowConfidenceCount: 0,
     heavyTurretTracked: false,
     heavyTurretFire: false,
     heavyTurretFireProbability: 0,
+    heavyTurretForcedExploration: false,
     movementCounts: Object.fromEntries(model.movementClasses.map(name => [name, 0])),
     updatedAt: 0,
   };
