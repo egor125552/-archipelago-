@@ -12,13 +12,18 @@ import {applyCombatAiHotfixV163} from "../public/src/free-roam-combat-ai-hotfix-
 import {replicatedFreeWorld} from "../public/src/free-roam-replication.js";
 import {reserveUnconnectedBoats} from "../public/src/free-roam-reserve-boats.js";
 import {
+  clearServerNeuralShadow,
+  neuralShadowStatus,
+  updateServerNeuralShadow,
+} from "./free-roam-neural-shadow.js";
+import {
   consumeCompletedTrainingEpisodes,
-  finishServerTrainingBattle,
+  finishServerTrainingBattle as finishServerTrainingBattleBase,
   persistedWorldForServerRoom,
   serializeTrainingEpisode,
   setServerTrainingRecording,
   startServerTrainingBattle as startServerTrainingBattleBase,
-  trainingRuntimeStatus,
+  trainingRuntimeStatus as trainingRuntimeStatusBase,
   updateTrainingRecorder,
 } from "./free-roam-training.js";
 
@@ -188,21 +193,34 @@ export function tickServerFreeRoom(serverRoom, now = Date.now()) {
   }
   const events = drainEvents(serverRoom.world);
   updateTrainingRecorder(serverRoom, now, events);
+  updateServerNeuralShadow(serverRoom, now);
   return snapshotServerFreeRoom(serverRoom, now, events);
 }
 
 export function startServerTrainingBattle(serverRoom, requestedLevel, record = true, now = Date.now()) {
+  clearServerNeuralShadow(serverRoom);
   const status = startServerTrainingBattleBase(serverRoom, requestedLevel, record, now);
   const activities = serverRoom?.world?.freeActivities;
   if (activities) activities.credits = Math.max(TRAINING_CREDIT_FLOOR, Number(activities.credits) || 0);
   return status;
 }
 
+export function finishServerTrainingBattle(serverRoom, outcome = "manual", options = {}) {
+  const status = finishServerTrainingBattleBase(serverRoom, outcome, options);
+  clearServerNeuralShadow(serverRoom);
+  return status;
+}
+
+export function trainingRuntimeStatus(serverRoom) {
+  return {
+    ...trainingRuntimeStatusBase(serverRoom),
+    neuralShadow: neuralShadowStatus(serverRoom),
+  };
+}
+
 export {
   consumeCompletedTrainingEpisodes,
-  finishServerTrainingBattle,
   persistedWorldForServerRoom,
   serializeTrainingEpisode,
   setServerTrainingRecording,
-  trainingRuntimeStatus,
 };
