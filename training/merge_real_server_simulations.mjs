@@ -19,12 +19,15 @@ async function jsonFiles(root) {
   return result;
 }
 
-function markdown(report) {
-  const summary = report.summary;
-  const failures = Object.entries(summary.byFailure || {})
+function listCounts(counts) {
+  return Object.entries(counts || {})
     .sort((left, right) => right[1] - left[1])
     .map(([name, count]) => `- ${name}: ${count}`)
     .join("\n") || "- none";
+}
+
+function markdown(report) {
+  const summary = report.summary;
   const critique = (summary.critique || []).map(item => `- ${item}`).join("\n");
   return `# Neural real-server simulation critique
 
@@ -32,18 +35,31 @@ Generated: ${summary.generatedAt}
 
 ## Run truth
 
-- Requested battles: ${summary.requestedBattles}
-- Completed battles: ${summary.completedBattles}
-- Failed mechanical checks: ${summary.failedBattles}
-- Level-five battles: ${summary.heavyLevelFiveBattles}
-- Level-five battles where the ready heavy turret never activated: ${summary.heavyTurretFailedBattles}
+- Profile: ${summary.profile}
+- Requested episodes/windows: ${summary.requestedBattles}
+- Completed simulations: ${summary.completedBattles}
+- Battle index range: ${report.startIndex}–${Math.max(report.startIndex, report.endIndex - 1)}
+- Mechanical failures: ${summary.mechanicalFailedBattles}
+- Simulations with quality findings: ${summary.qualityFindingBattles}
+- Mean simulated duration: ${(summary.meanElapsedMs / 1000).toFixed(2)} seconds
+- Level-five simulations: ${summary.heavyLevelFiveBattles}
+- Level-five simulations where the ready heavy turret never activated: ${summary.heavyTurretFailedBattles}
 - Mean stationary ratio: ${summary.meanStationaryRatio.toFixed(5)}
 - Mean invalid-water ratio: ${summary.meanInvalidWaterRatio.toFixed(5)}
-- Verdict: **${summary.verdict}**
+- Mechanical verdict: **${summary.mechanicalVerdict}**
+- Quality verdict: **${summary.qualityVerdict}**
+
+## Outcomes
+
+${listCounts(summary.byOutcome)}
 
 ## Mechanical failures
 
-${failures}
+${listCounts(summary.byFailure)}
+
+## Quality findings
+
+${listCounts(summary.byQualityFinding)}
 
 ## Required self-critique
 
@@ -51,7 +67,7 @@ ${critique}
 
 ## What this report cannot prove
 
-This report is intentionally not called training success. It can reject a mechanically broken controller. It cannot prove that the policy is clever, enjoyable, fair, human-like, or ready for ordinary play. A model promotion requires recorded human battles, a held-out evaluation set, adversarial shoreline scenarios, and an explicit comparison against the production AI.
+This report is intentionally not called training success. It can reject a mechanically broken controller and expose unresolved episodes. It cannot prove that the policy is clever, enjoyable, fair, human-like, or ready for ordinary play. A model promotion requires recorded human battles, a held-out evaluation set, adversarial shoreline scenarios, full policy-decision traces and an explicit comparison against the production AI.
 `;
 }
 
@@ -62,11 +78,15 @@ async function main() {
   const files = await jsonFiles(input);
   const results = [];
   let requestedBattles = 0;
+  let startIndex = Infinity;
+  let endIndex = -Infinity;
   for (const file of files) {
     const parsed = JSON.parse(await readFile(file, "utf8"));
     if (!Array.isArray(parsed.results)) continue;
     results.push(...parsed.results);
     requestedBattles = Math.max(requestedBattles, Number(parsed.summary?.requestedBattles) || 0);
+    if (Number.isFinite(Number(parsed.startIndex))) startIndex = Math.min(startIndex, Number(parsed.startIndex));
+    if (Number.isFinite(Number(parsed.endIndex))) endIndex = Math.max(endIndex, Number(parsed.endIndex));
   }
   results.sort((left, right) => Number(left.battleIndex) - Number(right.battleIndex));
   const unique = [];
@@ -77,19 +97,34 @@ async function main() {
     seen.add(key);
     unique.push(result);
   }
+  if (!Number.isFinite(startIndex)) startIndex = unique[0]?.battleIndex || 0;
+  if (!Number.isFinite(endIndex)) endIndex = startIndex + (requestedBattles || unique.length);
+  const expectedIndices = new Set(Array.from({length: requestedBattles || unique.length}, (_, offset) => startIndex + offset));
+  for (const result of unique) expectedIndices.delete(Number(result.battleIndex));
+  const missingBattleIndices = [...expectedIndices].sort((left, right) => left - right);
   const summary = summarizeBattles(unique, requestedBattles || unique.length);
-  const report = {summary, results: unique};
+  const report = {summary, startIndex, endIndex, missingBattleIndices, results: unique};
   await mkdir(output.split("/").slice(0, -1).join("/") || ".", {recursive: true});
   await writeFile(output, `${JSON.stringify(report, null, 2)}\n`);
   await writeFile(critiqueOutput, markdown(report));
   console.log(JSON.stringify({
     output,
     critiqueOutput,
+    profile: summary.profile,
+    startIndex,
+    endIndex,
     requestedBattles: summary.requestedBattles,
     completedBattles: summary.completedBattles,
-    verdict: summary.verdict,
+    missingBattleIndices: missingBattleIndices.length,
+    mechanicalVerdict: summary.mechanicalVerdict,
+    qualityVerdict: summary.qualityVerdict,
+    outcomes: summary.byOutcome,
   }, null, 2));
-  if (summary.completedBattles !== summary.requestedBattles || summary.verdict === "rejected") process.exitCode = 4;
+  if (summary.completedBattles !== summary.requestedBattles
+    || missingBattleIndices.length
+    || summary.mechanicalVerdict === "rejected") {
+    process.exitCode = 4;
+  }
 }
 
 main().catch(error => {
