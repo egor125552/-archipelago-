@@ -8,6 +8,7 @@ on:
       - "src/free-roam-neural-*.js"
       - "src/generated/free-roam-tactical-policy-v1.js"
       - "training/generate_neural_selfplay_dataset.mjs"
+      - "training/merge_neural_selfplay_shards.mjs"
       - "training/train_selfplay_policy.py"
       - "training/compare_selfplay_candidate.mjs"
       - "tests/free-roam-neural-selfplay.test.mjs"
@@ -165,6 +166,15 @@ jobs:
           path: training/reports/selfplay/input
           merge-multiple: true
 
+      - name: Verify and merge exact shard coverage
+        run: >-
+          node training/merge_neural_selfplay_shards.mjs
+          --input=training/reports/selfplay/input
+          --expected-battles=${{ needs.plan.outputs.batch_battles }}
+          --expected-shards=${{ needs.plan.outputs.shards }}
+          --expected-start-index=${{ needs.plan.outputs.start_index }}
+          --output=training/reports/selfplay-aggregate.json
+
       - name: Record truthful campaign range
         run: |
           cat > training/reports/selfplay-campaign.json <<JSON
@@ -174,6 +184,7 @@ jobs:
             "batchBattles": ${{ needs.plan.outputs.batch_battles }},
             "batchEndExclusive": $(( ${{ needs.plan.outputs.start_index }} + ${{ needs.plan.outputs.batch_battles }} )),
             "shards": ${{ needs.plan.outputs.shards }},
+            "coverageReport": "selfplay-aggregate.json",
             "note": "This artifact proves one batch only. It must not be reported as the full campaign unless completed ranges cover the target without gaps."
           }
           JSON
@@ -181,7 +192,7 @@ jobs:
       - name: Fine-tune a candidate from elite explored trajectories
         run: >-
           python training/train_selfplay_policy.py
-          --input training/reports/selfplay/input
+          --input training/reports/selfplay-aggregate.json
           --base-model src/generated/free-roam-tactical-policy-v1.js
           --output training/reports/selfplay-candidate-policy.js
           --report training/reports/selfplay-training.json
@@ -233,6 +244,7 @@ jobs:
           name: neural-selfplay-candidate-review
           path: |
             training/reports/selfplay-campaign.json
+            training/reports/selfplay-aggregate.json
             training/reports/selfplay-training.json
             training/reports/selfplay-candidate-policy.js
             training/reports/selfplay-baseline-evaluation.json
