@@ -47,11 +47,11 @@ export function seededRandom(seed) {
   };
 }
 
-async function withSeed(seed, callback) {
+export async function withWorldRandomSeed(seed, callback) {
   const previous = Math.random;
   Math.random = seededRandom(seed);
   try {
-    return await callback(Math.random);
+    return await callback();
   } finally {
     Math.random = previous;
   }
@@ -82,6 +82,7 @@ function scriptedInput(script, elapsed, server, playerIndex) {
   const cycle = Math.floor(elapsed / 1800) % 4;
   const targetId = nearestEnemyId(server, playerIndex);
   const attack = Boolean(targetId) && player?.combat?.alive !== false;
+  const pulse = divisor => Math.floor(elapsed / divisor) % 2 === 0;
   const base = {
     targetId,
     navigationTargetId: "objective",
@@ -90,15 +91,15 @@ function scriptedInput(script, elapsed, server, playerIndex) {
     repair: Number(boat?.leak) >= 0.7 && Math.abs(Number(boat?.speed) || 0) <= 3,
   };
   if (script === "idle-no-fire") return {...base, attack: false};
-  if (script === "water-zigzag") return {...base, up: true, left: cycle < 2, right: cycle >= 2, attack: attack && Math.floor(elapsed / 500) % 2 === 0};
+  if (script === "water-zigzag") return {...base, up: true, left: cycle < 2, right: cycle >= 2, attack: attack && pulse(500)};
   if (script === "water-escape") {
     const safe = Number(player?.combat?.health) > 25 && Number(boat?.hull) > 25;
-    return {...base, up: true, left: cycle === 0 || cycle === 3, right: cycle === 1 || cycle === 2, attack: attack && safe && Math.floor(elapsed / 700) % 2 === 0};
+    return {...base, up: true, left: cycle === 0 || cycle === 3, right: cycle === 1 || cycle === 2, attack: attack && safe && pulse(700)};
   }
   if (script === "aggressive") return {...base, up: true, left: cycle === 1, right: cycle === 3};
   if (script === "shoreline") {
     const y = Number(boat?.y) || 160;
-    return {...base, up: y > 92, down: y < 84, left: cycle === 0, right: cycle === 2, attack: attack && Math.floor(elapsed / 800) % 2 === 0};
+    return {...base, up: y > 92, down: y < 84, left: cycle === 0, right: cycle === 2, attack: attack && pulse(800)};
   }
   const damaged = Number(boat?.water) >= 6 || Number(boat?.leak) >= 0.7 || Number(boat?.hull) <= 70;
   return {
@@ -107,7 +108,7 @@ function scriptedInput(script, elapsed, server, playerIndex) {
     down: damaged && Math.abs(Number(boat?.speed) || 0) > 1,
     left: !damaged && cycle < 2,
     right: !damaged && cycle >= 2,
-    attack: !damaged && attack && Math.floor(elapsed / 600) % 2 === 0,
+    attack: !damaged && attack && pulse(600),
   };
 }
 
@@ -137,7 +138,7 @@ export function previousActionFeatureState(previousActions, actorId) {
     : {movementIndex: 0, fire: false};
 }
 
-function recordAndExplore(server, trajectories, previousActions, random, movementEpsilon, fireEpsilon, elapsedMs) {
+function recordAndExplore(server, trajectories, previousActions, explorationRandom, movementEpsilon, fireEpsilon, elapsedMs) {
   for (const actor of collectNeuralActors(server.world)) {
     const decision = neuralDecision(server, actor.id);
     if (!decision) continue;
@@ -145,9 +146,9 @@ function recordAndExplore(server, trajectories, previousActions, random, movemen
     const features = roundedFeatures(neuralFeatureVector(server.world, actor, recurrentState));
     const policyMovement = Math.max(0, Math.min(MOVEMENTS.length - 1, Number(decision.movementIndex) || 0));
     const policyFire = Boolean(decision.fire);
-    const movementExplored = actor.controlsMovement !== false && random() < movementEpsilon;
-    const fireExplored = actor.controlsFire !== false && random() < fireEpsilon;
-    const selectedMovement = movementExplored ? chooseDifferentMovement(policyMovement, random) : policyMovement;
+    const movementExplored = actor.controlsMovement !== false && explorationRandom() < movementEpsilon;
+    const fireExplored = actor.controlsFire !== false && explorationRandom() < fireEpsilon;
+    const selectedMovement = movementExplored ? chooseDifferentMovement(policyMovement, explorationRandom) : policyMovement;
     const selectedFire = fireExplored ? !policyFire : policyFire;
 
     decision.movementIndex = selectedMovement;
@@ -181,22 +182,25 @@ function recordAndExplore(server, trajectories, previousActions, random, movemen
 
 export function selfPlayScore({outcome, playerHealth, boatHull, boatWater, enemyHits, elapsedMs, durationMs, diagnostics}) {
   const pressure = (100 - playerHealth) * 0.75 + (100 - boatHull) * 0.55 + Math.min(100, boatWater) * 0.3 + enemyHits * 1.8;
-  const outcomeScore = outcome === "team-wipe" ? 95 : outcome === "victory" ? -35 : -18;
-  const speedBonus = outcome === "team-wipe" ? Math.max(0, 24 * (1 - elapsedMs / Math.max(1, durationMs))) : 0;
-  const guardPenalty = (Number(diagnostics?.waterGuardInterventions) || 0) * 0.018
-    + (Number(diagnostics?.stuckEscapes) || 0) * 0.75
-    + (Number(diagnostics?.shorelineRedirects) || 0) * 0.006;
+  const outcomeScore = outcome === "team-wipe" ? 120 : outcome === "timeout" ? 5 : -45;
+  const speedBonus = outcome === "team-wipe" ? Math.max(0, 30 * (1 - elapsedMs / Math.max(1, durationMs))) : 0;
+  const guardPenalty = (Number(diagnostics?.waterGuardInterventions) || 0) * 0.02
+    + (Number(diagnostics?.stuckEscapes) || 0) * 0.9
+    + (Number(diagnostics?.shorelineRedirects) || 0) * 0.008;
   return Math.round((pressure + outcomeScore + speedBonus - guardPenalty) * 1000) / 1000;
 }
 
-function hasTrainableTrajectory(episode) {
-  return (episode?.actors || []).some(actor => (actor?.samples || []).length >= 4);
+function hasExploredTrainableTrajectory(episode) {
+  return (episode?.actors || []).some(actor => {
+    const samples = actor?.samples || [];
+    return samples.length >= 4 && samples.some(sample => sample?.em || sample?.ef);
+  });
 }
 
-export function selectEliteEpisodes(episodes, perScenario = 1) {
+export function selectEliteEpisodes(episodes, perScenario = 1, minimumAdvantage = 2.5) {
   const groups = new Map();
   for (const episode of episodes) {
-    if (!hasTrainableTrajectory(episode)) continue;
+    if (!hasExploredTrainableTrajectory(episode) || Number(episode.advantage) < minimumAdvantage) continue;
     const key = `${Number(episode.level) || 0}:${episode.script || "unknown"}:${episode.coop ? "coop" : "solo"}`;
     const list = groups.get(key) || [];
     list.push(episode);
@@ -204,14 +208,15 @@ export function selectEliteEpisodes(episodes, perScenario = 1) {
   }
   const selected = [];
   for (const list of groups.values()) {
-    list.sort((left, right) => right.score - left.score || left.seed - right.seed);
+    list.sort((left, right) => right.advantage - left.advantage || right.score - left.score || left.seed - right.seed);
     selected.push(...list.slice(0, Math.max(1, perScenario)));
   }
-  return selected.sort((left, right) => left.level - right.level || String(left.script).localeCompare(String(right.script)) || Number(left.coop) - Number(right.coop) || right.score - left.score);
+  return selected.sort((left, right) => left.level - right.level || String(left.script).localeCompare(String(right.script)) || Number(left.coop) - Number(right.coop) || right.advantage - left.advantage);
 }
 
-async function simulateBattle({battleIndex, seed, durationMs, level, script, coop, movementEpsilon, fireEpsilon}) {
-  return withSeed(seed, async random => {
+async function simulateBattle({battleIndex, worldSeed, explorationSeed, durationMs, level, script, coop, movementEpsilon, fireEpsilon, explore}) {
+  return withWorldRandomSeed(worldSeed, async () => {
+    const explorationRandom = seededRandom(explorationSeed);
     const startedAt = 2_000_000 + battleIndex * (durationMs + 5000);
     const server = createServerFreeRoom(startedAt);
     setServerFreePresence(server, "captain", true);
@@ -239,8 +244,8 @@ async function simulateBattle({battleIndex, seed, durationMs, level, script, coo
         const type = String(event?.type || "");
         if (type === "heavy-bullet-boat-hit" || type === "gun-hit" || type.includes("ram-hit")) enemyHits += 1;
       }
-      if (elapsed >= nextSampleAt) {
-        recordAndExplore(server, trajectories, previousActions, random, movementEpsilon, fireEpsilon, elapsed);
+      if (explore && elapsed >= nextSampleAt) {
+        recordAndExplore(server, trajectories, previousActions, explorationRandom, movementEpsilon, fireEpsilon, elapsed);
         nextSampleAt = elapsed + SAMPLE_MS;
       }
       if ((snapshot.events || []).some(event => event?.type === "contract-threat-cleared")
@@ -262,12 +267,6 @@ async function simulateBattle({battleIndex, seed, durationMs, level, script, coo
     const boatWater = Math.max(0, Number(boat?.water) || 0);
     const score = selfPlayScore({outcome, playerHealth, boatHull, boatWater, enemyHits, elapsedMs, durationMs, diagnostics});
     return {
-      id: `selfplay-${battleIndex}-${seed}`,
-      battleIndex,
-      seed,
-      level,
-      script,
-      coop,
       outcome,
       elapsedMs,
       score,
@@ -276,9 +275,38 @@ async function simulateBattle({battleIndex, seed, durationMs, level, script, coo
       boatWater,
       enemyHits,
       diagnostics,
-      actors: [...trajectories.values()].filter(item => item.samples.length >= 4),
+      actors: explore ? [...trajectories.values()].filter(item => item.samples.length >= 4) : [],
     };
   });
+}
+
+export async function simulatePairedBattle({battleIndex, durationMs, level, script, coop, movementEpsilon, fireEpsilon}) {
+  const worldSeed = 725_552 + battleIndex * 10_007;
+  const explorationSeed = 1_925_552 + battleIndex * 65_537;
+  const baseline = await simulateBattle({battleIndex, worldSeed, explorationSeed, durationMs, level, script, coop, movementEpsilon: 0, fireEpsilon: 0, explore: false});
+  const explored = await simulateBattle({battleIndex, worldSeed, explorationSeed, durationMs, level, script, coop, movementEpsilon, fireEpsilon, explore: true});
+  const advantage = Math.round((explored.score - baseline.score) * 1000) / 1000;
+  return {
+    id: `selfplay-${battleIndex}-${worldSeed}`,
+    battleIndex,
+    seed: worldSeed,
+    explorationSeed,
+    level,
+    script,
+    coop,
+    ...explored,
+    baseline: {
+      outcome: baseline.outcome,
+      elapsedMs: baseline.elapsedMs,
+      score: baseline.score,
+      playerHealth: baseline.playerHealth,
+      boatHull: baseline.boatHull,
+      boatWater: baseline.boatWater,
+      enemyHits: baseline.enemyHits,
+      diagnostics: baseline.diagnostics,
+    },
+    advantage,
+  };
 }
 
 async function main() {
@@ -288,11 +316,13 @@ async function main() {
   const shards = Math.max(1, integerArgument("shards", 1));
   const durationMs = Math.max(8_000, integerArgument("duration-ms", 45_000));
   const elitePerScenario = Math.max(1, integerArgument("elite-per-scenario", integerArgument("elite-per-level", 1)));
-  const movementEpsilon = Math.max(0, Math.min(0.7, numberArgument("movement-epsilon", 0.18)));
-  const fireEpsilon = Math.max(0, Math.min(0.5, numberArgument("fire-epsilon", 0.08)));
+  const minimumAdvantage = Math.max(0, numberArgument("minimum-advantage", 2.5));
+  const movementEpsilon = Math.max(0, Math.min(0.7, numberArgument("movement-epsilon", 0.24)));
+  const fireEpsilon = Math.max(0, Math.min(0.5, numberArgument("fire-epsilon", 0.10)));
   const output = argument("output", `training/reports/selfplay-shard-${shard}.json`);
   const candidates = [];
-  const outcomeCounts = {};
+  const exploredOutcomeCounts = {};
+  const baselineOutcomeCounts = {};
   const endIndex = startIndex + battles;
 
   for (let battleIndex = startIndex + shard; battleIndex < endIndex; battleIndex += shards) {
@@ -300,19 +330,22 @@ async function main() {
     const level = 2 + (relative % 4);
     const script = SCRIPTS[Math.floor(relative / 4) % SCRIPTS.length];
     const coop = relative % 5 === 0;
-    const seed = 725_552 + battleIndex * 10_007;
-    const episode = await simulateBattle({battleIndex, seed, durationMs, level, script, coop, movementEpsilon, fireEpsilon});
+    const episode = await simulatePairedBattle({battleIndex, durationMs, level, script, coop, movementEpsilon, fireEpsilon});
     candidates.push(episode);
-    outcomeCounts[episode.outcome] = (outcomeCounts[episode.outcome] || 0) + 1;
+    exploredOutcomeCounts[episode.outcome] = (exploredOutcomeCounts[episode.outcome] || 0) + 1;
+    baselineOutcomeCounts[episode.baseline.outcome] = (baselineOutcomeCounts[episode.baseline.outcome] || 0) + 1;
   }
 
-  const eliteEpisodes = selectEliteEpisodes(candidates, elitePerScenario);
+  const eliteEpisodes = selectEliteEpisodes(candidates, elitePerScenario, minimumAdvantage);
+  const advantages = candidates.map(item => item.advantage);
+  const positiveAdvantagePairs = candidates.filter(item => item.advantage >= minimumAdvantage).length;
   const report = {
-    format: "echo-neural-selfplay-elites-v1",
+    format: "echo-neural-selfplay-elites-v2",
     generatedAt: new Date().toISOString(),
     modelVersion: model.version,
     requestedBattles: battles,
     completedBattles: candidates.length,
+    authoritativeRollouts: candidates.length * 2,
     startIndex,
     endIndex,
     shard,
@@ -320,25 +353,41 @@ async function main() {
     durationMs,
     movementEpsilon,
     fireEpsilon,
+    minimumAdvantage,
     elitePerScenario,
-    outcomeCounts,
+    baselineOutcomeCounts,
+    exploredOutcomeCounts,
+    outcomeCounts: exploredOutcomeCounts,
+    positiveAdvantagePairs,
+    advantageRange: {
+      minimum: Math.min(...advantages),
+      maximum: Math.max(...advantages),
+      mean: advantages.reduce((sum, value) => sum + value, 0) / Math.max(1, advantages.length),
+    },
     scoreRange: {
       minimum: Math.min(...candidates.map(item => item.score)),
       maximum: Math.max(...candidates.map(item => item.score)),
     },
     critique: [
-      "This is cross-entropy self-play data, not proof of intelligence: the candidate imitates high-scoring explored actions.",
-      "Scripted players are repetitive and can be exploited, so a held-out authoritative A/B gate is mandatory.",
-      "Guardrail penalties reduce but do not remove the risk that water clamps hide poor navigation.",
-      "Elite trajectories are retained separately by threat, script and solo/co-op mode so one easy pattern cannot erase scenario coverage.",
-      "Episodes without at least one four-sample actor trajectory are excluded from training rather than counted as useful data.",
-      "Recurrent previous-action features are captured before the current explored action is selected; current labels are never copied into their own input fields.",
+      "Each explored rollout is paired with an unmodified rollout using the same world seed; exploration uses a separate random stream and cannot consume production randomness.",
+      "Only trajectories whose explored score beats their paired baseline by the configured minimum advantage can enter training.",
+      "The score remains a hand-designed proxy for enemy effectiveness and can misvalue tactics; held-out authoritative A/B remains mandatory.",
+      "Elite trajectories are retained separately by threat, script and solo/co-op mode so aggregate pressure cannot erase scenario coverage.",
+      "Only actions explicitly changed by exploration receive meaningful supervised weight in the fine-tuner; unchanged actions remain context, not claimed discoveries.",
     ],
     eliteEpisodes,
   };
   await mkdir(output.split("/").slice(0, -1).join("/") || ".", {recursive: true});
   await writeFile(output, `${JSON.stringify(report)}\n`);
-  console.log(JSON.stringify({output, completedBattles: candidates.length, elites: eliteEpisodes.length, outcomeCounts}, null, 2));
+  console.log(JSON.stringify({
+    output,
+    completedPairs: candidates.length,
+    authoritativeRollouts: candidates.length * 2,
+    positiveAdvantagePairs,
+    elites: eliteEpisodes.length,
+    baselineOutcomeCounts,
+    exploredOutcomeCounts,
+  }, null, 2));
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
