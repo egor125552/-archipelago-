@@ -80,6 +80,21 @@ test("self-play aggregate rejects a missing shard instead of inventing completio
   assert.ok(incomplete.failures.includes("missing-shard-1"));
 });
 
+test("candidate gate rejects an unchanged model", () => {
+  const report = {
+    results: [{
+      level: 5,
+      outcome: "timeout",
+      result: {playerHealth: 80, boatHull: 90, boatWater: 0},
+      metrics: {stationaryRatio: 0.1, invalidWaterRatio: 0},
+      mechanicalFailures: [],
+    }],
+  };
+  const comparison = compareCandidate(report, structuredClone(report));
+  assert.equal(comparison.verdict, "rejected");
+  assert.ok(comparison.failures.includes("no-measurable-held-out-improvement"));
+});
+
 test("candidate gate rejects water regressions even when pressure increases", () => {
   const base = {results: [{level: 5, outcome: "timeout", result: {playerHealth: 80, boatHull: 90, boatWater: 0}, metrics: {stationaryRatio: 0.1, invalidWaterRatio: 0}, mechanicalFailures: []}]};
   const candidate = {results: [{level: 5, outcome: "team-wipe", result: {playerHealth: 0, boatHull: 20, boatWater: 40}, metrics: {stationaryRatio: 0.1, invalidWaterRatio: 0.02}, mechanicalFailures: []}]};
