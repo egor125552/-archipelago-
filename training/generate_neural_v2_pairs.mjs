@@ -29,6 +29,7 @@ import {seededRandom, selfPlayScore, withWorldRandomSeed} from "./generate_neura
 
 const STEP_MS = 40;
 const SAMPLE_MS = 200;
+const PAIR_FORMAT = "echo-neural-v2-pairs-v2";
 const PLAYER_SCRIPTS = Object.freeze([
   "idle-no-fire",
   "water-zigzag",
@@ -36,6 +37,17 @@ const PLAYER_SCRIPTS = Object.freeze([
   "aggressive",
   "shoreline",
   "damage-control",
+]);
+const DIAGNOSTIC_KEYS = Object.freeze([
+  "preparedFrames",
+  "controlledFrames",
+  "movementFrames",
+  "fireAllowedFrames",
+  "fireSuppressedFrames",
+  "waterClampFrames",
+  "waterGuardInterventions",
+  "missingActorFrames",
+  "missingTargetFrames",
 ]);
 
 function argument(name, fallback) {
@@ -129,6 +141,18 @@ function classIndex(random, classes) {
   return Math.min(classes.length - 1, Math.floor(random() * classes.length));
 }
 
+function validDiagnostics(diagnostics) {
+  return DIAGNOSTIC_KEYS.every(key => Number.isFinite(Number(diagnostics?.[key])) && Number(diagnostics[key]) >= 0);
+}
+
+function finalTickProved(intervention) {
+  return intervention?.completed === true
+    && intervention?.finishAfterTick === false
+    && Number.isFinite(Number(intervention?.controlledFramesBeforeLastSample))
+    && Number.isFinite(Number(intervention?.controlledFramesAtEnd))
+    && Number(intervention.controlledFramesAtEnd) > Number(intervention.controlledFramesBeforeLastSample);
+}
+
 export function createNeuralV2PairPlan(seed, level, durationMs) {
   const random = seededRandom(seed);
   const maximumStart = threatAwareStartWindow(level, durationMs);
@@ -194,8 +218,6 @@ function samplePlan(server, plan, elapsedMs, samples) {
     role: actor.role,
     kind: actor.kind,
     target: targetPoint ? [targetPoint.x, targetPoint.y, targetEntry.index] : null,
-    // No prior action exists in this one-macro discovery batch. The current
-    // five-head label must never appear in its own recurrent feature slots.
     features: neuralV2FeatureVector(server.world, actor, {stuckMs: 0}),
     action: [
       plan.action.throttleIndex,
@@ -317,10 +339,8 @@ export async function simulateNeuralV2Pair({battleIndex, durationMs, level, scri
 function usablePair(pair, minimumAdvantage) {
   return pair.advantage >= minimumAdvantage
     && pair.intervention?.started
-    && pair.intervention?.completed
-    && !pair.intervention?.finishAfterTick
     && pair.intervention?.appliedSamples >= 2
-    && Number(pair.intervention?.controlledFramesAtEnd) > Number(pair.intervention?.controlledFramesBeforeLastSample)
+    && finalTickProved(pair.intervention)
     && pair.explored?.samples?.length >= 2;
 }
 
@@ -368,8 +388,25 @@ async function main() {
 
   const elitePairs = selectNeuralV2Elites(pairs, elitePerGroup, minimumAdvantage);
   const advantages = pairs.map(pair => pair.advantage);
+  const qualifyingSamplePairs = pairs.filter(pair => (pair.explored?.samples?.length || 0) >= 2);
+  const allSamples = pairs.flatMap(pair => pair.explored?.samples || []);
+  const fullyCompletedInterventions = pairs.filter(pair => pair.intervention?.completed
+    && Number(pair.intervention?.appliedSamples) === Number(pair.intervention?.durationSamples));
+  const finalTickProofPairs = fullyCompletedInterventions.filter(pair => finalTickProved(pair.intervention)).length;
+  const invalidDiagnosticPairs = pairs.filter(pair => !validDiagnostics(pair.explored?.diagnostics)).length;
+  const integrity = {
+    sampledPairs: qualifyingSamplePairs.length,
+    sampledFrames: qualifyingSamplePairs.reduce((sum, pair) => sum + pair.explored.samples.length, 0),
+    nonZeroHistoryFrames: allSamples.filter(sample => sample.features?.slice(-5).some(value => Number(value) !== 0)).length,
+    diagnosticPairs: pairs.length - invalidDiagnosticPairs,
+    invalidDiagnosticPairs,
+    completedInterventions: fullyCompletedInterventions.length,
+    finalTickProofPairs,
+    invalidFinalTickProofs: fullyCompletedInterventions.length - finalTickProofPairs,
+    waterGuardInterventions: pairs.reduce((sum, pair) => sum + (Number(pair.explored?.diagnostics?.waterGuardInterventions) || 0), 0),
+  };
   const report = {
-    format: "echo-neural-v2-pairs-v1",
+    format: PAIR_FORMAT,
     generatedAt: new Date().toISOString(),
     requestedPairs: battles,
     completedPairs: pairs.length,
@@ -382,6 +419,7 @@ async function main() {
     minimumAdvantage,
     elitePerGroup,
     positivePairs: pairs.filter(pair => usablePair(pair, minimumAdvantage)).length,
+    integrity,
     baselineOutcomes,
     exploredOutcomes,
     advantageRange: {
@@ -398,8 +436,8 @@ async function main() {
     },
     critique: [
       "The unchanged rollout and v2-macro rollout share one world seed; only the explicit v2 override differs.",
-      "The current v2 label is excluded from its own recurrent input fields; those five feature slots are zero in this discovery batch.",
-      "Every retained sample is followed by one authoritative server tick, proven by controlled-frame counters stored around the final sample.",
+      "The current v2 label is excluded from its own recurrent input fields; all recorded history slots are audited as zero.",
+      "Every fully completed intervention is followed by an authoritative server tick, proven by controlled-frame counters stored around the final sample.",
       "Override diagnostics are captured before cleanup, so water clamps and fire suppression contribute to the score and remain auditable.",
       "A full five-head action is held for 0.8 to 2.2 seconds, which is more expressive but makes attribution between heads imperfect.",
       "This batch discovers causal action candidates; it does not yet train or enable a v2 neural model.",
@@ -414,6 +452,7 @@ async function main() {
     authoritativeRollouts: pairs.length * 2,
     positivePairs: report.positivePairs,
     elites: elitePairs.length,
+    integrity,
     baselineOutcomes,
     exploredOutcomes,
   }, null, 2));
