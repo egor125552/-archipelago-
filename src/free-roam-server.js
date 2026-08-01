@@ -11,18 +11,24 @@ import {applyCombatDamage} from "../public/src/free-roam-combat-v2.js?v=5";
 import {applyCombatAiHotfixV163} from "../public/src/free-roam-combat-ai-hotfix-v163.js?v=1";
 import {replicatedFreeWorld} from "../public/src/free-roam-replication.js";
 import {reserveUnconnectedBoats} from "../public/src/free-roam-reserve-boats.js";
+import {
+  ensureMegaBombState,
+  launchMegaBomb,
+  reportMegaBombStatus,
+  stepMegaBombs,
+} from "./free-roam-mega-bomb.js";
 
 export const FREE_TICK_MS = 40;
 const MAX_ELAPSED_SECONDS = 0.2;
 const MAX_STEP_SECONDS = 0.05;
 const INPUT_KEYS = Object.freeze([
   "up", "down", "left", "right", "run", "pump", "repair", "action",
-  "jump", "attack", "weapon", "sonar", "guide",
+  "jump", "attack", "weapon", "sonar", "guide", "megaBomb",
   "shopPrevious", "shopNext", "shopBuy", "shopClose",
   "boardPrevious", "boardNext", "boardAccept", "boardClose",
 ]);
 const PULSE_INPUT_KEYS = Object.freeze([
-  "action", "jump", "weapon", "sonar", "guide",
+  "action", "jump", "weapon", "sonar", "guide", "megaBomb",
   "shopPrevious", "shopNext", "shopBuy", "shopClose",
   "boardPrevious", "boardNext", "boardAccept", "boardClose",
 ]);
@@ -73,6 +79,13 @@ function deliverPendingPulses(serverRoom) {
   }
 }
 
+function launchPendingMegaBombs(serverRoom) {
+  ensureInputBuffers(serverRoom);
+  for (let index = 0; index < serverRoom.world.players.length; index += 1) {
+    if (serverRoom.pendingPulses[index]?.megaBomb) launchMegaBomb(serverRoom.world, index);
+  }
+}
+
 function clearDeliveredPulses(serverRoom) {
   ensureInputBuffers(serverRoom);
   for (let index = 0; index < serverRoom.world.players.length; index += 1) {
@@ -91,6 +104,7 @@ function applyAuthoritativeCombatHotfix(world, dt) {
 
 export function createServerFreeRoom(now = Date.now()) {
   const world = createFreeWorld();
+  ensureMegaBombState(world);
   setPlayerPresence(world, 0, false);
   setPlayerPresence(world, 1, false);
   reserveUnconnectedBoats(world);
@@ -109,18 +123,21 @@ export function createServerFreeRoom(now = Date.now()) {
 export function setServerFreePresence(serverRoom, role, present) {
   const playerIndex = freePlayerIndex(role);
   if (!serverRoom?.world || playerIndex < 0) return false;
+  ensureMegaBombState(serverRoom.world);
   ensureInputBuffers(serverRoom);
   serverRoom.inputSequence[playerIndex] = 0;
   serverRoom.receivedInputs[playerIndex] = normalizeInput({});
   serverRoom.pendingPulses[playerIndex] = {};
   setPlayerPresence(serverRoom.world, playerIndex, present);
   setPlayerInput(serverRoom.world, playerIndex, withoutPulseInputs(serverRoom.receivedInputs[playerIndex]));
+  if (present) reportMegaBombStatus(serverRoom.world, playerIndex);
   return true;
 }
 
 export function applyServerFreeInput(serverRoom, role, input, rawSequence) {
   const playerIndex = freePlayerIndex(role);
   if (!serverRoom?.world || playerIndex < 0) return false;
+  ensureMegaBombState(serverRoom.world);
   ensureInputBuffers(serverRoom);
   const sequence = Math.max(0, Math.floor(Number(rawSequence) || 0));
   if (sequence && sequence <= serverRoom.inputSequence[playerIndex]) return false;
@@ -150,6 +167,7 @@ function stepInChunks(world, elapsedSeconds) {
     // second pass reacts to the authoritative results of this exact tick.
     applyAuthoritativeCombatHotfix(world, 0);
     stepFreeWorld(world, chunk);
+    stepMegaBombs(world, chunk);
     applyAuthoritativeCombatHotfix(world, chunk);
     remaining -= chunk;
   }
@@ -168,10 +186,12 @@ export function snapshotServerFreeRoom(serverRoom, now = Date.now(), events = []
 
 export function tickServerFreeRoom(serverRoom, now = Date.now()) {
   if (!serverRoom?.world) return null;
+  ensureMegaBombState(serverRoom.world);
   const elapsedSeconds = Math.max(0, (now - serverRoom.lastTickAt) / 1_000);
   serverRoom.lastTickAt = now;
   if (elapsedSeconds > 0.0001) {
     deliverPendingPulses(serverRoom);
+    launchPendingMegaBombs(serverRoom);
     stepInChunks(serverRoom.world, elapsedSeconds);
     clearDeliveredPulses(serverRoom);
   }
