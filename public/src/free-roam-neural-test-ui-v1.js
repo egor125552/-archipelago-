@@ -49,10 +49,38 @@ async function requestJson(path, options = {}) {
   });
   let payload = null;
   try { payload = await response.json(); } catch (_) {}
+  if (!response.ok) throw new Error(payload?.error || `HTTP ${response.status}`);
+  return payload || {};
+}
+
+async function downloadArchive(roomId) {
+  const response = await fetch(`/api/training/archive?room=${encodeURIComponent(roomId)}`, {
+    cache: "no-store",
+    credentials: "same-origin",
+  });
   if (!response.ok) {
+    let payload = null;
+    try { payload = await response.json(); } catch (_) {}
     throw new Error(payload?.error || `HTTP ${response.status}`);
   }
-  return payload || {};
+  const blob = await response.blob();
+  const href = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = href;
+  link.download = `echo-neural-battles-${roomId}.zip`;
+  link.hidden = true;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(href), 30_000);
+}
+
+function heavyTurretText(runtime) {
+  const shadow = runtime?.neuralShadow;
+  if ((runtime?.level || 0) !== 5) return "";
+  if (!shadow?.heavyTurretTracked) return " Тяжёлая установка пока не обнаружена нейронным контроллером.";
+  const probability = Math.round((Number(shadow.heavyTurretFireProbability) || 0) * 100);
+  return ` Тяжёлая установка отслеживается отдельно; разрешение огня ${shadow.heavyTurretFire ? "активно" : "ожидает"}, вероятность ${probability} процентов.`;
 }
 
 function statusText(runtime, level) {
@@ -60,7 +88,7 @@ function statusText(runtime, level) {
     return "Тестовый бой не запущен. Обычный мир работает без нейронного управления.";
   }
   if (runtime.neuralOnly && runtime.neuralShadow?.controlEnabled) {
-    return `Идёт угроза ${runtime.level || level}. Тактическими решениями врагов управляет только нейросеть.`;
+    return `Идёт угроза ${runtime.level || level}. Тактическими решениями врагов управляет нейросеть.${heavyTurretText(runtime)}`;
   }
   return `Идёт обычный быстрый бой угрозы ${runtime.level || level}. Нейросеть не управляет врагами.`;
 }
@@ -74,6 +102,7 @@ export function installNeuralTestUi(root = document) {
   let level = readStoredLevel();
   let busy = false;
   let active = false;
+  let archiveEpisodes = 0;
 
   const section = root.createElement("section");
   section.id = "neuralTestSettings";
@@ -81,11 +110,12 @@ export function installNeuralTestUi(root = document) {
   section.setAttribute("aria-labelledby", "neuralTestSettingsTitle");
   section.innerHTML = `
     <h3 id="neuralTestSettingsTitle">Тест нейросети</h3>
-    <p id="neuralTestDescription" class="settings-note">Запускается та же производственная угроза, что в обычной игре, но тактическое движение и решение об огне передаются нейросети. Физика, урон, цели и правила боя остаются обычными. После завершения вернётся прежний мир без изменения прогресса.</p>
+    <p id="neuralTestDescription" class="settings-note">Запускается та же производственная угроза, что в обычной игре. Нейросеть управляет тактическим движением и разрешением огня, а физика, урон, цели и правила боя остаются серверными. Водный ограничитель не даёт катерам выйти на сушу, но сам по себе не делает модель умной. После завершения вернётся прежний мир без изменения прогресса.</p>
     <div class="settings-grid">
       <button id="neuralThreatLevelButton" type="button" aria-describedby="neuralTestDescription"></button>
       <button id="neuralOnlyStartButton" type="button" class="primary" aria-describedby="neuralTestDescription">Запустить угрозу — только нейросеть</button>
       <button id="neuralOnlyFinishButton" type="button" aria-describedby="neuralTestDescription" disabled>Завершить нейронный бой</button>
+      <button id="neuralDownloadBattleButton" type="button" aria-describedby="neuralTestDescription">Скачать записи нейронных боёв</button>
     </div>
     <p id="neuralTestStatus" class="settings-note" role="status" aria-live="polite">Тестовый бой не запущен.</p>
   `;
@@ -94,6 +124,7 @@ export function installNeuralTestUi(root = document) {
   const levelButton = root.getElementById("neuralThreatLevelButton");
   const startButton = root.getElementById("neuralOnlyStartButton");
   const finishButton = root.getElementById("neuralOnlyFinishButton");
+  const downloadButton = root.getElementById("neuralDownloadBattleButton");
   const status = root.getElementById("neuralTestStatus");
 
   function renderLevel() {
@@ -105,9 +136,13 @@ export function installNeuralTestUi(root = document) {
     levelButton.disabled = busy;
     startButton.disabled = busy;
     finishButton.disabled = busy || !active;
+    downloadButton.disabled = busy || (!active && archiveEpisodes <= 0);
     startButton.textContent = active
       ? "Перезапустить угрозу — только нейросеть"
       : "Запустить угрозу — только нейросеть";
+    downloadButton.textContent = active
+      ? "Завершить и скачать архив с этим боем"
+      : `Скачать записи нейронных боёв${archiveEpisodes > 0 ? `: ${archiveEpisodes}` : ""}`;
   }
 
   function setBusy(value) {
@@ -125,6 +160,7 @@ export function installNeuralTestUi(root = document) {
     const roomId = currentRoomId();
     if (!roomId) {
       active = false;
+      archiveEpisodes = 0;
       status.textContent = "Сначала войди в свободный мир.";
       renderButtons();
       return;
@@ -133,6 +169,7 @@ export function installNeuralTestUi(root = document) {
       const data = await requestJson(`/api/training/status?room=${encodeURIComponent(roomId)}`);
       const runtime = data.runtime || null;
       active = Boolean(runtime?.trainingActive);
+      archiveEpisodes = Math.max(0, Number(data.archive?.episodeCount) || 0);
       status.textContent = statusText(runtime, level);
     } catch (error) {
       status.textContent = `Не удалось проверить нейронный бой: ${error.message}.`;
@@ -162,7 +199,7 @@ export function installNeuralTestUi(root = document) {
       }
       active = true;
       status.textContent = statusText(data, level);
-      announce(`Запущена угроза ${data.level || level}. Врагами управляет только нейросеть.`, true);
+      announce(`Запущена угроза ${data.level || level}. Врагами управляет нейросеть. Бой записывается.`, true);
       root.getElementById("settingsCloseButton")?.click();
       root.getElementById("gameTitle")?.focus();
     } catch (error) {
@@ -186,10 +223,39 @@ export function installNeuralTestUi(root = document) {
         body: "{}",
       });
       active = Boolean(data.trainingActive);
+      archiveEpisodes += 1;
       status.textContent = statusText(data, level);
-      announce("Нейронный бой завершён. Обычный мир восстановлен.", true);
+      announce("Нейронный бой завершён. Обычный мир восстановлен, запись добавлена в архив.", true);
     } catch (error) {
       const text = `Не удалось завершить нейронный бой: ${error.message}.`;
+      status.textContent = text;
+      announce(text, true);
+    } finally {
+      setBusy(false);
+    }
+  });
+
+  downloadButton.addEventListener("click", async () => {
+    try {
+      setBusy(true);
+      const roomId = requireRoom();
+      if (active) {
+        status.textContent = "Завершаю текущий бой, сохраняю запись и собираю архив…";
+        await requestJson(`/api/training/finish?room=${encodeURIComponent(roomId)}`, {
+          method: "POST",
+          headers: {"content-type": "application/json"},
+          body: "{}",
+        });
+        active = false;
+        archiveEpisodes += 1;
+      } else {
+        status.textContent = "Собираю архив записанных боёв…";
+      }
+      await downloadArchive(roomId);
+      status.textContent = "Архив записей передан для скачивания. Внутри manifest.json и отдельный JSONL каждого боя.";
+      announce("Архив нейронных боёв скачивается.", true);
+    } catch (error) {
+      const text = `Не удалось скачать бой: ${error.message}.`;
       status.textContent = text;
       announce(text, true);
     } finally {
