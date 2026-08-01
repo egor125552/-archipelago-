@@ -154,6 +154,8 @@ export function createNeuralV2PairPlan(seed, level, durationMs) {
     startedAtMs: null,
     endedAtMs: null,
     appliedSamples: 0,
+    controlledFramesBeforeLastSample: null,
+    controlledFramesAtEnd: null,
   };
 }
 
@@ -185,6 +187,7 @@ function samplePlan(server, plan, elapsedMs, samples) {
   }
   const targetEntry = neuralTargetForActor(server.world, actor);
   const targetPoint = targetEntry?.player ? neuralPlayerPoint(server.world, targetEntry.player) : null;
+  plan.controlledFramesBeforeLastSample = Number(neuralV2OverrideStatus(server).diagnostics.controlledFrames) || 0;
   samples.push({
     t: elapsedMs,
     actorId: actor.id,
@@ -208,6 +211,7 @@ function samplePlan(server, plan, elapsedMs, samples) {
 
 function finishPlanAfterTick(server, plan, elapsedMs) {
   if (!plan?.finishAfterTick || plan.completed || !plan.actorId) return;
+  plan.controlledFramesAtEnd = Number(neuralV2OverrideStatus(server).diagnostics.controlledFrames) || 0;
   plan.finishAfterTick = false;
   plan.completed = true;
   plan.endedAtMs = elapsedMs;
@@ -316,6 +320,7 @@ function usablePair(pair, minimumAdvantage) {
     && pair.intervention?.completed
     && !pair.intervention?.finishAfterTick
     && pair.intervention?.appliedSamples >= 2
+    && Number(pair.intervention?.controlledFramesAtEnd) > Number(pair.intervention?.controlledFramesBeforeLastSample)
     && pair.explored?.samples?.length >= 2;
 }
 
@@ -394,7 +399,7 @@ async function main() {
     critique: [
       "The unchanged rollout and v2-macro rollout share one world seed; only the explicit v2 override differs.",
       "The current v2 label is excluded from its own recurrent input fields; those five feature slots are zero in this discovery batch.",
-      "Every retained sample is followed by one authoritative server tick before its override is removed.",
+      "Every retained sample is followed by one authoritative server tick, proven by controlled-frame counters stored around the final sample.",
       "Override diagnostics are captured before cleanup, so water clamps and fire suppression contribute to the score and remain auditable.",
       "A full five-head action is held for 0.8 to 2.2 seconds, which is more expressive but makes attribution between heads imperfect.",
       "This batch discovers causal action candidates; it does not yet train or enable a v2 neural model.",
