@@ -25,7 +25,7 @@ This document is deliberately written as a rejection checklist, not as release m
 - A held-out dataset that was never used for tuning.
 - Comparison against production AI for success, fairness, stuck time, water legality and player damage distribution.
 
-## 2026-08-01 — Water guard, separate heavy turret and real-server simulator
+## 2026-08-01 — Water guard, separate heavy turret and authoritative simulator
 
 ### What changed
 
@@ -34,9 +34,32 @@ This document is deliberately written as a rejection checklist, not as release m
 - A boundary guard prevents neural boats from leaving navigable water and a stuck escape can rotate a blocked actor.
 - The heavy hull and heavy turret are separate neural actors. The turret receives a latched fire permission long enough to finish its production wind-up and burst.
 - If the current model never permits the heavy turret to fire, test mode opens one explicitly marked exploration window after several seconds so the production turret can generate a real aim-and-burst sample instead of remaining permanently silent.
-- A distributed simulator now executes `createServerFreeRoom`, `startServerTrainingBattle`, `applyServerFreeInput` and `tickServerFreeRoom` for every battle.
-- Threat-five reports fail when a healthy heavy turret never winds up or fires.
+- A distributed simulator executes `createServerFreeRoom`, `startServerTrainingBattle`, `applyServerFreeInput` and `tickServerFreeRoom` for every simulation.
 - The neural settings panel can finish the current fight and download the persisted ZIP archive.
+- Recorded frames now include compact neural decisions, confidence, raw and effective fire, exploration markers and cumulative guardrail diagnostics.
+
+### What the first 1,024-run report proved
+
+- Exactly 1,024 requested short windows were completed across eight shards.
+- No neural-control samples were missing and no controlled enemy boats crossed the configured water bounds.
+- All 256 level-five windows exposed an active heavy turret; each produced one wind-up and five shots, for 256 wind-ups and 1,280 shots total.
+- The production game emitted 563 `contract-threat-cleared` events during those windows.
+
+### What was wrong with my first report
+
+- I called twelve-second windows “battles”. They were useful mechanical probes, but level-five encounters were still active at the end and they were not full episodes.
+- The victory counter looked for a generic victory name instead of the real production event `contract-threat-cleared`, so it incorrectly reported zero victories despite 563 clears.
+- A zero stationary ratio and zero water-boundary ratio only showed that the post-physics controller kept moving entities inside its guardrails. They did not prove sensible tactics.
+- The report did not distinguish mechanical failures from policy-quality findings such as timeouts and team wipes.
+- A workflow input of one million battles implied that one ordinary GitHub Actions run could finish a million full episodes. That is not a credible compute claim.
+
+### Corrections after the report
+
+- The simulator now has explicit `window` and `episode` profiles.
+- The episode profile runs until production victory, simultaneous team wipe or a clearly recorded timeout, with a default cap of ninety simulated seconds.
+- Victory is counted only from the real production clear event or cleared threat state.
+- Mechanical rejection and policy-quality findings are reported separately.
+- Million-scale work is represented as an accountable multi-batch campaign. Each artifact states its exact battle-index range; requested ranges cannot be silently skipped or duplicated.
 
 ### What is still weak or heuristic
 
@@ -45,18 +68,19 @@ This document is deliberately written as a rejection checklist, not as release m
 - The stuck escape is a deterministic emergency turn, not a neural decision.
 - The heavy-turret fire threshold, latch duration and exploration interval are manually calibrated. The exploration window deliberately overrides a repeatedly negative model decision; it is useful for collecting data but must not be presented as learned skill.
 - Scripted simulation players are repetitive and exploitable. A policy can overfit their turns and still fail against a person.
-- The simulator uses the authoritative server mechanics but does not include WebSocket delay, browser input jitter, speech queues, deployment restarts or Durable Object migration.
+- The simulator uses the authoritative server mechanics but runs them in GitHub compute, not through deployed WebSockets and Durable Object scheduling. It does not include network delay, browser input jitter, speech queues, deployment restarts or migration.
 - Running one million evaluations does not retrain the generated model. A separate dataset and training pipeline are still required.
-- Downloading the current fight currently returns the room archive, not a server-produced ZIP containing only one selected episode.
-- The downloaded JSONL records input, world entities and events, but does not yet contain every neural logit, confidence value, guardrail intervention and exploration decision. It is therefore sufficient to replay mechanics, not to fully explain the policy.
+- Downloading the current fight returns the room archive, not a server-produced ZIP containing only one selected episode.
+- The archive contains decision probabilities and diagnostics, but it still does not contain full hidden-state tensors or every pre-softmax logit. It is enough to audit actions, not to reconstruct the GRU numerically bit-for-bit.
 
 ### Automatic rejection conditions
 
 - Any neural-control sample is missing while neural-only mode is active.
 - Any controlled enemy boat leaves the navigable water bounds.
 - A healthy threat-five turret remains available for a meaningful interval but never winds up or fires.
-- Shards report fewer completed battles than requested while the aggregate is presented as complete.
-- The report omits the limitations above.
+- Shards report fewer completed simulations than requested or omit an index in the declared batch range.
+- A short window is presented as a completed full battle.
+- The report omits timeouts, team wipes or the limitations above.
 
 ## Required format for the next change
 
