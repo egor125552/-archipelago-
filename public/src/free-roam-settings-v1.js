@@ -223,4 +223,11 @@
     close: closeSettings,
     snapshot: () => ({...preferences, gameButtonsEnabled: gameButtonsEnabled(), speechEnabled: speechEnabled()}),
   };
+
+  if (!document.querySelector('script[data-free-roam-training="true"]')) {
+    const script = document.createElement("script");
+    script.src = "src/free-roam-training-client-v1.js?v=1";
+    script.dataset.freeRoamTraining = "true";
+    document.head.append(script);
+  }
 })();
