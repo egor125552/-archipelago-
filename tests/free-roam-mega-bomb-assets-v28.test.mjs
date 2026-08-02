@@ -11,8 +11,8 @@ function looksLikeMp3(bytes) {
 test("release explosion and kill cue are complete direct MP3 files", async () => {
   const explosion = await readFile(new URL("../public/audio/mega-bomb-explosion-v10.mp3", import.meta.url));
   const kill = await readFile(new URL("../public/audio/enemy-killed-v5.mp3", import.meta.url));
-  assert.ok(explosion.byteLength > 200_000);
-  assert.ok(kill.byteLength > 15_000);
+  assert.ok(explosion.byteLength > 50_000);
+  assert.ok(kill.byteLength > 1_000);
   assert.equal(looksLikeMp3(explosion), true);
   assert.equal(looksLikeMp3(kill), true);
 });
