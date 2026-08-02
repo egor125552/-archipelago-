@@ -1,2 +1,2 @@
-export * from "./free-roam-mega-bomb-client-v16.js?v=1";
-import "./free-roam-mega-bomb-client-v16.js?v=1";
+export * from "./free-roam-mega-bomb-client-v20.js?v=1";
+import "./free-roam-mega-bomb-client-v20.js?v=1";
