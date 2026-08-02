@@ -204,6 +204,6 @@ try {
   };
 })();
 
-import("./free-roam-mega-bomb-client.js?v=12").catch(error => {
+import("./free-roam-mega-bomb-client.js?v=13").catch(error => {
   console.error("Не удалось загрузить актуальный клиент мегабомбы", error);
 });
