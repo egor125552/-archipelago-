@@ -1,0 +1,1 @@
+Trigger the existing real mega-bomb audio builder for the final single-file v8 publication.
