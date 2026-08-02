@@ -71,14 +71,12 @@ jobs:
           transfer_sha="$GITHUB_SHA"
           git fetch origin main
           git checkout -B main origin/main
-          test "$(git rev-parse HEAD)" = "aab524d22bd718990f38b69b2f24ddc108172d90"
+          test "$(git rev-parse HEAD)" = "dafca87741816bbe046c0a74f6d5b88108403274"
 
           git checkout "$transfer_sha" -- \
             public/src/free-roam-mega-bomb-client-v10.js \
             public/src/free-roam-mega-bomb-client.js \
-            public/src/free-roam-startup-v1.js \
-            src/free-roam-mega-bomb-v26.js \
-            src/free-roam-mega-bomb.js
+            public/src/free-roam-startup-v1.js
 
           mkdir -p public/audio
           cp /tmp/mega-bomb-explosion-v7.mp3 public/audio/mega-bomb-explosion-v7.mp3
@@ -101,9 +99,7 @@ jobs:
             public/audio/enemy-killed-v2.mp3 \
             public/src/free-roam-mega-bomb-client-v10.js \
             public/src/free-roam-mega-bomb-client.js \
-            public/src/free-roam-startup-v1.js \
-            src/free-roam-mega-bomb-v26.js \
-            src/free-roam-mega-bomb.js
+            public/src/free-roam-startup-v1.js
 
           git commit -m "Upgrade mega-bomb blast and spatial flight"
           git push origin HEAD:main
