@@ -1,0 +1,107 @@
+name: Publish mega-bomb v7
+
+on:
+  push:
+    branches:
+      - agent/mega-bomb-v7-transfer
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build and verify final audio files
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v ffmpeg >/dev/null || { sudo apt-get update; sudo apt-get install -y ffmpeg; }
+
+          cat \
+            public/audio/mega-bomb-explosion-composite-v5.part-00.bin \
+            public/audio/mega-bomb-explosion-composite-v5.part-01.bin \
+            public/audio/mega-bomb-explosion-composite-v5.part-02.bin \
+            public/audio/mega-bomb-explosion-composite-v5.part-03.bin \
+            > /tmp/mega-bomb-source.mp3
+
+          ffmpeg -v error -i /tmp/mega-bomb-source.mp3 -f null -
+
+          ffmpeg -y -v error -i /tmp/mega-bomb-source.mp3 -filter_complex '
+            [0:a]aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=mono,atrim=0:10.15,asetpts=PTS-STARTPTS,asplit=6[dry][sub][body][crack][debris][tail];
+            [dry]highpass=f=26,lowpass=f=16200,volume=0.78[d];
+            [sub]lowpass=f=155,highpass=f=23,asetrate=43200,aresample=48000,volume=0.58,adelay=8[s];
+            [body]highpass=f=58,lowpass=f=1700,equalizer=f=92:t=q:w=0.8:g=4.2,equalizer=f=330:t=q:w=1.1:g=-2.4,acompressor=threshold=0.08:ratio=2.8:attack=3:release=180:makeup=1.4,volume=0.48,adelay=18[b];
+            [crack]highpass=f=2200,lowpass=f=15800,acompressor=threshold=0.045:ratio=3.5:attack=1:release=70:makeup=1.9,volume=0.58[c];
+            [debris]highpass=f=850,lowpass=f=11500,volume=0.23,adelay=72[dr];
+            [tail]highpass=f=78,lowpass=f=5600,aecho=0.8:0.42:110|245:0.17|0.09,volume=0.20,adelay=105,afade=t=out:st=8.8:d=1.2[t];
+            [d][s][b][c][dr][t]amix=inputs=6:duration=longest:normalize=0,acompressor=threshold=0.19:ratio=3.2:attack=2:release=230:makeup=1.55,equalizer=f=48:t=q:w=0.9:g=3.0,equalizer=f=108:t=q:w=0.8:g=2.3,equalizer=f=420:t=q:w=1.2:g=-2.2,equalizer=f=3200:t=q:w=1:g=1.6,alimiter=limit=0.95:attack=1:release=120,afade=t=in:st=0:d=0.003,afade=t=out:st=9.25:d=0.85[out]
+          ' -map '[out]' -t 10.15 -ar 48000 -ac 1 -c:a libmp3lame -b:a 192k /tmp/mega-bomb-explosion-v7.mp3
+
+          cat \
+            public/audio/enemy-killed-v1.part-00.b64 \
+            public/audio/enemy-killed-v1.part-01.b64 \
+            public/audio/enemy-killed-v1.part-02.b64 \
+            public/audio/enemy-killed-v1.part-03.b64 \
+            | tr -d '\r\n ' | base64 --decode > /tmp/enemy-killed-v2.mp3
+
+          for audio in /tmp/mega-bomb-explosion-v7.mp3 /tmp/enemy-killed-v2.mp3; do
+            test -s "$audio"
+            ffprobe -v error -show_entries stream=codec_name,sample_rate,channels -show_entries format=duration,size -of default=noprint_wrappers=1 "$audio"
+            ffmpeg -v error -i "$audio" -f null -
+            sha256sum "$audio"
+          done
+
+          explosion_duration="$(ffprobe -v error -show_entries format=duration -of csv=p=0 /tmp/mega-bomb-explosion-v7.mp3)"
+          explosion_size="$(stat -c%s /tmp/mega-bomb-explosion-v7.mp3)"
+          awk -v duration="$explosion_duration" 'BEGIN { exit !(duration > 9 && duration < 11) }'
+          test "$explosion_size" -gt 150000
+
+      - name: Publish one clean commit to main
+        shell: bash
+        run: |
+          set -euo pipefail
+          transfer_sha="$GITHUB_SHA"
+          git fetch origin main
+          git checkout -B main origin/main
+          test "$(git rev-parse HEAD)" = "aab524d22bd718990f38b69b2f24ddc108172d90"
+
+          git checkout "$transfer_sha" -- \
+            public/src/free-roam-mega-bomb-client-v10.js \
+            public/src/free-roam-mega-bomb-client.js \
+            public/src/free-roam-startup-v1.js \
+            src/free-roam-mega-bomb-v26.js \
+            src/free-roam-mega-bomb.js
+
+          mkdir -p public/audio
+          cp /tmp/mega-bomb-explosion-v7.mp3 public/audio/mega-bomb-explosion-v7.mp3
+          cp /tmp/enemy-killed-v2.mp3 public/audio/enemy-killed-v2.mp3
+
+          git rm -f \
+            public/audio/mega-bomb-explosion-composite-v5.part-00.bin \
+            public/audio/mega-bomb-explosion-composite-v5.part-01.bin \
+            public/audio/mega-bomb-explosion-composite-v5.part-02.bin \
+            public/audio/mega-bomb-explosion-composite-v5.part-03.bin \
+            public/audio/enemy-killed-v1.part-00.b64 \
+            public/audio/enemy-killed-v1.part-01.b64 \
+            public/audio/enemy-killed-v1.part-02.b64 \
+            public/audio/enemy-killed-v1.part-03.b64
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            public/audio/mega-bomb-explosion-v7.mp3 \
+            public/audio/enemy-killed-v2.mp3 \
+            public/src/free-roam-mega-bomb-client-v10.js \
+            public/src/free-roam-mega-bomb-client.js \
+            public/src/free-roam-startup-v1.js \
+            src/free-roam-mega-bomb-v26.js \
+            src/free-roam-mega-bomb.js
+
+          git commit -m "Upgrade mega-bomb blast and spatial flight"
+          git push origin HEAD:main
+          git push origin --delete agent/mega-bomb-v7-transfer || true

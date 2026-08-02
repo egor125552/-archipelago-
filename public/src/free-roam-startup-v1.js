@@ -228,4 +228,4 @@ try {
   };
 })();
 
-import("./free-roam-mega-bomb-client.js?v=5").catch(() => {});
+import("./free-roam-mega-bomb-client.js?v=6").catch(() => {});
