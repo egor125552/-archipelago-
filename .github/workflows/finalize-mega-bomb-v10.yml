@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - agent/mega-bomb-v7-transfer
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
