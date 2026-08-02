@@ -1,8 +1,8 @@
 "use strict";
 
-import * as base from "./free-roam-mega-bomb-v29.js";
+import * as base from "./free-roam-mega-bomb-v28.js";
 
-export * from "./free-roam-mega-bomb-v29.js";
+export * from "./free-roam-mega-bomb-v28.js";
 
 const ACTIVE_MAGAZINE = 25;
 const TOTAL_MAXIMUM = 145;
