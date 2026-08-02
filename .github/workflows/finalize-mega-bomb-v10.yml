@@ -1,0 +1,82 @@
+name: Finalize mega-bomb v10
+
+on:
+  push:
+    branches:
+      - agent/mega-bomb-v7-transfer
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Rebuild one verified explosion master
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_commit="dafca87741816bbe046c0a74f6d5b88108403274"
+          for index in 00 01 02 03; do
+            git show "${source_commit}:public/audio/mega-bomb-explosion-composite-v5.part-${index}.bin" > "/tmp/part-${index}.bin"
+            test -s "/tmp/part-${index}.bin"
+          done
+          cat /tmp/part-00.bin /tmp/part-01.bin /tmp/part-02.bin /tmp/part-03.bin > /tmp/mega-bomb-source.mp3
+          ffprobe -v error -show_entries stream=codec_name,sample_rate,channels -show_entries format=duration,size -of default=noprint_wrappers=1 /tmp/mega-bomb-source.mp3
+          ffmpeg -v error -i /tmp/mega-bomb-source.mp3 -f null -
+
+          ffmpeg -y -v error -i /tmp/mega-bomb-source.mp3 -filter_complex '
+            [0:a]aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=mono,atrim=0:10.15,asetpts=PTS-STARTPTS,asplit=7[dry][sub][body][crack][debris][tail][air];
+            [dry]highpass=f=24,lowpass=f=16500,volume=0.74[d];
+            [sub]lowpass=f=145,highpass=f=22,asetrate=42240,aresample=48000,equalizer=f=54:t=q:w=0.8:g=4.5,volume=0.64,adelay=7[s];
+            [body]highpass=f=52,lowpass=f=1900,equalizer=f=92:t=q:w=0.75:g=4.8,equalizer=f=310:t=q:w=1.1:g=-2.2,acompressor=threshold=0.075:ratio=3.0:attack=2:release=210:makeup=1.5,volume=0.51,adelay=16[b];
+            [crack]highpass=f=2100,lowpass=f=16500,acompressor=threshold=0.04:ratio=3.8:attack=1:release=65:makeup=2.0,volume=0.61[c];
+            [debris]highpass=f=720,lowpass=f=12500,equalizer=f=4200:t=q:w=1:g=1.8,volume=0.25,adelay=68[dr];
+            [tail]highpass=f=70,lowpass=f=6100,aecho=0.8:0.40:115|255|430:0.17|0.09|0.045,volume=0.22,adelay=98,afade=t=out:st=8.75:d=1.35[t];
+            [air]highpass=f=4800,lowpass=f=17500,volume=0.10,adelay=35[a];
+            [d][s][b][c][dr][t][a]amix=inputs=7:duration=longest:normalize=0,acompressor=threshold=0.18:ratio=3.4:attack=1.5:release=240:makeup=1.58,equalizer=f=46:t=q:w=0.85:g=3.2,equalizer=f=105:t=q:w=0.78:g=2.6,equalizer=f=390:t=q:w=1.15:g=-2.0,equalizer=f=3100:t=q:w=1:g=1.7,alimiter=limit=0.94:attack=1:release=130,afade=t=in:st=0:d=0.003,afade=t=out:st=9.20:d=0.90[out]
+          ' -map '[out]' -t 10.15 -ar 48000 -ac 1 -c:a libmp3lame -b:a 192k /tmp/mega-bomb-explosion-v10.mp3
+
+          test -s /tmp/mega-bomb-explosion-v10.mp3
+          ffprobe -v error -show_entries stream=codec_name,sample_rate,channels -show_entries format=duration,size,bit_rate -of default=noprint_wrappers=1 /tmp/mega-bomb-explosion-v10.mp3
+          ffmpeg -v error -i /tmp/mega-bomb-explosion-v10.mp3 -f null -
+          duration="$(ffprobe -v error -show_entries format=duration -of csv=p=0 /tmp/mega-bomb-explosion-v10.mp3)"
+          size="$(stat -c%s /tmp/mega-bomb-explosion-v10.mp3)"
+          awk -v duration="$duration" 'BEGIN { exit !(duration > 9.5 && duration < 10.5) }'
+          test "$size" -gt 180000
+          sha256sum /tmp/mega-bomb-explosion-v10.mp3 | tee /tmp/mega-bomb-explosion-v10.sha256
+
+      - name: Publish the audio without touching v27 physics
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git checkout -B main origin/main
+          test "$(git rev-parse HEAD)" = "4d68264f077c8e46d906bf597ad51e6d714b488c"
+
+          cp /tmp/mega-bomb-explosion-v10.mp3 public/audio/mega-bomb-explosion-v10.mp3
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('public/src/free-roam-mega-bomb-client-v14.js')
+          text = path.read_text()
+          old = '../audio/mega-bomb-explosion-v9.mp3?v=1'
+          new = '../audio/mega-bomb-explosion-v10.mp3?v=10'
+          if text.count(old) != 1:
+              raise SystemExit(f'Expected one old explosion URL, found {text.count(old)}')
+          path.write_text(text.replace(old, new))
+          PY
+          node --check public/src/free-roam-mega-bomb-client-v14.js
+          grep -q 'mega-bomb-explosion-v10.mp3?v=10' public/src/free-roam-mega-bomb-client-v14.js
+          grep -q 'free-roam-mega-bomb-v27.js' src/free-roam-mega-bomb.js
+          grep -q 'free-roam-mega-bomb-client.js?v=10' public/src/free-roam-startup-v1.js
+          git rm -f public/audio/mega-bomb-explosion-v9.mp3
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/audio/mega-bomb-explosion-v10.mp3 public/src/free-roam-mega-bomb-client-v14.js
+          git commit -m "Finish verified mega-bomb explosion master"
+          git push origin HEAD:main
