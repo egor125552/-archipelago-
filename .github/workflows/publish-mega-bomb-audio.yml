@@ -1,20 +1,21 @@
 name: Publish mega-bomb audio
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/publish-mega-bomb-audio.yml
+  issues:
+    types: [opened]
 
 permissions:
   contents: write
+  issues: write
 
 jobs:
   publish:
+    if: github.event.issue.title == 'Publish mega-bomb audio now'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: main
           fetch-depth: 0
 
       - name: Download verified binary assets
@@ -47,4 +48,7 @@ jobs:
           git commit -m 'Publish final mega-bomb explosion and seamless flight audio'
           git push origin HEAD:main
 
-# Triggered after initial workflow registration.
+      - name: Close trigger issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh issue close "${{ github.event.issue.number }}" --comment 'Audio publication completed.'
