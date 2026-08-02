@@ -1,28 +1,23 @@
 "use strict";
-
 export * from "./free-roam-mega-bomb-v25.js";
 import * as base from "./free-roam-mega-bomb-v25.js";
 
-const MIN_X = 4;
-const MAX_X = 416;
-const MIN_Y = 4;
-const MAX_Y = 316;
+const MIN_X = 4, MAX_X = 416, MIN_Y = 4, MAX_Y = 316;
 const clamp = (value, min, max) => Math.max(min, Math.min(max, Number(value) || 0));
 
 function idNumber(projectile) {
-  return Number(String(projectile?.id || "").match(/\d+$/)?.[0]) || 1;
+  const match = String(projectile?.id || "").match(/(\d+)$/);
+  return match ? Number(match[1]) : 1;
 }
 
 function effectiveCurve(midpoint, normal, control, side) {
-  return Math.max(0, ((control.x - midpoint.x) * normal.x + (control.y - midpoint.y) * normal.y) * side);
+  return ((control.x - midpoint.x) * normal.x + (control.y - midpoint.y) * normal.y) * side;
 }
 
 function improveTrajectory(projectile) {
-  if (!projectile) return;
   const start = {x: Number(projectile.startX), y: Number(projectile.startY)};
   const target = {x: Number(projectile.targetX), y: Number(projectile.targetY)};
   if (![start.x, start.y, target.x, target.y].every(Number.isFinite)) return;
-
   const dx = target.x - start.x;
   const dy = target.y - start.y;
   const pathDistance = Math.max(0.001, Math.hypot(dx, dy));
@@ -30,7 +25,6 @@ function improveTrajectory(projectile) {
   const midpoint = {x: (start.x + target.x) / 2, y: (start.y + target.y) / 2};
   const wantedCurve = clamp(pathDistance * 0.62, 18, 64);
   const preferredSide = idNumber(projectile) % 2 ? -1 : 1;
-
   const candidate = side => ({
     side,
     control: {
@@ -43,7 +37,6 @@ function improveTrajectory(projectile) {
   preferred.effective = effectiveCurve(midpoint, normal, preferred.control, preferred.side);
   alternate.effective = effectiveCurve(midpoint, normal, alternate.control, alternate.side);
   const chosen = alternate.effective > preferred.effective + 10 ? alternate : preferred;
-
   projectile.controlX = chosen.control.x;
   projectile.controlY = chosen.control.y;
   projectile.arcHeight = clamp(20 + pathDistance * 0.13, 24, 39);
@@ -65,16 +58,11 @@ function refreshLaunchEvent(world, projectile) {
 }
 
 export function launchMegaBomb(world, playerIndex) {
-  const stateBefore = world?.freeMegaBombs;
-  const known = new Set(Array.isArray(stateBefore?.projectiles)
-    ? stateBefore.projectiles.map(item => item?.id)
-    : []);
+  const before = world?.freeMegaBombs;
+  const known = new Set(Array.isArray(before?.projectiles) ? before.projectiles.map(item => item?.id) : []);
   const launched = base.launchMegaBomb(world, playerIndex);
   if (!launched) return false;
-
-  const projectiles = Array.isArray(world?.freeMegaBombs?.projectiles)
-    ? world.freeMegaBombs.projectiles
-    : [];
+  const projectiles = Array.isArray(world?.freeMegaBombs?.projectiles) ? world.freeMegaBombs.projectiles : [];
   const projectile = [...projectiles].reverse().find(item => item?.owner === playerIndex && !known.has(item?.id));
   if (!projectile) return true;
   improveTrajectory(projectile);
