@@ -22,6 +22,11 @@ function rising(input, previous, key) {
   return Boolean(input?.[key] && !previous?.[key]);
 }
 
+function totalMegaBombAmmo(combat) {
+  return Math.max(0, Math.floor(Number(combat?.megaBombAmmo) || 0))
+    + Math.max(0, Math.floor(Number(combat?.megaBombReserve) || 0));
+}
+
 export function updateMerchantShop(world) {
   const state = base.ensureShopState(world);
   if (!state) return base.updateMerchantShop(world);
@@ -36,7 +41,7 @@ export function updateMerchantShop(world) {
 
     const combat = world.players?.[index]?.combat;
     if (!combat) continue;
-    const current = Math.max(0, Math.floor(Number(combat.megaBombAmmo) || 0));
+    const current = totalMegaBombAmmo(combat);
 
     if (current + MEGA_BOMB_BATCH > MEGA_BOMB_MAXIMUM) {
       emit(world, "shop-denied", `Партия из ${MEGA_BOMB_BATCH} зарядов не помещается. Максимум ${MEGA_BOMB_MAXIMUM}, сейчас у тебя ${current}.`, [index]);
@@ -44,8 +49,9 @@ export function updateMerchantShop(world) {
       emit(world, "shop-denied", `Недостаточно кредитов. Нужно ${MEGA_BOMB_PRICE}, баланс команды ${state.credits}.`, [index]);
     } else {
       state.credits -= MEGA_BOMB_PRICE;
-      combat.megaBombAmmo = current + MEGA_BOMB_BATCH;
-      emit(world, "shop-purchased", `Куплено 30 зарядов мега-бомбы. Теперь у тебя ${combat.megaBombAmmo}. Баланс команды ${state.credits}.`, [0, 1], {
+      combat.megaBombReserve = Math.max(0, Math.floor(Number(combat.megaBombReserve) || 0)) + MEGA_BOMB_BATCH;
+      const total = totalMegaBombAmmo(combat);
+      emit(world, "shop-purchased", `Куплено 30 зарядов мега-бомбы. Теперь у тебя ${total}. Баланс команды ${state.credits}.`, [0, 1], {
         sourcePlayer: index,
         itemId: "mega-bomb-charge",
         price: MEGA_BOMB_PRICE,
