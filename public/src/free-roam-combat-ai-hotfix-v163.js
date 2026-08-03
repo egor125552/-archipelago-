@@ -1,6 +1,7 @@
 "use strict";
 
 import {applyCombatAiHotfixV162} from "./free-roam-combat-ai-hotfix-v162.js?v=1";
+import {applyCombatAiModelV164} from "./free-roam-combat-ai-model-v164.js?v=1";
 
 function ensureState(world) {
   world.freeCombatAiHotfixV163 ||= {
@@ -31,14 +32,12 @@ function removeReplacementActors(world, state) {
   hostile.actors = hostile.actors.filter(actor => !openingActor(actor) || allowed.has(String(actor.id)));
 }
 
-export function applyCombatAiHotfixV163(world, dt, helpers = {}) {
+function preserveOpeningActors(world) {
   const state = ensureState(world);
   const director = world.freeThreatDirector;
   const encounterId = director?.active && Number(director.level) >= 5
     ? Number(director.encounterId) || 0
     : null;
-
-  applyCombatAiHotfixV162(world, dt, helpers);
 
   if (encounterId == null) {
     state.encounterId = null;
@@ -50,4 +49,10 @@ export function applyCombatAiHotfixV163(world, dt, helpers = {}) {
     return;
   }
   removeReplacementActors(world, state);
+}
+
+export function applyCombatAiHotfixV163(world, dt, helpers = {}) {
+  applyCombatAiHotfixV162(world, dt, helpers);
+  preserveOpeningActors(world);
+  return applyCombatAiModelV164(world, dt, helpers);
 }
