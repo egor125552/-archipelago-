@@ -82,6 +82,7 @@ test("repair is aborted when a pursuer is inside mega-bomb clearance", () => {
   assert.equal(heavy.phase, "breach-escaping-v166");
   assert.ok(heavy.repairProgress < 6);
   assert.ok(heavy.destination);
+  assert.deepEqual(heavy.v167ReachableDestination, heavy.destination);
   assert.equal(state.events.some(event => event.type === "heavy-tactical-mode-v168" && event.mode === "repair-aborted"), true);
 });
 
@@ -109,7 +110,7 @@ test("incoming bomb interrupts a stationary repair", () => {
   state.players[0].x = 18;
   state.players[0].y = 88;
   state.players[1].combat.alive = false;
-  state.freeMegaBombs.projectiles.push({ttl: 4, energy: 1, targetId: "heavy-pursuer", x: 100, y: 100});
+  state.freeMegaBombs.projectiles.push({age: 0.4, maxAge: 6, energy: 1, targetId: "heavy-pursuer", x: 100, y: 100});
   tick(state);
   assert.equal(heavy.phase, "breach-escaping-v166");
   assert.equal(state.events.some(event => event.mode === "repair-aborted"), true);
