@@ -108,6 +108,20 @@ test("repair is aborted when a pursuer is inside mega-bomb clearance", () => {
   assert.equal(state.events.some(event => event.type === "heavy-tactical-mode-v168" && event.mode === "repair-aborted"), true);
 });
 
+test("repair abort removes a contradictory repair announcement", () => {
+  const state = world();
+  tick(state);
+  const heavy = state.freeCombatAiV164.heavy;
+  const boat = state.freeHeavyPursuer.boat;
+  heavy.phase = "breach-repairing-v166";
+  heavy.repairSystem = "turret";
+  state.players[0].x = boat.x + 50;
+  state.players[0].y = boat.y;
+  tick(state, 0.2, [{type: "heavy-repair-start-v166", text: "Начат ремонт."}]);
+  assert.equal(state.events.some(event => event.type === "heavy-repair-start-v166"), false);
+  assert.equal(state.events.some(event => event.type === "heavy-tactical-mode-v168" && event.mode === "repair-aborted"), true);
+});
+
 test("destroyed engine does not produce a magical escape", () => {
   const state = world();
   const heavy = state.freeCombatAiV164.heavy;
