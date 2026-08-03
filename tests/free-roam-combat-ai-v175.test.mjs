@@ -41,6 +41,15 @@ test("journal regression: duplicate phases, ceasefires and windups are collapsed
   assert.equal(w.events.some(event => event.type === "contract-cleared"), false);
 });
 
+test("forty-seven repair-start events become one announcement", () => {
+  const w = world();
+  w.freeCombatAiV175 = {frame: null, encounterId: null, announcedPhases: {}, repairCommitted: true, repairAnnouncementActive: false, lastWindupAt: -Infinity, massBombAlertUntil: 0};
+  w.freeCombatAiV164.heavy.phase = "breach-repairing-v166";
+  w.events = Array.from({length: 47}, (_, index) => ({type: "heavy-turret-repair-safe-v172", at: 100 + index * 0.04}));
+  normalizeThreatEventsV175(w, 0);
+  assert.equal(w.events.filter(event => event.type === "heavy-turret-repair-safe-v172").length, 1);
+});
+
 test("repair has a twenty metre hysteresis band", () => {
   const w = world();
   w.freeHeavyPursuer.boat.x = 230;
