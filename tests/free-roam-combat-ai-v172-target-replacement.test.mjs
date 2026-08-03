@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {preserveLongRangeTargetV172} from "../public/src/free-roam-combat-ai-model-v172.js";
+import {clearFarTargetReplacementV173} from "../public/src/free-roam-combat-ai-model-v173.js";
 
 test("far selected target does not keep a replacement lock when no replacement was requested", () => {
   const input = {targetId: "heavy-pursuer", attack: false};
@@ -13,5 +14,6 @@ test("far selected target does not keep a replacement lock when no replacement w
     freeHeavyPursuer: {active: true, boat: {id: "heavy-pursuer", active: true, destroyed: false, x: 360, y: 0, hull: 700, engineHealth: 180, turretHealth: 240, targetPlayer: 0}},
   };
   preserveLongRangeTargetV172(world, {targetLocks: {}, lastOutOfRangeFireAt: {}}, 0);
-  assert.notEqual(world.players[0].combat.lockedTargetId, "other-enemy");
+  clearFarTargetReplacementV173(world);
+  assert.equal(world.players[0].combat.lockedTargetId, null);
 });
