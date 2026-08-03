@@ -1,15 +1,16 @@
 "use strict";
 
 import {applyCombatAiHotfixV162} from "./free-roam-combat-ai-hotfix-v162.js?v=1";
-import {applyCombatAiModelV165} from "./free-roam-combat-ai-model-v165.js?v=1";
+import {applyCombatAiModelV166} from "./free-roam-combat-ai-model-v166.js?v=1";
 
 function ensureState(world) {
-  world.freeCombatAiHotfixV163 ||= {
-    encounterId: null,
-    fixedOpeningActorIds: [],
-  };
+  world.freeCombatAiHotfixV163 ||= {encounterId: null, fixedOpeningActorIds: []};
   const state = world.freeCombatAiHotfixV163;
-  if (!Array.isArray(state.fixedOpeningActorIds)) state.fixedOpeningActorIds = state.fixedOpeningActorIds && typeof state.fixedOpeningActorIds === "object" ? Object.values(state.fixedOpeningActorIds) : [];
+  if (!Array.isArray(state.fixedOpeningActorIds)) {
+    state.fixedOpeningActorIds = state.fixedOpeningActorIds && typeof state.fixedOpeningActorIds === "object"
+      ? Object.values(state.fixedOpeningActorIds)
+      : [];
+  }
   return state;
 }
 
@@ -38,7 +39,6 @@ function preserveOpeningActors(world) {
   const encounterId = director?.active && Number(director.level) >= 5
     ? Number(director.encounterId) || 0
     : null;
-
   if (encounterId == null) {
     state.encounterId = null;
     state.fixedOpeningActorIds = [];
@@ -54,5 +54,5 @@ function preserveOpeningActors(world) {
 export function applyCombatAiHotfixV163(world, dt, helpers = {}) {
   applyCombatAiHotfixV162(world, dt, helpers);
   preserveOpeningActors(world);
-  return applyCombatAiModelV165(world, dt, helpers);
+  return applyCombatAiModelV166(world, dt, helpers);
 }
