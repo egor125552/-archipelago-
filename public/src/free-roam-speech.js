@@ -1,6 +1,28 @@
 "use strict";
 
+const SPEECH_RATE_KEY = "echo-free-roam-speech-rate";
+const DEFAULT_SPEECH_RATE = 1.18;
 const normalize = value => String(value || "").toLowerCase().replace(/ё/g, "е");
+
+export function clampSpeechRate(value, fallback = DEFAULT_SPEECH_RATE) {
+  const fallbackNumber = Number(fallback);
+  const safeFallback = Number.isFinite(fallbackNumber) && fallbackNumber > 0
+    ? Math.max(0.6, Math.min(2, fallbackNumber))
+    : DEFAULT_SPEECH_RATE;
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) return safeFallback;
+  return Math.max(0.6, Math.min(2, number));
+}
+
+export function storedSpeechRate(storage, fallback = DEFAULT_SPEECH_RATE) {
+  try {
+    const stored = storage?.getItem?.(SPEECH_RATE_KEY);
+    if (stored == null || stored === "") return clampSpeechRate(fallback);
+    return clampSpeechRate(stored, fallback);
+  } catch (_) {
+    return clampSpeechRate(fallback);
+  }
+}
 
 export function russianVoiceScore(voice) {
   if (!normalize(voice?.lang).startsWith("ru")) return -10_000;
@@ -15,7 +37,8 @@ export function russianVoiceScore(voice) {
 export function createSpeechController({
   synth = globalThis.speechSynthesis,
   Utterance = globalThis.SpeechSynthesisUtterance,
-  rate = 1.18,
+  rate = DEFAULT_SPEECH_RATE,
+  storage,
   onIdle = () => {},
 } = {}) {
   let enabled = true;
@@ -24,8 +47,18 @@ export function createSpeechController({
   let activeText = "";
   let watchdog = 0;
   let primed = false;
+  let currentRate = clampSpeechRate(rate);
+  let speechRateStorage = storage;
+  if (speechRateStorage === undefined) {
+    try { speechRateStorage = globalThis.localStorage; }
+    catch (_) { speechRateStorage = null; }
+  }
 
   const available = Boolean(synth && Utterance);
+
+  function resolveRate() {
+    return storedSpeechRate(speechRateStorage, currentRate);
+  }
 
   function refreshVoice() {
     if (!available) return null;
@@ -48,7 +81,7 @@ export function createSpeechController({
     activeText = normalized;
     const utterance = new Utterance(normalized);
     utterance.lang = "ru-RU";
-    utterance.rate = rate;
+    utterance.rate = resolveRate();
     utterance.pitch = 1;
     if (selectedVoice) utterance.voice = selectedVoice;
 
@@ -103,6 +136,11 @@ export function createSpeechController({
     return enabled;
   }
 
+  function setRate(nextRate) {
+    currentRate = clampSpeechRate(nextRate, currentRate);
+    return currentRate;
+  }
+
   function prime() {
     if (!enabled || !available) return;
     synth.resume?.();
@@ -111,6 +149,7 @@ export function createSpeechController({
     try {
       const utterance = new Utterance(".");
       utterance.lang = "ru-RU";
+      utterance.rate = resolveRate();
       utterance.volume = 0;
       synth.speak(utterance);
     } catch (_) {}
@@ -126,10 +165,12 @@ export function createSpeechController({
     prime,
     refreshVoice,
     setEnabled,
+    setRate,
     get enabled() { return enabled; },
     get activeText() { return activeText; },
     // Kept for diagnostics compatibility. The queue itself no longer exists.
     get pendingText() { return ""; },
+    get rate() { return resolveRate(); },
     get voice() { return selectedVoice; },
   };
 }
