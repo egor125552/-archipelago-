@@ -48,14 +48,33 @@
   function installSpeechRateHook() {
     const synth = globalThis.speechSynthesis;
     if (!synth || synth.__echoSpeechRateHookInstalled) return;
+    const nativeSpeak = synth.speak?.bind?.(synth);
+    if (!nativeSpeak) return;
+    const wrappedSpeak = utterance => {
+      try { utterance.rate = currentSpeechRate(); } catch (_) {}
+      return nativeSpeak(utterance);
+    };
+    let installed = false;
     try {
-      const nativeSpeak = synth.speak.bind(synth);
-      Object.defineProperty(synth, "__echoSpeechRateHookInstalled", {value: true});
-      synth.speak = utterance => {
-        try { utterance.rate = currentSpeechRate(); } catch (_) {}
-        return nativeSpeak(utterance);
-      };
+      Object.defineProperty(synth, "speak", {configurable: true, value: wrappedSpeak});
+      installed = synth.speak === wrappedSpeak;
     } catch (_) {}
+    if (!installed) {
+      try {
+        const prototype = Object.getPrototypeOf(synth);
+        Object.defineProperty(prototype, "speak", {
+          configurable: true,
+          value(utterance) {
+            try { utterance.rate = currentSpeechRate(); } catch (_) {}
+            return nativeSpeak(utterance);
+          },
+        });
+        installed = true;
+      } catch (_) {}
+    }
+    if (installed) {
+      try { Object.defineProperty(synth, "__echoSpeechRateHookInstalled", {value: true}); } catch (_) {}
+    }
   }
 
   function gameReady() {
