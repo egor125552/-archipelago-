@@ -1,6 +1,6 @@
 "use strict";
 
-import "./free-roam-speech-runtime-v2.js?v=1";
+import "./free-roam-speech-runtime-v2.js?v=2";
 import "./free-roam-combat-experience-v2.js?v=1";
 
 function targetMenuPhrase(text) {
@@ -32,7 +32,8 @@ function refreshCombatStatusLabel() {
   const button = document.getElementById("combatGuidance-combatStatus");
   if (button) {
     const enabled = button.getAttribute("aria-pressed") === "true";
-    button.textContent = `Попадания по врагам и остаток прочности: ${enabled ? "озвучивать" : "не озвучивать"}`;
+    const nextText = `Попадания по врагам и остаток прочности: ${enabled ? "озвучивать" : "не озвучивать"}`;
+    if (button.textContent !== nextText) button.textContent = nextText;
   }
   const section = document.getElementById("combatGuidanceSettings");
   if (section && !document.getElementById("combatGuidanceTargetNote")) {
@@ -50,6 +51,8 @@ setTimeout(refreshCombatStatusLabel, 0);
 
 const panel = document.getElementById("settingsPanel");
 if (panel) {
-  const observer = new MutationObserver(() => queueMicrotask(refreshCombatStatusLabel));
-  observer.observe(panel, {attributes: true, childList: true, subtree: true});
+  const observer = new MutationObserver(() => {
+    if (!panel.hidden) queueMicrotask(refreshCombatStatusLabel);
+  });
+  observer.observe(panel, {attributes: true, attributeFilter: ["hidden"]});
 }
