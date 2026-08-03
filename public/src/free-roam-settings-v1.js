@@ -2,23 +2,29 @@
 
 (() => {
   const STORAGE_KEY = "echo-free-roam-interface-settings-v1";
+  const SPEECH_RATE_KEY = "echo-free-roam-speech-rate";
   const DEFAULTS = Object.freeze({
     gameButtons: null,
     quickControl: false,
     quickSpeech: false,
     autoResume: false,
+    speechRate: 1.18,
   });
   const $ = id => document.getElementById(id);
+  const clampRate = value => Math.max(0.6, Math.min(2, Number(value) || DEFAULTS.speechRate));
   let returnFocus = null;
+  let previewTimer = 0;
 
   function readPreferences() {
     try {
       const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+      const legacyRate = Number(localStorage.getItem(SPEECH_RATE_KEY));
       return {
         gameButtons: typeof stored?.gameButtons === "boolean" ? stored.gameButtons : null,
         quickControl: stored?.quickControl === true,
         quickSpeech: stored?.quickSpeech === true,
         autoResume: stored?.autoResume === true,
+        speechRate: clampRate(Number.isFinite(Number(stored?.speechRate)) ? stored.speechRate : legacyRate),
       };
     } catch (_) {
       return {...DEFAULTS};
@@ -28,7 +34,28 @@
   let preferences = readPreferences();
 
   function savePreferences() {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences)); } catch (_) {}
+    preferences.speechRate = clampRate(preferences.speechRate);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
+      localStorage.setItem(SPEECH_RATE_KEY, String(preferences.speechRate));
+    } catch (_) {}
+  }
+
+  function currentSpeechRate() {
+    return clampRate(preferences.speechRate);
+  }
+
+  function installSpeechRateHook() {
+    const synth = globalThis.speechSynthesis;
+    if (!synth || synth.__echoSpeechRateHookInstalled) return;
+    try {
+      const nativeSpeak = synth.speak.bind(synth);
+      Object.defineProperty(synth, "__echoSpeechRateHookInstalled", {value: true});
+      synth.speak = utterance => {
+        try { utterance.rate = currentSpeechRate(); } catch (_) {}
+        return nativeSpeak(utterance);
+      };
+    } catch (_) {}
   }
 
   function gameReady() {
@@ -47,10 +74,86 @@
     return !(globalThis.matchMedia?.("(pointer: coarse)")?.matches ?? false);
   }
 
+  function speechRateLabel(rate = currentSpeechRate()) {
+    if (rate <= 0.7) return "самая медленная";
+    if (rate < 0.95) return "медленная";
+    if (rate < 1.12) return "обычная";
+    if (rate < 1.35) return "быстрая";
+    if (rate < 1.7) return "очень быстрая";
+    return "самая быстрая";
+  }
+
   function setPressed(button, pressed, text) {
     if (!button) return;
     button.setAttribute("aria-pressed", String(Boolean(pressed)));
     button.textContent = text;
+  }
+
+  function ensureSpeechRateControl() {
+    if ($("settingsSpeechRate")) return;
+    const speechButton = $("settingsSpeechButton");
+    const group = speechButton?.closest?.(".settings-group");
+    if (!group) return;
+
+    const wrapper = document.createElement("div");
+    wrapper.className = "speech-rate-setting";
+
+    const label = document.createElement("label");
+    label.htmlFor = "settingsSpeechRate";
+    label.textContent = "Скорость игровой речи";
+
+    const slider = document.createElement("input");
+    slider.id = "settingsSpeechRate";
+    slider.type = "range";
+    slider.min = "0.6";
+    slider.max = "2";
+    slider.step = "0.05";
+    slider.value = String(currentSpeechRate());
+    slider.setAttribute("aria-describedby", "settingsSpeechRateValue settingsSpeechRateHint");
+    slider.style.width = "100%";
+
+    const value = document.createElement("output");
+    value.id = "settingsSpeechRateValue";
+    value.htmlFor = "settingsSpeechRate";
+    value.setAttribute("aria-live", "polite");
+
+    const hint = document.createElement("p");
+    hint.id = "settingsSpeechRateHint";
+    hint.className = "settings-note";
+    hint.textContent = "Стрелки меняют скорость постепенно. Слева — самая медленная, справа — самая быстрая. Изменение применяется к следующей фразе.";
+
+    wrapper.append(label, slider, value, hint);
+    const existingNote = group.querySelector(".settings-note");
+    group.insertBefore(wrapper, existingNote || null);
+
+    const applySlider = ({preview = false} = {}) => {
+      preferences.speechRate = clampRate(slider.value);
+      savePreferences();
+      syncSpeechRateControl();
+      if (!preview || !speechEnabled()) return;
+      clearTimeout(previewTimer);
+      previewTimer = setTimeout(() => {
+        try {
+          const Utterance = globalThis.SpeechSynthesisUtterance;
+          if (!Utterance || !globalThis.speechSynthesis) return;
+          const phrase = new Utterance("Проверка скорости речи.");
+          phrase.lang = "ru-RU";
+          globalThis.speechSynthesis.cancel();
+          globalThis.speechSynthesis.speak(phrase);
+        } catch (_) {}
+      }, 180);
+    };
+
+    slider.addEventListener("input", () => applySlider());
+    slider.addEventListener("change", () => applySlider({preview: true}));
+  }
+
+  function syncSpeechRateControl() {
+    const slider = $("settingsSpeechRate");
+    const value = $("settingsSpeechRateValue");
+    const rate = currentSpeechRate();
+    if (slider && Math.abs(Number(slider.value) - rate) > 0.001) slider.value = String(rate);
+    if (value) value.textContent = `Текущая скорость: ${rate.toFixed(2)}, ${speechRateLabel(rate)}.`;
   }
 
   function syncQuickButtons() {
@@ -61,6 +164,7 @@
   }
 
   function syncSettingsControls() {
+    ensureSpeechRateControl();
     const buttonsOn = gameButtonsEnabled();
     const speechOn = speechEnabled();
     setPressed(
@@ -88,6 +192,7 @@
       preferences.autoResume,
       `После обновления: ${preferences.autoResume ? "вернуться в тот же мир" : "остаться в меню"}`,
     );
+    syncSpeechRateControl();
   }
 
   function applyGameButtonsPreference() {
@@ -180,6 +285,9 @@
     syncSettingsControls();
   }
 
+  installSpeechRateHook();
+  savePreferences();
+
   $("lobbySettingsButton")?.addEventListener("click", openSettings);
   $("gameSettingsButton")?.addEventListener("click", openSettings);
   $("settingsCloseButton")?.addEventListener("click", closeSettings);
@@ -214,6 +322,7 @@
     if (event.target === event.currentTarget) closeSettings();
   });
 
+  ensureSpeechRateControl();
   syncQuickButtons();
   syncSettingsControls();
   waitForGameBindings();
@@ -221,6 +330,17 @@
   globalThis.__freeRoamSettings = {
     open: openSettings,
     close: closeSettings,
-    snapshot: () => ({...preferences, gameButtonsEnabled: gameButtonsEnabled(), speechEnabled: speechEnabled()}),
+    setSpeechRate(rate) {
+      preferences.speechRate = clampRate(rate);
+      savePreferences();
+      syncSpeechRateControl();
+      return preferences.speechRate;
+    },
+    snapshot: () => ({
+      ...preferences,
+      gameButtonsEnabled: gameButtonsEnabled(),
+      speechEnabled: speechEnabled(),
+      speechRate: currentSpeechRate(),
+    }),
   };
 })();
