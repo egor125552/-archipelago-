@@ -107,7 +107,11 @@ function observePlayers(world, state, dt) {
 
   const start = state.frame?.eventStart || 0;
   for (const event of (world.events || []).slice(start)) {
-    const source = Number(event?.sourcePlayer);
+    const explicitSource = Number(event?.sourcePlayer);
+    const targetSource = Array.isArray(event?.targets) && event.targets.length === 1
+      ? Number(event.targets[0])
+      : NaN;
+    const source = Number.isInteger(explicitSource) ? explicitSource : targetSource;
     if (!Number.isInteger(source) || !state.players[String(source)]) continue;
     const memory = state.players[String(source)];
     if (["gun-shot", "automatic-shot", "automatic-burst", "mega-bomb-launch", "pursuer-hit", "heavy-component-hit", "mega-bomb-explosion"].includes(event.type)) {
