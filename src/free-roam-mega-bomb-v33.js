@@ -131,7 +131,7 @@ function beginThreatVariant(world, balance, state) {
   if (state.level >= 5) {
     if (variant === "blockade") state.heavyStartsAt = world.time + 16 + nextRandom(balance) * 7;
     else if (variant === "counterattack") state.heavyStartsAt = world.time + 4 + nextRandom(balance) * 3;
-    else state.heavyStartsAt = Number.POSITIVE_INFINITY;
+    else state.heavyStartsAt = world.time + 86_400;
   }
 
   const text = variant === "blockade"
@@ -252,6 +252,7 @@ function rebalanceHeavyBombEvents(world, eventStart, projectileTargets, before) 
     if (event?.type === "heavy-turret-destroyed" && !keepTurretDestroyed) return false;
     if (event?.type === "heavy-engine-destroyed" && !keepEngineDestroyed) return false;
     if (event?.type === "heavy-pursuer-destroyed" && !keepBoatDestroyed) return false;
+    if (event?.type === "threat-breathing-room" && !keepBoatDestroyed) return false;
     return true;
   });
   world.events = [...prefix, ...filtered];
@@ -290,8 +291,20 @@ export function stepMegaBombs(world, dt) {
     String(projectile?.id || ""),
     String(projectile?.targetId || ""),
   ]));
-  const before = heavyHealth(world.freeHeavyPursuer?.boat);
+  const heavy = world.freeHeavyPursuer?.boat;
+  const before = heavyHealth(heavy);
+  const targetIds = new Set(projectileTargets.values());
+  const guardHull = Boolean(heavy && before && targetIds.size && !targetIds.has("heavy-pursuer"));
+  const originalMaxHull = Number(heavy?.maxHull) || before?.hull || 0;
+  if (guardHull) {
+    heavy.maxHull = originalMaxHull + 10_000;
+    heavy.hull = before.hull + 10_000;
+  }
   base.stepMegaBombs(world, dt);
+  if (guardHull) {
+    heavy.maxHull = originalMaxHull;
+    heavy.hull = before.hull;
+  }
   rebalanceHeavyBombEvents(world, eventStart, projectileTargets, before);
   updateThreatVariant(world);
   clampStock(world);
