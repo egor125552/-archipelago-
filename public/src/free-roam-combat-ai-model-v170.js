@@ -16,6 +16,7 @@ const bearing = (from, to) => Math.atan2(
 const HIT_WINDOW_SECONDS = 1.05;
 const HIT_THRESHOLD = 3;
 const ESCAPE_MIN_SECONDS = 4.2;
+const ESCAPE_MAX_SECONDS = 8.5;
 const ESCAPE_EXTEND_SECONDS = 2.6;
 const ESCAPE_DISTANCE = 255;
 const REGROUP_SECONDS = 2.4;
@@ -35,6 +36,8 @@ function ensureState(world) {
     destination: null,
     sourcePlayer: null,
     minimumUntil: -999,
+    maximumUntil: -999,
+    escapeDistance: 225,
     regroupUntil: -999,
     retreatSerial: 0,
     newAutomaticHits: 0,
@@ -42,6 +45,8 @@ function ensureState(world) {
   const state = world.freeCombatAiV170;
   if (!Array.isArray(state.automaticHits)) state.automaticHits = [];
   if (!Number.isFinite(state.minimumUntil)) state.minimumUntil = -999;
+  if (!Number.isFinite(state.maximumUntil)) state.maximumUntil = -999;
+  if (!Number.isFinite(state.escapeDistance)) state.escapeDistance = 225;
   if (!Number.isFinite(state.regroupUntil)) state.regroupUntil = -999;
   if (!Number.isFinite(state.retreatSerial)) state.retreatSerial = 0;
   return state;
@@ -118,6 +123,13 @@ function retreatCandidates() {
   return points;
 }
 
+function achievableEscapeDistance(world, sourcePlayer) {
+  const source = pointForPlayer(world, sourcePlayer);
+  if (!source) return 225;
+  const farthest = Math.max(...retreatCandidates().map(point => distance(point, source)));
+  return clamp(farthest - 10, 205, ESCAPE_DISTANCE);
+}
+
 function safestDestination(world, boat, sourcePlayer, serial) {
   const source = pointForPlayer(world, sourcePlayer);
   const living = livingPoints(world);
@@ -163,8 +175,11 @@ function startEscape(world, state, eventStart, repeat = false) {
   const boat = world.freeHeavyPursuer.boat;
   const now = Number(world.time) || 0;
   state.phase = "escape";
-  state.sourcePlayer = pressureSource(state);
+  const detectedSource = pressureSource(state);
+  if (Number.isInteger(detectedSource)) state.sourcePlayer = detectedSource;
   state.minimumUntil = Math.max(Number(state.minimumUntil) || -999, now + (repeat ? ESCAPE_EXTEND_SECONDS : ESCAPE_MIN_SECONDS));
+  state.maximumUntil = Math.max(Number(state.maximumUntil) || -999, now + (repeat ? ESCAPE_EXTEND_SECONDS + 1.5 : ESCAPE_MAX_SECONDS));
+  state.escapeDistance = achievableEscapeDistance(world, state.sourcePlayer);
   state.retreatSerial += 1;
   state.destination = safestDestination(world, boat, state.sourcePlayer, state.retreatSerial);
   boat.speed = Math.max(Number(boat.speed) || 0, 11.5);
@@ -197,6 +212,8 @@ function cancelRetreat(state) {
   state.destination = null;
   state.sourcePlayer = null;
   state.minimumUntil = -999;
+  state.maximumUntil = -999;
+  state.escapeDistance = 225;
   state.regroupUntil = -999;
   state.automaticHits = [];
   state.newAutomaticHits = 0;
@@ -233,14 +250,16 @@ export function applyAutomaticSuppressionRetreatV170(world, state, dt, frame = n
   if (state.phase === "escape") {
     const destinationUnsafe = !state.destination
       || distance(boat, state.destination) <= 9
-      || (source && distance(state.destination, source) < ESCAPE_DISTANCE);
+      || (source && distance(state.destination, source) < state.escapeDistance);
     if (destinationUnsafe) {
       state.retreatSerial += 1;
       state.destination = safestDestination(world, boat, state.sourcePlayer, state.retreatSerial);
     }
     moveTo(boat, state.destination, ESCAPE_SPEED, dt, 82);
     boat.targetPlayer = Number.isInteger(state.sourcePlayer) ? state.sourcePlayer : boat.targetPlayer;
-    if (now >= state.minimumUntil && sourceDistance >= ESCAPE_DISTANCE && pressure < HIT_THRESHOLD) {
+    const escapedFarEnough = sourceDistance >= state.escapeDistance;
+    const escapeTimedOut = now >= state.maximumUntil;
+    if (now >= state.minimumUntil && pressure < HIT_THRESHOLD && (escapedFarEnough || escapeTimedOut)) {
       state.phase = "regroup";
       state.regroupUntil = now + REGROUP_SECONDS;
       emit(world, "heavy-automatic-suppression-regroup-v170",
