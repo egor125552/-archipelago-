@@ -25,8 +25,9 @@ function world() {
   };
 }
 
-function tick(state, dt = 0.2) {
+function tick(state, dt = 0.2, events = []) {
   prepareCombatAiV168Overlay(state);
+  state.events.push(...events);
   finishCombatAiV168Overlay(state, dt);
   state.time += dt;
 }
@@ -43,20 +44,41 @@ test("armed player makes the boss open distance and keep the turret available", 
   assert.equal(state.freeCombatAiV168.mode, "standoff");
 });
 
-test("unarmed target is approached cautiously", () => {
+test("zero ammo is not read telepathically", () => {
   const state = world();
   state.players[0].combat.ammo = 0;
   state.players[0].combat.pistolAmmo = 0;
   state.players[0].combat.megaBombStock = 0;
   state.players[1].combat.alive = false;
+  tick(state);
+  assert.equal(state.freeCombatAiV168.mode, "standoff");
+});
+
+test("observed empty weapons make the boss approach cautiously", () => {
+  const state = world();
+  state.players[1].combat.alive = false;
   state.players[0].x = 20;
   state.players[0].y = 90;
+  tick(state, 0.2, [{type: "gun-empty", sourcePlayer: 0, weapon: "automatic", text: "Патроны автомата закончились."}]);
+  state.time += 1.6;
   const boat = state.freeHeavyPursuer.boat;
   const before = Math.hypot(boat.x - state.players[0].x, boat.y - state.players[0].y);
-  tick(state);
+  tick(state, 0.2, [{type: "gun-empty", targets: [0], weapon: "pistol", text: "Патроны пистолета закончились."}]);
+  for (let index = 0; index < 15; index += 1) tick(state);
   const after = Math.hypot(boat.x - state.players[0].x, boat.y - state.players[0].y);
   assert.ok(after < before);
   assert.equal(state.freeCombatAiV168.mode, "press-unarmed");
+});
+
+test("a new shot cancels the unarmed assumption", () => {
+  const state = world();
+  state.players[1].combat.alive = false;
+  tick(state, 0.2, [{type: "gun-empty", sourcePlayer: 0, weapon: "automatic", text: "Патроны автомата закончились."}]);
+  state.time += 1.6;
+  tick(state, 0.2, [{type: "gun-empty", sourcePlayer: 0, weapon: "pistol", text: "Патроны пистолета закончились."}]);
+  state.time += 1.6;
+  tick(state, 0.2, [{type: "gun-shot", sourcePlayer: 0, weapon: "pistol"}]);
+  assert.notEqual(state.freeCombatAiV168.mode, "press-unarmed");
 });
 
 test("swimmer becomes the priority and triggers aggressive closing", () => {
