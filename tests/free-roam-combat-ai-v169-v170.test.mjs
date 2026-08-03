@@ -47,6 +47,8 @@ function tacticalState() {
     destination: null,
     sourcePlayer: null,
     minimumUntil: -999,
+    maximumUntil: -999,
+    escapeDistance: 225,
     regroupUntil: -999,
     retreatSerial: 0,
   };
@@ -166,4 +168,39 @@ test("a destroyed engine never receives a magical suppression escape", () => {
 
   assert.equal(tactics.phase, null);
   assert.equal(boat.speed, 0);
+});
+
+test("escape eventually regroups and returns when the player stops chasing", () => {
+  const state = world();
+  const tactics = tacticalState();
+  const boat = state.freeHeavyPursuer.boat;
+  state.players[0].x = 210;
+  state.players[0].y = 200;
+  state.events.push(automaticHit(), automaticHit(), automaticHit());
+  recordAutomaticPressureV170(state, tactics, 0);
+  applyAutomaticSuppressionRetreatV170(state, tactics, 0.2, {
+    eventStart: 0,
+    position: {...boat},
+  });
+
+  state.events = [];
+  state.time = tactics.maximumUntil + 0.1;
+  boat.x = 404;
+  boat.y = 308;
+  recordAutomaticPressureV170(state, tactics, 0);
+  applyAutomaticSuppressionRetreatV170(state, tactics, 0.2, {
+    eventStart: 0,
+    position: {...boat},
+  });
+  assert.equal(tactics.phase, "regroup");
+
+  state.events = [];
+  state.time = tactics.regroupUntil + 0.1;
+  recordAutomaticPressureV170(state, tactics, 0);
+  applyAutomaticSuppressionRetreatV170(state, tactics, 0.2, {
+    eventStart: 0,
+    position: {...boat},
+  });
+  assert.equal(tactics.phase, null);
+  assert.equal(state.events.some(event => event.type === "heavy-automatic-suppression-return-v170"), true);
 });
