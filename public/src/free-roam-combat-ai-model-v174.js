@@ -128,11 +128,14 @@ export function adoptExistingHeavyForThreatV174(world, lookaheadSeconds = HEAVY_
   const state = ensureState(world);
   if (String(state.adoptedEncounterId) !== String(encounterId)) {
     state.adoptedEncounterId = encounterId;
-    emit(world, "heavy-pursuer-adopted-v174",
-      "Тяжёлый катер уже находится в бою. Новая волна не восстановила ему корпус и системы: он продолжает прежний манёвр, а элитный стрелок присоединяется к атаке.",
+    emit(world, "contract-threat-phase",
+      "Вторая фаза. Уже находящийся в бою тяжёлый катер продолжает бой без восстановления, а элитный стрелок готовится к высадке.",
       [0, 1], {
+        level: director.level,
+        phase: 2,
         encounterId,
-        phase: aiHeavy.phase,
+        continuityV174: true,
+        heavyPhase: aiHeavy.phase,
         repairSystem: aiHeavy.repairSystem || null,
         x: boat.x,
         y: boat.y,
