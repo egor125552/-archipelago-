@@ -188,9 +188,9 @@ function incomingBombThreat(world, boat) {
   });
 }
 
-function announceMode(world, state, mode, target, boat, text) {
+function announceMode(world, state, mode, target, boat, text, force = false) {
   const now = Number(world.time) || 0;
-  if (state.mode === mode || now - state.lastModeAt < 1.5) return;
+  if (state.mode === mode || (!force && now - state.lastModeAt < 1.5)) return;
   state.mode = mode;
   state.lastModeAt = now;
   emit(world, "heavy-tactical-mode-v168", text, [0, 1], {
@@ -213,6 +213,16 @@ function setEscapeDestination(world, state, heavy, boat) {
   return point;
 }
 
+function removeContradictoryRepairEvents(world, state) {
+  const start = Math.max(0, Number(state.frame?.eventStart) || 0);
+  const prefix = (world.events || []).slice(0, start);
+  const filtered = (world.events || []).slice(start).filter(event => ![
+    "heavy-repair-start-v166",
+    "heavy-repair-progress-v166",
+  ].includes(event?.type));
+  world.events = [...prefix, ...filtered];
+}
+
 function handleRepairSafety(world, state, heavy, boat) {
   if (!CUSTOM_PHASES.has(heavy.phase)) return;
   if (heavy.phase === "breach-escaping-v166") {
@@ -231,11 +241,12 @@ function handleRepairSafety(world, state, heavy, boat) {
   if ((Number(boat.engineHealth) || 0) <= 0) {
     if (state.mode !== "engine-trapped-repair") {
       announceMode(world, state, "engine-trapped-repair", null, boat,
-        "Двигатель тяжёлого катера уничтожен. Уйти он не может: аварийный ремонт продолжается под угрозой.");
+        "Двигатель тяжёлого катера уничтожен. Уйти он не может: аварийный ремонт продолжается под угрозой.", true);
     }
     return;
   }
 
+  removeContradictoryRepairEvents(world, state);
   heavy.phase = "breach-escaping-v166";
   heavy.repairProgress = Math.max(0, (Number(heavy.repairProgress) || 0) * 0.35);
   setEscapeDestination(world, state, heavy, boat);
@@ -243,7 +254,7 @@ function handleRepairSafety(world, state, heavy, boat) {
   announceMode(world, state, "repair-aborted", null, boat,
     bombIncoming
       ? "Тяжёлый катер заметил летящую мега-бомбу, сорвал ремонт и снова уходит на полном ходу."
-      : "Ты подошёл слишком близко. Тяжёлый катер прервал ремонт и снова уходит на полном ходу.");
+      : "Ты подошёл слишком близко. Тяжёлый катер прервал ремонт и снова уходит на полном ходу.", true);
 }
 
 function movementBand(world, state, target, boat, heavy) {
