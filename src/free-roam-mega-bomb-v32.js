@@ -41,19 +41,23 @@ function ensureStock(combat) {
 }
 
 function patchLaunchEvents(world, playerIndex, projectile, remaining) {
+  let launchPatched = !projectile;
+  let statusPatched = false;
   for (let index = (world.events || []).length - 1; index >= 0; index -= 1) {
     const event = world.events[index];
-    if (event?.type === "mega-bomb-launch" && event.projectileId === projectile?.id) {
+    if (!launchPatched && event?.type === "mega-bomb-launch" && event.projectileId === projectile.id) {
       Object.assign(event, projectile, {
         projectileId: projectile.id,
         speed: Math.hypot(Number(projectile.vx) || 0, Number(projectile.vy) || 0, Number(projectile.vz) || 0),
       });
+      launchPatched = true;
     }
-    if (event?.type === "mega-bomb-launched-status" && event.targets?.[0] === playerIndex) {
+    if (!statusPatched && event?.type === "mega-bomb-launched-status" && event.targets?.[0] === playerIndex) {
       event.remaining = remaining;
       event.text = `Мега-бомба запущена. Осталось ${remaining}.`;
-      break;
+      statusPatched = true;
     }
+    if (launchPatched && statusPatched) break;
   }
 }
 
