@@ -221,11 +221,18 @@ test("V174 preserves real movement state instead of a fake nonzero speed at fixe
   assert.deepEqual(world.freeCombatAiV164.heavy.destination, {x: 404, y: 308});
 });
 
-test("hotfix V163 routes authoritative AI through V174", async () => {
-  const source = await import("node:fs/promises").then(fs => fs.readFile(
+test("hotfix V163 routes authoritative AI through V175 while V175 preserves V174", async () => {
+  const fs = await import("node:fs/promises");
+  const hotfix = await fs.readFile(
     new URL("../public/src/free-roam-combat-ai-hotfix-v163.js", import.meta.url),
     "utf8",
-  ));
-  assert.match(source, /free-roam-combat-ai-model-v174\.js\?v=1/);
-  assert.match(source, /applyCombatAiModelV174\(world, dt, helpers\)/);
+  );
+  const v175 = await fs.readFile(
+    new URL("../public/src/free-roam-combat-ai-model-v175.js", import.meta.url),
+    "utf8",
+  );
+  assert.match(hotfix, /free-roam-combat-ai-model-v175\.js\?v=1/);
+  assert.match(hotfix, /applyCombatAiModelV175\(world, dt, helpers\)/);
+  assert.match(v175, /free-roam-combat-ai-model-v174\.js\?v=1/);
+  assert.match(v175, /applyCombatAiModelV174\(world, 0, helpers\)/);
 });
