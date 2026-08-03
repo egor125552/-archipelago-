@@ -58,11 +58,21 @@ function livingPlayers(world) {
     .filter(({player, index, point}) => world.freeActivities?.presence?.[index] !== false && player?.combat?.alive && point);
 }
 
-function ammunition(player) {
-  const combat = player?.combat || {};
-  return Math.max(0, Number(combat.ammo) || 0)
-    + Math.max(0, Number(combat.pistolAmmo) || 0)
-    + Math.max(0, Number(combat.megaBombStock) || Number(combat.megaBombAmmo) || 0) * 4;
+function emptySignalKey(event) {
+  const weapon = String(event?.weapon || "").toLowerCase();
+  const text = String(event?.text || "").toLowerCase();
+  if (weapon === "automatic" || text.includes("автомат")) return "automatic";
+  if (weapon === "pistol" || text.includes("пистолет")) return "pistol";
+  if (weapon === "mega-bomb" || text.includes("мега-бомб")) return "megaBomb";
+  return "unknown";
+}
+
+function emptyEvidence(memory) {
+  const signals = memory?.emptySignals || {};
+  return (signals.automatic ? 1.2 : 0)
+    + (signals.pistol ? 1 : 0)
+    + (signals.megaBomb ? 0.7 : 0)
+    + (signals.unknown ? 0.75 : 0);
 }
 
 function isSwimming(player) {
@@ -79,6 +89,7 @@ function observePlayers(world, state, dt) {
       heading: Number(point.heading) || 0,
       volatility: 0,
       lastAttackAt: -999,
+      emptySignals: {},
       lastSeenAt: now,
     };
     const moved = distance(memory, point);
@@ -90,7 +101,7 @@ function observePlayers(world, state, dt) {
     memory.y = Number(point.y) || 0;
     memory.heading = Number(point.heading) || 0;
     memory.lastSeenAt = now;
-    memory.ammo = ammunition(player);
+    memory.emptySignals ||= {};
     memory.swimming = isSwimming(player);
   }
 
@@ -98,8 +109,18 @@ function observePlayers(world, state, dt) {
   for (const event of (world.events || []).slice(start)) {
     const source = Number(event?.sourcePlayer);
     if (!Number.isInteger(source) || !state.players[String(source)]) continue;
+    const memory = state.players[String(source)];
     if (["gun-shot", "automatic-shot", "automatic-burst", "mega-bomb-launch", "pursuer-hit", "heavy-component-hit", "mega-bomb-explosion"].includes(event.type)) {
-      state.players[String(source)].lastAttackAt = now;
+      memory.lastAttackAt = now;
+      const fired = event.type === "mega-bomb-launch" ? "megaBomb" : emptySignalKey(event);
+      if (fired === "unknown") memory.emptySignals = {};
+      else delete memory.emptySignals[fired];
+    }
+    const emptyGun = event.type === "gun-empty";
+    const emptyBomb = event.type === "mega-bomb-denied"
+      && (Number(event.remaining) === 0 || String(event.text || "").toLowerCase().includes("законч"));
+    if (emptyGun || emptyBomb) {
+      memory.emptySignals[emptySignalKey(event)] = now;
     }
   }
 }
@@ -108,11 +129,10 @@ function targetScore(world, state, boat, item) {
   const memory = state.players[String(item.index)] || {};
   const metres = distance(boat, item.point);
   const swimmer = isSwimming(item.player);
-  const ammo = ammunition(item.player);
   const recentAttack = (Number(world.time) || 0) - (Number(memory.lastAttackAt) || -999) < 4;
   return (swimmer ? 900 : 0)
     + (recentAttack ? 260 : 0)
-    + Math.min(220, ammo * 2)
+    - emptyEvidence(memory) * 75
     - metres * 0.35;
 }
 
@@ -224,15 +244,15 @@ function handleRepairSafety(world, state, heavy, boat) {
 
 function movementBand(world, state, target, boat, heavy) {
   const memory = state.players[String(target.index)] || {};
-  const ammo = ammunition(target.player);
   const swimmer = isSwimming(target.player);
   const recentAttack = (Number(world.time) || 0) - (Number(memory.lastAttackAt) || -999) < 3.5;
+  const knownUnarmed = emptyEvidence(memory) >= 2.1 && !recentAttack;
   const damaged = heavy.armourBreached && ((Number(boat.hull) || 0) / Math.max(1, Number(boat.maxHull) || 1) < 0.48
     || (Number(world.time) || 0) - (Number(heavy.lastDamageAt) || -999) < 1.6);
 
-  if (damaged && ammo > 0) return {mode: "disengage", min: 255, max: 292, speed: 15.2, cooldown: 1.8};
+  if (damaged) return {mode: "disengage", min: 255, max: 292, speed: 15.2, cooldown: 1.8};
   if (swimmer) return {mode: "hunt-swimmer", min: 58, max: 92, speed: 13.6, cooldown: 0.55};
-  if (ammo <= 0) return {mode: "press-unarmed", min: 95, max: 128, speed: 12.4, cooldown: 0.8};
+  if (knownUnarmed) return {mode: "press-unarmed", min: 95, max: 128, speed: 12.4, cooldown: 0.8};
   if ((Number(memory.volatility) || 0) >= 1.8 && !recentAttack) {
     return {mode: "probe-unpredictable", min: 145, max: 182, speed: 10.8, cooldown: 1.15};
   }
@@ -285,7 +305,7 @@ function applyCombatMovement(world, state, heavy, boat, target, dt) {
   const text = band.mode === "hunt-swimmer"
     ? "Тяжёлый катер заметил игрока в воде и идёт на решительное сближение, продолжая огонь."
     : band.mode === "press-unarmed"
-      ? "Тяжёлый катер понял, что у цели закончились боеприпасы, и осторожно сокращает дистанцию."
+      ? "Тяжёлый катер услышал несколько пустых щелчков и осторожно сокращает дистанцию."
       : band.mode === "probe-unpredictable"
         ? "Тяжёлый катер не понимает твой манёвр и осторожно проверяет дистанцию, не подставляя корпус."
         : band.mode === "disengage"
