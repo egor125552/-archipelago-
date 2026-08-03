@@ -16,6 +16,7 @@ function ensureState(world) {
     encounterId: null,
     announcedPhases: {},
     repairCommitted: false,
+    repairAnnouncementActive: false,
     lastWindupAt: -Infinity,
     massBombAlertUntil: 0,
   };
@@ -57,7 +58,7 @@ export function normalizeThreatEventsV175(world, eventStart = 0) {
     const type = String(event?.type || "");
     const at = eventAt(event, world);
 
-    if (type === "contract-threat-phase" || type === "contract-threat-phase-two" || type === "contract-threat-final-phase") {
+    if (["contract-threat-phase", "contract-threat-phase-two", "contract-threat-final-phase"].includes(type)) {
       const phase = Number(event.phase || (type.includes("final") ? 3 : type.includes("two") ? 2 : 0));
       const encounter = String(event.encounterId ?? world.freeThreatDirector?.encounterId ?? "active");
       const key = `${encounter}:${phase}`;
@@ -86,6 +87,14 @@ export function normalizeThreatEventsV175(world, eventStart = 0) {
       event.correctedTargetLabelV175 = true;
     }
 
+    if (type === "heavy-turret-repair-safe-v172") {
+      if (state.repairAnnouncementActive) continue;
+      state.repairAnnouncementActive = true;
+    }
+    if (["heavy-turret-repair-aborted-v172", "heavy-repair-complete", "heavy-system-repaired"].includes(type)) {
+      state.repairAnnouncementActive = false;
+    }
+
     if (type === "heavy-gun-windup") {
       if (at - state.lastWindupAt < 0.75) continue;
       state.lastWindupAt = at;
@@ -93,6 +102,9 @@ export function normalizeThreatEventsV175(world, eventStart = 0) {
 
     result.push(event);
   }
+
+  const heavy = world.freeCombatAiV164?.heavy;
+  if (!state.repairCommitted && heavy?.phase !== "breach-repairing-v166") state.repairAnnouncementActive = false;
   world.events = [...prefix, ...result];
   return result;
 }
@@ -103,16 +115,21 @@ export function applyRepairHysteresisV175(world) {
   const heavy = world.freeCombatAiV164?.heavy;
   if (!boat?.active || boat.destroyed || !heavy) {
     state.repairCommitted = false;
+    state.repairAnnouncementActive = false;
     return false;
   }
   const repairingTurret = heavy.repairSystem === "turret" && Number(boat.turretHealth) <= 0;
   if (!repairingTurret) {
     state.repairCommitted = false;
+    state.repairAnnouncementActive = false;
     return false;
   }
   const nearest = nearestPlayerDistance(world, boat);
   if (!state.repairCommitted && nearest >= REPAIR_START_CLEARANCE) state.repairCommitted = true;
-  if (state.repairCommitted && nearest < REPAIR_ABORT_CLEARANCE) state.repairCommitted = false;
+  if (state.repairCommitted && nearest < REPAIR_ABORT_CLEARANCE) {
+    state.repairCommitted = false;
+    state.repairAnnouncementActive = false;
+  }
 
   if (state.repairCommitted) {
     heavy.phase = "breach-repairing-v166";
@@ -129,8 +146,7 @@ export function applyDamagedEngineCautionV175(world) {
   const heavy = world.freeCombatAiV164?.heavy;
   if (!boat?.active || boat.destroyed || !heavy || Number(boat.engineHealth) <= 0) return false;
   const ratio = Number(boat.engineHealth) / Math.max(1, Number(boat.maxEngineHealth) || 180);
-  if (ratio > ENGINE_CAUTION_RATIO || Number(heavy.repairPlates) <= 0) return false;
-  if (Number(boat.turretHealth) <= 0) return false;
+  if (ratio > ENGINE_CAUTION_RATIO || Number(heavy.repairPlates) <= 0 || Number(boat.turretHealth) <= 0) return false;
   heavy.tacticalMode = "engine-caution-v175";
   heavy.destination ||= world.freeCombatAiV172?.stableRepairDestination || {x: Number(boat.x)||0, y: Number(boat.y)||0};
   if (!["breach-escaping-v166", "breach-repairing-v166"].includes(heavy.phase)) heavy.phase = "retreating";
