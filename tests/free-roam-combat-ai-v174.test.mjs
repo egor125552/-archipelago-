@@ -99,10 +99,13 @@ test("V174 adopts an already active heavy before the delayed level-five respawn"
   assert.equal(world.freeCombatAiV164.heavy.repairProgress, 4.2);
   assert.equal(world.freeCombatAiV172.repairEncounterId, "12");
   assert.ok(world.freeHostileActors.actors.some(actor => actor.id === "elite-12" && actor.boatId === "heavy-pursuer"));
-  assert.equal(world.events.filter(event => event.type === "heavy-pursuer-adopted-v174").length, 1);
+  const phaseEvents = world.events.filter(event => event.type === "contract-threat-phase" && event.phase === 2);
+  assert.equal(phaseEvents.length, 1);
+  assert.equal(phaseEvents[0].continuityV174, true);
+  assert.match(phaseEvents[0].text, /без восстановления/);
 
   assert.equal(adoptExistingHeavyForThreatV174(world, 0.06), false);
-  assert.equal(world.events.filter(event => event.type === "heavy-pursuer-adopted-v174").length, 1);
+  assert.equal(world.events.filter(event => event.type === "contract-threat-phase" && event.phase === 2).length, 1);
 });
 
 test("V174 does not start the delayed phase too early", () => {
