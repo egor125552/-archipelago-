@@ -8,7 +8,14 @@ export const CONTRACT_BOARD = Object.freeze({id: "contract-board", kind: "contra
 export const CONTRACT_BOARD_ACTION_RANGE = 8.5;
 export const CONTRACT_BOARD_AUDIO_RANGE = 26;
 const CATEGORIES = Object.freeze(["normal", "salvage", "dangerous"]);
+const DANGEROUS_THREATS = Object.freeze([2, 3, 4, 5]);
 const CATEGORY_LABELS = Object.freeze({normal: "обычная доставка", salvage: "поиск металлолома", dangerous: "опасная работа"});
+const THREAT_LABELS = Object.freeze({
+  2: "лёгкая погоня: один катер",
+  3: "вооружённая погоня: несколько преследователей",
+  4: "засада: таранщики, стрелки и высадка",
+  5: "две фазы: тяжёлый катер и элитный стрелок",
+});
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const distance = (a, b) => Math.hypot((Number(a?.x) || 0) - (Number(b?.x) || 0), (Number(a?.y) || 0) - (Number(b?.y) || 0));
 
@@ -75,6 +82,34 @@ function refreshOffers(state) {
   state.offerGeneration += 1;
 }
 
+function dangerousDefinitions(threat = null) {
+  return catalogForCategory("dangerous")
+    .filter(definition => threat == null || Math.floor(Number(definition.threat) || 0) === threat);
+}
+
+function dangerousThreatEntries() {
+  return DANGEROUS_THREATS.map(threat => ({
+    id: `danger-threat-${threat}`,
+    dangerousThreat: threat,
+    count: dangerousDefinitions(threat).length,
+  })).filter(entry => entry.count > 0);
+}
+
+function dangerousOfferEntries(threat) {
+  return dangerousDefinitions(threat).map(offerFromDefinition);
+}
+
+function boardMode(state, playerIndex) {
+  const mode = state.boardMode?.[playerIndex];
+  return mode === "danger-threats" || mode === "danger-offers" ? mode : "root";
+}
+
+function resetBoardNavigation(state, playerIndex, mode = "root") {
+  state.boardMode[playerIndex] = mode;
+  state.boardSelection[playerIndex] = 0;
+  if (mode === "root") state.boardThreat[playerIndex] = null;
+}
+
 export function createContractsState(playerCount = 2) {
   const state = {
     seed: 0x9c47e21,
@@ -88,6 +123,8 @@ export function createContractsState(playerCount = 2) {
     scrap: 0,
     boardOpen: Array.from({length: playerCount}, () => false),
     boardSelection: Array.from({length: playerCount}, () => 0),
+    boardMode: Array.from({length: playerCount}, () => "root"),
+    boardThreat: Array.from({length: playerCount}, () => null),
     boardPrompted: Array.from({length: playerCount}, () => false),
     encounterActive: false,
     encounterLevel: 0,
@@ -108,10 +145,20 @@ export function ensureContracts(world) {
   if (!Number.isFinite(state.scrap)) state.scrap = 0;
   state.boardOpen ||= Array.from({length: world.players.length}, () => false);
   state.boardSelection ||= Array.from({length: world.players.length}, () => 0);
+  state.boardMode ||= Array.from({length: world.players.length}, () => "root");
+  state.boardThreat ||= Array.from({length: world.players.length}, () => null);
   state.boardPrompted ||= Array.from({length: world.players.length}, () => false);
   while (state.boardOpen.length < world.players.length) state.boardOpen.push(false);
   while (state.boardSelection.length < world.players.length) state.boardSelection.push(0);
+  while (state.boardMode.length < world.players.length) state.boardMode.push("root");
+  while (state.boardThreat.length < world.players.length) state.boardThreat.push(null);
   while (state.boardPrompted.length < world.players.length) state.boardPrompted.push(false);
+  for (let index = 0; index < world.players.length; index += 1) {
+    if (!["root", "danger-threats", "danger-offers"].includes(state.boardMode[index])) state.boardMode[index] = "root";
+    const threat = Math.floor(Number(state.boardThreat[index]) || 0);
+    state.boardThreat[index] = DANGEROUS_THREATS.includes(threat) ? threat : null;
+    if (state.boardMode[index] === "danger-offers" && state.boardThreat[index] == null) state.boardMode[index] = "danger-threats";
+  }
   state.decks ||= {};
   state.history ||= {};
   for (const category of CATEGORIES) ensureDeck(state, category);
@@ -140,15 +187,31 @@ export function isPlayerNearContractBoard(player, maximum = CONTRACT_BOARD_ACTIO
   return Boolean(player?.mode === "foot" && distance(player, CONTRACT_BOARD) <= maximum);
 }
 
-function boardEntries(state) {
+function rootBoardEntries(state) {
+  const routine = state.offers.filter(offer => offer.category !== "dangerous");
+  return [...routine, {
+    id: "dangerous-menu",
+    dangerousMenu: true,
+    count: dangerousDefinitions().length,
+  }];
+}
+
+function boardEntries(state, playerIndex) {
   if (state.activeContract) {
     return [{id: "active", active: true}, {id: "abandon", abandon: true}];
   }
-  return state.offers;
+  const mode = boardMode(state, playerIndex);
+  if (mode === "danger-threats") return dangerousThreatEntries();
+  if (mode === "danger-offers") return dangerousOfferEntries(state.boardThreat[playerIndex]);
+  return rootBoardEntries(state);
 }
 
 function boardIndex(state, playerIndex) {
-  const entries = boardEntries(state);
+  const entries = boardEntries(state, playerIndex);
+  if (!entries.length) {
+    resetBoardNavigation(state, playerIndex);
+    return 0;
+  }
   const raw = Math.floor(Number(state.boardSelection[playerIndex]) || 0);
   const index = ((raw % entries.length) + entries.length) % entries.length;
   state.boardSelection[playerIndex] = index;
@@ -169,7 +232,54 @@ function describeEntry(state, entry) {
     return `Текущий заказ: ${active.label}. Этап: ${active.phase}. Награда ${active.creditReward} кредитов.`;
   }
   if (entry?.abandon) return "Отказаться от текущего заказа. Потребуется повторное подтверждение.";
+  if (entry?.dangerousMenu) return `Опасная работа. Выбрать уровень угрозы. Доступно ${entry.count} заказов.`;
+  if (entry?.dangerousThreat) {
+    return `Угроза ${entry.dangerousThreat} из пяти. ${THREAT_LABELS[entry.dangerousThreat]}. Доступно ${entry.count} заказов.`;
+  }
   return describeOffer(entry);
+}
+
+function currentBoardEntry(state, playerIndex) {
+  const entries = boardEntries(state, playerIndex);
+  return entries[boardIndex(state, playerIndex)] || null;
+}
+
+function enterDangerousThreats(world, state, playerIndex) {
+  resetBoardNavigation(state, playerIndex, "danger-threats");
+  const entry = currentBoardEntry(state, playerIndex);
+  emit(world, "contract-board-level", `Опасная работа. Выбери уровень угрозы. ${describeEntry(state, entry)} Назад — к видам работ.`, [playerIndex], {sourcePlayer: playerIndex, x: CONTRACT_BOARD.x, y: CONTRACT_BOARD.y});
+}
+
+function enterDangerousOffers(world, state, playerIndex, threat) {
+  state.boardThreat[playerIndex] = threat;
+  resetBoardNavigation(state, playerIndex, "danger-offers");
+  state.boardThreat[playerIndex] = threat;
+  const entry = currentBoardEntry(state, playerIndex);
+  emit(world, "contract-board-level", `Выбрана угроза ${threat} из пяти. ${describeEntry(state, entry)} Назад — к уровням угрозы.`, [playerIndex], {sourcePlayer: playerIndex, x: CONTRACT_BOARD.x, y: CONTRACT_BOARD.y});
+}
+
+function backContractBoard(world, state, playerIndex) {
+  if (state.activeContract) return false;
+  const mode = boardMode(state, playerIndex);
+  if (mode === "danger-offers") {
+    const threat = state.boardThreat[playerIndex];
+    state.boardMode[playerIndex] = "danger-threats";
+    const entries = boardEntries(state, playerIndex);
+    const target = Math.max(0, entries.findIndex(entry => entry.dangerousThreat === threat));
+    state.boardSelection[playerIndex] = target;
+    emit(world, "contract-board-back", `Уровни угрозы. ${describeEntry(state, entries[target])} Назад — к видам работ.`, [playerIndex], {sourcePlayer: playerIndex, x: CONTRACT_BOARD.x, y: CONTRACT_BOARD.y});
+    return true;
+  }
+  if (mode === "danger-threats") {
+    state.boardMode[playerIndex] = "root";
+    state.boardThreat[playerIndex] = null;
+    const entries = boardEntries(state, playerIndex);
+    const target = Math.max(0, entries.findIndex(entry => entry.dangerousMenu));
+    state.boardSelection[playerIndex] = target;
+    emit(world, "contract-board-back", `Виды работ. ${describeEntry(state, entries[target])} Назад — закрыть доску.`, [playerIndex], {sourcePlayer: playerIndex, x: CONTRACT_BOARD.x, y: CONTRACT_BOARD.y});
+    return true;
+  }
+  return false;
 }
 
 export function handleContractBoardAction(world, playerIndex) {
@@ -177,8 +287,8 @@ export function handleContractBoardAction(world, playerIndex) {
   const player = world.players?.[playerIndex];
   if (!contractsUnlocked(world) || !player?.combat?.alive || !isPlayerNearContractBoard(player)) return false;
   state.boardOpen[playerIndex] = true;
-  const entries = boardEntries(state);
-  const entry = entries[boardIndex(state, playerIndex)];
+  if (!state.activeContract) resetBoardNavigation(state, playerIndex);
+  const entry = currentBoardEntry(state, playerIndex);
   emit(world, "contract-board-open", `Доска заказов открыта. ${describeEntry(state, entry)} Листай и подтверждай.`, [playerIndex], {sourcePlayer: playerIndex, x: CONTRACT_BOARD.x, y: CONTRACT_BOARD.y});
   return true;
 }
@@ -405,21 +515,22 @@ export function updateContractBoard(world) {
       closeBoard(world, index, "Ты отошёл от доски. Доска заказов закрыта.");
       continue;
     }
-    const entries = boardEntries(state);
     if (rising(inputs[index], previous[index], "boardClose")) {
-      closeBoard(world, index);
+      if (!backContractBoard(world, state, index)) closeBoard(world, index);
       continue;
     }
     if (rising(inputs[index], previous[index], "boardPrevious") || rising(inputs[index], previous[index], "boardNext")) {
       const direction = rising(inputs[index], previous[index], "boardPrevious") ? -1 : 1;
       state.boardSelection[index] += direction;
-      const entry = entries[boardIndex(state, index)];
+      const entry = currentBoardEntry(state, index);
       emit(world, "contract-board-selection", describeEntry(state, entry), [index], {sourcePlayer: index, x: CONTRACT_BOARD.x, y: CONTRACT_BOARD.y});
     }
     if (rising(inputs[index], previous[index], "boardAccept")) {
-      const entry = entries[boardIndex(state, index)];
+      const entry = currentBoardEntry(state, index);
       if (entry?.abandon) abandonContract(world, index);
       else if (entry?.active) emit(world, "contract-board-selection", describeEntry(state, entry), [index]);
+      else if (entry?.dangerousMenu) enterDangerousThreats(world, state, index);
+      else if (entry?.dangerousThreat) enterDangerousOffers(world, state, index, entry.dangerousThreat);
       else acceptOffer(world, index, entry);
     }
   }
