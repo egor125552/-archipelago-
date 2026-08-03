@@ -152,7 +152,12 @@ function nearestPlayerDistance(world, boat) {
 
 function incomingBombThreat(world, boat) {
   return (world.freeMegaBombs?.projectiles || []).some(projectile => {
-    if (!projectile || Number(projectile.ttl) <= 0 || Number(projectile.energy) <= 0) return false;
+    if (!projectile || Number(projectile.energy) <= 0) return false;
+    const ttl = Number(projectile.ttl);
+    if (Number.isFinite(ttl) && ttl <= 0) return false;
+    const age = Math.max(0, Number(projectile.age) || 0);
+    const maxAge = Number(projectile.maxAge);
+    if (Number.isFinite(maxAge) && maxAge > 0 && age >= maxAge) return false;
     if (["heavy-pursuer", "heavy-turret", "heavy-engine"].includes(projectile.targetId)) return true;
     const target = {x: projectile.targetX ?? projectile.x, y: projectile.targetY ?? projectile.y};
     return distance(target, boat) <= 105 || distance(projectile, boat) <= 145;
@@ -176,7 +181,10 @@ function setEscapeDestination(world, state, heavy, boat) {
   state.retreatSerial += 1;
   const point = safestRetreatPoint(world, boat, state.retreatSerial);
   heavy.destination = point;
-  heavy.v167ReachableDestination = null;
+  // V167 used this marker to force a bomb-reachable point. Keep it populated
+  // with our actual retreat destination so the older overlay does not replace
+  // the route again on the next server step.
+  heavy.v167ReachableDestination = {x: point.x, y: point.y};
   heavy.v168SafeDestination = {x: point.x, y: point.y};
   return point;
 }
@@ -297,6 +305,10 @@ function prepareOverlay(world) {
     y: Number(boat?.y) || 0,
   };
 
+  if (heavy && boat && CUSTOM_PHASES.has(heavy.phase) && heavy.v168SafeDestination) {
+    heavy.destination = {...heavy.v168SafeDestination};
+    heavy.v167ReachableDestination = {...heavy.v168SafeDestination};
+  }
   if (heavy && boat && heavy.phase === "combat" && !boat.destroyed) {
     const target = chooseTarget(world, state, boat);
     if (target) boat.targetPlayer = target.index;
