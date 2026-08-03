@@ -63,7 +63,7 @@ test("observed empty weapons make the boss approach cautiously", () => {
   state.time += 1.6;
   const boat = state.freeHeavyPursuer.boat;
   const before = Math.hypot(boat.x - state.players[0].x, boat.y - state.players[0].y);
-  tick(state, 0.2, [{type: "gun-empty", sourcePlayer: 0, weapon: "pistol", text: "Патроны пистолета закончились."}]);
+  tick(state, 0.2, [{type: "gun-empty", targets: [0], weapon: "pistol", text: "Патроны пистолета закончились."}]);
   for (let index = 0; index < 15; index += 1) tick(state);
   const after = Math.hypot(boat.x - state.players[0].x, boat.y - state.players[0].y);
   assert.ok(after < before);
