@@ -2,6 +2,7 @@
 
 import {applyCombatAiHotfixV162} from "./free-roam-combat-ai-hotfix-v162.js?v=1";
 import {prepareHeavyAiControllerV1,finishHeavyAiControllerV1} from "./free-roam-heavy-ai-controller-v1.js?v=1";
+import {normalizeHeavyBaseStepV1} from "./free-roam-heavy-ai-base-normalizer-v1.js?v=1";
 import {rollbackPrematureThreatPhasesV1} from "./free-roam-threat-phase-guard-v1.js?v=1";
 
 function ensureState(world) {
@@ -29,6 +30,7 @@ function preserveOpeningActors(world) {
 export function applyCombatAiHotfixV163(world,dt,helpers={}) {
   prepareHeavyAiControllerV1(world);
   applyCombatAiHotfixV162(world,dt,helpers);
+  normalizeHeavyBaseStepV1(world);
   rollbackPrematureThreatPhasesV1(world,world.freeHeavyAiControllerV1?.frame?.eventStart||0);
   preserveOpeningActors(world);
   return finishHeavyAiControllerV1(world,dt);
