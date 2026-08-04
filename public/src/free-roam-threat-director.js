@@ -9,6 +9,20 @@ import {awardEncounter} from "./free-roam-encounter-loot.js?v=1";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const distance = (a, b) => Math.hypot((Number(a?.x) || 0) - (Number(b?.x) || 0), (Number(a?.y) || 0) - (Number(b?.y) || 0));
+const values = value => Array.isArray(value)
+  ? value
+  : value && typeof value === "object" ? Object.values(value) : [];
+const HEAVY_TARGET_IDS = new Set(["heavy-pursuer", "heavy-turret", "heavy-engine"]);
+
+function filterCollection(collection, keep) {
+  if (Array.isArray(collection)) return collection.filter(keep);
+  if (collection && typeof collection === "object") {
+    for (const [key, value] of Object.entries(collection)) {
+      if (!keep(value)) delete collection[key];
+    }
+  }
+  return collection;
+}
 
 function emit(world, type, text, targets = [0, 1], extra = {}) {
   world.events ||= [];
@@ -159,6 +173,24 @@ function projectileSourceIds(projectile) {
   ].filter(value => value !== null && value !== undefined && String(value) !== "").map(String);
 }
 
+function clearHeavyTargetReferences(world) {
+  for (const player of values(world.players)) {
+    const combat = player?.combat;
+    if (!combat) continue;
+    if (HEAVY_TARGET_IDS.has(String(combat.lockedTargetId || ""))) combat.lockedTargetId = null;
+    if (HEAVY_TARGET_IDS.has(String(combat.lastTargetRequestId || ""))) combat.lastTargetRequestId = null;
+  }
+  for (const collection of [
+    world.freeActivities?.inputs,
+    world.operationInputs,
+    world.inputs,
+  ]) {
+    for (const input of values(collection)) {
+      if (HEAVY_TARGET_IDS.has(String(input?.targetId || ""))) input.targetId = null;
+    }
+  }
+}
+
 export function resetHeavyThreatState(world) {
   const state = ensureThreatDirector(world);
   const heavyState = ensureHeavyPursuer(world);
@@ -168,7 +200,7 @@ export function resetHeavyThreatState(world) {
     oldBoat.speed = 0;
   }
 
-  const removedActorIds = new Set((world.freeHostileActors?.actors || [])
+  const removedActorIds = new Set(values(world.freeHostileActors?.actors)
     .filter(actor => String(actor?.boatId || "") === "heavy-pursuer")
     .map(actor => String(actor.id)));
 
@@ -179,12 +211,16 @@ export function resetHeavyThreatState(world) {
   delete heavyState.v176ContractId;
 
   if (world.freeHostileActors?.actors) {
-    world.freeHostileActors.actors = world.freeHostileActors.actors.filter(actor => String(actor?.boatId || "") !== "heavy-pursuer");
+    world.freeHostileActors.actors = filterCollection(
+      world.freeHostileActors.actors,
+      actor => String(actor?.boatId || "") !== "heavy-pursuer",
+    );
   }
   if (world.freeHostileActors?.projectiles && removedActorIds.size) {
-    world.freeHostileActors.projectiles = world.freeHostileActors.projectiles.filter(projectile => (
-      !projectileSourceIds(projectile).some(id => removedActorIds.has(id))
-    ));
+    world.freeHostileActors.projectiles = filterCollection(
+      world.freeHostileActors.projectiles,
+      projectile => !projectileSourceIds(projectile).some(id => removedActorIds.has(id)),
+    );
   }
 
   if (world.freeCombatAiV164) {
@@ -196,6 +232,7 @@ export function resetHeavyThreatState(world) {
     world.freeCombatAiV172.repairEncounterId = null;
     world.freeCombatAiV172.stableRepairDestination = null;
     world.freeCombatAiV172.frame = null;
+    world.freeCombatAiV172.targetLocks = {};
   }
   if (world.freeCombatAiV174) {
     world.freeCombatAiV174.adoptedEncounterId = null;
@@ -213,6 +250,7 @@ export function resetHeavyThreatState(world) {
     world.freeCombatAiV176.frame = null;
   }
 
+  clearHeavyTargetReferences(world);
   delete state.assignments["heavy-pursuer"];
   for (const actorId of removedActorIds) delete state.actorAssignments[actorId];
   return Boolean(oldBoat || removedActorIds.size);
