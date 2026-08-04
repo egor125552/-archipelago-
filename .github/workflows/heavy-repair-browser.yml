@@ -5,6 +5,7 @@ on:
     paths:
       - "public/src/free-roam-heavy-ai-controller-v1.js"
       - "public/src/free-roam-heavy-ai-support-v1.js"
+      - "public/src/free-roam-heavy-hull-damage-memory-v1.js"
       - "public/src/free-roam-combat-ai-hotfix-v163.js"
       - "public/src/free-roam-heavy-pursuer.js"
       - "tests/free-roam-heavy-repair-route-v1.test.mjs"
@@ -17,6 +18,7 @@ on:
     paths:
       - "public/src/free-roam-heavy-ai-controller-v1.js"
       - "public/src/free-roam-heavy-ai-support-v1.js"
+      - "public/src/free-roam-heavy-hull-damage-memory-v1.js"
       - "public/src/free-roam-combat-ai-hotfix-v163.js"
       - "public/src/free-roam-heavy-pursuer.js"
       - "tests/free-roam-heavy-repair-route-v1.test.mjs"
