@@ -6,13 +6,6 @@ import {bearing, clamp, sourceVelocity, speed3, surfaceAt} from "./free-roam-meg
 export * from "./free-roam-mega-bomb-v30.js";
 
 const IMPACT_SOUND_SECONDS = 10.6;
-const UPDATE_INTERVAL = 0.08;
-
-function emit(world, type, text = "", targets = [0, 1], extra = {}) {
-  world.events ||= [];
-  world.events.push({type, text, targets, at: world.time, operationEvent: true, ...extra});
-  if (world.events.length > 180) world.events.splice(0, world.events.length - 180);
-}
 
 function boatForPlayer(world, playerIndex) {
   const player = world.players?.[playerIndex];
@@ -79,67 +72,36 @@ function spatial(world, source) {
   });
 }
 
-function acousticState(world) {
-  world.freeMegaBombAcoustics ||= {impacts: [], seen: []};
-  const state = world.freeMegaBombAcoustics;
-  if (!Array.isArray(state.impacts)) state.impacts = [];
-  if (!Array.isArray(state.seen)) state.seen = [];
-  return state;
-}
-
-function captureExplosions(world, state) {
-  const known = new Set(state.seen);
+/**
+ * Один неподвижный взрыв является одним сетевым событием. Пространственные
+ * параметры прикладываются к исходному событию до репликации; звуковой MP3
+ * затем полностью доигрывает на клиенте без серверного таймера на 10.6 секунд.
+ */
+export function attachExplosionSpatialV31(world) {
+  let patched = 0;
   for (const event of world.events || []) {
-    if (event?.type !== "mega-bomb-explosion") continue;
-    const id = String(event.projectileId || "");
-    if (!id || known.has(id)) continue;
-    known.add(id);
-    state.seen.push(id);
-    state.impacts.push({
-      projectileId: id,
-      sourcePlayer: event.sourcePlayer,
+    if (event?.type !== "mega-bomb-explosion" || event.impactSpatialV31) continue;
+    const source = {
       x: Number(event.x) || 0,
       y: Number(event.y) || 0,
       z: Math.max(0, Number(event.z) || 0),
+      vx: 0,
+      vy: 0,
+      vz: 0,
       surface: event.surface || "water",
-      reason: event.reason || "impact",
-      age: 0,
-      nextUpdateAt: 0,
-    });
+    };
+    event.surface ||= surfaceAt(source);
+    event.duration = IMPACT_SOUND_SECONDS;
+    event.spatial = spatial(world, source);
+    event.impactSpatialV31 = true;
+    patched += 1;
   }
-  if (state.seen.length > 128) state.seen.splice(0, state.seen.length - 128);
-}
-
-function updateImpactAcoustics(world, state, seconds) {
-  const survivors = [];
-  for (const impact of state.impacts) {
-    impact.age += seconds;
-    if (impact.age > IMPACT_SOUND_SECONDS) continue;
-    if (impact.age >= impact.nextUpdateAt) {
-      impact.nextUpdateAt = impact.age + UPDATE_INTERVAL;
-      const source = {...impact, vx: 0, vy: 0, vz: 0};
-      emit(world, "mega-bomb-explosion-spatial", "", [0, 1], {
-        sourcePlayer: impact.sourcePlayer,
-        projectileId: impact.projectileId,
-        x: impact.x,
-        y: impact.y,
-        z: impact.z,
-        surface: impact.surface,
-        reason: impact.reason,
-        age: impact.age,
-        duration: IMPACT_SOUND_SECONDS,
-        spatial: spatial(world, source),
-      });
-    }
-    survivors.push(impact);
-  }
-  state.impacts = survivors;
+  return patched;
 }
 
 export function stepMegaBombs(world, dt) {
-  const seconds = clamp(dt, 0, 0.1);
-  base.stepMegaBombs(world, seconds);
-  const state = acousticState(world);
-  captureExplosions(world, state);
-  updateImpactAcoustics(world, state, seconds);
+  base.stepMegaBombs(world, clamp(dt, 0, 0.1));
+  attachExplosionSpatialV31(world);
 }
+
+export {IMPACT_SOUND_SECONDS};
