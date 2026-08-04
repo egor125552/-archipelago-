@@ -7,9 +7,10 @@ import {damageEscort} from "./free-roam-pursuer-squad.js?v=33";
 import {damageEnemyBoat} from "./free-roam-enemy-boats.js?v=3";
 import {damageHostileActor} from "./free-roam-hostile-actors.js?v=2";
 import {damageHeavyPursuer} from "./free-roam-heavy-pursuer.js?v=3";
-import {listCombatTargets, resolveCombatTarget} from "./free-roam-targeting.js?v=35";
+import {describeCombatTarget, listCombatTargets, resolveCombatTarget} from "./free-roam-targeting.js?v=35";
 
 export const PISTOL_START_AMMO = 36;
+export const COMBAT_TARGET_LOCK_RANGE = 320;
 
 const WEAPON_LABELS = Object.freeze({
   fists: "кулаки",
@@ -39,12 +40,46 @@ function emit(world, type, text, targets = [0, 1], extra = {}) {
   if (world.events.length > 180) world.events.splice(0, world.events.length - 180);
 }
 
+function removeRecentTargetEvents(world, eventStart, playerIndex) {
+  for (let index = world.events.length - 1; index >= eventStart; index -= 1) {
+    const event = world.events[index];
+    if (!event || !["target-lost", "target-cleared"].includes(event.type)) continue;
+    const sourcePlayer = Number(event.sourcePlayer ?? event.targets?.[0]);
+    if (sourcePlayer === playerIndex) world.events.splice(index, 1);
+  }
+}
+
+function announceOutOfWeaponRange(world, playerIndex, target, weapon) {
+  const combat = world.players?.[playerIndex]?.combat;
+  if (!combat || !target) return;
+  const now = Number(world.time) || 0;
+  if (now - (Number(combat.lastTargetRangeNoticeAt) || -999) < 1.5) return;
+  combat.lastTargetRangeNoticeAt = now;
+  const weaponLabel = weapon === "pistol" ? "пистолета" : "автомата";
+  emit(
+    world,
+    "target-out-of-weapon-range",
+    `Цель остаётся захваченной, но находится слишком далеко для ${weaponLabel}. Сократи дистанцию или используй мега-бомбу.`,
+    [playerIndex],
+    {
+      sourcePlayer: playerIndex,
+      targetId: target.id,
+      targetKind: target.kind,
+      weapon,
+      distance: Math.round(target.distance),
+      x: target.point.x,
+      y: target.point.y,
+    },
+  );
+}
+
 function ensurePistol(combat) {
   if (!combat) return;
   combat.weapons ||= {knife: false, automatic: false};
   combat.weapons.pistol = true;
   if (!Number.isFinite(combat.pistolAmmo)) combat.pistolAmmo = PISTOL_START_AMMO;
   if (!Number.isFinite(combat.pistolCooldown)) combat.pistolCooldown = 0;
+  if (!Number.isFinite(combat.lastTargetRangeNoticeAt)) combat.lastTargetRangeNoticeAt = -999;
 }
 
 export function ensureCombat(world) {
@@ -79,13 +114,12 @@ function cycleWeapon(world, playerIndex) {
   });
 }
 
-
 function combatEncounterActive(world) {
   return Boolean(world?.freeContracts?.encounterActive || world?.freeScenario?.phase === "pursuit");
 }
 
 function nextEnemyTarget(world, attackerIndex) {
-  return listCombatTargets(world, attackerIndex, COMBAT_TUNING.automaticRange)
+  return listCombatTargets(world, attackerIndex, COMBAT_TARGET_LOCK_RANGE)
     .filter(target => !["player", "boat"].includes(target.kind))[0] || null;
 }
 
@@ -135,18 +169,29 @@ function firePistol(world, attackerIndex, helpers) {
     return;
   }
 
+  const retainedTarget = resolveCombatTarget(
+    world,
+    attackerIndex,
+    combat.lockedTargetId,
+    COMBAT_TARGET_LOCK_RANGE,
+  );
   const lockedTarget = resolveCombatTarget(
     world,
     attackerIndex,
     combat.lockedTargetId,
     COMBAT_TUNING.pistolRange,
   );
-  if (combat.lockedTargetId && !lockedTarget) {
+  if (combat.lockedTargetId && !retainedTarget) {
     combat.lockedTargetId = null;
     combat.pistolCooldown = COMBAT_TUNING.pistolShotInterval;
-    emit(world, "target-lost", "Цель потеряна или ушла слишком далеко.", [attackerIndex], {
+    emit(world, "target-lost", "Цель уничтожена или ушла за пределы дальнего захвата.", [attackerIndex], {
       sourcePlayer: attackerIndex,
     });
+    return;
+  }
+  if (retainedTarget && !lockedTarget) {
+    combat.pistolCooldown = COMBAT_TUNING.pistolShotInterval;
+    announceOutOfWeaponRange(world, attackerIndex, retainedTarget, "pistol");
     return;
   }
 
@@ -271,9 +316,11 @@ export function updateCombat(world, dt, helpers = {}) {
   ensureCombat(world);
   const state = world.freeActivities;
   const intercepted = [];
+  const eventStart = world.events?.length || 0;
 
   for (let index = 0; index < world.players.length; index += 1) {
-    const combat = world.players[index].combat;
+    const player = world.players[index];
+    const combat = player.combat;
     const input = state.inputs[index] || {};
     const previous = state.previousInputs[index] || {};
     combat.pistolCooldown = Math.max(0, combat.pistolCooldown - dt);
@@ -287,6 +334,18 @@ export function updateCombat(world, dt, helpers = {}) {
       });
     }
 
+    const explicitTargetChange = input.targetId !== previous.targetId;
+    const requestedTarget = explicitTargetChange
+      ? resolveCombatTarget(world, index, input.targetId, COMBAT_TARGET_LOCK_RANGE)
+      : null;
+    const retainedBefore = combat.lockedTargetId
+      ? resolveCombatTarget(world, index, combat.lockedTargetId, COMBAT_TARGET_LOCK_RANGE)
+      : null;
+    const suspendedLongLock = Boolean(
+      !explicitTargetChange
+      && retainedBefore
+      && retainedBefore.distance > COMBAT_TUNING.automaticRange
+    );
     const pistolAttack = combat.equipped === "pistol" && Boolean(input.attack);
     intercepted.push({
       input,
@@ -297,10 +356,18 @@ export function updateCombat(world, dt, helpers = {}) {
       pistolAttack,
       equippedBefore: combat.equipped,
       lockedBefore: combat.lockedTargetId,
+      retainedBefore,
       targetRequestBefore: input.targetId,
-      previousTargetRequest: previous.targetId,
+      explicitTargetChange,
+      requestedTarget,
+      suspendedLongLock,
     });
     input.weapon = false;
+    if (explicitTargetChange) input.targetId = combat.lastTargetRequestId;
+    if (suspendedLongLock) {
+      combat.lockedTargetId = null;
+      if (combat.equipped === "automatic") input.attack = false;
+    }
     if (combat.equipped === "pistol") {
       input.attack = false;
       previous.attack = false;
@@ -314,16 +381,77 @@ export function updateCombat(world, dt, helpers = {}) {
     saved.input.attack = saved.attack;
     saved.previous.attack = saved.previousAttack;
     saved.input.weapon = saved.weapon;
-    const combat = world.players[index].combat;
-    if (saved.equippedBefore === "pistol" && combat.pistolAmmo > 0 && combat.equipped === "automatic" && saved.input.targetId !== saved.previous.targetId) {
+    saved.input.targetId = saved.targetRequestBefore;
+    const player = world.players[index];
+    const combat = player.combat;
+
+    if (saved.explicitTargetChange) {
+      combat.lastTargetRequestId = saved.targetRequestBefore;
+      removeRecentTargetEvents(world, eventStart, index);
+      const requested = saved.requestedTarget
+        ? resolveCombatTarget(world, index, saved.requestedTarget.id, COMBAT_TARGET_LOCK_RANGE)
+        : null;
+      combat.lockedTargetId = requested?.id || null;
+      if (requested) {
+        if (combat.weapons.automatic && combat.ammo > 0) combat.equipped = "automatic";
+        player.heading = bearing(player, requested.point);
+        emit(
+          world,
+          "target-locked",
+          `${describeCombatTarget(requested)} Захват подтверждён. Дальность оружия проверяется только в момент выстрела.`,
+          [index],
+          {
+            sourcePlayer: index,
+            targetId: requested.id,
+            targetKind: requested.kind,
+            distance: Math.round(requested.distance),
+            x: requested.point.x,
+            y: requested.point.y,
+          },
+        );
+      } else if (saved.targetRequestBefore) {
+        emit(world, "target-lost", "Эта цель уже уничтожена или дальше 320 метров.", [index], {
+          sourcePlayer: index,
+          targetId: saved.targetRequestBefore,
+        });
+      }
+    }
+
+    if (saved.suspendedLongLock && !saved.explicitTargetChange) {
+      const sameTarget = resolveCombatTarget(world, index, saved.lockedBefore, COMBAT_TARGET_LOCK_RANGE);
+      if (sameTarget) {
+        combat.lockedTargetId = sameTarget.id;
+        player.heading = bearing(player, sameTarget.point);
+      }
+    }
+
+    if (saved.equippedBefore === "pistol" && combat.pistolAmmo > 0 && combat.equipped === "automatic" && !saved.explicitTargetChange) {
       combat.equipped = "pistol";
     }
     if (!state.presence[index] || !combat.alive || combat.knockedDown) continue;
+
+    if (saved.suspendedLongLock && saved.attack && saved.equippedBefore === "automatic" && combat.lockedTargetId) {
+      const sameTarget = resolveCombatTarget(world, index, combat.lockedTargetId, COMBAT_TARGET_LOCK_RANGE);
+      if (sameTarget) announceOutOfWeaponRange(world, index, sameTarget, "automatic");
+    }
+
     if (saved.pistolAttack && combat.equipped === "pistol" && combat.pistolCooldown <= 0) {
       firePistol(world, index, helpers);
     }
-    const explicitTargetChange = saved.targetRequestBefore !== saved.previousTargetRequest;
-    if (saved.lockedBefore && !combat.lockedTargetId && !explicitTargetChange && combatEncounterActive(world)) {
+
+    if (saved.explicitTargetChange) continue;
+    if (saved.lockedBefore && !combat.lockedTargetId) {
+      const sameTarget = resolveCombatTarget(world, index, saved.lockedBefore, COMBAT_TARGET_LOCK_RANGE);
+      removeRecentTargetEvents(world, eventStart, index);
+      if (sameTarget) {
+        combat.lockedTargetId = sameTarget.id;
+        player.heading = bearing(player, sameTarget.point);
+        continue;
+      }
+      if (!combatEncounterActive(world)) {
+        emit(world, "target-lost", "Цель уничтожена или ушла дальше 320 метров.", [index], {sourcePlayer: index});
+        continue;
+      }
       const replacement = nextEnemyTarget(world, index);
       if (replacement) {
         combat.lockedTargetId = replacement.id;
