@@ -10,9 +10,32 @@ function worldWithOldHeavy() {
   return {
     time: 7335.4,
     events: [],
-    players: [{x: 210, y: 180, mode: "foot", combat: {alive: true}}],
+    players: [{
+      x: 210,
+      y: 180,
+      mode: "foot",
+      combat: {
+        alive: true,
+        lockedTargetId: "heavy-turret",
+        lastTargetRequestId: "heavy-pursuer",
+      },
+    }],
     boats: [],
-    freeActivities: {presence: [true]},
+    freeActivities: {
+      presence: [true],
+      inputs: [
+        {targetId: "heavy-engine"},
+        {targetId: "opening-boat"},
+      ],
+    },
+    operationInputs: {
+      primary: {targetId: "heavy-pursuer"},
+      unrelated: {targetId: "opening-boat"},
+    },
+    inputs: [
+      {targetId: "heavy-turret"},
+      {targetId: "opening-crew"},
+    ],
     freeThreatDirector: {
       active: true,
       level: 5,
@@ -66,6 +89,7 @@ function worldWithOldHeavy() {
     freeCombatAiV172: {
       repairEncounterId: "12",
       stableRepairDestination: {x: 404, y: 308},
+      targetLocks: {0: "heavy-turret"},
       frame: {old: true},
     },
     freeCombatAiV174: {adoptedEncounterId: 12, frame: {old: true}},
@@ -98,6 +122,7 @@ test("shared lifecycle reset removes only the old heavy and its owned processes"
   assert.equal(world.freeCombatAiV164.heavyEncounterId, null);
   assert.equal(world.freeCombatAiV172.repairEncounterId, null);
   assert.equal(world.freeCombatAiV172.stableRepairDestination, null);
+  assert.deepEqual(world.freeCombatAiV172.targetLocks, {});
   assert.equal(world.freeCombatAiV174.adoptedEncounterId, null);
   assert.equal(world.freeCombatAiV175.repairCommitted, false);
   assert.equal(world.freeCombatAiV175.repairAnnouncementActive, false);
@@ -108,6 +133,31 @@ test("shared lifecycle reset removes only the old heavy and its owned processes"
   assert.equal("opening-boat" in world.freeThreatDirector.assignments, true);
   assert.equal("old-heavy-crew" in world.freeThreatDirector.actorAssignments, false);
   assert.equal("opening-crew" in world.freeThreatDirector.actorAssignments, true);
+
+  assert.equal(world.players[0].combat.lockedTargetId, null);
+  assert.equal(world.players[0].combat.lastTargetRequestId, null);
+  assert.equal(world.freeActivities.inputs[0].targetId, null);
+  assert.equal(world.freeActivities.inputs[1].targetId, "opening-boat");
+  assert.equal(world.operationInputs.primary.targetId, null);
+  assert.equal(world.operationInputs.unrelated.targetId, "opening-boat");
+  assert.equal(world.inputs[0].targetId, null);
+  assert.equal(world.inputs[1].targetId, "opening-crew");
+});
+
+test("object-mapped actor state from an older save is cleaned without flattening unrelated entries", () => {
+  const world = worldWithOldHeavy();
+  world.freeHostileActors.actors = {
+    heavy: {id: "old-heavy-crew", boatId: "heavy-pursuer", active: true},
+    opening: {id: "opening-crew", boatId: "opening-boat", active: true},
+  };
+  world.freeHostileActors.projectiles = {
+    heavyShot: {id: "old-crew-shot", sourceActorId: "old-heavy-crew"},
+    openingShot: {id: "opening-shot", sourceActorId: "opening-crew"},
+  };
+
+  assert.equal(resetHeavyThreatState(world), true);
+  assert.deepEqual(Object.keys(world.freeHostileActors.actors), ["opening"]);
+  assert.deepEqual(Object.keys(world.freeHostileActors.projectiles), ["openingShot"]);
 });
 
 test("starting any new contract clears the old boss before creating the new encounter", () => {
@@ -127,6 +177,7 @@ test("starting any new contract clears the old boss before creating the new enco
   assert.equal(world.freeHostileActors.projectiles.some(projectile => projectile.id === "old-crew-shot"), false);
   assert.equal(world.freeCombatAiV164.heavy, null);
   assert.equal(world.freeCombatAiV172.repairEncounterId, null);
+  assert.equal(world.players[0].combat.lockedTargetId, null);
   assert.equal(world.events.some(event => event.type === "contract-threat-phase"), false);
   assert.equal(world.events.some(event => event.type === "contract-threat-final-wave"), false);
   assert.equal(world.events.some(event => event.type === "contract-threat-observed"), true);
