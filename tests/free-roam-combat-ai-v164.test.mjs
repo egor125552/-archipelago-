@@ -107,7 +107,7 @@ test("systems are armoured before breach and vulnerable after breach", () => {
   assert.equal(boat.engineHealth, before - 50, "post-breach system damage should be amplified");
 });
 
-test("destroyed turret makes heavy retreat, stop, repair with a plate and return", () => {
+test("V164 records a destroyed turret but never starts its deleted repair lifecycle", () => {
   const world = worldFixture();
   pre(world);
   const boat = world.freeHeavyPursuer.boat;
@@ -119,22 +119,11 @@ test("destroyed turret makes heavy retreat, stop, repair with a plate and return
   world.events.push({type: "heavy-turret-destroyed", targets: [0, 1]});
   post(world);
   const heavy = world.freeCombatAiV164.heavy;
-  assert.equal(heavy.phase, "retreating");
-  assert.equal(heavy.repairSystem, "turret");
-
-  Object.assign(boat, heavy.destination, {speed: 0});
-  pre(world);
-  post(world, 0.1);
-  assert.equal(heavy.phase, "repairing");
-
-  for (let i = 0; i < 420 && heavy.phase !== "combat"; i += 1) {
-    pre(world);
-    post(world, 0.1);
-  }
-  assert.equal(boat.turretDisabled, false);
-  assert.equal(heavy.repairPlates, 2);
   assert.equal(heavy.phase, "combat");
-  assert.ok(boat.turretHealth > 150);
+  assert.equal(heavy.actualTurretDisabled, true);
+  assert.equal(heavy.repairSystem, null);
+  assert.equal(heavy.repairPlates, 3);
+  assert.equal(world.events.some(event => ["heavy-repair-retreat", "heavy-repair-start", "heavy-repair-complete"].includes(event.type)), false);
 });
 
 test("enemy assigned to a dead player physically searches the last position", () => {
