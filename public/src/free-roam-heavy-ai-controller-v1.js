@@ -133,6 +133,9 @@ export function moveHeavyToRepairPointV1(boat,destination,maxSpeed,dt,turnRate=7
   const brakingSpeed=Math.sqrt(Math.max(0,2*7.5*Math.max(0,before-arrivalRadius)));
   const wantedSpeed=Math.min(maxSpeed,Math.max(1.8,brakingSpeed));
   const after=moveTo(boat,destination,wantedSpeed,dt,turnRate);
+  if (after<=arrivalRadius) {
+    boat.x=destination.x;boat.y=destination.y;boat.speed=0;return 0;
+  }
   if (after>before&&before<=Math.max(18,Math.abs(Number(boat.speed)||0)*1.25)) {
     boat.x=destination.x;boat.y=destination.y;boat.speed=0;return 0;
   }
