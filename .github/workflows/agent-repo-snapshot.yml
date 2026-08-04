@@ -1,0 +1,24 @@
+name: Agent repository snapshot
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pack repository
+        run: |
+          tar --exclude='.git' -czf /tmp/archipelago-repo.tgz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: archipelago-repo-snapshot
+          path: /tmp/archipelago-repo.tgz
+          if-no-files-found: error
+          retention-days: 1
