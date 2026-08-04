@@ -1,5 +1,6 @@
 "use strict";
 
+import {addEliteActor,ensureHostileActors} from "./free-roam-hostile-actors.js?v=2";
 import {
   clamp,currentHeavyBoat,distance,emit,ensureControllerState,heavyEncounterId,
   incomingMegaBomb,livingPlayers,moveTo,nearestPlayerDistance,pointForPlayer,
@@ -56,6 +57,36 @@ function ensureHeavy(world,state) {
   publishCompatibility(world,state);
   return state.heavy;
 }
+function adoptDueHeavy(world,state,boat,heavy) {
+  const director=world.freeThreatDirector;
+  if (!director?.active||Number(director.level)<5||director.heavyStarted) return false;
+  if ((Number(world.time)||0)+0.06<(Number(director.heavyStartsAt)||Infinity)) return false;
+  const id=Number(director.encounterId)||state.encounterId||world.freeHeavyPursuer?.encounterId;
+  const target=livingPlayers(world)[0]?.index??(Number(boat.targetPlayer)||0);
+  director.heavyStarted=true;director.heavyStartsAt=0;director.assignments||={};director.assignments[boat.id]=target;
+  world.freeHeavyPursuer.encounterId=id;state.encounterId=id;heavy.encounterId=id;boat.targetPlayer=target;
+  const hostile=ensureHostileActors(world),eliteId=`elite-${id}`;
+  if (!values(hostile.actors).some(actor=>actor?.active&&!actor.destroyed&&String(actor.id)===eliteId)) addEliteActor(world,boat,target,id);
+  if (String(state.adoptedEncounterId)!==String(id)) {
+    state.adoptedEncounterId=id;
+    emit(world,"contract-threat-phase","Вторая фаза. Повреждённый тяжёлый катер продолжает бой без восстановления.",[0,1],{phase:2,encounterId:id,continuityV1:true,x:boat.x,y:boat.y});
+  }
+  publishCompatibility(world,state);
+  return true;
+}
+function restoreDuplicateHeavy(world,state,frame) {
+  const current=world.freeHeavyPursuer?.boat,old=frame?.boat;
+  if (!old?.ref||!current||current===old.ref) return false;
+  const fresh=values(world.events).slice(frame.eventStart);
+  if (!fresh.some(event=>["heavy-pursuer-arrived","heavy-pursuer-approaching"].includes(event.type))) return false;
+  Object.assign(old.ref,old.data);
+  world.freeHeavyPursuer.boat=old.ref;world.freeHeavyPursuer.active=true;
+  world.freeHeavyPursuer.projectiles=(frame.projectiles||[]).map(item=>({...item}));
+  world.freeHeavyPursuer.nextProjectileId=frame.nextProjectileId;
+  world.events=values(world.events).filter((event,index)=>index<frame.eventStart||!["heavy-pursuer-arrived","heavy-pursuer-approaching"].includes(event.type));
+  emit(world,"heavy-pursuer-continuity-restored-v1","Тяжёлый катер сохранил повреждения, координаты и текущий манёвр.",[0,1],{phase:state.heavy?.phase,hull:old.ref.hull,x:old.ref.x,y:old.ref.y});
+  return true;
+}
 function preSimulationRules(boat,heavy) {
   const defensive=(heavy.phase==="stopping"||heavy.phase==="repairing")&&heavy.repairSystem==="engine"&&Number(boat.turretHealth)>0;
   if (heavy.phase!=="combat") suppress(boat,defensive);
@@ -64,7 +95,8 @@ export function prepareHeavyAiControllerV1(world) {
   const state=ensureControllerState(world);
   retireStaleHeavyV1(world,"pre-step");
   const boat=currentHeavyBoat(world),heavy=boat?ensureHeavy(world,state):null;
-  state.frame={eventStart:values(world.events).length,directorId:world.freeThreatDirector?.active?String(world.freeThreatDirector.encounterId??""):null,boat:snapshotBoat(boat)};
+  if (boat&&heavy) adoptDueHeavy(world,state,boat,heavy);
+  state.frame={eventStart:values(world.events).length,directorId:world.freeThreatDirector?.active?String(world.freeThreatDirector.encounterId??""):null,boat:snapshotBoat(boat),projectiles:values(world.freeHeavyPursuer?.projectiles).map(item=>({...item})),nextProjectileId:world.freeHeavyPursuer?.nextProjectileId};
   if (boat&&heavy) preSimulationRules(boat,heavy);
   return state;
 }
@@ -172,6 +204,7 @@ export function finishHeavyAiControllerV1(world,dt) {
   const state=ensureControllerState(world),frame=state.frame||{eventStart:values(world.events).length,boat:snapshotBoat(currentHeavyBoat(world))};
   const directorId=world.freeThreatDirector?.active?String(world.freeThreatDirector.encounterId??""):null;
   if (frame.directorId!==undefined&&frame.directorId!==directorId&&frame.boat?.ref===world.freeHeavyPursuer?.boat) retireStaleHeavyV1(world,"encounter-changed",true);
+  restoreDuplicateHeavy(world,state,frame);
   const boat=currentHeavyBoat(world),heavy=boat?ensureHeavy(world,state):null;
   if (boat&&heavy) {
     reconcileHeavyDamage(world,state,boat,heavy,frame);
