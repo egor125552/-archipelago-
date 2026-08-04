@@ -240,12 +240,38 @@ export function evaluateHullDangerV1(world,state,boat,heavy,frame) {
   const shouldEscape=breachedNow||hull<=staticLimit||sustained||(bombShock&&hull<=bombDangerLimit);
   return {shouldEscape,breachedNow,damage,dps,hull,maxHull,staticLimit,predictedLoss,reserve,escapeSeconds,source:state.hullDamageSamples.at(-1)?.source??null,bombShock,bombDangerLimit};
 }
+function pointSegmentDistance(point,a,b) {
+  const dx=(Number(b?.x)||0)-(Number(a?.x)||0),dy=(Number(b?.y)||0)-(Number(a?.y)||0);
+  const length=dx*dx+dy*dy;
+  if (length<=0) return distance(point,a);
+  const amount=clamp((((Number(point?.x)||0)-(Number(a?.x)||0))*dx+((Number(point?.y)||0)-(Number(a?.y)||0))*dy)/length,0,1);
+  return Math.hypot((Number(point?.x)||0)-((Number(a?.x)||0)+dx*amount),(Number(point?.y)||0)-((Number(a?.y)||0)+dy*amount));
+}
+function survivalPoint(world,boat,state) {
+  const people=livingPlayers(world);
+  if (!people.length) return safestPoint(world,boat,state,HULL_ESCAPE_CLEARANCE);
+  const current=nearestPlayerDistance(world,boat),nearest=[...people].sort((a,b)=>distance(boat,a.point)-distance(boat,b.point))[0];
+  const awayX=(Number(boat.x)||0)-(Number(nearest.point.x)||0),awayY=(Number(boat.y)||0)-(Number(nearest.point.y)||0);
+  const awayLength=Math.max(1,Math.hypot(awayX,awayY));
+  const points=[];
+  for (const x of [16,42,88,150,210,272,334,380,404]) for (const y of [86,108,150,200,250,292,308]) points.push({x,y});
+  const scored=points.map(point=>{
+    const travel=distance(boat,point);
+    const endpoint=Math.min(...people.map(person=>distance(point,person.point)));
+    const path=Math.min(...people.map(person=>pointSegmentDistance(person.point,boat,point)));
+    const vx=point.x-(Number(boat.x)||0),vy=point.y-(Number(boat.y)||0),length=Math.max(1,Math.hypot(vx,vy));
+    const away=(vx*awayX+vy*awayY)/(length*awayLength);
+    return {point,travel,endpoint,path,away};
+  }).filter(item=>item.travel>=35);
+  return scored.sort((a,b)=>(b.path>=current-3)-(a.path>=current-3)||b.path-a.path||b.endpoint-a.endpoint||b.away-a.away||b.travel-a.travel)[0]?.point
+    ||safestPoint(world,boat,state,HULL_ESCAPE_CLEARANCE);
+}
 function startSuppressionEscape(world,state,boat,heavy) {
   if (heavy.phase!=="combat"||Number(boat.engineHealth)<=0) return;
   const latest=[...state.automaticHits].reverse().find(hit=>Number.isInteger(hit.source));
   heavy.phase="escape";heavy.escapeReason="suppression";heavy.escapeSourcePlayer=latest?.source;
   heavy.minimumUntil=(Number(world.time)||0)+4.2;heavy.maximumUntil=(Number(world.time)||0)+8.5;
-  heavy.destination=safestPoint(world,boat,state,250);boat.speed=Math.max(Number(boat.speed)||0,11.5);
+  heavy.destination=survivalPoint(world,boat,state);boat.speed=Math.max(Number(boat.speed)||0,11.5);
   emit(world,"heavy-automatic-suppression-escape-v1","Плотная очередь прижала тяжёлый катер. Он даёт полный ход и уходит.",[0,1],{sourcePlayer:latest?.source,x:boat.x,y:boat.y});
 }
 function startHullDangerEscape(world,state,boat,heavy,danger) {
@@ -253,7 +279,7 @@ function startHullDangerEscape(world,state,boat,heavy,danger) {
   const already=heavy.phase==="escape"&&heavy.escapeReason==="hull-danger";
   heavy.phase="escape";heavy.escapeReason="hull-danger";heavy.escapeSourcePlayer=danger.source;
   heavy.minimumUntil=(Number(world.time)||0)+6;heavy.maximumUntil=Infinity;
-  if (!already||!heavy.destination) heavy.destination=safestPoint(world,boat,state,HULL_ESCAPE_CLEARANCE);
+  if (!already||!heavy.destination) heavy.destination=survivalPoint(world,boat,state);
   heavy.hullEscapeStartedAt=already?heavy.hullEscapeStartedAt:Number(world.time)||0;
   heavy.hullEscapeThreshold=danger.staticLimit;heavy.hullEscapeDps=danger.dps;
   boat.speed=Math.max(Number(boat.speed)||0,emergencyEscapeSpeedV1(boat)*0.78);
@@ -296,7 +322,7 @@ function advanceHeavy(world,state,boat,heavy,dt,newHits) {
     } else if (hullEscape) {
       const arrival=Math.max(16,Math.abs(Number(boat.speed)||0)*Math.max(0,dt)+7);
       if (distance(boat,destination)<=arrival) {
-        heavy.destination=safestPoint(world,boat,state,HULL_ESCAPE_CLEARANCE);
+        heavy.destination=survivalPoint(world,boat,state);
         heavy.hullEscapeRerouteAt=now;destination=heavy.destination;
       }
       remaining=moveTo(boat,destination,emergencyEscapeSpeedV1(boat),dt,92);
@@ -308,7 +334,7 @@ function advanceHeavy(world,state,boat,heavy,dt,newHits) {
       const clearance=nearestPlayerDistance(world,boat),bomb=incomingMegaBomb(world,boat);
       const rerouteDue=now-(Number(heavy.hullEscapeRerouteAt)||-999)>=0.8;
       if (rerouteDue&&(bomb||clearance<HULL_ESCAPE_CLEARANCE-28)) {
-        heavy.destination=safestPoint(world,boat,state,HULL_ESCAPE_CLEARANCE);
+        heavy.destination=survivalPoint(world,boat,state);
         heavy.hullEscapeRerouteAt=now;
       }
       boat.speed=Math.max(Number(boat.speed)||0,emergencyEscapeSpeedV1(boat)*0.72);
