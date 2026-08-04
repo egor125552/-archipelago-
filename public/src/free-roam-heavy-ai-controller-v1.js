@@ -28,7 +28,7 @@ export function normalizeHeavyPhaseV1(heavy) {
 }
 function suppress(boat,keepTurret=false) {
   if (!boat||keepTurret) return;
-  boat.turretDisabled=true;boat.burstRemaining=0;boat.aimRemaining=0;boat.fireCooldown=Math.max(999,Number(boat.fireCooldown)||0);
+  boat.burstRemaining=0;boat.aimRemaining=0;boat.fireCooldown=Math.max(999,Number(boat.fireCooldown)||0);
 }
 function initializeHeavy(world,state,boat) {
   const id=heavyEncounterId(world,boat),armourMax=Math.max(1,Number(boat.maxHull)||Number(boat.hull)||700);
