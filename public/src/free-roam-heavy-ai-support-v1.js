@@ -31,7 +31,11 @@ export function currentHeavyBoat(world) {
   return boat?.active&&!boat.destroyed&&Number(boat.hull)>0?boat:null;
 }
 export function heavyEncounterId(world,boat) {
-  return Number(world.freeThreatDirector?.encounterId)||Number(world.freeHeavyPursuer?.encounterId)||String(boat?.id||"heavy-pursuer");
+  const director=world.freeThreatDirector;
+  if (director?.active&&Number(director.level)>=5&&!director.heavyStarted) {
+    return Number(world.freeHeavyPursuer?.encounterId)||world.freeHeavyAiControllerV1?.encounterId||String(boat?.id||"heavy-pursuer");
+  }
+  return Number(director?.encounterId)||Number(world.freeHeavyPursuer?.encounterId)||String(boat?.id||"heavy-pursuer");
 }
 export function ensureControllerState(world) {
   world.freeHeavyAiControllerV1 ||= {heavy:null,encounterId:null,frame:null,serial:0,targetLocks:{},automaticHits:[],lastWindupAt:-999};
@@ -51,7 +55,7 @@ export function publishCompatibility(world,state) {
   Object.assign(world.freeCombatAiV164,{heavy:state.heavy,heavyEncounterId:state.encounterId,frame:null,owner:"free-heavy-ai-controller-v1"});
 }
 export function snapshotBoat(boat) {
-  return boat&&{ref:boat,x:boat.x,y:boat.y,heading:boat.heading,speed:boat.speed,hull:boat.hull,maxHull:boat.maxHull,
+  return boat&&{ref:boat,data:{...boat},x:boat.x,y:boat.y,heading:boat.heading,speed:boat.speed,hull:boat.hull,maxHull:boat.maxHull,
     engineHealth:boat.engineHealth,turretHealth:boat.turretHealth,engineDisabled:boat.engineDisabled,turretDisabled:boat.turretDisabled,
     fireCooldown:boat.fireCooldown,burstRemaining:boat.burstRemaining,aimRemaining:boat.aimRemaining,turretHeading:boat.turretHeading};
 }
@@ -94,7 +98,9 @@ export function retireStaleHeavyV1(world,reason="stale",force=false) {
   if (!boat) return false;
   const known=String(state.heavy?.encounterId??state.encounterId??world.freeHeavyPursuer?.encounterId??"");
   const current=director?.active&&Number(director.level)>=5?String(director.encounterId??""):known;
-  if (!force&&(!director?.active||Number(director.level)<5||!known||known===current)) return false;
+  const adoptionDue=director?.active&&Number(director.level)>=5&&!director.heavyStarted
+    &&(Number(world.time)||0)+0.07>=(Number(director.heavyStartsAt)||Infinity);
+  if (!force&&(!director?.active||Number(director.level)<5||!known||known===current||adoptionDue)) return false;
   Object.assign(world.freeHeavyPursuer,{active:false,boat:null,encounterId:null,projectiles:[],nextProjectileId:1});
   state.heavy=null;state.encounterId=null;state.targetLocks={};
   if (world.freeHostileActors?.actors) world.freeHostileActors.actors=values(world.freeHostileActors.actors).filter(actor=>String(actor?.boatId)!=="heavy-pursuer");
