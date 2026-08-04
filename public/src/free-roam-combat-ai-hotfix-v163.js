@@ -1,7 +1,7 @@
 "use strict";
 
 import {applyCombatAiHotfixV162} from "./free-roam-combat-ai-hotfix-v162.js?v=1";
-import {prepareHeavyAiControllerV1,finishHeavyAiControllerV1} from "./free-roam-heavy-ai-controller-v1.js?v=1";
+import {prepareHeavyAiControllerV1,finishHeavyAiControllerV1} from "./free-roam-heavy-ai-controller-v1.js?v=2";
 import {normalizeHeavyBaseStepV1} from "./free-roam-heavy-ai-base-normalizer-v1.js?v=1";
 import {rollbackPrematureThreatPhasesV1} from "./free-roam-threat-phase-guard-v1.js?v=1";
 
