@@ -8,7 +8,7 @@ test("authoritative hotfix uses one heavy controller instead of the V164-V176 la
   const support = fs.readFileSync(new URL("../public/src/free-roam-heavy-ai-support-v1.js", import.meta.url), "utf8");
   const memory = fs.readFileSync(new URL("../public/src/free-roam-heavy-hull-damage-memory-v1.js", import.meta.url), "utf8");
 
-  assert.match(hotfix, /free-roam-heavy-ai-controller-v1\.js\?v=3/);
+  assert.match(hotfix, /free-roam-heavy-ai-controller-v1\.js\?v=4/);
   assert.match(hotfix, /free-roam-heavy-hull-damage-memory-v1\.js\?v=1/);
   assert.match(hotfix, /prepareHeavyAiControllerV1\(world\)/);
   assert.match(hotfix, /captureHeavyHullDamageCarryoverV1\(world\)/);
