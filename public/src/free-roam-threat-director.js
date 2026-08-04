@@ -145,8 +145,82 @@ function activateBasePursuers(world, anchor, escortCount = 2) {
   }
 }
 
+function projectileSourceIds(projectile) {
+  return [
+    projectile?.sourceId,
+    projectile?.sourceBoatId,
+    projectile?.sourcePursuerId,
+    projectile?.sourceActorId,
+    projectile?.boatId,
+    projectile?.actorId,
+    projectile?.ownerId,
+    projectile?.shooterId,
+    projectile?.launcherId,
+  ].filter(value => value !== null && value !== undefined && String(value) !== "").map(String);
+}
+
+export function resetHeavyThreatState(world) {
+  const state = ensureThreatDirector(world);
+  const heavyState = ensureHeavyPursuer(world);
+  const oldBoat = heavyState.boat;
+  if (oldBoat) {
+    oldBoat.active = false;
+    oldBoat.speed = 0;
+  }
+
+  const removedActorIds = new Set((world.freeHostileActors?.actors || [])
+    .filter(actor => String(actor?.boatId || "") === "heavy-pursuer")
+    .map(actor => String(actor.id)));
+
+  heavyState.active = false;
+  heavyState.encounterId = 0;
+  heavyState.boat = null;
+  heavyState.projectiles = [];
+  delete heavyState.v176ContractId;
+
+  if (world.freeHostileActors?.actors) {
+    world.freeHostileActors.actors = world.freeHostileActors.actors.filter(actor => String(actor?.boatId || "") !== "heavy-pursuer");
+  }
+  if (world.freeHostileActors?.projectiles && removedActorIds.size) {
+    world.freeHostileActors.projectiles = world.freeHostileActors.projectiles.filter(projectile => (
+      !projectileSourceIds(projectile).some(id => removedActorIds.has(id))
+    ));
+  }
+
+  if (world.freeCombatAiV164) {
+    world.freeCombatAiV164.heavy = null;
+    world.freeCombatAiV164.heavyEncounterId = null;
+    world.freeCombatAiV164.frame = null;
+  }
+  if (world.freeCombatAiV172) {
+    world.freeCombatAiV172.repairEncounterId = null;
+    world.freeCombatAiV172.stableRepairDestination = null;
+    world.freeCombatAiV172.frame = null;
+  }
+  if (world.freeCombatAiV174) {
+    world.freeCombatAiV174.adoptedEncounterId = null;
+    world.freeCombatAiV174.frame = null;
+  }
+  if (world.freeCombatAiV175) {
+    world.freeCombatAiV175.repairCommitted = false;
+    world.freeCombatAiV175.repairAnnouncementActive = false;
+    world.freeCombatAiV175.frame = null;
+  }
+  if (world.freeCombatAiV176) {
+    world.freeCombatAiV176.heavyContractId = null;
+    world.freeCombatAiV176.repairAnnouncementKey = null;
+    world.freeCombatAiV176.repairAnchor = null;
+    world.freeCombatAiV176.frame = null;
+  }
+
+  delete state.assignments["heavy-pursuer"];
+  for (const actorId of removedActorIds) delete state.actorAssignments[actorId];
+  return Boolean(oldBoat || removedActorIds.size);
+}
+
 export function startThreatEncounter(world, requestedLevel, contractId = null) {
   const state = ensureThreatDirector(world);
+  resetHeavyThreatState(world);
   const level = clamp(Math.floor(Number(requestedLevel) || 0), 0, 5);
   state.encounterId += 1;
   state.contractId = contractId;
@@ -195,6 +269,7 @@ export function startThreatEncounter(world, requestedLevel, contractId = null) {
 
 export function cancelThreatEncounter(world, reason = "cancelled") {
   const state = ensureThreatDirector(world);
+  resetHeavyThreatState(world);
   state.active = false;
   state.cleared = false;
   state.assignments = {};
@@ -223,11 +298,6 @@ export function cancelThreatEncounter(world, reason = "cancelled") {
   if (world.freeHostileGunners) {
     world.freeHostileGunners.gunners = [];
     world.freeHostileGunners.projectiles = [];
-  }
-  if (world.freeHeavyPursuer) {
-    world.freeHeavyPursuer.active = false;
-    if (world.freeHeavyPursuer.boat) world.freeHeavyPursuer.boat.active = false;
-    world.freeHeavyPursuer.projectiles = [];
   }
   if (world.freeContracts) {
     world.freeContracts.encounterActive = false;
