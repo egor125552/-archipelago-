@@ -44,6 +44,24 @@ function step(world,seconds=0.05) {
   finishHeavyAiControllerV1(world,seconds);
 }
 
+function diagnostic(world,heavy,phases) {
+  const boat=world.freeHeavyPursuer.boat;
+  return {
+    time:world.time,
+    phases:[...phases],
+    phase:heavy.phase,
+    repairSystem:heavy.repairSystem,
+    repairProgress:heavy.repairProgress,
+    repairRouteClearance:heavy.repairRouteClearance,
+    requiredClearance:requiredRepairClearanceV1(heavy),
+    repairReroutes:heavy.repairReroutes,
+    destination:heavy.destination,
+    boat:{x:boat.x,y:boat.y,heading:boat.heading,speed:boat.speed,turretHealth:boat.turretHealth,turretDisabled:boat.turretDisabled},
+    player:{x:world.players[0].x,y:world.players[0].y},
+    recentEvents:world.events.slice(-12).map(event=>event.type),
+  };
+}
+
 test("repair safety adapts when fixed 236 metres is geometrically impossible", () => {
   const world=makeWorld();
   const heavy=startDestroyedTurret(world);
@@ -61,8 +79,10 @@ test("the real central-map case reaches a stop, repairs once and returns", () =>
     step(world);
     phases.add(heavy.phase);
   }
-  assert.ok(phases.has("stopping"),"the boat must physically stop before repair");
-  assert.ok(phases.has("repairing"),"the repair phase must be reached");
+  const state=diagnostic(world,heavy,phases);
+  console.log("HEAVY_REPAIR_DIAGNOSTIC",JSON.stringify(state));
+  assert.ok(phases.has("stopping"),`the boat must physically stop before repair: ${JSON.stringify(state)}`);
+  assert.ok(phases.has("repairing"),`the repair phase must be reached: ${JSON.stringify(state)}`);
   assert.equal(world.events.filter(event=>event.type==="heavy-repair-start-v1").length,1);
   assert.equal(world.events.filter(event=>event.type==="heavy-repair-complete-v1").length,1);
   assert.ok(world.freeHeavyPursuer.boat.turretHealth>0);
@@ -82,8 +102,14 @@ test("high-speed repair approach cannot orbit forever outside the six-metre radi
 test("a repaired turret is not mistaken for a newly destroyed turret", () => {
   const world=makeWorld();
   const heavy=startDestroyedTurret(world);
-  for (let tick=0;tick<1800&&!world.events.some(event=>event.type==="heavy-repair-complete-v1");tick+=1) step(world);
-  assert.equal(world.events.filter(event=>event.type==="heavy-repair-complete-v1").length,1);
+  const phases=new Set([heavy.phase]);
+  for (let tick=0;tick<1800&&!world.events.some(event=>event.type==="heavy-repair-complete-v1");tick+=1) {
+    step(world);
+    phases.add(heavy.phase);
+  }
+  const state=diagnostic(world,heavy,phases);
+  console.log("HEAVY_REPAIR_REPEAT_DIAGNOSTIC",JSON.stringify(state));
+  assert.equal(world.events.filter(event=>event.type==="heavy-repair-complete-v1").length,1,JSON.stringify(state));
   for (let tick=0;tick<500;tick+=1) step(world);
   assert.equal(world.events.filter(event=>event.type==="heavy-system-recovery-v1").length,1);
   assert.equal(world.events.filter(event=>event.type==="heavy-repair-complete-v1").length,1);
