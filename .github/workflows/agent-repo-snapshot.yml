@@ -1,24 +1,43 @@
-name: Agent repository snapshot
+name: Publish elite boss release branch
 
 on:
-  pull_request:
-    branches: [main]
+  push:
+    branches:
+      - agent/elite-boss-snapshot
+    paths:
+      - ".github/workflows/agent-repo-snapshot.yml"
+      - ".agent/elite-boss-release/**"
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  snapshot:
+  publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - name: Pack current repository snapshot
+
+      - name: Rebuild and verify release patch
         run: |
-          tar --exclude='.git' -czf /tmp/archipelago-repo.tgz .
-      - uses: actions/upload-artifact@v4
-        with:
-          name: archipelago-repo-snapshot
-          path: /tmp/archipelago-repo.tgz
-          if-no-files-found: error
-          retention-days: 1
+          cat .agent/elite-boss-release/part-* > /tmp/elite-boss-release.patch.gz.b64
+          base64 --decode /tmp/elite-boss-release.patch.gz.b64 | gzip -d > /tmp/elite-boss-release.patch
+          echo "1e3c32843159d5eab98ad2ff439725791f1f5ed7b06be7e3625ac753ef26f7a4  /tmp/elite-boss-release.patch" | sha256sum -c -
+
+      - name: Apply release over current main
+        run: |
+          git fetch origin main --depth=1
+          git switch --force-create agent/elite-boat-release-1.0 origin/main
+          git apply --index --check /tmp/elite-boss-release.patch
+          git apply --index /tmp/elite-boss-release.patch
+          git diff --cached --check
+          test ! -e .agent
+          test ! -e .github/workflows/agent-repo-snapshot.yml
+
+      - name: Create one release commit
+        run: |
+          git config user.name "Archipelago Release Agent"
+          git config user.email "release-agent@users.noreply.github.com"
+          git commit -m "Выпустить элитного катера-босса 1.0"
+          git push --force-with-lease origin HEAD:refs/heads/agent/elite-boat-release-1.0
