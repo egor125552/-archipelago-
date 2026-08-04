@@ -15,6 +15,7 @@ try {
   const result=await page.evaluate(async()=>{
     const stamp=Date.now();
     const controller=await import(`/src/free-roam-heavy-ai-controller-v1.js?browser-heavy=${stamp}`);
+    const memory=await import(`/src/free-roam-heavy-hull-damage-memory-v1.js?browser-heavy=${stamp}`);
     const base=await import(`/src/free-roam-heavy-pursuer.js?browser-heavy=${stamp}`);
     const normalizer=await import(`/src/free-roam-heavy-ai-base-normalizer-v1.js?browser-heavy=${stamp}`);
 
@@ -40,28 +41,34 @@ try {
     function productionStep(world,dt=0.05,betweenBaseAndFinish=null) {
       world.time+=dt;
       controller.prepareHeavyAiControllerV1(world);
+      memory.captureHeavyHullDamageCarryoverV1(world);
       base.updateHeavyPursuer(world,dt,{});
       normalizer.normalizeHeavyBaseStepV1(world);
       if (typeof betweenBaseAndFinish==="function") betweenBaseAndFinish();
       controller.finishHeavyAiControllerV1(world,dt);
+      memory.finalizeHeavyHullDamageCarryoverV1(world);
     }
 
     const repairWorld=makeWorld();
     const repairBoat=repairWorld.freeHeavyPursuer.boat;
     controller.prepareHeavyAiControllerV1(repairWorld);
+    memory.captureHeavyHullDamageCarryoverV1(repairWorld);
     const repairHeavy=repairWorld.freeHeavyAiControllerV1.heavy;
     repairHeavy.armourBreached=true;
     repairHeavy.phase="combat";
     repairBoat.turretHealth=0;
     repairBoat.turretDisabled=true;
     controller.finishHeavyAiControllerV1(repairWorld,0.05);
+    memory.finalizeHeavyHullDamageCarryoverV1(repairWorld);
 
     const repairPhases=[repairHeavy.phase];
     let completedAt=null;
     for (let tick=0;tick<1800;tick+=1) {
       repairWorld.time+=0.05;
       controller.prepareHeavyAiControllerV1(repairWorld);
+      memory.captureHeavyHullDamageCarryoverV1(repairWorld);
       controller.finishHeavyAiControllerV1(repairWorld,0.05);
+      memory.finalizeHeavyHullDamageCarryoverV1(repairWorld);
       if (repairPhases.at(-1)!==repairHeavy.phase) repairPhases.push(repairHeavy.phase);
       if (repairWorld.events.some(event=>event.type==="heavy-repair-complete-v1")) {
         completedAt=repairWorld.time;
@@ -71,7 +78,9 @@ try {
     for (let tick=0;tick<500;tick+=1) {
       repairWorld.time+=0.05;
       controller.prepareHeavyAiControllerV1(repairWorld);
+      memory.captureHeavyHullDamageCarryoverV1(repairWorld);
       controller.finishHeavyAiControllerV1(repairWorld,0.05);
+      memory.finalizeHeavyHullDamageCarryoverV1(repairWorld);
     }
     const repair={
       phases:repairPhases,completedAt,phase:repairHeavy.phase,
@@ -91,17 +100,16 @@ try {
       projectiles:turretWorld.freeHeavyPursuer.projectiles.length,
     };
 
-    const survivalWorld=makeWorld({hull:700,maxHull:700,player:{x:210,y:200},fireCooldown:999});
+    const survivalWorld=makeWorld({hull:588,maxHull:700,player:{x:210,y:200},fireCooldown:999});
     const survivalBoat=survivalWorld.freeHeavyPursuer.boat;
-    let escapeHull=null,escapeAt=null;
-    for (let tick=0;tick<35;tick+=1) {
-      productionStep(survivalWorld,0.08,()=>base.damageHeavyPursuer(survivalWorld,"hull",12,0,{}, {weapon:"automatic"}));
-      const heavy=survivalWorld.freeHeavyAiControllerV1.heavy;
-      if (heavy.phase==="escape"&&heavy.escapeReason==="hull-danger") {
-        escapeHull=survivalBoat.hull;escapeAt=survivalWorld.time;break;
-      }
-    }
+    productionStep(survivalWorld,0.08);
+    for (let hit=0;hit<17;hit+=1) base.damageHeavyPursuer(survivalWorld,"hull",12,0,{}, {weapon:"automatic"});
+    productionStep(survivalWorld,0.08);
+    base.damageHeavyPursuer(survivalWorld,"hull",12,0,{}, {weapon:"automatic"});
+    productionStep(survivalWorld,0.08);
     const survivalHeavy=survivalWorld.freeHeavyAiControllerV1.heavy;
+    const escapeEvent=survivalWorld.events.find(event=>event.type==="heavy-hull-danger-escape-v1");
+    const escapeHull=escapeEvent?survivalBoat.hull:null,escapeAt=escapeEvent?.at??null;
     const initialDistance=Math.hypot(survivalBoat.x-survivalWorld.players[0].x,survivalBoat.y-survivalWorld.players[0].y);
     const shotsBefore=survivalWorld.events.filter(event=>event.type==="heavy-gun-shot").length;
     let maxSpeed=survivalBoat.speed;
@@ -112,10 +120,12 @@ try {
     const finalDistance=Math.hypot(survivalBoat.x-survivalWorld.players[0].x,survivalBoat.y-survivalWorld.players[0].y);
     const shotsAfter=survivalWorld.events.filter(event=>event.type==="heavy-gun-shot").length;
     const survival={
-      escapeHull,escapeAt,phase:survivalHeavy.phase,escapeReason:survivalHeavy.escapeReason,
+      escapeHull,escapeAt,damageRate:escapeEvent?.damageRate,predictedLoss:escapeEvent?.predictedLoss,
+      phase:survivalHeavy.phase,escapeReason:survivalHeavy.escapeReason,
       maxSpeed,emergencySpeed:controller.emergencyEscapeSpeedV1(survivalBoat),
       initialDistance,finalDistance,coverShots:Math.max(0,shotsAfter-shotsBefore),
       escapeEvents:survivalWorld.events.filter(event=>event.type==="heavy-hull-danger-escape-v1").length,
+      leakedMeasurements:survivalWorld.events.filter(event=>event.carryoverMeasurementV1).length,
       destination:survivalHeavy.destination,position:{x:survivalBoat.x,y:survivalBoat.y},
     };
     return {repair,turret,survival};
@@ -138,16 +148,19 @@ try {
   assert.ok(result.turret.shots>0,"the real mounted turret never fired in Chromium");
   assert.ok(result.turret.fireCooldown<30,"the legacy 999-second turret cooldown was not released");
 
-  assert.ok(result.survival.escapeAt!==null,"predictive survival escape never started in Chromium");
-  assert.ok(result.survival.escapeHull>200,`survival escape started too late at ${result.survival.escapeHull}`);
+  assert.ok(result.survival.escapeAt!==null,"pre-step survival escape never started in Chromium");
+  assert.ok(result.survival.escapeHull>300,`pre-step survival escape started too late at ${result.survival.escapeHull}`);
+  assert.ok(result.survival.damageRate>0,`browser damage rate stayed ${result.survival.damageRate}`);
+  assert.ok(result.survival.predictedLoss>0,`browser predicted loss stayed ${result.survival.predictedLoss}`);
   assert.equal(result.survival.phase,"escape");
   assert.equal(result.survival.escapeReason,"hull-danger");
   assert.equal(result.survival.escapeEvents,1,"survival escape must be announced exactly once");
+  assert.equal(result.survival.leakedMeasurements,0,"measurement events leaked into browser world events");
   assert.ok(result.survival.maxSpeed>=result.survival.emergencySpeed*0.9,`escape speed ${result.survival.maxSpeed} was not maximum ${result.survival.emergencySpeed}`);
   assert.ok(result.survival.finalDistance>result.survival.initialDistance+35,`boat did not physically open distance: ${result.survival.initialDistance} -> ${result.survival.finalDistance}`);
   assert.ok(result.survival.coverShots>0,"the healthy mounted turret did not fire while the boat escaped");
 
-  console.log(JSON.stringify({scenario:"heavy-repair-turret-and-survival",...result},null,2));
+  console.log(JSON.stringify({scenario:"heavy-repair-turret-and-prestep-survival",...result},null,2));
 } finally {
   await browser.close();
 }

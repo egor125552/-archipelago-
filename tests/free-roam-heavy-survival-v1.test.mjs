@@ -5,6 +5,10 @@ import {
   finishHeavyAiControllerV1,
   emergencyEscapeSpeedV1,
 } from "../public/src/free-roam-heavy-ai-controller-v1.js";
+import {
+  captureHeavyHullDamageCarryoverV1,
+  finalizeHeavyHullDamageCarryoverV1,
+} from "../public/src/free-roam-heavy-hull-damage-memory-v1.js";
 import {normalizeHeavyBaseStepV1} from "../public/src/free-roam-heavy-ai-base-normalizer-v1.js";
 import {
   damageHeavyPursuer,
@@ -34,10 +38,12 @@ function makeWorld({hull=700,maxHull=700,player={x:300,y:20}}={}) {
 function productionStep(world,dt=0.05,betweenBaseAndFinish=null) {
   world.time+=dt;
   prepareHeavyAiControllerV1(world);
+  captureHeavyHullDamageCarryoverV1(world);
   updateHeavyPursuer(world,dt,{});
   normalizeHeavyBaseStepV1(world);
   if (typeof betweenBaseAndFinish==="function") betweenBaseAndFinish();
   finishHeavyAiControllerV1(world,dt);
+  finalizeHeavyHullDamageCarryoverV1(world);
 }
 
 test("combat releases the legacy 999 second turret cooldown and the real installation fires", () => {
@@ -65,14 +71,34 @@ test("sustained automatic damage predicts a lethal chase and starts escape well 
   assert.equal(world.events.filter(event=>event.type==="heavy-hull-danger-escape-v1").length,1);
 });
 
-test("one accidental mega-bomb clip makes an exposed core retreat before the static threshold", () => {
+test("real log regression: damage applied before prepare is measured across server ticks", () => {
+  const world=makeWorld({hull:588,maxHull:700,player:{x:210,y:200}});
+  productionStep(world,0.08);
+  for (let hit=0;hit<17;hit+=1) damageHeavyPursuer(world,"hull",12,0,{}, {weapon:"automatic"});
+  assert.equal(world.freeHeavyPursuer.boat.hull,384);
+  productionStep(world,0.08);
+  damageHeavyPursuer(world,"hull",12,0,{}, {weapon:"automatic"});
+  productionStep(world,0.08);
+
+  const heavy=world.freeHeavyAiControllerV1.heavy,boat=world.freeHeavyPursuer.boat;
+  const escape=world.events.find(event=>event.type==="heavy-hull-danger-escape-v1");
+  assert.equal(boat.hull,372);
+  assert.equal(heavy.phase,"escape");
+  assert.equal(heavy.escapeReason,"hull-danger");
+  assert.ok(boat.hull>300,`the real-log escape still started too late at ${boat.hull}`);
+  assert.ok(Number(escape?.damageRate)>0,`damage rate stayed ${escape?.damageRate}`);
+  assert.ok(Number(escape?.predictedLoss)>0,`predicted loss stayed ${escape?.predictedLoss}`);
+  assert.equal(world.events.some(event=>event.carryoverMeasurementV1),false,"measurement event leaked to clients");
+});
+
+test("one accidental pre-step mega-bomb clip makes an exposed core retreat before the static threshold", () => {
   const world=makeWorld({hull:260,maxHull:260,player:{x:210,y:200}});
-  prepareHeavyAiControllerV1(world);
+  productionStep(world,0.05);
   const heavy=world.freeHeavyAiControllerV1.heavy;
   heavy.armourBreached=true;heavy.coreMax=260;heavy.phase="combat";
-  updateHeavyPursuer(world,0.05,{});normalizeHeavyBaseStepV1(world);
+  finalizeHeavyHullDamageCarryoverV1(world);
   damageHeavyPursuer(world,"hull",20,0,{}, {weapon:"mega-bomb"});
-  finishHeavyAiControllerV1(world,0.05);
+  productionStep(world,0.05);
   assert.equal(world.freeHeavyPursuer.boat.hull,240);
   assert.ok(240>Math.min(220,260*0.84),"test must remain above the ordinary low-hull threshold");
   assert.equal(heavy.phase,"escape");assert.equal(heavy.escapeReason,"hull-danger");
@@ -84,6 +110,7 @@ test("critical escape persists, reaches emergency speed and keeps a healthy turr
   const heavy=world.freeHeavyAiControllerV1.heavy;
   heavy.armourBreached=true;heavy.coreMax=260;heavy.phase="combat";
   finishHeavyAiControllerV1(world,0.05);
+  finalizeHeavyHullDamageCarryoverV1(world);
   const boat=world.freeHeavyPursuer.boat;
   const initialDistance=Math.hypot(boat.x-world.players[0].x,boat.y-world.players[0].y);
   let maxSpeed=boat.speed,shotsDuringEscape=0;
