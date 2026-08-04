@@ -70,21 +70,20 @@ function heavyIsStale(world) {
   const boat = currentHeavyBoat(world);
   if (!boat) return false;
   const director = world.freeThreatDirector;
-  if (!director?.active || Number(director.level) < 5) return true;
+  if (!director?.active || Number(director.level) < 5) return false;
 
   const encounterId = String(director.encounterId ?? "");
   const knownIds = knownHeavyEncounterIds(world);
   if (knownIds.some(value => value !== encounterId)) return true;
 
-  if (!director.heavyStarted) {
+  if (!director.heavyStarted && knownIds.length > 0) {
     const startsAt = Number(director.heavyStartsAt) || 0;
     const now = Number(world.time) || 0;
-    const dueForSameEncounterAdoption = knownIds.length > 0
-      && knownIds.every(value => value === encounterId)
+    const dueForSameEncounterAdoption = knownIds.every(value => value === encounterId)
       && now + ADOPTION_LOOKAHEAD_SECONDS >= startsAt;
     return !dueForSameEncounterAdoption;
   }
-  return knownIds.length > 0 && knownIds.some(value => value !== encounterId);
+  return false;
 }
 
 function clearRepairState(world, state) {
@@ -101,9 +100,9 @@ function clearRepairState(world, state) {
   }
 }
 
-export function retireStaleHeavyV176(world, reason = "stale-encounter") {
+export function retireStaleHeavyV176(world, reason = "stale-encounter", force = false) {
   const state = ensureState(world);
-  if (!currentHeavyBoat(world) || !heavyIsStale(world)) return false;
+  if (!currentHeavyBoat(world) || (!force && !heavyIsStale(world))) return false;
 
   const boat = world.freeHeavyPursuer.boat;
   const oldEncounterIds = knownHeavyEncounterIds(world);
@@ -337,7 +336,7 @@ export function finishCombatAiV176Overlay(world, dt, helpers = {}) {
   synchronizeEncounterState(world, state);
 
   if (staleAcrossEncounterBoundary(world, frame)) {
-    retireStaleHeavyV176(world, "encounter-changed-during-step");
+    retireStaleHeavyV176(world, "encounter-changed-during-step", true);
   } else {
     retireStaleHeavyV176(world, "post-step-stale-encounter");
   }
