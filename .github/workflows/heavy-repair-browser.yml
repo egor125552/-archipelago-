@@ -6,13 +6,17 @@ on:
       - "public/src/free-roam-heavy-ai-controller-v1.js"
       - "public/src/free-roam-heavy-ai-support-v1.js"
       - "public/src/free-roam-heavy-hull-damage-memory-v1.js"
+      - "public/src/free-roam-heavy-automatic-damage-v1.js"
       - "public/src/free-roam-combat-ai-hotfix-v163.js"
+      - "public/src/free-roam-combat.js"
       - "public/src/free-roam-heavy-pursuer.js"
       - "tests/free-roam-heavy-repair-route-v1.test.mjs"
       - "tests/free-roam-heavy-survival-v1.test.mjs"
       - "tests/free-roam-heavy-standoff-v1.test.mjs"
+      - "tests/free-roam-heavy-adaptive-repair-v1.test.mjs"
       - "tests/browser/heavy-repair-browser.mjs"
       - "tests/browser/heavy-standoff-browser.mjs"
+      - "tests/browser/heavy-adaptive-repair-browser.mjs"
       - "public/heavy-repair-browser-harness.html"
       - ".github/workflows/heavy-repair-browser.yml"
   push:
@@ -21,13 +25,17 @@ on:
       - "public/src/free-roam-heavy-ai-controller-v1.js"
       - "public/src/free-roam-heavy-ai-support-v1.js"
       - "public/src/free-roam-heavy-hull-damage-memory-v1.js"
+      - "public/src/free-roam-heavy-automatic-damage-v1.js"
       - "public/src/free-roam-combat-ai-hotfix-v163.js"
+      - "public/src/free-roam-combat.js"
       - "public/src/free-roam-heavy-pursuer.js"
       - "tests/free-roam-heavy-repair-route-v1.test.mjs"
       - "tests/free-roam-heavy-survival-v1.test.mjs"
       - "tests/free-roam-heavy-standoff-v1.test.mjs"
+      - "tests/free-roam-heavy-adaptive-repair-v1.test.mjs"
       - "tests/browser/heavy-repair-browser.mjs"
       - "tests/browser/heavy-standoff-browser.mjs"
+      - "tests/browser/heavy-adaptive-repair-browser.mjs"
       - "public/heavy-repair-browser-harness.html"
       - ".github/workflows/heavy-repair-browser.yml"
   workflow_dispatch:
@@ -49,7 +57,7 @@ jobs:
           node-version: 22
 
       - name: Run deterministic heavy-boat regressions
-        run: node --test tests/free-roam-heavy-repair-route-v1.test.mjs tests/free-roam-heavy-survival-v1.test.mjs tests/free-roam-heavy-standoff-v1.test.mjs
+        run: node --test tests/free-roam-heavy-repair-route-v1.test.mjs tests/free-roam-heavy-survival-v1.test.mjs tests/free-roam-heavy-standoff-v1.test.mjs tests/free-roam-heavy-adaptive-repair-v1.test.mjs
 
       - name: Install Chromium test runtime
         run: |
@@ -69,12 +77,13 @@ jobs:
           cat /tmp/archipelago-heavy-browser-http.log
           exit 1
 
-      - name: Reproduce repair, turret, survival and standoff scenarios in Chromium
+      - name: Reproduce repair, turret, survival, standoff and adaptive damage scenarios in Chromium
         env:
           ARCHIPELAGO_TEST_URL: http://127.0.0.1:4173
         run: |
           node tests/browser/heavy-repair-browser.mjs
           node tests/browser/heavy-standoff-browser.mjs
+          node tests/browser/heavy-adaptive-repair-browser.mjs
 
       - name: Show HTTP log on failure
         if: failure()
