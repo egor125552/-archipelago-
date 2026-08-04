@@ -20,17 +20,20 @@ const bearing = (from, to) => Math.atan2(
   -((Number(to?.y) || 0) - (Number(from?.y) || 0)),
 ) * 180 / Math.PI;
 
+function playerBoat(world, player) {
+  return ["boat", "roof"].includes(player?.mode) ? world.boats?.[player.activeBoat] || null : null;
+}
+
 function playerBoatUnavailable(world, player) {
-  if (!["boat", "roof"].includes(player?.mode)) return false;
-  const boat = world.boats?.[player.activeBoat];
-  return !boat || boat.sunk || boat.emergencyActive || Number(boat.hull) <= 0;
+  const boat = playerBoat(world, player);
+  return Boolean(["boat", "roof"].includes(player?.mode) && (!boat || boat.sunk || boat.emergencyActive || Number(boat.hull) <= 0));
 }
 
 function presentPlayers(world) {
   const presence = world.freeActivities?.presence || [];
   return world.players
     .map((player, index) => ({player, index}))
-    .filter(({player, index}) => presence[index] && player?.combat?.alive && !playerBoatUnavailable(world, player));
+    .filter(({player, index}) => presence[index] && player?.combat?.alive);
 }
 
 function eventTargets(world) {
@@ -169,23 +172,24 @@ function nextRandom(state) {
 
 function actorForPlayer(world, playerIndex) {
   const player = world.players[playerIndex];
-  if (!player || playerBoatUnavailable(world, player)) return null;
-  if (["boat", "roof"].includes(player.mode)) return world.boats[player.activeBoat] || null;
+  if (!player) return null;
+  const boat = playerBoat(world, player);
+  if (boat && !playerBoatUnavailable(world, player)) return boat;
   return player;
 }
 
 function velocityForPlayer(world, playerIndex) {
   const player = world.players[playerIndex];
-  if (!player || playerBoatUnavailable(world, player)) return {x: 0, y: 0};
-  if (["boat", "roof"].includes(player.mode)) {
-    const boat = world.boats[player.activeBoat];
-    if (!boat) return {x: 0, y: 0};
+  if (!player) return {x: 0, y: 0};
+  const boat = playerBoat(world, player);
+  if (boat && !playerBoatUnavailable(world, player)) {
     const angle = (Number(boat.heading) || 0) * Math.PI / 180;
     return {
       x: Math.sin(angle) * (Number(boat.speed) || 0),
       y: -Math.cos(angle) * (Number(boat.speed) || 0),
     };
   }
+  if (["boat", "roof"].includes(player.mode)) return {x: 0, y: 0};
   const input = world.inputs?.[playerIndex] || {};
   let x = (input.right ? 1 : 0) - (input.left ? 1 : 0);
   let y = (input.down ? 1 : 0) - (input.up ? 1 : 0);
@@ -221,6 +225,7 @@ function reconcileAssignments(world, state) {
     if (Number.isInteger(next[pursuer.id]) || !waitingPlayers.length) continue;
     const playerIndex = waitingPlayers.shift();
     next[pursuer.id] = playerIndex;
+    coveredPlayers.add(playerIndex);
     emit(
       world,
       "pursuer-target-lock",
@@ -463,8 +468,9 @@ function firstProjectileCollision(world, projectile, x2, y2) {
     result = {kind: "boat", actor: boat, time};
   }
   for (const {player, index} of presentPlayers(world)) {
-    if (!["foot", "swim"].includes(player.mode)) continue;
-    const time = segmentCircleHit(projectile.x, projectile.y, x2, y2, player, 1.9);
+    const emergencyRider = playerBoatUnavailable(world, player);
+    if (!["foot", "swim"].includes(player.mode) && !emergencyRider) continue;
+    const time = segmentCircleHit(projectile.x, projectile.y, x2, y2, player, emergencyRider ? 2.8 : 1.9);
     if (time == null || (result && time >= result.time)) continue;
     result = {kind: "player", actor: player, playerIndex: index, time};
   }
