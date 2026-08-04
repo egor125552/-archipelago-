@@ -76,6 +76,34 @@ test("real journal regression: encounter 13 retires the damaged heavy left by en
   assert.equal("heavy-pursuer" in world.freeThreatDirector.assignments, false);
 });
 
+test("a legitimate heavy outside an active threat-five contract is never retired", () => {
+  const world = staleJournalWorld();
+  world.freeThreatDirector.active = false;
+  assert.equal(retireStaleHeavyV176(world), false);
+  assert.ok(world.freeHeavyPursuer.boat);
+});
+
+test("an id-less current heavy is not guessed to be stale", () => {
+  const world = staleJournalWorld();
+  world.freeHeavyPursuer.encounterId = null;
+  world.freeCombatAiV164.heavyEncounterId = null;
+  world.freeCombatAiV164.heavy.encounterId = null;
+  world.freeCombatAiV172.repairEncounterId = null;
+  assert.equal(retireStaleHeavyV176(world), false);
+  assert.ok(world.freeHeavyPursuer.boat);
+});
+
+test("a preserved heavy reference can be forcibly retired after an encounter changes inside one step", () => {
+  const world = staleJournalWorld();
+  world.freeHeavyPursuer.encounterId = 13;
+  world.freeCombatAiV164.heavyEncounterId = 13;
+  world.freeCombatAiV164.heavy.encounterId = 13;
+  world.freeCombatAiV172.repairEncounterId = "13";
+  assert.equal(retireStaleHeavyV176(world), false);
+  assert.equal(retireStaleHeavyV176(world, "encounter-changed-during-step", true), true);
+  assert.equal(world.freeHeavyPursuer.boat, null);
+});
+
 test("premature second and final phases are rolled back while phase-one forces remain", () => {
   const world = staleJournalWorld();
   world.freeHeavyPursuer.boat = null;
