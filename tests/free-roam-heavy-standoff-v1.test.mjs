@@ -91,5 +91,6 @@ test("an isolated low-hull heavy boat settles into its own firing range instead 
   assert.equal(heavy.hullEscapeMode,"flee","close pressure did not restart survival flight");
   assert.ok(boat.speed>=emergencyEscapeSpeedV1(boat)*0.7,"the renewed escape did not use emergency speed");
   for (let tick=0;tick<100;tick+=1) productionStep(world,0.05);
-  assert.ok(metres(world)>beforePressure+20,`the boat failed to open distance again: ${beforePressure} -> ${metres(world)}`);
+  assert.ok(metres(world)>=HULL_STANDOFF_MIN-1,`the boat failed to restore the safe firing band: ${beforePressure} -> ${metres(world)}`);
+  assert.equal(heavy.hullEscapeMode,"standoff","the boat did not settle again after reopening distance");
 });
