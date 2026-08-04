@@ -16,6 +16,7 @@ const PROJECTILE_RANGES = Object.freeze({
   enemyBoat: 235,
   heavy: 285,
 });
+const LEGACY_HEAVY_REPAIR_PHASES = new Set(["retreating", "repairing", "returning"]);
 
 function emit(world, type, text, targets = [0, 1], extra = {}) {
   world.events ||= [];
@@ -307,6 +308,15 @@ function initializeHeavy(world, state, boat) {
   return state.heavy;
 }
 
+function normalizeLegacyHeavyRepair(heavy) {
+  if (!heavy || !LEGACY_HEAVY_REPAIR_PHASES.has(String(heavy.phase))) return false;
+  heavy.phase = "combat";
+  heavy.destination = null;
+  heavy.repairProgress = 0;
+  heavy.repairQuarter = 0;
+  return true;
+}
+
 function ensureHeavy(world, state) {
   const boat = world.freeHeavyPursuer?.boat;
   if (!boat) {
@@ -320,6 +330,7 @@ function ensureHeavy(world, state) {
   if (typeof heavy.armourBreached !== "boolean") heavy.armourBreached = false;
   if (!Number.isFinite(heavy.repairPlates)) heavy.repairPlates = 3;
   if (!Number.isFinite(heavy.lastDamageAt)) heavy.lastDamageAt = -999;
+  normalizeLegacyHeavyRepair(heavy);
   return heavy;
 }
 
@@ -346,15 +357,11 @@ function frameSnapshot(world, state) {
   trimProjectileRanges(world);
 
   if (!boat || !heavy) return;
-  if (["approach", "retreating", "repairing", "returning"].includes(heavy.phase)) {
+  if (heavy.phase === "approach") {
     boat.burstRemaining = 0;
     boat.aimRemaining = 0;
     boat.fireCooldown = Math.max(Number(boat.fireCooldown) || 0, 999);
     boat.turretDisabled = true;
-  }
-  if (["retreating", "repairing", "returning"].includes(heavy.phase)) {
-    state.frame.overridePosition = {x: boat.x, y: boat.y, heading: boat.heading, speed: boat.speed};
-  } else if (heavy.phase === "approach") {
     state.frame.overridePosition = {x: boat.x, y: boat.y, heading: boat.heading, speed: boat.speed};
   }
 
@@ -374,41 +381,6 @@ function removeEventTypes(world, start, types) {
   for (let index = (world.events?.length || 0) - 1; index >= start; index -= 1) {
     if (blocked.has(world.events[index]?.type)) world.events.splice(index, 1);
   }
-}
-
-function farthestRepairPoint(world, boat) {
-  const candidates = [
-    {x: 28, y: 286},
-    {x: 392, y: 286},
-    {x: 32, y: 112},
-    {x: 388, y: 112},
-  ];
-  const living = livingPlayers(world);
-  return candidates.sort((left, right) => {
-    const leftScore = living.length ? Math.min(...living.map(item => distance(left, item.actor))) : distance(left, boat);
-    const rightScore = living.length ? Math.min(...living.map(item => distance(right, item.actor))) : distance(right, boat);
-    return rightScore - leftScore;
-  })[0];
-}
-
-function startHeavyRepair(world, boat, heavy, system) {
-  if (heavy.armourBreached || heavy.repairPlates <= 0 || heavy.phase !== "combat") return;
-  heavy.repairSystem = system;
-  heavy.repairProgress = 0;
-  heavy.repairQuarter = 0;
-  heavy.destination = system === "engine" ? {x: boat.x, y: boat.y} : farthestRepairPoint(world, boat);
-  heavy.phase = system === "engine" ? "repairing" : "retreating";
-  boat.burstRemaining = 0;
-  boat.aimRemaining = 0;
-  boat.turretDisabled = true;
-  emit(world, "heavy-repair-retreat", system === "engine"
-    ? "Двигатель тяжёлого катера разрушен. Катер физически остановился и экипаж начал аварийный ремонт пластинами."
-    : "Установка тяжёлого катера разрушена. Катер разворачивается, уходит на максимальной скорости и попытается починить её пластинами.", [0, 1], {
-    system,
-    plates: heavy.repairPlates,
-    x: boat.x,
-    y: boat.y,
-  });
 }
 
 function applyPistolToExposedHeavy(world, boat, heavy, events) {
@@ -515,8 +487,8 @@ function reconcileHeavyDamage(world, state, boat, heavy, frame) {
 
   heavy.actualEngineDisabled = (Number(boat.engineHealth) || 0) <= 0;
   heavy.actualTurretDisabled = (Number(boat.turretHealth) || 0) <= 0;
-  if (heavy.actualEngineDisabled) startHeavyRepair(world, boat, heavy, "engine");
-  else if (heavy.actualTurretDisabled) startHeavyRepair(world, boat, heavy, "turret");
+  // V164 no longer owns repair. V166+ is the only lifecycle allowed to react
+  // to destroyed components, both before and after the armour is breached.
 }
 
 function moveHeavyOverride(boat, destination, desiredSpeed, dt) {
@@ -533,101 +505,18 @@ function updateHeavyBehaviour(world, state, boat, heavy, frame, dt) {
   if (!boat?.active || boat.destroyed || dt <= 0) return;
   if (frame?.overridePosition) Object.assign(boat, frame.overridePosition);
 
-  if (heavy.armourBreached && ["retreating", "repairing", "returning"].includes(heavy.phase)) {
+  if (heavy.phase !== "approach") return;
+  const remaining = moveHeavyOverride(boat, heavy.combatPoint, 11.8, dt);
+  boat.turretDisabled = true;
+  boat.fireCooldown = 999;
+  if (remaining <= 4) {
+    boat.x = heavy.combatPoint.x;
+    boat.y = heavy.combatPoint.y;
+    boat.speed = 0;
     heavy.phase = "combat";
-    heavy.repairSystem = null;
-    heavy.repairProgress = 0;
-    heavy.destination = null;
-  }
-
-  if (heavy.phase === "approach") {
-    const remaining = moveHeavyOverride(boat, heavy.combatPoint, 11.8, dt);
-    boat.turretDisabled = true;
-    boat.fireCooldown = 999;
-    if (remaining <= 4) {
-      boat.x = heavy.combatPoint.x;
-      boat.y = heavy.combatPoint.y;
-      boat.speed = 0;
-      heavy.phase = "combat";
-      boat.turretDisabled = heavy.actualTurretDisabled;
-      boat.fireCooldown = 1.8;
-      emit(world, "heavy-pursuer-arrived", "Тяжёлый катер физически вошёл в бухту, остановился на боевой позиции и разворачивает установку.", [0, 1], {x: boat.x, y: boat.y});
-    }
-    return;
-  }
-
-  if (heavy.phase === "retreating") {
-    const remaining = moveHeavyOverride(boat, heavy.destination || farthestRepairPoint(world, boat), 12.2, dt);
-    boat.turretDisabled = true;
-    boat.fireCooldown = 999;
-    if (remaining <= 5) {
-      boat.speed = 0;
-      heavy.phase = "repairing";
-      emit(world, "heavy-repair-start", "Тяжёлый катер физически остановился. Слышно, как экипаж ставит ремонтные пластины.", [0, 1], {
-        system: heavy.repairSystem,
-        plates: heavy.repairPlates,
-        x: boat.x,
-        y: boat.y,
-      });
-    }
-    return;
-  }
-
-  if (heavy.phase === "repairing") {
-    boat.speed += clamp(0 - (Number(boat.speed) || 0), -8 * dt, 8 * dt);
-    boat.turretDisabled = true;
-    boat.fireCooldown = 999;
-    const quiet = (Number(world.time) || 0) - heavy.lastDamageAt >= 1.2;
-    if (quiet) heavy.repairProgress += dt;
-    else heavy.repairProgress = Math.max(0, heavy.repairProgress - dt * 1.5);
-    const duration = heavy.repairSystem === "engine" ? 9 : 12;
-    const quarter = Math.min(4, Math.floor(heavy.repairProgress / duration * 4));
-    if (quarter > heavy.repairQuarter && quarter < 4) {
-      heavy.repairQuarter = quarter;
-      emit(world, "heavy-repair-progress", `Ремонт тяжёлого катера: ${quarter * 25} процентов.`, [0, 1], {
-        system: heavy.repairSystem,
-        percent: quarter * 25,
-        x: boat.x,
-        y: boat.y,
-      });
-    }
-    if (heavy.repairProgress < duration) return;
-    if (heavy.repairSystem === "engine") {
-      boat.engineHealth = Math.max(1, (Number(boat.maxEngineHealth) || 180) * 0.68);
-      boat.engineDisabled = false;
-      heavy.actualEngineDisabled = false;
-    } else {
-      boat.turretHealth = Math.max(1, (Number(boat.maxTurretHealth) || 240) * 0.68);
-      boat.turretDisabled = false;
-      heavy.actualTurretDisabled = false;
-    }
-    heavy.repairPlates = Math.max(0, heavy.repairPlates - 1);
-    const repairedSystem = heavy.repairSystem;
-    heavy.repairSystem = null;
-    heavy.repairProgress = 0;
-    heavy.repairQuarter = 0;
-    heavy.phase = "returning";
-    heavy.destination = heavy.combatPoint;
-    emit(world, "heavy-repair-complete", `Ремонт ${repairedSystem === "engine" ? "двигателя" : "установки"} завершён. Осталось ремонтных пластин: ${heavy.repairPlates}. Катер возвращается в бой.`, [0, 1], {
-      system: repairedSystem,
-      plates: heavy.repairPlates,
-      x: boat.x,
-      y: boat.y,
-    });
-    return;
-  }
-
-  if (heavy.phase === "returning") {
-    const remaining = moveHeavyOverride(boat, heavy.destination || heavy.combatPoint, 11.5, dt);
-    boat.turretDisabled = true;
-    boat.fireCooldown = 999;
-    if (remaining <= 8) {
-      heavy.phase = "combat";
-      heavy.destination = null;
-      boat.turretDisabled = heavy.actualTurretDisabled;
-      boat.fireCooldown = 1.4;
-      emit(world, "heavy-repair-returned", "Тяжёлый катер вернулся на боевую позицию. Отремонтированная система снова работает.", [0, 1], {x: boat.x, y: boat.y});
-    }
+    boat.turretDisabled = heavy.actualTurretDisabled;
+    boat.fireCooldown = 1.8;
+    emit(world, "heavy-pursuer-arrived", "Тяжёлый катер физически вошёл в бухту, остановился на боевой позиции и разворачивает установку.", [0, 1], {x: boat.x, y: boat.y});
   }
 }
 
@@ -683,4 +572,4 @@ export function applyCombatAiModelV164(world, dt, helpers = {}) {
   return finishCombatAiV164(world, dt, helpers);
 }
 
-export {PROJECTILE_RANGES};
+export {PROJECTILE_RANGES, LEGACY_HEAVY_REPAIR_PHASES, normalizeLegacyHeavyRepair};
