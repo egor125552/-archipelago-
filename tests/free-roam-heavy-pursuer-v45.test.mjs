@@ -33,6 +33,16 @@ function worldForFive(coop = true) {
   return world;
 }
 
+function placeAttackerNearHeavy(world, metres = 35) {
+  const heavy = activeHeavyPursuer(world);
+  const player = world.players[0];
+  const boat = world.boats[player.activeBoat];
+  boat.x = heavy.x - metres;
+  boat.y = heavy.y;
+  player.x = boat.x;
+  player.y = boat.y;
+}
+
 function destroyAllExceptHeavy(world) {
   world.freeActivities.marauder.active = false;
   world.freeActivities.marauder.destroyed = true;
@@ -69,7 +79,7 @@ test("heavy hull, turret and engine are separate combat targets", () => {
   assert.deepEqual(targets.map(target => target.component), ["hull", "turret", "engine"]);
 });
 
-test("pistol cannot pierce heavy armour while automatic fire disables systems", () => {
+test("pistol cannot pierce heavy armour while close automatic fire disables systems", () => {
   const world = worldForFive();
   const heavy = activeHeavyPursuer(world);
   const hull = heavy.hull;
@@ -82,6 +92,7 @@ test("pistol cannot pierce heavy armour while automatic fire disables systems", 
   assert.equal(heavy.turretHealth, turret);
   assert.equal(heavy.engineHealth, engine);
 
+  placeAttackerNearHeavy(world);
   damageHeavyPursuer(world, "turret", 240, 0, {}, {weapon: "automatic"});
   damageHeavyPursuer(world, "engine", 180, 0, {}, {weapon: "automatic"});
   assert.equal(heavy.turretDisabled, true);
@@ -140,6 +151,7 @@ test("destroyed heavy boat releases its elite into the water", () => {
   const heavy = activeHeavyPursuer(world);
   const elite = activeHostileActors(world).find(actor => actor.elite);
   assert.equal(elite.state, "aboard");
+  placeAttackerNearHeavy(world);
   damageHeavyPursuer(world, "hull", heavy.hull, 0, {
     onEnemyBoatDestroyed(targetWorld, boat) {
       for (const actor of activeHostileActors(targetWorld)) {
@@ -163,6 +175,7 @@ test("clearing threat five grants 500 credits and six physical loot crates exact
   const elite = activeHostileActors(world).find(actor => actor.elite);
   damageHostileActor(world, elite.id, elite.health, 0, {weapon: "automatic"});
   const heavy = activeHeavyPursuer(world);
+  placeAttackerNearHeavy(world);
   damageHeavyPursuer(world, "hull", heavy.hull, 0, {}, {weapon: "automatic"});
   updateThreatDirector(world);
   assert.equal(world.freeActivities.credits, 525);
