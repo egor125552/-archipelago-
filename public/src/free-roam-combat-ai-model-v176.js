@@ -3,6 +3,7 @@
 import {applyCombatAiModelV175} from "./free-roam-combat-ai-model-v175.js?v=1";
 
 const ADOPTION_LOOKAHEAD_SECONDS = 0.07;
+const REPAIR_START_CLEARANCE = 236;
 const REPAIR_ABORT_CLEARANCE = 216;
 const PHASE_EVENT_TYPES = new Set([
   "contract-threat-phase",
@@ -19,6 +20,18 @@ const REPAIR_COMPLETE_TYPES = new Set([
 const values = value => Array.isArray(value)
   ? value
   : value && typeof value === "object" ? Object.values(value) : [];
+
+const HEAVY_TARGET_IDS = new Set(["heavy-pursuer", "heavy-turret", "heavy-engine"]);
+
+function filterCollection(collection, keep) {
+  if (Array.isArray(collection)) return collection.filter(keep);
+  if (collection && typeof collection === "object") {
+    for (const [key, value] of Object.entries(collection)) {
+      if (!keep(value)) delete collection[key];
+    }
+  }
+  return collection;
+}
 
 const distance = (a, b) => Math.hypot(
   (Number(a?.x) || 0) - (Number(b?.x) || 0),
@@ -93,10 +106,29 @@ function clearRepairState(world, state) {
     world.freeCombatAiV172.repairEncounterId = null;
     world.freeCombatAiV172.stableRepairDestination = null;
     world.freeCombatAiV172.frame = null;
+    world.freeCombatAiV172.targetLocks = {};
   }
   if (world.freeCombatAiV175) {
     world.freeCombatAiV175.repairCommitted = false;
     world.freeCombatAiV175.repairAnnouncementActive = false;
+  }
+}
+
+function clearStaleHeavyTargets(world) {
+  for (const player of values(world.players)) {
+    const combat = player?.combat;
+    if (!combat) continue;
+    if (HEAVY_TARGET_IDS.has(String(combat.lockedTargetId || ""))) combat.lockedTargetId = null;
+    if (HEAVY_TARGET_IDS.has(String(combat.lastTargetRequestId || ""))) combat.lastTargetRequestId = null;
+  }
+  for (const collection of [
+    world.freeActivities?.inputs,
+    world.operationInputs,
+    world.inputs,
+  ]) {
+    for (const input of values(collection)) {
+      if (HEAVY_TARGET_IDS.has(String(input?.targetId || ""))) input.targetId = null;
+    }
   }
 }
 
@@ -108,7 +140,9 @@ export function retireStaleHeavyV176(world, reason = "stale-encounter", force = 
   const oldEncounterIds = knownHeavyEncounterIds(world);
   world.freeHeavyPursuer.active = false;
   world.freeHeavyPursuer.boat = null;
+  world.freeHeavyPursuer.encounterId = null;
   world.freeHeavyPursuer.projectiles = [];
+  world.freeHeavyPursuer.nextProjectileId = 1;
 
   if (world.freeCombatAiV164) {
     world.freeCombatAiV164.heavy = null;
@@ -120,6 +154,7 @@ export function retireStaleHeavyV176(world, reason = "stale-encounter", force = 
     world.freeCombatAiV174.adoptedEncounterId = null;
   }
   clearRepairState(world, state);
+  clearStaleHeavyTargets(world);
 
   if (world.freeHostileActors?.actors) {
     world.freeHostileActors.actors = values(world.freeHostileActors.actors).filter(actor => (
@@ -164,26 +199,63 @@ export function rollbackPrematureThreatPhasesV176(world, frame = null) {
   if (!director?.active || Number(director.level) < 5 || director.heavyStarted) return false;
   const encounterId = String(director.encounterId ?? "");
   const intelligence = world.freeThreatIntelligence;
+  const isPrematureBoat = boat => belongsToEncounter(boat?.id, encounterId, 2)
+    || belongsToEncounter(boat?.id, encounterId, 3);
+  const isPrematureActorId = actor => belongsToEncounter(actor?.id, encounterId, 2)
+    || belongsToEncounter(actor?.id, encounterId, 3);
   const hadPrematureState = Boolean(
     intelligence?.phase2Spawned
     || intelligence?.finalWaveSpawned
     || Number(intelligence?.phase) > 1
-    || values(world.freeEnemyBoats?.boats).some(boat => belongsToEncounter(boat?.id, encounterId, 2) || belongsToEncounter(boat?.id, encounterId, 3))
-    || values(world.freeHostileActors?.actors).some(actor => belongsToEncounter(actor?.id, encounterId, 2) || belongsToEncounter(actor?.id, encounterId, 3))
+    || values(world.freeEnemyBoats?.boats).some(isPrematureBoat)
+    || values(world.freeThreatDirector?.boats).some(isPrematureBoat)
+    || values(world.freeHostileActors?.actors).some(isPrematureActorId)
   );
   if (!hadPrematureState) return false;
 
-  if (world.freeEnemyBoats?.boats) {
-    world.freeEnemyBoats.boats = values(world.freeEnemyBoats.boats).filter(boat => (
-      !belongsToEncounter(boat?.id, encounterId, 2)
-      && !belongsToEncounter(boat?.id, encounterId, 3)
-    ));
-  }
+  const removedBoatIds = new Set();
+  const keepBoat = boat => {
+    if (!isPrematureBoat(boat)) return true;
+    removedBoatIds.add(String(boat?.id || ""));
+    return false;
+  };
+  if (world.freeEnemyBoats?.boats) world.freeEnemyBoats.boats = filterCollection(world.freeEnemyBoats.boats, keepBoat);
+  if (world.freeThreatDirector?.boats) world.freeThreatDirector.boats = filterCollection(world.freeThreatDirector.boats, keepBoat);
+
+  const removedActorIds = new Set();
   if (world.freeHostileActors?.actors) {
-    world.freeHostileActors.actors = values(world.freeHostileActors.actors).filter(actor => (
-      !belongsToEncounter(actor?.id, encounterId, 2)
-      && !belongsToEncounter(actor?.id, encounterId, 3)
-    ));
+    world.freeHostileActors.actors = filterCollection(world.freeHostileActors.actors, actor => {
+      const remove = isPrematureActorId(actor) || removedBoatIds.has(String(actor?.boatId || ""));
+      if (remove) removedActorIds.add(String(actor?.id || ""));
+      return !remove;
+    });
+  }
+  if (world.freeHostileActors?.projectiles) {
+    world.freeHostileActors.projectiles = filterCollection(world.freeHostileActors.projectiles, projectile => !removedActorIds.has(String(
+      projectile?.sourceActorId
+        ?? projectile?.ownerId
+        ?? projectile?.actorId
+        ?? "",
+      )) && !removedBoatIds.has(String(
+        projectile?.sourceBoatId
+        ?? projectile?.boatId
+        ?? "",
+      )),
+    );
+  }
+  if (world.freeEnemyBoats?.projectiles) {
+    world.freeEnemyBoats.projectiles = filterCollection(
+      world.freeEnemyBoats.projectiles,
+      projectile => !removedBoatIds.has(String(
+        projectile?.sourcePursuerId
+        ?? projectile?.sourceBoatId
+        ?? projectile?.boatId
+        ?? "",
+      )),
+     );
+  }
+  if (director.assignments) {
+    for (const boatId of removedBoatIds) delete director.assignments[boatId];
   }
 
   if (intelligence) {
@@ -196,22 +268,14 @@ export function rollbackPrematureThreatPhasesV176(world, frame = null) {
     intelligence.nextBoatSerial = 1;
   }
 
-  const blockedHeavyTypes = new Set([
-    "heavy-armour-breached",
-    "heavy-breach-escape-v166",
-    "heavy-breach-engine-repair-trapped-v166",
-    "heavy-engine-repair-trapped-v166",
-    "heavy-turret-repair-route-v172",
-    "heavy-turret-repair-safe-v172",
-    "heavy-repair-progress-v166",
-    "heavy-repair-complete-v166",
-  ]);
   world.events = values(world.events).filter((event, index) => {
     if (!eventIsFresh(event, index, frame)) return true;
     const type = String(event?.type || "");
-    if (type === "contract-threat-phase-two" || type === "contract-threat-final-wave" || type === "contract-threat-final-phase") return false;
-    if (type === "contract-threat-phase" && Number(event.phase) === 2) return false;
-    if (blockedHeavyTypes.has(type)) return false;
+    if (type === "contract-threat-phase-two"
+      || type === "contract-threat-final-wave"
+      || type === "contract-threat-final-phase") return false;
+    if (type === "contract-threat-phase" && Number(event.phase) >= 2) return false;
+    if (type.startsWith("heavy-") && type !== "heavy-stale-state-retired-v176") return false;
     return true;
   });
   return true;
@@ -243,6 +307,7 @@ export function normalizeRepairLifecycleV176(world, frame = null) {
   const encounterId = String(heavy?.encounterId ?? world.freeThreatDirector?.encounterId ?? "active");
   const key = `${encounterId}:turret`;
   let resetAfterEvents = false;
+  let sawSafeAnnouncement = false;
 
   world.events = values(world.events).filter((event, index) => {
     if (!eventIsFresh(event, index, frame)) return true;
@@ -253,10 +318,8 @@ export function normalizeRepairLifecycleV176(world, frame = null) {
       return true;
     }
     if (event?.type !== "heavy-turret-repair-safe-v172") return true;
-    if (!committed) return false;
-    if (state.repairAnnouncementKey === key) return false;
-    state.repairAnnouncementKey = key;
-    return true;
+    sawSafeAnnouncement = true;
+    return false;
   });
 
   if (!boat || !heavy || heavy.repairSystem !== "turret" || Number(boat.turretHealth) > 0) {
@@ -264,13 +327,21 @@ export function normalizeRepairLifecycleV176(world, frame = null) {
     state.repairAnchor = null;
     return false;
   }
-  if (!committed || resetAfterEvents || nearestLivingPlayerDistance(world, boat) < REPAIR_ABORT_CLEARANCE) {
+
+  const nearest = nearestLivingPlayerDistance(world, boat);
+  if (!committed || resetAfterEvents || nearest < REPAIR_ABORT_CLEARANCE) {
+    state.repairAnnouncementKey = null;
     state.repairAnchor = null;
     return false;
   }
 
   if (!state.repairAnchor || state.repairAnchor.key !== key) {
-    state.repairAnchor = {key, x: Number(boat.x) || 0, y: Number(boat.y) || 0, heading: Number(boat.heading) || 0};
+    state.repairAnchor = {
+      key,
+      x: Number(boat.x) || 0,
+      y: Number(boat.y) || 0,
+      heading: Number(boat.heading) || 0,
+    };
   } else {
     boat.x = state.repairAnchor.x;
     boat.y = state.repairAnchor.y;
@@ -278,6 +349,26 @@ export function normalizeRepairLifecycleV176(world, frame = null) {
   }
   boat.speed = 0;
   heavy.phase = "breach-repairing-v166";
+
+  if (sawSafeAnnouncement && state.repairAnnouncementKey !== key) {
+    state.repairAnnouncementKey = key;
+    world.events.push({
+      type: "heavy-turret-repair-safe-v172",
+      text: `Тяжёлый катер разорвал дистанцию до ${Math.round(nearest)} метров, остановился и начал ремонт оружейной установки.`,
+      targets: [0, 1],
+      at: world.time,
+      operationEvent: true,
+      system: "turret",
+      clearance: REPAIR_START_CLEARANCE,
+      nearest,
+      destination: world.freeCombatAiV172?.stableRepairDestination
+        ? {...world.freeCombatAiV172.stableRepairDestination}
+        : null,
+      x: boat.x,
+      y: boat.y,
+      normalizedV176: true,
+    });
+  }
   return true;
 }
 
@@ -355,4 +446,4 @@ export function applyCombatAiModelV176(world, dt, helpers = {}) {
     : finishCombatAiV176Overlay(world, dt, helpers);
 }
 
-export {ADOPTION_LOOKAHEAD_SECONDS, REPAIR_ABORT_CLEARANCE};
+export {ADOPTION_LOOKAHEAD_SECONDS, REPAIR_START_CLEARANCE, REPAIR_ABORT_CLEARANCE};
