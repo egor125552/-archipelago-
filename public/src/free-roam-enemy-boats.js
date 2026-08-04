@@ -104,16 +104,22 @@ export function startEnemyBoats(world, level, anchor = null) {
   return state;
 }
 
+function playerBoatUnavailable(world, player) {
+  if (!["boat", "roof"].includes(player?.mode)) return false;
+  const boat = world.boats?.[player.activeBoat];
+  return !boat || boat.sunk || boat.emergencyActive || Number(boat.hull) <= 0;
+}
+
 function actorForPlayer(world, playerIndex) {
   const player = world.players?.[playerIndex];
-  if (!player) return null;
-  if (["boat", "roof"].includes(player.mode)) return world.boats?.[player.activeBoat] || player;
+  if (!player || playerBoatUnavailable(world, player)) return null;
+  if (["boat", "roof"].includes(player.mode)) return world.boats?.[player.activeBoat] || null;
   return player;
 }
 
 function velocityForPlayer(world, playerIndex) {
   const player = world.players?.[playerIndex];
-  if (!player) return {x: 0, y: 0};
+  if (!player || playerBoatUnavailable(world, player)) return {x: 0, y: 0};
   if (["boat", "roof"].includes(player.mode)) {
     const boat = world.boats?.[player.activeBoat];
     const angle = (Number(boat?.heading) || 0) * Math.PI / 180;
@@ -196,7 +202,11 @@ function spawnProjectile(world, state, boat) {
 function updateWeapon(world, state, boat, dt) {
   if (!["gunboat", "interceptor"].includes(boat.role)) return;
   const target = actorForPlayer(world, boat.targetPlayer);
-  if (!target) return;
+  if (!target) {
+    boat.aimRemaining = 0;
+    boat.burstRemaining = 0;
+    return;
+  }
   const metres = distance(boat, target);
   boat.fireCooldown = Math.max(0, boat.fireCooldown - dt);
   boat.burstCooldown = Math.max(0, boat.burstCooldown - dt);
@@ -224,8 +234,8 @@ function updateProjectiles(world, state, dt, helpers) {
     const next = {x: projectile.x + projectile.vx * dt, y: projectile.y + projectile.vy * dt};
     let hit = false;
     for (const boat of world.boats || []) {
-      if (!boat || boat.sunk || !segmentHit(projectile, next, boat, 6.4)) continue;
-      boat.hull = clamp(boat.hull - 2.5, 0.05, 100);
+      if (!boat || boat.sunk || boat.emergencyActive || Number(boat.hull) <= 0 || !segmentHit(projectile, next, boat, 6.4)) continue;
+      boat.hull = clamp(boat.hull - 2.5, 0, 100);
       boat.leak = clamp((Number(boat.leak) || 0) + 0.1, 0, 16);
       const occupants = world.players.map((player, index) => ({player, index})).filter(({player}) => ["boat", "roof"].includes(player.mode) && player.activeBoat === boat.id).map(({index}) => index);
       emit(world, "enemy-bullet-boat-hit", `Огонь ударной группы попал в лодку. Корпус ${Math.round(boat.hull)}.`, occupants.length ? occupants : [boat.owner], {sourcePlayer: -1, sourcePursuerId: projectile.boatId, targetBoat: boat.id, x: next.x, y: next.y});
@@ -255,9 +265,9 @@ function updateRamming(world, boat, dt) {
   boat.contactCooldown = Math.max(0, boat.contactCooldown - dt);
   if (boat.role !== "rammer" || boat.contactCooldown > 0) return;
   for (const targetBoat of world.boats || []) {
-    if (!targetBoat || targetBoat.sunk || distance(boat, targetBoat) > 12.2) continue;
+    if (!targetBoat || targetBoat.sunk || targetBoat.emergencyActive || Number(targetBoat.hull) <= 0 || distance(boat, targetBoat) > 12.2) continue;
     const impact = Math.max(8, boat.speed * 1.35);
-    targetBoat.hull = clamp(targetBoat.hull - impact * 0.45, 0.05, 100);
+    targetBoat.hull = clamp(targetBoat.hull - impact * 0.45, 0, 100);
     targetBoat.leak = clamp((Number(targetBoat.leak) || 0) + impact * 0.04, 0, 16);
     targetBoat.speed *= 0.45;
     boat.speed *= 0.55;

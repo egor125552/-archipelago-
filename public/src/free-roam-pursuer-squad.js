@@ -20,11 +20,17 @@ const bearing = (from, to) => Math.atan2(
   -((Number(to?.y) || 0) - (Number(from?.y) || 0)),
 ) * 180 / Math.PI;
 
+function playerBoatUnavailable(world, player) {
+  if (!["boat", "roof"].includes(player?.mode)) return false;
+  const boat = world.boats?.[player.activeBoat];
+  return !boat || boat.sunk || boat.emergencyActive || Number(boat.hull) <= 0;
+}
+
 function presentPlayers(world) {
   const presence = world.freeActivities?.presence || [];
   return world.players
     .map((player, index) => ({player, index}))
-    .filter(({player, index}) => presence[index] && player?.combat?.alive);
+    .filter(({player, index}) => presence[index] && player?.combat?.alive && !playerBoatUnavailable(world, player));
 }
 
 function eventTargets(world) {
@@ -163,15 +169,15 @@ function nextRandom(state) {
 
 function actorForPlayer(world, playerIndex) {
   const player = world.players[playerIndex];
-  if (["boat", "roof"].includes(player?.mode)) {
-    return world.boats[player.activeBoat] || player;
-  }
+  if (!player || playerBoatUnavailable(world, player)) return null;
+  if (["boat", "roof"].includes(player.mode)) return world.boats[player.activeBoat] || null;
   return player;
 }
 
 function velocityForPlayer(world, playerIndex) {
   const player = world.players[playerIndex];
-  if (["boat", "roof"].includes(player?.mode)) {
+  if (!player || playerBoatUnavailable(world, player)) return {x: 0, y: 0};
+  if (["boat", "roof"].includes(player.mode)) {
     const boat = world.boats[player.activeBoat];
     if (!boat) return {x: 0, y: 0};
     const angle = (Number(boat.heading) || 0) * Math.PI / 180;
@@ -192,6 +198,7 @@ function assignedTarget(world, playerIndex, shooter) {
   const candidate = presentPlayers(world).find(item => item.index === playerIndex);
   if (!candidate) return null;
   const actor = actorForPlayer(world, candidate.index);
+  if (!actor) return null;
   return {...candidate, actor, distance: distance(shooter, actor)};
 }
 
@@ -282,12 +289,13 @@ function separateEscortFromBoats(world, escort, helpers) {
     const playerIndex = boat.driver ?? boat.owner;
     const effectiveHeading = wrapDeg(boat.heading + (boat.speed < 0 ? 180 : 0));
     const directedAtEscort = Math.abs(wrapDeg(bearing(boat, escort) - effectiveHeading)) <= 70;
+    const canDamageBoat = !boat.emergencyActive && Number(boat.hull) > 0;
     let rammed = false;
-    if (escort.contactCooldown <= 0 && Math.abs(boat.speed) >= 4.5 && directedAtEscort) {
+    if (canDamageBoat && escort.contactCooldown <= 0 && Math.abs(boat.speed) >= 4.5 && directedAtEscort) {
       const impact = Math.max(9, Math.abs(boat.speed) * 1.65);
       rammed = damageEscort(world, escort.id, impact, playerIndex, helpers, {weapon: "ram"});
       if (rammed) escort.contactCooldown = 1.2;
-      boat.hull = clamp(boat.hull - impact * 0.24, 0.05, 100);
+      boat.hull = clamp(boat.hull - impact * 0.24, 0, 100);
       boat.leak = clamp((Number(boat.leak) || 0) + impact * 0.025, 0, 16);
     }
     boat.x = clamp(boat.x - nx * overlap * 0.32, 7, 413);
@@ -297,7 +305,7 @@ function separateEscortFromBoats(world, escort, helpers) {
     boat.speed *= 0.52;
     escort.heading = bearing(boat, escort);
     escort.speed = Math.max(8, Math.abs(escort.speed) * 0.48);
-    if (escort.contactCooldown > 0 || rammed || escort.destroyed) continue;
+    if (escort.contactCooldown > 0 || rammed || escort.destroyed || !canDamageBoat) continue;
     escort.contactCooldown = 1.2;
     const occupants = world.players
       .map((player, index) => ({player, index}))
@@ -318,6 +326,7 @@ function spawnProjectile(world, state, shooter, weapon) {
   const targetPlayer = presentPlayers(world).find(candidate => candidate.index === weapon.targetPlayer);
   if (!targetPlayer) return false;
   const actor = actorForPlayer(world, targetPlayer.index);
+  if (!actor) return false;
   const target = {...targetPlayer, actor, distance: distance(shooter, actor)};
   if (target.distance > PURSUER_SQUAD_TUNING.range) return false;
   const velocity = velocityForPlayer(world, target.index);
@@ -448,7 +457,7 @@ function segmentDistance(x1, y1, x2, y2, point) {
 function firstProjectileCollision(world, projectile, x2, y2) {
   let result = null;
   for (const boat of world.boats || []) {
-    if (boat.sunk) continue;
+    if (!boat || boat.sunk || boat.emergencyActive || Number(boat.hull) <= 0) continue;
     const time = segmentCircleHit(projectile.x, projectile.y, x2, y2, boat, 6.6);
     if (time == null || (result && time >= result.time)) continue;
     result = {kind: "boat", actor: boat, time};
@@ -463,7 +472,8 @@ function firstProjectileCollision(world, projectile, x2, y2) {
 }
 
 function hitBoat(world, projectile, boat, x, y) {
-  boat.hull = clamp(boat.hull - PURSUER_SQUAD_TUNING.boatDamage, 0.05, 100);
+  if (!boat || boat.sunk || boat.emergencyActive || Number(boat.hull) <= 0) return false;
+  boat.hull = clamp(boat.hull - PURSUER_SQUAD_TUNING.boatDamage, 0, 100);
   boat.leak = clamp((Number(boat.leak) || 0) + 0.22, 0, 16);
   boat.speed *= 0.94;
   const occupants = world.players
@@ -484,12 +494,14 @@ function hitBoat(world, projectile, boat, x, y) {
     x,
     y,
   });
+  return true;
 }
 
 function announceNearMisses(world, projectile, x2, y2) {
   for (const {player, index} of presentPlayers(world)) {
     if (projectile.nearMissAnnounced[index]) continue;
     const actor = actorForPlayer(world, index);
+    if (!actor) continue;
     const near = segmentDistance(projectile.x, projectile.y, x2, y2, actor);
     if (near.distance <= 2.2 || near.distance > 9) continue;
     projectile.nearMissAnnounced[index] = true;
