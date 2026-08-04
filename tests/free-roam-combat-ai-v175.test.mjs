@@ -83,8 +83,8 @@ test("the player's mass-bomb tactic changes spacing and repair cover", () => {
   assert.equal(w.freeThreatDirector.boats[0].tacticalRole, "screen-heavy-repair-v175");
 });
 
-test("hotfix routes authoritative AI through V175", async () => {
-  const source = await import("node:fs/promises").then(fs => fs.readFile(new URL("../public/src/free-roam-combat-ai-hotfix-v163.js", import.meta.url), "utf8"));
+test("V175 remains directly below the authoritative V176 layer", async () => {
+  const source = await import("node:fs/promises").then(fs => fs.readFile(new URL("../public/src/free-roam-combat-ai-model-v176.js", import.meta.url), "utf8"));
   assert.match(source, /free-roam-combat-ai-model-v175\.js\?v=1/);
-  assert.match(source, /applyCombatAiModelV175\(world, dt, helpers\)/);
+  assert.match(source, /applyCombatAiModelV175/);
 });
