@@ -1,7 +1,7 @@
 "use strict";
 
 import {applyCombatAiHotfixV162} from "./free-roam-combat-ai-hotfix-v162.js?v=1";
-import {applyCombatAiModelV175} from "./free-roam-combat-ai-model-v175.js?v=1";
+import {applyCombatAiModelV176} from "./free-roam-combat-ai-model-v176.js?v=1";
 
 function ensureState(world) {
   world.freeCombatAiHotfixV163 ||= {encounterId: null, fixedOpeningActorIds: []};
@@ -54,5 +54,5 @@ function preserveOpeningActors(world) {
 export function applyCombatAiHotfixV163(world, dt, helpers = {}) {
   applyCombatAiHotfixV162(world, dt, helpers);
   preserveOpeningActors(world);
-  return applyCombatAiModelV175(world, dt, helpers);
+  return applyCombatAiModelV176(world, dt, helpers);
 }
