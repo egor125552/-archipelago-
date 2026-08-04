@@ -334,13 +334,18 @@ export function updateCombat(world, dt, helpers = {}) {
       });
     }
 
-    const targetRequestChanged = input.targetId !== combat.lastTargetRequestId;
-    const requestedTarget = targetRequestChanged
+    const explicitTargetChange = input.targetId !== previous.targetId;
+    const requestedTarget = explicitTargetChange
       ? resolveCombatTarget(world, index, input.targetId, COMBAT_TARGET_LOCK_RANGE)
       : null;
     const retainedBefore = combat.lockedTargetId
       ? resolveCombatTarget(world, index, combat.lockedTargetId, COMBAT_TARGET_LOCK_RANGE)
       : null;
+    const suspendedLongLock = Boolean(
+      !explicitTargetChange
+      && retainedBefore
+      && retainedBefore.distance > COMBAT_TUNING.automaticRange
+    );
     const pistolAttack = combat.equipped === "pistol" && Boolean(input.attack);
     intercepted.push({
       input,
@@ -353,12 +358,16 @@ export function updateCombat(world, dt, helpers = {}) {
       lockedBefore: combat.lockedTargetId,
       retainedBefore,
       targetRequestBefore: input.targetId,
-      targetRequestChanged,
+      explicitTargetChange,
       requestedTarget,
-      baseTargetRequest: combat.lastTargetRequestId,
+      suspendedLongLock,
     });
     input.weapon = false;
-    if (targetRequestChanged) input.targetId = combat.lastTargetRequestId;
+    if (explicitTargetChange) input.targetId = combat.lastTargetRequestId;
+    if (suspendedLongLock) {
+      combat.lockedTargetId = null;
+      if (combat.equipped === "automatic") input.attack = false;
+    }
     if (combat.equipped === "pistol") {
       input.attack = false;
       previous.attack = false;
@@ -376,7 +385,7 @@ export function updateCombat(world, dt, helpers = {}) {
     const player = world.players[index];
     const combat = player.combat;
 
-    if (saved.targetRequestChanged) {
+    if (saved.explicitTargetChange) {
       combat.lastTargetRequestId = saved.targetRequestBefore;
       removeRecentTargetEvents(world, eventStart, index);
       const requested = saved.requestedTarget
@@ -408,23 +417,39 @@ export function updateCombat(world, dt, helpers = {}) {
       }
     }
 
-    if (saved.equippedBefore === "pistol" && combat.pistolAmmo > 0 && combat.equipped === "automatic" && !saved.targetRequestChanged) {
+    if (saved.suspendedLongLock && !saved.explicitTargetChange) {
+      const sameTarget = resolveCombatTarget(world, index, saved.lockedBefore, COMBAT_TARGET_LOCK_RANGE);
+      if (sameTarget) {
+        combat.lockedTargetId = sameTarget.id;
+        player.heading = bearing(player, sameTarget.point);
+      }
+    }
+
+    if (saved.equippedBefore === "pistol" && combat.pistolAmmo > 0 && combat.equipped === "automatic" && !saved.explicitTargetChange) {
       combat.equipped = "pistol";
     }
     if (!state.presence[index] || !combat.alive || combat.knockedDown) continue;
+
+    if (saved.suspendedLongLock && saved.attack && saved.equippedBefore === "automatic" && combat.lockedTargetId) {
+      const sameTarget = resolveCombatTarget(world, index, combat.lockedTargetId, COMBAT_TARGET_LOCK_RANGE);
+      if (sameTarget) announceOutOfWeaponRange(world, index, sameTarget, "automatic");
+    }
+
     if (saved.pistolAttack && combat.equipped === "pistol" && combat.pistolCooldown <= 0) {
       firePistol(world, index, helpers);
     }
 
-    if (saved.targetRequestChanged) continue;
-    if (saved.lockedBefore && !combat.lockedTargetId && combatEncounterActive(world)) {
+    if (saved.explicitTargetChange) continue;
+    if (saved.lockedBefore && !combat.lockedTargetId) {
       const sameTarget = resolveCombatTarget(world, index, saved.lockedBefore, COMBAT_TARGET_LOCK_RANGE);
       removeRecentTargetEvents(world, eventStart, index);
       if (sameTarget) {
         combat.lockedTargetId = sameTarget.id;
-        if (saved.attack && combat.equipped === "automatic" && sameTarget.distance > COMBAT_TUNING.automaticRange) {
-          announceOutOfWeaponRange(world, index, sameTarget, "automatic");
-        }
+        player.heading = bearing(player, sameTarget.point);
+        continue;
+      }
+      if (!combatEncounterActive(world)) {
+        emit(world, "target-lost", "Цель уничтожена или ушла дальше 320 метров.", [index], {sourcePlayer: index});
         continue;
       }
       const replacement = nextEnemyTarget(world, index);
