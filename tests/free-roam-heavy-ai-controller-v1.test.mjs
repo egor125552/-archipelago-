@@ -30,7 +30,7 @@ test("authoritative hotfix imports one heavy controller and no V164-V176 chain",
   const fs=await import("node:fs/promises");
   const hotfix=await fs.readFile(new URL("../public/src/free-roam-combat-ai-hotfix-v163.js",import.meta.url),"utf8");
   const controller=await fs.readFile(new URL("../public/src/free-roam-heavy-ai-controller-v1.js",import.meta.url),"utf8");
-  assert.match(hotfix,/free-roam-heavy-ai-controller-v1\.js\?v=2/);
+  assert.match(hotfix,/free-roam-heavy-ai-controller-v1\.js\?v=3/);
   assert.match(hotfix,/prepareHeavyAiControllerV1\(world\)/);
   assert.match(hotfix,/finishHeavyAiControllerV1\(world,dt\)/);
   assert.doesNotMatch(hotfix,/free-roam-combat-ai-model-v1(?:6[4-9]|7[0-6])\.js/);
