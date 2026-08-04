@@ -88,7 +88,7 @@ try {
       xSpan,ySpan,shotsDuringStandoff,maxEmergencySpeed,
       emergencySpeed:controller.emergencyEscapeSpeedV1(boat),
       standoffMin:controller.HULL_STANDOFF_MIN,standoffMax:controller.HULL_STANDOFF_MAX,
-      modeAfterPressure,speedAfterPressure,pressureStart,pressureEnd:metres(),
+      modeAfterPressure,speedAfterPressure,modeAfterRecovery:heavy.hullEscapeMode,pressureStart,pressureEnd:metres(),
       announcements:world.events.filter(event=>event.type==="heavy-hull-standoff-v1").length,
     };
   });
@@ -106,7 +106,8 @@ try {
   assert.ok(result.announcements>=1,"the firing-position cue was never emitted");
   assert.equal(result.modeAfterPressure,"flee","close pressure did not restart flight in Chromium");
   assert.ok(result.speedAfterPressure>=result.emergencySpeed*0.7,"renewed Chromium flight was not urgent");
-  assert.ok(result.pressureEnd>result.pressureStart+20,`Chromium failed to reopen distance: ${result.pressureStart} -> ${result.pressureEnd}`);
+  assert.ok(result.pressureEnd>=result.standoffMin-1,`Chromium failed to restore the safe firing band: ${result.pressureStart} -> ${result.pressureEnd}`);
+  assert.equal(result.modeAfterRecovery,"standoff","Chromium did not settle again after reopening distance");
 
   console.log(JSON.stringify({scenario:"heavy-low-hull-standoff",...result},null,2));
 } finally {
