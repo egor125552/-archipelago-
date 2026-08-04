@@ -1,58 +1,37 @@
 "use strict";
 
 import {applyCombatAiHotfixV162} from "./free-roam-combat-ai-hotfix-v162.js?v=1";
-import {applyCombatAiModelV176} from "./free-roam-combat-ai-model-v176.js?v=1";
+import {prepareHeavyAiControllerV1,finishHeavyAiControllerV1} from "./free-roam-heavy-ai-controller-v1.js?v=1";
+import {normalizeHeavyBaseStepV1} from "./free-roam-heavy-ai-base-normalizer-v1.js?v=1";
+import {rollbackPrematureThreatPhasesV1} from "./free-roam-threat-phase-guard-v1.js?v=1";
 
 function ensureState(world) {
-  world.freeCombatAiHotfixV163 ||= {encounterId: null, fixedOpeningActorIds: []};
-  const state = world.freeCombatAiHotfixV163;
-  if (!Array.isArray(state.fixedOpeningActorIds)) {
-    state.fixedOpeningActorIds = state.fixedOpeningActorIds && typeof state.fixedOpeningActorIds === "object"
-      ? Object.values(state.fixedOpeningActorIds)
-      : [];
-  }
+  world.freeCombatAiHotfixV163 ||= {encounterId:null,fixedOpeningActorIds:[]};
+  const state=world.freeCombatAiHotfixV163;
+  if (!Array.isArray(state.fixedOpeningActorIds)) state.fixedOpeningActorIds=state.fixedOpeningActorIds&&typeof state.fixedOpeningActorIds==="object"?Object.values(state.fixedOpeningActorIds):[];
   return state;
 }
-
 function openingActor(actor) {
-  const id = String(actor?.id || "");
-  return id.startsWith("v161-opening-") || id.startsWith("v162-opening-");
+  const id=String(actor?.id||"");
+  return id.startsWith("v161-opening-")||id.startsWith("v162-opening-");
 }
-
-function freezeOpeningGroup(world, state, encounterId) {
-  state.encounterId = encounterId;
-  state.fixedOpeningActorIds = (world.freeHostileActors?.actors || [])
-    .filter(openingActor)
-    .map(actor => String(actor.id));
-}
-
-function removeReplacementActors(world, state) {
-  const hostile = world.freeHostileActors;
-  if (!hostile?.actors?.length) return;
-  const allowed = new Set(state.fixedOpeningActorIds.map(String));
-  hostile.actors = hostile.actors.filter(actor => !openingActor(actor) || allowed.has(String(actor.id)));
-}
-
 function preserveOpeningActors(world) {
-  const state = ensureState(world);
-  const director = world.freeThreatDirector;
-  const encounterId = director?.active && Number(director.level) >= 5
-    ? Number(director.encounterId) || 0
-    : null;
-  if (encounterId == null) {
-    state.encounterId = null;
-    state.fixedOpeningActorIds = [];
+  const state=ensureState(world),director=world.freeThreatDirector;
+  const encounterId=director?.active&&Number(director.level)>=5?Number(director.encounterId)||0:null;
+  if (encounterId==null) {state.encounterId=null;state.fixedOpeningActorIds=[];return;}
+  if (state.encounterId!==encounterId) {
+    state.encounterId=encounterId;
+    state.fixedOpeningActorIds=(world.freeHostileActors?.actors||[]).filter(openingActor).map(actor=>String(actor.id));
     return;
   }
-  if (state.encounterId !== encounterId) {
-    freezeOpeningGroup(world, state, encounterId);
-    return;
-  }
-  removeReplacementActors(world, state);
+  const allowed=new Set(state.fixedOpeningActorIds.map(String));
+  if (world.freeHostileActors?.actors) world.freeHostileActors.actors=world.freeHostileActors.actors.filter(actor=>!openingActor(actor)||allowed.has(String(actor.id)));
 }
-
-export function applyCombatAiHotfixV163(world, dt, helpers = {}) {
-  applyCombatAiHotfixV162(world, dt, helpers);
+export function applyCombatAiHotfixV163(world,dt,helpers={}) {
+  prepareHeavyAiControllerV1(world);
+  applyCombatAiHotfixV162(world,dt,helpers);
+  normalizeHeavyBaseStepV1(world);
+  rollbackPrematureThreatPhasesV1(world,world.freeHeavyAiControllerV1?.frame?.eventStart||0);
   preserveOpeningActors(world);
-  return applyCombatAiModelV176(world, dt, helpers);
+  return finishHeavyAiControllerV1(world,dt);
 }
