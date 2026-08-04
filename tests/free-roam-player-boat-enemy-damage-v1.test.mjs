@@ -17,6 +17,11 @@ function placeShot(projectile, boat, damage = 1.5) {
   });
 }
 
+function placePlayerOnBoat(world, boat) {
+  Object.assign(world.players[0], {x: boat.x, y: boat.y, mode: "boat", activeBoat: boat.id});
+  boat.driver = 0;
+}
+
 test("pursuer bullets hand zero hull to the canonical emergency lifecycle", () => {
   const world = createFreeWorld();
   const boat = world.boats[0];
@@ -37,19 +42,22 @@ test("pursuer bullets hand zero hull to the canonical emergency lifecycle", () =
   assert.equal(world.events.filter(event => event.type === "flood-emergency-start").length, 1);
 });
 
-test("pursuers do not keep hitting a boat during its canonical emergency", () => {
+test("pursuers stop damaging emergency hull but can still hit its living passenger", () => {
   const world = createFreeWorld();
   const boat = world.boats[0];
   boat.hull = 0.05;
   boat.emergencyActive = true;
+  placePlayerOnBoat(world, boat);
   activatePursuerSquad(world);
   const state = world.freePursuerSquad;
-  state.projectiles = [{id:"ignored-pursuer-shot",sourcePursuerId:"pursuer-2",targetPlayer:0,sourceX:boat.x,sourceY:boat.y-2}];
+  state.projectiles = [{id:"emergency-rider-pursuer-shot",sourcePursuerId:"pursuer-2",targetPlayer:0,sourceX:boat.x,sourceY:boat.y-2}];
   placeShot(state.projectiles[0], boat);
   const before = world.events.length;
+  let playerHits = 0;
 
-  updatePursuerSquad(world, 0.1);
+  updatePursuerSquad(world, 0.1, {damagePlayer(){ playerHits += 1; return true; }});
   assert.equal(world.events.slice(before).some(event => event.type === "enemy-bullet-boat-hit"), false);
+  assert.equal(playerHits, 1);
 });
 
 test("threat-group bullets hand zero hull to the canonical emergency lifecycle", () => {
@@ -68,11 +76,12 @@ test("threat-group bullets hand zero hull to the canonical emergency lifecycle",
   assert.equal(world.events.filter(event => event.type === "flood-emergency-start").length, 1);
 });
 
-test("threat group does not ram or shoot a boat during its canonical emergency", () => {
+test("threat group stops damaging emergency hull but can still shoot its passenger", () => {
   const world = createFreeWorld();
   const boat = world.boats[0];
   boat.hull = 0.05;
   boat.emergencyActive = true;
+  placePlayerOnBoat(world, boat);
   const state = ensureEnemyBoats(world);
   state.active = true;
   state.boats = [{
@@ -80,11 +89,13 @@ test("threat group does not ram or shoot a boat during its canonical emergency",
     x:boat.x,y:boat.y,heading:0,speed:18,targetPlayer:0,contactCooldown:0,
     fireCooldown:1,aimRemaining:0,burstRemaining:0,burstCooldown:0,
   }];
-  state.projectiles = [{id:"ignored-threat-shot",boatId:"threat-boat-1",targetPlayer:0,x:boat.x,y:boat.y-1,vx:0,vy:20,ttl:1}];
+  state.projectiles = [{id:"emergency-rider-threat-shot",boatId:"threat-boat-1",targetPlayer:0,x:boat.x,y:boat.y-1,vx:0,vy:20,ttl:1}];
   const before = world.events.length;
+  let playerHits = 0;
 
-  updateEnemyBoats(world, 0.1);
+  updateEnemyBoats(world, 0.1, {damagePlayer(){ playerHits += 1; return true; }});
   const fresh = world.events.slice(before);
   assert.equal(fresh.some(event => event.type === "enemy-bullet-boat-hit"), false);
   assert.equal(fresh.some(event => event.type === "enemy-ram-hit"), false);
+  assert.equal(playerHits, 1);
 });
