@@ -8,8 +8,8 @@ export * from "./free-roam-mega-bomb-v35.js";
 
 const MAX_LEAD_DISTANCE = 52;
 const MAX_LEAD_TIME = 4.8;
-const MIN_TARGET_SPEED = 1.2;
 const HEAVY_TARGET_IDS = new Set(["heavy-pursuer", "heavy-turret", "heavy-engine"]);
+const MOVING_REPAIR_PHASES = new Set(["breach-escaping-v166", "breach-returning-v166"]);
 const clamp = (value, min, max) => Math.max(min, Math.min(max, Number(value) || 0));
 const wrapDeg = value => ((Number(value) + 180) % 360 + 360) % 360 - 180;
 const distance = (a, b) => Math.hypot(
@@ -38,25 +38,23 @@ function pointForPlayer(world, playerIndex) {
   return player;
 }
 
-function linearPrediction(point, seconds, bounds = MEGA_BOMB_WORLD_BOUNDS) {
-  const speed = Math.max(0, Number(point?.speed) || 0);
-  if (speed < MIN_TARGET_SPEED) return {x: Number(point?.x) || 0, y: Number(point?.y) || 0};
-  const direction = headingVector(Number(point?.heading) || 0);
-  return {
-    x: clamp((Number(point?.x) || 0) + direction.x * speed * seconds, bounds.minX, bounds.maxX),
-    y: clamp((Number(point?.y) || 0) + direction.y * speed * seconds, bounds.minY, bounds.maxY),
-  };
+function currentPoint(boat) {
+  return {x: Number(boat?.x) || 0, y: Number(boat?.y) || 0};
+}
+
+function repairDestination(world, heavy) {
+  return heavy?.destination
+    || world?.freeCombatAiV172?.stableRepairDestination
+    || heavy?.v168SafeDestination
+    || heavy?.v167ReachableDestination
+    || null;
 }
 
 export function predictHeavyPositionV36(world, boat, seconds, bounds = MEGA_BOMB_WORLD_BOUNDS) {
   if (!boat) return null;
   const heavy = world?.freeCombatAiV164?.heavy;
   const phase = String(heavy?.phase || "combat");
-  const destination = heavy?.destination
-    || world?.freeCombatAiV172?.stableRepairDestination
-    || heavy?.v168SafeDestination
-    || heavy?.v167ReachableDestination
-    || null;
+  const destination = repairDestination(world, heavy);
   const point = {
     x: Number(boat.x) || 0,
     y: Number(boat.y) || 0,
@@ -64,7 +62,14 @@ export function predictHeavyPositionV36(world, boat, seconds, bounds = MEGA_BOMB
     speed: Math.max(0, Number(boat.speed) || 0),
   };
 
-  if (phase === "breach-repairing-v166" || phase === "repairing") return {x: point.x, y: point.y};
+  // V36 only predicts movement that belongs to the unified V166+ repair
+  // lifecycle. Ordinary combat remains aimed at the current physical target,
+  // and deleted V164 phases are deliberately not supported here.
+  if (phase === "breach-repairing-v166") return currentPoint(point);
+  if (phase !== "breach-stopping-v166" && (!MOVING_REPAIR_PHASES.has(phase) || !destination)) {
+    return currentPoint(point);
+  }
+
   const total = clamp(seconds, 0, MAX_LEAD_TIME);
   const stepSize = 0.08;
   let elapsed = 0;
@@ -72,18 +77,16 @@ export function predictHeavyPositionV36(world, boat, seconds, bounds = MEGA_BOMB
     const dt = Math.min(stepSize, total - elapsed);
     if (phase === "breach-stopping-v166") {
       point.speed += clamp(0 - point.speed, -5.8 * dt, 5.8 * dt);
-    } else if ((phase === "breach-escaping-v166" || phase === "retreating") && destination) {
+    } else {
       const desiredHeading = bearing(point, destination);
-      const turnRate = phase === "retreating" ? 32 : 38;
-      const desiredSpeed = phase === "retreating" ? 12.2 : 13.4;
-      point.heading = wrapDeg(point.heading + clamp(wrapDeg(desiredHeading - point.heading), -turnRate * dt, turnRate * dt));
+      const desiredSpeed = phase === "breach-returning-v166" ? 12.1 : 13.4;
+      point.heading = wrapDeg(point.heading + clamp(wrapDeg(desiredHeading - point.heading), -38 * dt, 38 * dt));
       point.speed += clamp(desiredSpeed - point.speed, -7 * dt, 5.4 * dt);
       if (distance(point, destination) <= Math.max(5, point.speed * dt)) {
         point.x = clamp(destination.x, bounds.minX, bounds.maxX);
         point.y = clamp(destination.y, bounds.minY, bounds.maxY);
         point.speed = 0;
-        elapsed += dt;
-        continue;
+        break;
       }
     }
 
@@ -92,18 +95,15 @@ export function predictHeavyPositionV36(world, boat, seconds, bounds = MEGA_BOMB
     point.y = clamp(point.y + direction.y * point.speed * dt, bounds.minY, bounds.maxY);
     elapsed += dt;
   }
-  return {x: point.x, y: point.y};
+  return currentPoint(point);
 }
 
 export function leadTargetPointV36(world, origin, target, projectileSpeed, bounds = MEGA_BOMB_WORLD_BOUNDS) {
   if (!origin || !target) return null;
   const horizontalSpeed = clamp(projectileSpeed, 44, 68);
   let flightTime = clamp(distance(origin, target) / horizontalSpeed, 1.05, MAX_LEAD_TIME);
-  const speed = Math.max(0, Number(target.speed) || 0);
-  let predicted = target.id === "heavy-pursuer" || target.role === "heavy"
-    ? predictHeavyPositionV36(world, target, flightTime, bounds)
-    : linearPrediction(target, flightTime, bounds);
-  if (!predicted) predicted = {x: Number(target.x) || 0, y: Number(target.y) || 0};
+  let predicted = predictHeavyPositionV36(world, target, flightTime, bounds)
+    || currentPoint(target);
 
   const dx = predicted.x - Number(target.x || 0);
   const dy = predicted.y - Number(target.y || 0);
@@ -121,7 +121,7 @@ export function leadTargetPointV36(world, origin, target, projectileSpeed, bound
     ...predicted,
     leadTime: flightTime,
     leadDistance: distance(predicted, target),
-    targetSpeed: speed,
+    targetSpeed: Math.max(0, Number(target.speed) || 0),
   };
 }
 
@@ -159,8 +159,14 @@ export function applyMovingTargetLeadV36(world, playerIndex, projectile) {
   const targetId = String(target?.id || lockedId || "");
   if (!origin || !projectile || !target?.point || !HEAVY_TARGET_IDS.has(targetId)) return false;
 
+  const phase = String(world?.freeCombatAiV164?.heavy?.phase || "combat");
+  if (phase !== "breach-stopping-v166" && phase !== "breach-repairing-v166" && !MOVING_REPAIR_PHASES.has(phase)) {
+    return false;
+  }
+
   const boat = world.freeHeavyPursuer?.boat;
-  const movingPoint = boat && HEAVY_TARGET_IDS.has(targetId) ? {...boat, id: "heavy-pursuer", role: "heavy"} : target.point;
+  if (!boat) return false;
+  const movingPoint = {...boat, id: "heavy-pursuer", role: "heavy"};
   const horizontalSpeed = Math.hypot(Number(projectile.vx) || 0, Number(projectile.vy) || 0);
   const lead = leadTargetPointV36(world, projectile, movingPoint, horizontalSpeed);
   if (!lead || lead.leadDistance < 0.5) return false;
@@ -198,4 +204,4 @@ export function launchMegaBomb(world, playerIndex) {
   return true;
 }
 
-export {MAX_LEAD_DISTANCE, MAX_LEAD_TIME, MIN_TARGET_SPEED};
+export {MAX_LEAD_DISTANCE, MAX_LEAD_TIME, MOVING_REPAIR_PHASES};
