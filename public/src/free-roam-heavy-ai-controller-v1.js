@@ -17,6 +17,10 @@ export const HULL_DAMAGE_WINDOW=3.6;
 export const HULL_ESCAPE_CLEARANCE=250;
 export const HULL_ESCAPE_ARMOUR_RATIO=0.34;
 export const HULL_ESCAPE_CORE_LIMIT=220;
+export const HULL_STANDOFF_MIN=226;
+export const HULL_STANDOFF_MAX=242;
+export const HULL_STANDOFF_TARGET=234;
+export const HULL_STANDOFF_QUIET=4.5;
 const OLD_PHASE=new Map([
   ["retreating","escape"],["breach-escaping-v166","escape"],
   ["stopping-v165","stopping"],["breach-stopping-v166","stopping"],
@@ -61,6 +65,7 @@ function initializeHeavy(world,state,boat) {
     combatPoint:{x:clamp(boat.x,70,350),y:clamp(boat.y,115,285)},lastDamageAt:-999,
     escapeReason:null,escapeSourcePlayer:null,minimumUntil:-999,maximumUntil:-999,
     hullEscapeStartedAt:-999,hullEscapeThreshold:null,hullEscapeDps:0,hullEscapeRerouteAt:-999,
+    hullEscapeMode:"flee",hullStandoffAt:-999,hullStandoffAnnouncedAt:-999,
     hullDangerDuringRepair:false};
   const now=Number(world.time)||0;
   const spawned=values(world.events).some(event=>["heavy-pursuer-arrived","heavy-pursuer-approaching"].includes(event?.type)&&Math.abs(now-(Number(event.at)||0))<0.4);
@@ -86,6 +91,9 @@ function ensureHeavy(world,state) {
   if (!Number.isFinite(state.heavy.hullEscapeStartedAt)) state.heavy.hullEscapeStartedAt=-999;
   if (!Number.isFinite(state.heavy.hullEscapeDps)) state.heavy.hullEscapeDps=0;
   if (!Number.isFinite(state.heavy.hullEscapeRerouteAt)) state.heavy.hullEscapeRerouteAt=-999;
+  if (!["flee","standoff"].includes(state.heavy.hullEscapeMode)) state.heavy.hullEscapeMode="flee";
+  if (!Number.isFinite(state.heavy.hullStandoffAt)) state.heavy.hullStandoffAt=-999;
+  if (!Number.isFinite(state.heavy.hullStandoffAnnouncedAt)) state.heavy.hullStandoffAnnouncedAt=-999;
   if (typeof state.heavy.hullDangerDuringRepair!=="boolean") state.heavy.hullDangerDuringRepair=false;
   publishCompatibility(world,state);
   return state.heavy;
@@ -266,6 +274,46 @@ function survivalPoint(world,boat,state) {
   return scored.sort((a,b)=>(b.path>=current-3)-(a.path>=current-3)||b.path-a.path||b.endpoint-a.endpoint||b.away-a.away||b.travel-a.travel)[0]?.point
     ||safestPoint(world,boat,state,HULL_ESCAPE_CLEARANCE);
 }
+function hullStandoffPoint(world,boat,state,target) {
+  if (!target?.point) return survivalPoint(world,boat,state);
+  const current=distance(boat,target.point);
+  const base=Math.atan2((Number(boat.y)||0)-(Number(target.point.y)||0),(Number(boat.x)||0)-(Number(target.point.x)||0));
+  const offsets=[0,Math.PI/10,-Math.PI/10,Math.PI/5,-Math.PI/5,Math.PI/3,-Math.PI/3,Math.PI/2,-Math.PI/2,Math.PI];
+  const candidates=offsets.map(offset=>{
+    const angle=base+offset;
+    const point={
+      x:clamp((Number(target.point.x)||0)+Math.cos(angle)*HULL_STANDOFF_TARGET,16,404),
+      y:clamp((Number(target.point.y)||0)+Math.sin(angle)*HULL_STANDOFF_TARGET,86,308),
+    };
+    const actual=distance(point,target.point),travel=distance(boat,point);
+    const path=pointSegmentDistance(target.point,boat,point);
+    const bandPenalty=actual<HULL_STANDOFF_MIN?(HULL_STANDOFF_MIN-actual)*80
+      :actual>HULL_STANDOFF_MAX?(actual-HULL_STANDOFF_MAX)*80:0;
+    const crossingPenalty=path<Math.min(Math.max(0,current-3),HULL_STANDOFF_MIN-8)?600:0;
+    return {point,score:bandPenalty+crossingPenalty+Math.abs(actual-HULL_STANDOFF_TARGET)*3+travel*0.08};
+  });
+  return candidates.sort((a,b)=>a.score-b.score)[0]?.point||survivalPoint(world,boat,state);
+}
+function resumeHullFlight(world,state,boat,heavy) {
+  const now=Number(world.time)||0;
+  heavy.hullEscapeMode="flee";heavy.hullStandoffAt=-999;
+  heavy.destination=survivalPoint(world,boat,state);heavy.hullEscapeRerouteAt=now;
+  boat.speed=Math.max(Number(boat.speed)||0,emergencyEscapeSpeedV1(boat)*0.78);
+  return heavy.destination;
+}
+function enterHullStandoff(world,state,boat,heavy,target) {
+  const now=Number(world.time)||0;
+  heavy.hullEscapeMode="standoff";heavy.hullStandoffAt=now;
+  heavy.destination=hullStandoffPoint(world,boat,state,target);
+  boat.speed=Math.min(Number(boat.speed)||0,13.2);
+  if (now-(Number(heavy.hullStandoffAnnouncedAt)||-999)>=12) {
+    heavy.hullStandoffAnnouncedAt=now;
+    emit(world,"heavy-hull-standoff-v1","Тяжёлый катер занял дальнюю огневую позицию и снова ведёт огонь.",[0,1],{
+      targetPlayer:target?.index??null,distance:target?.point?distance(boat,target.point):null,x:boat.x,y:boat.y,
+    });
+  }
+  return heavy.destination;
+}
 function startSuppressionEscape(world,state,boat,heavy) {
   if (heavy.phase!=="combat"||Number(boat.engineHealth)<=0) return;
   const latest=[...state.automaticHits].reverse().find(hit=>Number.isInteger(hit.source));
@@ -276,13 +324,15 @@ function startSuppressionEscape(world,state,boat,heavy) {
 }
 function startHullDangerEscape(world,state,boat,heavy,danger) {
   if (Number(boat.engineHealth)<=0||heavy.repairSystem) return false;
-  const already=heavy.phase==="escape"&&heavy.escapeReason==="hull-danger";
-  heavy.phase="escape";heavy.escapeReason="hull-danger";heavy.escapeSourcePlayer=danger.source;
-  heavy.minimumUntil=(Number(world.time)||0)+6;heavy.maximumUntil=Infinity;
-  if (!already||!heavy.destination) heavy.destination=survivalPoint(world,boat,state);
-  heavy.hullEscapeStartedAt=already?heavy.hullEscapeStartedAt:Number(world.time)||0;
+  const now=Number(world.time)||0,already=heavy.phase==="escape"&&heavy.escapeReason==="hull-danger";
+  heavy.phase="escape";heavy.escapeReason="hull-danger";heavy.escapeSourcePlayer=danger.source;heavy.maximumUntil=Infinity;
+  if (!already) {
+    heavy.minimumUntil=now+6;heavy.hullEscapeStartedAt=now;heavy.hullEscapeMode="flee";heavy.hullStandoffAt=-999;
+    heavy.destination=survivalPoint(world,boat,state);
+  } else if (danger.damage>0||danger.breachedNow||danger.bombShock) resumeHullFlight(world,state,boat,heavy);
+  else if (!heavy.destination&&heavy.hullEscapeMode!=="standoff") heavy.destination=survivalPoint(world,boat,state);
   heavy.hullEscapeThreshold=danger.staticLimit;heavy.hullEscapeDps=danger.dps;
-  boat.speed=Math.max(Number(boat.speed)||0,emergencyEscapeSpeedV1(boat)*0.78);
+  if (heavy.hullEscapeMode!=="standoff") boat.speed=Math.max(Number(boat.speed)||0,emergencyEscapeSpeedV1(boat)*0.78);
   if (!already) emit(world,"heavy-hull-danger-escape-v1","Корпус тяжёлого катера не выдержит продолжение боя. Он стреляет на отходе и уходит на максимальной скорости.",[0,1],{
     sourcePlayer:danger.source,hull:danger.hull,maxHull:danger.maxHull,damageRate:danger.dps,predictedLoss:danger.predictedLoss,x:boat.x,y:boat.y,
   });
@@ -314,31 +364,50 @@ function advanceHeavy(world,state,boat,heavy,dt,newHits) {
     if (Number(boat.engineHealth)<=0) {heavy.phase="stopping";heavy.repairSystem="engine";return;}
     const repairEscape=heavy.escapeReason==="repair";
     const hullEscape=heavy.escapeReason==="hull-danger";
-    let destination=heavy.destination||(repairEscape?assignRepairRoute(world,state,boat,heavy,true):safestPoint(world,boat,state,hullEscape?HULL_ESCAPE_CLEARANCE:236));
-    let remaining;
+    let destination=null,remaining=Infinity;
     if (repairEscape) {
+      destination=heavy.destination||assignRepairRoute(world,state,boat,heavy,true);
       const repairSpeed=heavy.hullDangerDuringRepair?emergencyEscapeSpeedV1(boat):14.6;
       remaining=moveHeavyToRepairPointV1(boat,destination,repairSpeed,dt,heavy.hullDangerDuringRepair?92:78);
     } else if (hullEscape) {
-      const arrival=Math.max(16,Math.abs(Number(boat.speed)||0)*Math.max(0,dt)+7);
-      if (distance(boat,destination)<=arrival) {
-        heavy.destination=survivalPoint(world,boat,state);
-        heavy.hullEscapeRerouteAt=now;destination=heavy.destination;
+      const target=chooseTarget(world,boat),bomb=incomingMegaBomb(world,boat);
+      const clearance=target?distance(boat,target.point):nearestPlayerDistance(world,boat);
+      const quiet=now-(Number(heavy.lastDamageAt)||-999)>=HULL_STANDOFF_QUIET;
+      if (heavy.hullEscapeMode==="standoff"&&(bomb||!quiet||clearance<HULL_STANDOFF_MIN-4)) resumeHullFlight(world,state,boat,heavy);
+      if (heavy.hullEscapeMode==="standoff") {
+        if (!target) boat.speed+=clamp(0-boat.speed,-8*dt,8*dt);
+        else {
+          boat.targetPlayer=target.index;
+          if (clearance>HULL_STANDOFF_MAX||clearance<HULL_STANDOFF_MIN) {
+            destination=hullStandoffPoint(world,boat,state,target);heavy.destination=destination;
+            const speed=clearance<HULL_STANDOFF_MIN?emergencyEscapeSpeedV1(boat):Math.min(13.2,emergencyEscapeSpeedV1(boat));
+            remaining=moveTo(boat,destination,speed,dt,clearance<HULL_STANDOFF_MIN?88:72);
+          } else {
+            heavy.destination=null;boat.speed+=clamp(0-boat.speed,-8*dt,8*dt);remaining=0;
+          }
+        }
+      } else {
+        destination=heavy.destination||resumeHullFlight(world,state,boat,heavy);
+        const arrival=Math.max(16,Math.abs(Number(boat.speed)||0)*Math.max(0,dt)+7);
+        if (distance(boat,destination)<=arrival) {
+          heavy.destination=survivalPoint(world,boat,state);heavy.hullEscapeRerouteAt=now;destination=heavy.destination;
+        }
+        remaining=moveTo(boat,destination,emergencyEscapeSpeedV1(boat),dt,92);
+        const rerouteDue=now-(Number(heavy.hullEscapeRerouteAt)||-999)>=0.8;
+        if (rerouteDue&&(bomb||clearance<HULL_ESCAPE_CLEARANCE-28)) {
+          heavy.destination=survivalPoint(world,boat,state);heavy.hullEscapeRerouteAt=now;
+        }
+        boat.speed=Math.max(Number(boat.speed)||0,emergencyEscapeSpeedV1(boat)*0.72);
+        if (target&&now>=Number(heavy.minimumUntil)&&quiet&&!bomb&&clearance>=HULL_STANDOFF_MIN-4) enterHullStandoff(world,state,boat,heavy,target);
       }
-      remaining=moveTo(boat,destination,emergencyEscapeSpeedV1(boat),dt,92);
-    } else remaining=moveTo(boat,destination,18.5,dt,78);
+    } else {
+      destination=heavy.destination||safestPoint(world,boat,state,236);
+      remaining=moveTo(boat,destination,18.5,dt,78);
+    }
     if (heavy.escapeReason==="suppression") {
       const source=pointForPlayer(world,heavy.escapeSourcePlayer),far=!source||distance(boat,source)>=250;
       if (now>=heavy.minimumUntil&&(far||now>=heavy.maximumUntil)) {heavy.phase="returning";heavy.destination=heavy.combatPoint;heavy.escapeReason=null;}
-    } else if (hullEscape) {
-      const clearance=nearestPlayerDistance(world,boat),bomb=incomingMegaBomb(world,boat);
-      const rerouteDue=now-(Number(heavy.hullEscapeRerouteAt)||-999)>=0.8;
-      if (rerouteDue&&(bomb||clearance<HULL_ESCAPE_CLEARANCE-28)) {
-        heavy.destination=survivalPoint(world,boat,state);
-        heavy.hullEscapeRerouteAt=now;
-      }
-      boat.speed=Math.max(Number(boat.speed)||0,emergencyEscapeSpeedV1(boat)*0.72);
-    } else if (remaining<=REPAIR_ARRIVAL_RADIUS) {
+    } else if (!hullEscape&&remaining<=REPAIR_ARRIVAL_RADIUS) {
       const clearance=nearestPlayerDistance(world,boat),required=requiredRepairClearanceV1(heavy);
       const quiet=now-(Number(heavy.lastDamageAt)||-999)>=1.2;
       const bomb=incomingMegaBomb(world,boat);
