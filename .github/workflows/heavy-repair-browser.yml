@@ -1,0 +1,69 @@
+name: Heavy boat repair browser regression
+
+on:
+  pull_request:
+    paths:
+      - "public/src/free-roam-heavy-ai-controller-v1.js"
+      - "public/src/free-roam-heavy-ai-support-v1.js"
+      - "public/src/free-roam-combat-ai-hotfix-v163.js"
+      - "tests/free-roam-heavy-repair-route-v1.test.mjs"
+      - "tests/browser/heavy-repair-browser.mjs"
+      - "public/heavy-repair-browser-harness.html"
+      - ".github/workflows/heavy-repair-browser.yml"
+  push:
+    branches: [main]
+    paths:
+      - "public/src/free-roam-heavy-ai-controller-v1.js"
+      - "public/src/free-roam-heavy-ai-support-v1.js"
+      - "public/src/free-roam-combat-ai-hotfix-v163.js"
+      - "tests/free-roam-heavy-repair-route-v1.test.mjs"
+      - "tests/browser/heavy-repair-browser.mjs"
+      - "public/heavy-repair-browser-harness.html"
+      - ".github/workflows/heavy-repair-browser.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  heavy-repair-chromium:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run deterministic repair regressions
+        run: node --test tests/free-roam-heavy-repair-route-v1.test.mjs
+
+      - name: Install Chromium test runtime
+        run: |
+          npm install --no-save --package-lock=false playwright@1.54.1
+          npx playwright install --with-deps chromium
+
+      - name: Start the real public web root
+        run: |
+          python3 -m http.server 4173 --directory public > /tmp/archipelago-heavy-repair-http.log 2>&1 &
+          echo $! > /tmp/archipelago-heavy-repair-http.pid
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:4173/heavy-repair-browser-harness.html > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/archipelago-heavy-repair-http.log
+          exit 1
+
+      - name: Reproduce the player's repair failure in Chromium
+        env:
+          ARCHIPELAGO_TEST_URL: http://127.0.0.1:4173
+        run: node tests/browser/heavy-repair-browser.mjs
+
+      - name: Show HTTP log on failure
+        if: failure()
+        run: cat /tmp/archipelago-heavy-repair-http.log || true
