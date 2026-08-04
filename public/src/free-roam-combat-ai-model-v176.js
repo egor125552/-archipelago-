@@ -25,6 +25,10 @@ const distance = (a, b) => Math.hypot(
   (Number(a?.y) || 0) - (Number(b?.y) || 0),
 );
 
+function normalizedId(value) {
+  return value === null || value === undefined || String(value) === "" ? null : String(value);
+}
+
 function ensureState(world) {
   world.freeCombatAiV176 ||= {
     frame: null,
@@ -32,15 +36,22 @@ function ensureState(world) {
     phaseAnnouncements: {},
     repairAnnouncementKey: null,
     repairAnchor: null,
+    heavyContractId: null,
   };
   const state = world.freeCombatAiV176;
   state.phaseAnnouncements ||= {};
+  state.heavyContractId = normalizedId(state.heavyContractId);
   return state;
 }
 
 function directorEncounterId(world) {
   const director = world.freeThreatDirector;
-  return director?.active ? String(director.encounterId ?? "") : null;
+  return director?.active ? normalizedId(director.encounterId) : null;
+}
+
+function directorContractId(world) {
+  const director = world.freeThreatDirector;
+  return director?.active ? normalizedId(director.contractId) : null;
 }
 
 function synchronizeEncounterState(world, state) {
@@ -63,7 +74,48 @@ function knownHeavyEncounterIds(world) {
     world.freeCombatAiV164?.heavyEncounterId,
     world.freeCombatAiV164?.heavy?.encounterId,
     world.freeCombatAiV172?.repairEncounterId,
-  ].filter(value => value !== null && value !== undefined && String(value) !== "").map(String);
+  ].map(normalizedId).filter(Boolean);
+}
+
+function knownHeavyContractIds(world) {
+  const state = ensureState(world);
+  return [
+    state.heavyContractId,
+    world.freeHeavyPursuer?.v176ContractId,
+    currentHeavyBoat(world)?.v176ContractId,
+    world.freeCombatAiV164?.heavy?.v176ContractId,
+  ].map(normalizedId).filter(Boolean);
+}
+
+function stampHeavyContract(world, contractId) {
+  const normalized = normalizedId(contractId);
+  const boat = currentHeavyBoat(world);
+  if (!normalized || !boat) return false;
+  const state = ensureState(world);
+  state.heavyContractId = normalized;
+  world.freeHeavyPursuer.v176ContractId = normalized;
+  boat.v176ContractId = normalized;
+  if (world.freeCombatAiV164?.heavy) world.freeCombatAiV164.heavy.v176ContractId = normalized;
+  return true;
+}
+
+export function bindHeavyOwnershipV176(world) {
+  const boat = currentHeavyBoat(world);
+  const director = world.freeThreatDirector;
+  if (!boat || !director?.active || Number(director.level) < 5) return false;
+
+  const contractId = directorContractId(world);
+  if (!contractId) return false;
+
+  const existingOwnership = knownHeavyContractIds(world);
+  if (existingOwnership.length) return existingOwnership.every(value => value === contractId);
+
+  const encounterId = directorEncounterId(world);
+  const knownEncounterIds = knownHeavyEncounterIds(world);
+  const encounterMatches = knownEncounterIds.length === 0
+    || knownEncounterIds.every(value => value === encounterId);
+  if (!director.heavyStarted && !encounterMatches) return false;
+  return stampHeavyContract(world, contractId);
 }
 
 function heavyIsStale(world) {
@@ -72,18 +124,33 @@ function heavyIsStale(world) {
   const director = world.freeThreatDirector;
   if (!director?.active || Number(director.level) < 5) return false;
 
-  const encounterId = String(director.encounterId ?? "");
-  const knownIds = knownHeavyEncounterIds(world);
-  if (knownIds.some(value => value !== encounterId)) return true;
-
-  if (!director.heavyStarted && knownIds.length > 0) {
-    const startsAt = Number(director.heavyStartsAt) || 0;
-    const now = Number(world.time) || 0;
-    const dueForSameEncounterAdoption = knownIds.every(value => value === encounterId)
-      && now + ADOPTION_LOOKAHEAD_SECONDS >= startsAt;
-    return !dueForSameEncounterAdoption;
+  const contractId = directorContractId(world);
+  const ownedContractIds = knownHeavyContractIds(world);
+  if (contractId && ownedContractIds.length) {
+    if (ownedContractIds.some(value => value !== contractId)) return true;
+    return false;
   }
-  return false;
+
+  const encounterId = directorEncounterId(world);
+  const knownEncounterIds = knownHeavyEncounterIds(world);
+  return Boolean(encounterId && knownEncounterIds.some(value => value !== encounterId));
+}
+
+function projectileSourceIds(projectile) {
+  return [
+    projectile?.sourceId,
+    projectile?.sourceBoatId,
+    projectile?.sourceActorId,
+    projectile?.boatId,
+    projectile?.actorId,
+    projectile?.ownerId,
+    projectile?.shooterId,
+    projectile?.launcherId,
+  ].map(normalizedId).filter(Boolean);
+}
+
+function projectileFromRemoved(projectile, removedIds) {
+  return projectileSourceIds(projectile).some(id => removedIds.has(id));
 }
 
 function clearRepairState(world, state) {
@@ -106,9 +173,16 @@ export function retireStaleHeavyV176(world, reason = "stale-encounter", force = 
 
   const boat = world.freeHeavyPursuer.boat;
   const oldEncounterIds = knownHeavyEncounterIds(world);
+  const oldContractIds = knownHeavyContractIds(world);
+  const removedActorIds = new Set(values(world.freeHostileActors?.actors)
+    .filter(actor => String(actor?.boatId || "") === "heavy-pursuer")
+    .map(actor => normalizedId(actor?.id))
+    .filter(Boolean));
+
   world.freeHeavyPursuer.active = false;
   world.freeHeavyPursuer.boat = null;
   world.freeHeavyPursuer.projectiles = [];
+  world.freeHeavyPursuer.v176ContractId = null;
 
   if (world.freeCombatAiV164) {
     world.freeCombatAiV164.heavy = null;
@@ -120,13 +194,21 @@ export function retireStaleHeavyV176(world, reason = "stale-encounter", force = 
     world.freeCombatAiV174.adoptedEncounterId = null;
   }
   clearRepairState(world, state);
+  state.heavyContractId = null;
 
   if (world.freeHostileActors?.actors) {
     world.freeHostileActors.actors = values(world.freeHostileActors.actors).filter(actor => (
       String(actor?.boatId || "") !== "heavy-pursuer"
     ));
   }
+  if (world.freeHostileActors?.projectiles && removedActorIds.size) {
+    world.freeHostileActors.projectiles = values(world.freeHostileActors.projectiles)
+      .filter(projectile => !projectileFromRemoved(projectile, removedActorIds));
+  }
   if (world.freeThreatDirector?.assignments) delete world.freeThreatDirector.assignments[boat.id];
+  if (world.freeThreatDirector?.actorAssignments) {
+    for (const id of removedActorIds) delete world.freeThreatDirector.actorAssignments[id];
+  }
 
   world.events ||= [];
   world.events.push({
@@ -137,7 +219,9 @@ export function retireStaleHeavyV176(world, reason = "stale-encounter", force = 
     operationEvent: true,
     reason,
     oldEncounterIds,
+    oldContractIds,
     encounterId: world.freeThreatDirector?.encounterId ?? null,
+    contractId: world.freeThreatDirector?.contractId ?? null,
     hull: boat.hull,
     engineHealth: boat.engineHealth,
     turretHealth: boat.turretHealth,
@@ -153,10 +237,19 @@ function belongsToEncounter(id, encounterId, phase) {
     || value.startsWith(`threat-phase-${encounterId}-${phase}-`);
 }
 
+function belongsToPrematurePhase(id, encounterId) {
+  return belongsToEncounter(id, encounterId, 2) || belongsToEncounter(id, encounterId, 3);
+}
+
 function eventIsFresh(event, index, frame) {
   if (!frame) return true;
   if (index >= Math.max(0, Number(frame.eventStart) || 0)) return true;
   return Number(event?.at) >= (Number(frame.time) || 0) - 0.001;
+}
+
+function removeAssignments(assignments, removedIds) {
+  if (!assignments || typeof assignments !== "object") return;
+  for (const id of removedIds) delete assignments[id];
 }
 
 export function rollbackPrematureThreatPhasesV176(world, frame = null) {
@@ -164,27 +257,51 @@ export function rollbackPrematureThreatPhasesV176(world, frame = null) {
   if (!director?.active || Number(director.level) < 5 || director.heavyStarted) return false;
   const encounterId = String(director.encounterId ?? "");
   const intelligence = world.freeThreatIntelligence;
+  const boats = values(world.freeEnemyBoats?.boats);
+  const actors = values(world.freeHostileActors?.actors);
+
+  const removedBoatIds = new Set(boats
+    .filter(boat => belongsToPrematurePhase(boat?.id, encounterId))
+    .map(boat => normalizedId(boat?.id))
+    .filter(Boolean));
+  for (const actor of actors) {
+    const boatId = normalizedId(actor?.boatId);
+    if (boatId && belongsToPrematurePhase(boatId, encounterId)) removedBoatIds.add(boatId);
+  }
+
+  const removedActorIds = new Set(actors
+    .filter(actor => belongsToPrematurePhase(actor?.id, encounterId)
+      || removedBoatIds.has(normalizedId(actor?.boatId)))
+    .map(actor => normalizedId(actor?.id))
+    .filter(Boolean));
+
   const hadPrematureState = Boolean(
     intelligence?.phase2Spawned
     || intelligence?.finalWaveSpawned
     || Number(intelligence?.phase) > 1
-    || values(world.freeEnemyBoats?.boats).some(boat => belongsToEncounter(boat?.id, encounterId, 2) || belongsToEncounter(boat?.id, encounterId, 3))
-    || values(world.freeHostileActors?.actors).some(actor => belongsToEncounter(actor?.id, encounterId, 2) || belongsToEncounter(actor?.id, encounterId, 3))
+    || removedBoatIds.size
+    || removedActorIds.size
   );
   if (!hadPrematureState) return false;
 
   if (world.freeEnemyBoats?.boats) {
-    world.freeEnemyBoats.boats = values(world.freeEnemyBoats.boats).filter(boat => (
-      !belongsToEncounter(boat?.id, encounterId, 2)
-      && !belongsToEncounter(boat?.id, encounterId, 3)
-    ));
+    world.freeEnemyBoats.boats = boats.filter(boat => !removedBoatIds.has(normalizedId(boat?.id)));
   }
   if (world.freeHostileActors?.actors) {
-    world.freeHostileActors.actors = values(world.freeHostileActors.actors).filter(actor => (
-      !belongsToEncounter(actor?.id, encounterId, 2)
-      && !belongsToEncounter(actor?.id, encounterId, 3)
-    ));
+    world.freeHostileActors.actors = actors.filter(actor => !removedActorIds.has(normalizedId(actor?.id)));
   }
+
+  const removedSourceIds = new Set([...removedBoatIds, ...removedActorIds]);
+  if (world.freeEnemyBoats?.projectiles) {
+    world.freeEnemyBoats.projectiles = values(world.freeEnemyBoats.projectiles)
+      .filter(projectile => !projectileFromRemoved(projectile, removedSourceIds));
+  }
+  if (world.freeHostileActors?.projectiles) {
+    world.freeHostileActors.projectiles = values(world.freeHostileActors.projectiles)
+      .filter(projectile => !projectileFromRemoved(projectile, removedSourceIds));
+  }
+  removeAssignments(director.assignments, removedBoatIds);
+  removeAssignments(director.actorAssignments, removedActorIds);
 
   if (intelligence) {
     intelligence.encounterId = Number(director.encounterId) || 0;
@@ -193,7 +310,7 @@ export function rollbackPrematureThreatPhasesV176(world, frame = null) {
     intelligence.phase2BaselineActors = 0;
     intelligence.phase2Spawned = false;
     intelligence.finalWaveSpawned = false;
-    intelligence.nextBoatSerial = 1;
+    intelligence.nextBoatSerial = Math.max(1, Number(intelligence.nextBoatSerial) || 1);
   }
 
   const blockedHeavyTypes = new Set([
@@ -209,9 +326,20 @@ export function rollbackPrematureThreatPhasesV176(world, frame = null) {
   world.events = values(world.events).filter((event, index) => {
     if (!eventIsFresh(event, index, frame)) return true;
     const type = String(event?.type || "");
-    if (type === "contract-threat-phase-two" || type === "contract-threat-final-wave" || type === "contract-threat-final-phase") return false;
-    if (type === "contract-threat-phase" && Number(event.phase) === 2) return false;
+    if (type === "contract-threat-phase-two"
+      || type === "contract-threat-final-wave"
+      || type === "contract-threat-final-phase") return false;
+    if (type === "contract-threat-phase" && [2, 3].includes(Number(event.phase))) return false;
     if (blockedHeavyTypes.has(type)) return false;
+    const references = [
+      event?.sourceId,
+      event?.sourceBoatId,
+      event?.sourceActorId,
+      event?.boatId,
+      event?.actorId,
+      event?.targetId,
+    ].map(normalizedId).filter(Boolean);
+    if (references.some(id => removedSourceIds.has(id))) return false;
     return true;
   });
   return true;
@@ -233,6 +361,12 @@ function actualRepairAbort(event) {
     || (event?.type === "heavy-tactical-mode-v168" && event.mode === "repair-aborted");
 }
 
+function resetRepairAnnouncement(world, state) {
+  state.repairAnnouncementKey = null;
+  state.repairAnchor = null;
+  if (world.freeCombatAiV175) world.freeCombatAiV175.repairAnnouncementActive = false;
+}
+
 export function normalizeRepairLifecycleV176(world, frame = null) {
   const state = ensureState(world);
   const boat = currentHeavyBoat(world);
@@ -242,35 +376,47 @@ export function normalizeRepairLifecycleV176(world, frame = null) {
     && Number(boat?.turretHealth) <= 0;
   const encounterId = String(heavy?.encounterId ?? world.freeThreatDirector?.encounterId ?? "active");
   const key = `${encounterId}:turret`;
-  let resetAfterEvents = false;
+  let lastLifecycleEvent = null;
 
   world.events = values(world.events).filter((event, index) => {
     if (!eventIsFresh(event, index, frame)) return true;
-    if (actualRepairAbort(event) || REPAIR_COMPLETE_TYPES.has(event?.type)) {
-      state.repairAnnouncementKey = null;
-      state.repairAnchor = null;
-      resetAfterEvents = true;
+    if (actualRepairAbort(event)) {
+      resetRepairAnnouncement(world, state);
+      lastLifecycleEvent = "abort";
+      return true;
+    }
+    if (REPAIR_COMPLETE_TYPES.has(event?.type)) {
+      resetRepairAnnouncement(world, state);
+      lastLifecycleEvent = "complete";
       return true;
     }
     if (event?.type !== "heavy-turret-repair-safe-v172") return true;
     if (!committed) return false;
     if (state.repairAnnouncementKey === key) return false;
     state.repairAnnouncementKey = key;
+    if (world.freeCombatAiV175) world.freeCombatAiV175.repairAnnouncementActive = true;
+    lastLifecycleEvent = "start";
     return true;
   });
 
   if (!boat || !heavy || heavy.repairSystem !== "turret" || Number(boat.turretHealth) > 0) {
-    state.repairAnnouncementKey = null;
-    state.repairAnchor = null;
+    resetRepairAnnouncement(world, state);
     return false;
   }
-  if (!committed || resetAfterEvents || nearestLivingPlayerDistance(world, boat) < REPAIR_ABORT_CLEARANCE) {
+  if (!committed
+    || ["abort", "complete"].includes(lastLifecycleEvent)
+    || nearestLivingPlayerDistance(world, boat) < REPAIR_ABORT_CLEARANCE) {
     state.repairAnchor = null;
     return false;
   }
 
   if (!state.repairAnchor || state.repairAnchor.key !== key) {
-    state.repairAnchor = {key, x: Number(boat.x) || 0, y: Number(boat.y) || 0, heading: Number(boat.heading) || 0};
+    state.repairAnchor = {
+      key,
+      x: Number(boat.x) || 0,
+      y: Number(boat.y) || 0,
+      heading: Number(boat.heading) || 0,
+    };
   } else {
     boat.x = state.repairAnchor.x;
     boat.y = state.repairAnchor.y;
@@ -309,23 +455,43 @@ function frameSnapshot(world) {
     eventStart: values(world.events).length,
     time: Number(world.time) || 0,
     directorEncounterId: directorEncounterId(world),
+    directorContractId: directorContractId(world),
     heavyReference: boat,
     heavyEncounterIds: knownHeavyEncounterIds(world),
+    heavyContractIds: knownHeavyContractIds(world),
   };
 }
 
-function staleAcrossEncounterBoundary(world, frame) {
+function staleAcrossContractBoundary(world, frame) {
   const boat = currentHeavyBoat(world);
   if (!frame?.heavyReference || boat !== frame.heavyReference) return false;
-  const currentEncounterId = directorEncounterId(world);
-  return frame.directorEncounterId !== currentEncounterId;
+  const before = normalizedId(frame.directorContractId);
+  const after = directorContractId(world);
+  return Boolean(before && after && before !== after);
+}
+
+function intendedHeavySchedule(world) {
+  const director = world.freeThreatDirector;
+  return director ? {
+    heavyStarted: Boolean(director.heavyStarted),
+    heavyStartsAt: Number(director.heavyStartsAt) || 0,
+  } : null;
+}
+
+function restoreHeavySchedule(world, schedule) {
+  const director = world.freeThreatDirector;
+  if (!director || !schedule) return;
+  director.heavyStarted = schedule.heavyStarted;
+  director.heavyStartsAt = schedule.heavyStartsAt;
 }
 
 export function prepareCombatAiV176Overlay(world, helpers = {}) {
   const state = ensureState(world);
   synchronizeEncounterState(world, state);
   state.frame = frameSnapshot(world);
+  bindHeavyOwnershipV176(world);
   retireStaleHeavyV176(world, "pre-step-stale-encounter");
+  rollbackPrematureThreatPhasesV176(world, state.frame);
   applyCombatAiModelV175(world, 0, helpers);
   return state;
 }
@@ -334,15 +500,23 @@ export function finishCombatAiV176Overlay(world, dt, helpers = {}) {
   const state = ensureState(world);
   const frame = state.frame || frameSnapshot(world);
   synchronizeEncounterState(world, state);
+  bindHeavyOwnershipV176(world);
 
-  if (staleAcrossEncounterBoundary(world, frame)) {
-    retireStaleHeavyV176(world, "encounter-changed-during-step", true);
+  if (staleAcrossContractBoundary(world, frame)) {
+    retireStaleHeavyV176(world, "contract-changed-during-step", true);
   } else {
     retireStaleHeavyV176(world, "post-step-stale-encounter");
   }
   rollbackPrematureThreatPhasesV176(world, frame);
 
+  const schedule = intendedHeavySchedule(world);
   applyCombatAiModelV175(world, Math.max(0, Number(dt) || 0), helpers);
+
+  const retiredAfterBase = retireStaleHeavyV176(world, "base-reintroduced-stale-heavy");
+  if (retiredAfterBase) restoreHeavySchedule(world, schedule);
+  rollbackPrematureThreatPhasesV176(world, frame);
+  bindHeavyOwnershipV176(world);
+
   normalizeRepairLifecycleV176(world, frame);
   normalizePhaseAnnouncementsV176(world, frame);
   state.frame = null;
