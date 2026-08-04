@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Pack repository
+      - name: Pack current repository snapshot
         run: |
           tar --exclude='.git' -czf /tmp/archipelago-repo.tgz .
       - uses: actions/upload-artifact@v4
