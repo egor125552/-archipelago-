@@ -22,6 +22,11 @@ export function normalizeHeavyBaseStepV1(world) {
   boat.heading = snapshot.heading;
   boat.speed = snapshot.speed;
 
+  // В обычном бою выбор безопасной точки должен быть детерминированным.
+  // Иначе служебный serial слегка меняет оценку одинаковых точек каждый кадр,
+  // и катер может беспричинно перекладывать руль между двумя маршрутами.
+  if (state?.heavy?.phase === "combat") state.serial = 0;
+
   const heavy = state.heavy;
   const armourWasAlive = !heavy?.armourBreached && Number(snapshot.hull) > 0;
   const armourWasDestroyed = Number(boat.hull) <= 0 || boat.destroyed || boat.active === false;
