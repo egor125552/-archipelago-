@@ -11,6 +11,8 @@ import {
 export const HEAVY_PHASE_V1=Object.freeze({APPROACH:"approach",COMBAT:"combat",ESCAPE:"escape",STOPPING:"stopping",REPAIRING:"repairing",RETURNING:"returning"});
 export const REPAIR_START_CLEARANCE=236;
 export const REPAIR_ABORT_CLEARANCE=216;
+export const REPAIR_ARRIVAL_RADIUS=6;
+export const REPAIR_ROUTE_MARGIN=8;
 const OLD_PHASE=new Map([
   ["retreating","escape"],["breach-escaping-v166","escape"],
   ["stopping-v165","stopping"],["breach-stopping-v166","stopping"],
@@ -33,6 +35,7 @@ function initializeHeavy(world,state,boat) {
   state.encounterId=id;
   state.heavy={encounterId:id,phase:"combat",armourBreached:false,armourMax,coreMax:armourMax>=900?340:260,
     repairPlates:3,repairSystem:null,repairProgress:0,repairQuarter:0,destination:null,
+    repairRouteClearance:null,repairEscapeStartedAt:-999,repairReroutes:0,
     combatPoint:{x:clamp(boat.x,70,350),y:clamp(boat.y,115,285)},lastDamageAt:-999,
     escapeReason:null,escapeSourcePlayer:null,minimumUntil:-999,maximumUntil:-999};
   const now=Number(world.time)||0;
@@ -54,6 +57,8 @@ function ensureHeavy(world,state) {
   if (!state.heavy||String(state.encounterId)!==String(id)) return initializeHeavy(world,state,boat);
   normalizeHeavyPhaseV1(state.heavy);
   if (!Number.isFinite(state.heavy.repairPlates)) state.heavy.repairPlates=3;
+  if (!Number.isFinite(state.heavy.repairEscapeStartedAt)) state.heavy.repairEscapeStartedAt=-999;
+  if (!Number.isFinite(state.heavy.repairReroutes)) state.heavy.repairReroutes=0;
   publishCompatibility(world,state);
   return state.heavy;
 }
@@ -105,12 +110,49 @@ function noPlates(world,heavy,boat,system) {
   heavy.noPlateSystem=system;
   emit(world,"heavy-repair-no-plates-v1","Система тяжёлого катера уничтожена, но ремонтных пластин больше нет.",[0,1],{system,x:boat.x,y:boat.y});
 }
+function assignRepairRoute(world,state,boat,heavy,resetClock=false) {
+  const destination=safestPoint(world,boat,state);
+  heavy.destination=destination;
+  heavy.repairRouteClearance=nearestPlayerDistance(world,destination);
+  heavy.repairReroutes=resetClock?0:(Number(heavy.repairReroutes)||0)+1;
+  if (resetClock||!Number.isFinite(heavy.repairEscapeStartedAt)||heavy.repairEscapeStartedAt<0) heavy.repairEscapeStartedAt=Number(world.time)||0;
+  return destination;
+}
+export function requiredRepairClearanceV1(heavy) {
+  const planned=Number(heavy?.repairRouteClearance);
+  if (!Number.isFinite(planned)) return REPAIR_START_CLEARANCE;
+  return clamp(planned-REPAIR_ROUTE_MARGIN,REPAIR_ABORT_CLEARANCE+4,REPAIR_START_CLEARANCE);
+}
+export function moveHeavyToRepairPointV1(boat,destination,maxSpeed,dt,turnRate=78,arrivalRadius=REPAIR_ARRIVAL_RADIUS) {
+  if (!destination) return Infinity;
+  const before=distance(boat,destination);
+  const reach=Math.max(arrivalRadius,Math.abs(Number(boat.speed)||0)*Math.max(0,dt)+0.75);
+  if (before<=reach) {
+    boat.x=destination.x;boat.y=destination.y;boat.speed=0;return 0;
+  }
+  const brakingSpeed=Math.sqrt(Math.max(0,2*7.5*Math.max(0,before-arrivalRadius)));
+  const wantedSpeed=Math.min(maxSpeed,Math.max(1.8,brakingSpeed));
+  const after=moveTo(boat,destination,wantedSpeed,dt,turnRate);
+  if (after>before&&before<=Math.max(18,Math.abs(Number(boat.speed)||0)*1.25)) {
+    boat.x=destination.x;boat.y=destination.y;boat.speed=0;return 0;
+  }
+  return after;
+}
+function beginStoppingForRepair(world,boat,heavy) {
+  heavy.phase="stopping";heavy.repairProgress=0;heavy.repairQuarter=0;
+  emit(world,"heavy-repair-stopping-v1",`Тяжёлый катер достиг точки отхода и останавливается перед ремонтом ${heavy.repairSystem==="engine"?"двигателя":"оружейной установки"}.`,[0,1],{
+    system:heavy.repairSystem,plates:heavy.repairPlates,x:boat.x,y:boat.y,
+  });
+}
 function startRecovery(world,state,boat,heavy,system) {
   if (!system||heavy.repairSystem===system&&["escape","stopping","repairing"].includes(heavy.phase)) return;
   if (Number(heavy.repairPlates)<=0) return noPlates(world,heavy,boat,system);
   heavy.repairSystem=system;heavy.repairProgress=0;heavy.repairQuarter=0;
-  if (system==="engine") {heavy.phase="stopping";heavy.destination=null;}
-  else {heavy.phase="escape";heavy.escapeReason="repair";heavy.destination=safestPoint(world,boat,state);boat.speed=Math.max(Number(boat.speed)||0,7.2);}
+  if (system==="engine") {
+    heavy.phase="stopping";heavy.destination=null;heavy.repairRouteClearance=null;heavy.repairEscapeStartedAt=Number(world.time)||0;heavy.repairReroutes=0;
+  } else {
+    heavy.phase="escape";heavy.escapeReason="repair";assignRepairRoute(world,state,boat,heavy,true);boat.speed=Math.max(Number(boat.speed)||0,7.2);
+  }
   emit(world,"heavy-system-recovery-v1",system==="engine"
     ?"Двигатель тяжёлого катера уничтожен. Он теряет ход и готовит аварийный ремонт."
     :"Орудийная установка уничтожена. Катер уходит из-под огня и готовит ремонт.",[0,1],{system,plates:heavy.repairPlates,x:boat.x,y:boat.y});
@@ -149,32 +191,53 @@ function advanceHeavy(world,state,boat,heavy,dt,newHits) {
   const phase=normalizeHeavyPhaseV1(heavy),now=Number(world.time)||0;
   if (phase!=="combat") restorePosition(boat,state.frame);
   if (phase==="approach") {
-    if (moveTo(boat,heavy.combatPoint,11.8,dt,42)<=4) {
+    if (moveHeavyToRepairPointV1(boat,heavy.combatPoint,11.8,dt,42,4)<=0) {
       Object.assign(boat,{x:heavy.combatPoint.x,y:heavy.combatPoint.y,speed:0});heavy.phase="combat";
       emit(world,"heavy-pursuer-arrived","Тяжёлый катер вошёл в бухту и разворачивает установку.",[0,1],{x:boat.x,y:boat.y});
     }
   } else if (phase==="combat") combatMovement(world,state,boat,heavy,dt,newHits);
   else if (phase==="escape") {
     if (Number(boat.engineHealth)<=0) {heavy.phase="stopping";heavy.repairSystem="engine";return;}
-    const remaining=moveTo(boat,heavy.destination||(heavy.destination=safestPoint(world,boat,state)),heavy.escapeReason==="suppression"?18.5:14.6,dt,78);
+    const repairEscape=heavy.escapeReason==="repair";
+    const destination=heavy.destination||(repairEscape?assignRepairRoute(world,state,boat,heavy,true):safestPoint(world,boat,state));
+    const remaining=repairEscape
+      ?moveHeavyToRepairPointV1(boat,destination,14.6,dt,78)
+      :moveTo(boat,destination,18.5,dt,78);
     if (heavy.escapeReason==="suppression") {
       const source=pointForPlayer(world,heavy.escapeSourcePlayer),far=!source||distance(boat,source)>=250;
       if (now>=heavy.minimumUntil&&(far||now>=heavy.maximumUntil)) {heavy.phase="returning";heavy.destination=heavy.combatPoint;heavy.escapeReason=null;}
-    } else if (remaining<=6&&nearestPlayerDistance(world,boat)>=REPAIR_START_CLEARANCE&&!incomingMegaBomb(world,boat)) {
-      boat.speed=0;heavy.phase="repairing";heavy.repairProgress=0;
-      emit(world,"heavy-repair-start-v1",`Начат ремонт: ${heavy.repairSystem==="engine"?"двигатель":"оружейная установка"}.`,[0,1],{system:heavy.repairSystem,plates:heavy.repairPlates,x:boat.x,y:boat.y});
-    } else if (remaining<=8) heavy.destination=safestPoint(world,boat,state);
+    } else if (remaining<=REPAIR_ARRIVAL_RADIUS) {
+      const clearance=nearestPlayerDistance(world,boat),required=requiredRepairClearanceV1(heavy);
+      const quiet=now-(Number(heavy.lastDamageAt)||-999)>=1.2;
+      const bomb=incomingMegaBomb(world,boat);
+      if (quiet&&!bomb&&clearance>=required) {
+        beginStoppingForRepair(world,boat,heavy);
+      } else {
+        const next=safestPoint(world,boat,state),nextClearance=nearestPlayerDistance(world,next);
+        const improvement=nextClearance-clearance;
+        if (quiet&&!bomb&&clearance>=REPAIR_ABORT_CLEARANCE+4&&improvement<12) {
+          beginStoppingForRepair(world,boat,heavy);
+        } else {
+          heavy.destination=next;heavy.repairRouteClearance=nextClearance;heavy.repairReroutes=(Number(heavy.repairReroutes)||0)+1;
+        }
+      }
+    }
   } else if (phase==="stopping") {
+    if (heavy.repairSystem==="turret"&&(nearestPlayerDistance(world,boat)<REPAIR_ABORT_CLEARANCE||incomingMegaBomb(world,boat))) {
+      heavy.phase="escape";heavy.escapeReason="repair";heavy.repairProgress*=0.35;assignRepairRoute(world,state,boat,heavy,true);boat.speed=Math.max(7.2,Number(boat.speed)||0);
+      emit(world,"heavy-repair-aborted-v1","Ты подошёл слишком близко или запустил мега-бомбу. Катер сорвал остановку и снова уходит.",[0,1],{x:boat.x,y:boat.y});return;
+    }
     boat.speed+=clamp(0-boat.speed,-5.8*dt,5.8*dt);const radians=boat.heading*Math.PI/180;
     boat.x=clamp(boat.x+Math.sin(radians)*boat.speed*dt,14,406);boat.y=clamp(boat.y-Math.cos(radians)*boat.speed*dt,84,310);
     if (Math.abs(boat.speed)<=0.3) {
-      boat.speed=0;heavy.phase="repairing";heavy.repairProgress=0;
-      emit(world,"heavy-repair-start-v1","Катер остановился. Начат аварийный ремонт двигателя.",[0,1],{system:"engine",plates:heavy.repairPlates,x:boat.x,y:boat.y});
+      const system=heavy.repairSystem||"engine";
+      boat.speed=0;heavy.phase="repairing";heavy.repairProgress=0;heavy.lastDamageAt=Math.min(Number(heavy.lastDamageAt)||-999,now-1.3);
+      emit(world,"heavy-repair-start-v1",`Катер полностью остановился. Начат ремонт: ${system==="engine"?"двигатель":"оружейная установка"}.`,[0,1],{system,plates:heavy.repairPlates,x:boat.x,y:boat.y});
     }
   } else if (phase==="repairing") {
     boat.speed=0;
     if (heavy.repairSystem==="turret"&&(nearestPlayerDistance(world,boat)<REPAIR_ABORT_CLEARANCE||incomingMegaBomb(world,boat))) {
-      heavy.phase="escape";heavy.escapeReason="repair";heavy.repairProgress*=0.35;heavy.destination=safestPoint(world,boat,state);boat.speed=7.2;
+      heavy.phase="escape";heavy.escapeReason="repair";heavy.repairProgress*=0.35;assignRepairRoute(world,state,boat,heavy,true);boat.speed=7.2;
       emit(world,"heavy-repair-aborted-v1","Ты подошёл слишком близко или запустил мега-бомбу. Катер сорвал ремонт и снова уходит.",[0,1],{x:boat.x,y:boat.y});return;
     }
     if (now-(Number(heavy.lastDamageAt)||-999)>=1.2) heavy.repairProgress+=dt;
@@ -187,12 +250,13 @@ function advanceHeavy(world,state,boat,heavy,dt,newHits) {
       const system=heavy.repairSystem;
       if (system==="engine") {boat.engineHealth=Math.max(1,(boat.maxEngineHealth||180)*0.68);boat.engineDisabled=false;}
       else {boat.turretHealth=Math.max(1,(boat.maxTurretHealth||240)*0.68);boat.turretDisabled=false;}
-      heavy.repairPlates=Math.max(0,Number(heavy.repairPlates)-1);heavy.repairSystem=null;heavy.repairProgress=0;heavy.repairQuarter=0;heavy.phase="returning";heavy.destination=heavy.combatPoint;
+      heavy.repairPlates=Math.max(0,Number(heavy.repairPlates)-1);heavy.repairSystem=null;heavy.repairProgress=0;heavy.repairQuarter=0;
+      heavy.repairRouteClearance=null;heavy.repairEscapeStartedAt=-999;heavy.repairReroutes=0;heavy.phase="returning";heavy.destination=heavy.combatPoint;
       emit(world,"heavy-repair-complete-v1",`Ремонт завершён. Осталось пластин: ${heavy.repairPlates}.`,[0,1],{system,plates:heavy.repairPlates,x:boat.x,y:boat.y});
     }
   } else if (phase==="returning") {
     if (Number(boat.engineHealth)<=0) {heavy.phase="stopping";heavy.repairSystem="engine";return;}
-    if (moveTo(boat,heavy.destination||heavy.combatPoint,12.1,dt,62)<=8) {
+    if (moveHeavyToRepairPointV1(boat,heavy.destination||heavy.combatPoint,12.1,dt,62,8)<=0) {
       boat.speed=0;heavy.phase="combat";heavy.destination=null;
       emit(world,"heavy-repair-returned-v1","Тяжёлый катер вернулся в бой.",[0,1],{x:boat.x,y:boat.y});
     }
