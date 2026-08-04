@@ -96,7 +96,7 @@ export function incomingMegaBomb(world,boat) {
 export function retireStaleHeavyV1(world,reason="stale",force=false) {
   const state=ensureControllerState(world),boat=currentHeavyBoat(world),director=world.freeThreatDirector;
   if (!boat) return false;
-  const known=String(state.heavy?.encounterId??state.encounterId??world.freeHeavyPursuer?.encounterId??"");
+  const known=String(world.freeHeavyPursuer?.encounterId??state.heavy?.encounterId??state.encounterId??"");
   const current=director?.active&&Number(director.level)>=5?String(director.encounterId??""):known;
   const adoptionDue=director?.active&&Number(director.level)>=5&&!director.heavyStarted
     &&(Number(world.time)||0)+0.07>=(Number(director.heavyStartsAt)||Infinity);
