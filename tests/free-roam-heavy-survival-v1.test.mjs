@@ -55,8 +55,8 @@ test("combat releases the legacy 999 second turret cooldown and the real install
   assert.ok(Number(world.freeHeavyPursuer.boat.fireCooldown)<30,"the poisoned legacy cooldown survived combat entry");
 });
 
-test("sustained automatic damage predicts a lethal chase and starts escape well above 200 hull", () => {
-  const world=makeWorld({player:{x:210,y:200}});
+test("sustained close automatic damage predicts a lethal chase and starts escape well above 200 hull", () => {
+  const world=makeWorld({player:{x:260,y:225}});
   let escapeHull=null;
   for (let tick=0;tick<35;tick+=1) {
     productionStep(world,0.08,()=>damageHeavyPursuer(world,"hull",12,0,{}, {weapon:"automatic"}));
@@ -71,8 +71,8 @@ test("sustained automatic damage predicts a lethal chase and starts escape well 
   assert.equal(world.events.filter(event=>event.type==="heavy-hull-danger-escape-v1").length,1);
 });
 
-test("real log regression: damage applied before prepare is measured across server ticks", () => {
-  const world=makeWorld({hull:588,maxHull:700,player:{x:210,y:200}});
+test("real log regression: close damage applied before prepare is measured across server ticks", () => {
+  const world=makeWorld({hull:588,maxHull:700,player:{x:260,y:225}});
   productionStep(world,0.08);
   for (let hit=0;hit<17;hit+=1) damageHeavyPursuer(world,"hull",12,0,{}, {weapon:"automatic"});
   assert.equal(world.freeHeavyPursuer.boat.hull,384);

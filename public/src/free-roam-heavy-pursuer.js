@@ -1,5 +1,7 @@
 "use strict";
 
+import {heavyAutomaticDamageScaleV1,heavyAutomaticDamageV1} from "./free-roam-heavy-automatic-damage-v1.js?v=1";
+
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const distance = (a, b) => Math.hypot((Number(a?.x) || 0) - (Number(b?.x) || 0), (Number(a?.y) || 0) - (Number(b?.y) || 0));
 const wrapDeg = value => ((value + 180) % 360 + 360) % 360 - 180;
@@ -74,6 +76,13 @@ export function startHeavyPursuer(world, encounterId, anchor = {x: 210, y: 180},
 
 function livingPlayers(world) {
   return world.players.map((player, index) => ({player, index})).filter(({player, index}) => world.freeActivities?.presence?.[index] && player?.combat?.alive);
+}
+
+function playerPoint(world,index) {
+  const player=world.players?.[index];
+  if (!player) return null;
+  if (["boat","roof"].includes(player.mode)) return world.boats?.[player.activeBoat]||world.boats?.find?.(boat=>String(boat?.id)===String(player.activeBoat))||player;
+  return player;
 }
 
 function targetActor(world, boat) {
@@ -223,13 +232,22 @@ function updateRamming(world, boat, dt, helpers) {
 export function damageHeavyPursuer(world, component, amount, sourcePlayer = -1, helpers = {}, details = {}) {
   const state = ensureHeavyPursuer(world);
   const boat = activeHeavyPursuer(world);
-  if (!boat || amount <= 0) return false;
+  const rawAmount=Math.max(0,Number(amount)||0);
+  if (!boat || rawAmount <= 0) return false;
   if (details.weapon === "pistol" && ["hull", "engine", "turret"].includes(component)) {
     emit(world, "armoured-target", "Пистолет не пробивает броню тяжёлого катера. Используй автомат, таран или стреляй по открытому экипажу.", [sourcePlayer].filter(index => index >= 0), {sourcePlayer, component, x: boat.x, y: boat.y});
     return false;
   }
+  const source=details.weapon==="automatic"?playerPoint(world,sourcePlayer):null;
+  const shotDistance=source?distance(source,boat):null;
+  const effectiveAmount=details.weapon==="automatic"?heavyAutomaticDamageV1(rawAmount,shotDistance):rawAmount;
+  const damageScale=details.weapon==="automatic"?heavyAutomaticDamageScaleV1(shotDistance):1;
+  if (effectiveAmount<=0) return false;
+  let appliedDamage=0;
   if (component === "turret") {
-    boat.turretHealth = clamp(boat.turretHealth - amount, 0, boat.maxTurretHealth || 240);
+    const before=Number(boat.turretHealth)||0;
+    boat.turretHealth = clamp(before - effectiveAmount, 0, boat.maxTurretHealth || 240);
+    appliedDamage=Math.max(0,before-boat.turretHealth);
     if (boat.turretHealth <= 0 && !boat.turretDisabled) {
       boat.turretDisabled = true;
       boat.burstRemaining = 0;
@@ -237,19 +255,24 @@ export function damageHeavyPursuer(world, component, amount, sourcePlayer = -1, 
       emit(world, "heavy-turret-destroyed", "Тяжёлая оружейная установка выведена из строя.", [0, 1], {sourcePlayer, x: boat.x, y: boat.y});
     }
   } else if (component === "engine") {
-    boat.engineHealth = clamp(boat.engineHealth - amount, 0, boat.maxEngineHealth || 180);
+    const before=Number(boat.engineHealth)||0;
+    boat.engineHealth = clamp(before - effectiveAmount, 0, boat.maxEngineHealth || 180);
+    appliedDamage=Math.max(0,before-boat.engineHealth);
     if (boat.engineHealth <= 0 && !boat.engineDisabled) {
       boat.engineDisabled = true;
       emit(world, "heavy-engine-destroyed", "Двигатель тяжёлого катера выведен из строя. Он почти потерял ход.", [0, 1], {sourcePlayer, x: boat.x, y: boat.y});
     }
   } else {
-    boat.hull = clamp(boat.hull - amount, 0, boat.maxHull);
+    const before=Number(boat.hull)||0;
+    boat.hull = clamp(before - effectiveAmount, 0, boat.maxHull);
+    appliedDamage=Math.max(0,before-boat.hull);
   }
   emit(world, "heavy-component-hit", component === "turret"
     ? `Попадание по установке. Прочность ${Math.round(boat.turretHealth)}.`
     : component === "engine" ? `Попадание по двигателю. Прочность ${Math.round(boat.engineHealth)}.`
       : `Попадание по тяжёлому корпусу. Осталось ${Math.round(boat.hull)}.`, [sourcePlayer].filter(index => index >= 0), {
-    sourcePlayer, component, weapon: details.weapon, x: boat.x, y: boat.y,
+    sourcePlayer, component, weapon: details.weapon, damage:appliedDamage, effectiveDamage:effectiveAmount, rawDamage:rawAmount,
+    distance:Number.isFinite(shotDistance)?shotDistance:null,damageScale,x: boat.x, y: boat.y,
   });
   if (boat.hull > 0) return true;
   boat.active = false;

@@ -13,7 +13,7 @@ import {describeCombatTarget, resolveCombatTarget} from "./free-roam-targeting.j
 import {activeHostileGunners, damageHostileGunner} from "./free-roam-hostile-gunners.js?v=32";
 import {activeEnemyBoats, damageEnemyBoat} from "./free-roam-enemy-boats.js?v=3";
 import {activeHostileActors, damageHostileActor} from "./free-roam-hostile-actors.js?v=2";
-import {activeHeavyPursuer, damageHeavyPursuer} from "./free-roam-heavy-pursuer.js?v=3";
+import {activeHeavyPursuer, damageHeavyPursuer} from "./free-roam-heavy-pursuer.js?v=4";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));
