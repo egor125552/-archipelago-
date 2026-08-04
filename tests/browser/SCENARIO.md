@@ -1,1 +1,0 @@
-The browser regression keeps the player near the map centre, destroys only the heavy boat turret, leaves the internal hull intact, and advances the production controller until the boat stops, repairs exactly once, and returns.
