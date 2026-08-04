@@ -78,7 +78,7 @@ try {
     const pressureStart=metres();
     step();
     const modeAfterPressure=heavy.hullEscapeMode,speedAfterPressure=boat.speed;
-    for (let tick=0;tick<30;tick+=1) step();
+    for (let tick=0;tick<100;tick+=1) step();
 
     return {
       phase:heavy.phase,escapeReason:heavy.escapeReason,modeBeforePressure:"standoff",
@@ -106,7 +106,7 @@ try {
   assert.ok(result.announcements>=1,"the firing-position cue was never emitted");
   assert.equal(result.modeAfterPressure,"flee","close pressure did not restart flight in Chromium");
   assert.ok(result.speedAfterPressure>=result.emergencySpeed*0.7,"renewed Chromium flight was not urgent");
-  assert.ok(result.pressureEnd>result.pressureStart+8,`Chromium failed to reopen distance: ${result.pressureStart} -> ${result.pressureEnd}`);
+  assert.ok(result.pressureEnd>result.pressureStart+20,`Chromium failed to reopen distance: ${result.pressureStart} -> ${result.pressureEnd}`);
 
   console.log(JSON.stringify({scenario:"heavy-low-hull-standoff",...result},null,2));
 } finally {
