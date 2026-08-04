@@ -104,26 +104,30 @@ export function startEnemyBoats(world, level, anchor = null) {
   return state;
 }
 
+function playerBoat(world, player) {
+  return ["boat", "roof"].includes(player?.mode) ? world.boats?.[player.activeBoat] || null : null;
+}
+
 function playerBoatUnavailable(world, player) {
-  if (!["boat", "roof"].includes(player?.mode)) return false;
-  const boat = world.boats?.[player.activeBoat];
-  return !boat || boat.sunk || boat.emergencyActive || Number(boat.hull) <= 0;
+  const boat = playerBoat(world, player);
+  return Boolean(["boat", "roof"].includes(player?.mode) && (!boat || boat.sunk || boat.emergencyActive || Number(boat.hull) <= 0));
 }
 
 function actorForPlayer(world, playerIndex) {
   const player = world.players?.[playerIndex];
-  if (!player || playerBoatUnavailable(world, player)) return null;
-  if (["boat", "roof"].includes(player.mode)) return world.boats?.[player.activeBoat] || null;
+  if (!player) return null;
+  const boat = playerBoat(world, player);
+  if (boat && !playerBoatUnavailable(world, player)) return boat;
   return player;
 }
 
 function velocityForPlayer(world, playerIndex) {
   const player = world.players?.[playerIndex];
-  if (!player || playerBoatUnavailable(world, player)) return {x: 0, y: 0};
-  if (["boat", "roof"].includes(player.mode)) {
-    const boat = world.boats?.[player.activeBoat];
-    const angle = (Number(boat?.heading) || 0) * Math.PI / 180;
-    return {x: Math.sin(angle) * (Number(boat?.speed) || 0), y: -Math.cos(angle) * (Number(boat?.speed) || 0)};
+  if (!player) return {x: 0, y: 0};
+  const boat = playerBoat(world, player);
+  if (boat && !playerBoatUnavailable(world, player)) {
+    const angle = (Number(boat.heading) || 0) * Math.PI / 180;
+    return {x: Math.sin(angle) * (Number(boat.speed) || 0), y: -Math.cos(angle) * (Number(boat.speed) || 0)};
   }
   return {x: 0, y: 0};
 }
@@ -245,8 +249,9 @@ function updateProjectiles(world, state, dt, helpers) {
     if (!hit) {
       for (let index = 0; index < world.players.length; index += 1) {
         const player = world.players[index];
-        if (!world.freeActivities?.presence?.[index] || !player?.combat?.alive || !["foot", "swim", "roof"].includes(player.mode)) continue;
-        if (!segmentHit(projectile, next, player, 1.9)) continue;
+        const emergencyRider = playerBoatUnavailable(world, player);
+        if (!world.freeActivities?.presence?.[index] || !player?.combat?.alive || (!["foot", "swim", "roof"].includes(player.mode) && !emergencyRider)) continue;
+        if (!segmentHit(projectile, next, player, emergencyRider ? 2.8 : 1.9)) continue;
         helpers?.damagePlayer?.(world, index, 4, {weapon: "automatic", eventType: "gun-hit", sourcePoint: {x: projectile.sourceX, y: projectile.sourceY}});
         hit = true;
         break;
