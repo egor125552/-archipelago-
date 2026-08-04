@@ -8,7 +8,7 @@ import {
 } from "../src/free-roam-mega-bomb-v36.js";
 
 test("ordinary combat movement does not receive speculative mega-bomb lead", () => {
-  const world = {freeCombatAiV164: {heavy: {phase: "combat"}}};
+  const world = {freeHeavyAiControllerV1: {heavy: {phase: "combat"}}};
   const boat = {
     id: "heavy-pursuer",
     role: "heavy",
@@ -25,9 +25,11 @@ test("ordinary combat movement does not receive speculative mega-bomb lead", () 
 
 test("unified repair escape prediction follows the real turn toward its destination", () => {
   const world = {
-    freeCombatAiV164: {
+    freeHeavyAiControllerV1: {
       heavy: {
-        phase: "breach-escaping-v166",
+        phase: "escape",
+        escapeReason: "repair",
+        repairSystem: "turret",
         destination: {x: 32, y: 112},
       },
     },
@@ -48,7 +50,7 @@ test("unified repair escape prediction follows the real turn toward its destinat
 });
 
 test("a repair-stopped heavy is not given fake movement lead", () => {
-  const world = {freeCombatAiV164: {heavy: {phase: "breach-repairing-v166"}}};
+  const world = {freeHeavyAiControllerV1: {heavy: {phase: "repairing", repairSystem: "turret"}}};
   const boat = {id: "heavy-pursuer", role: "heavy", x: 80, y: 120, heading: 90, speed: 12.2};
   const predicted = predictHeavyPositionV36(world, boat, 4);
   assert.deepEqual(predicted, {x: 80, y: 120});
