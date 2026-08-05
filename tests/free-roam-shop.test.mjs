@@ -125,15 +125,19 @@ test("insufficient credits never change inventory", () => {
   assert.ok(drainEvents(world).some(event => event.type === "shop-denied"));
 });
 
-test("automatic ammunition can be purchased before the automatic is found", () => {
+test("the automatic-ammo slot sells a missing automatic before it sells ammunition", () => {
   const world = createFreeWorld();
   openShop(world);
-  world.freeActivities.credits = 80;
+  world.freeActivities.credits = 120;
   selectItem(world, 0, "automatic-ammo");
+  const ammoBefore = world.players[0].combat.ammo;
   assert.equal(world.players[0].combat.weapons.automatic, false);
   pulse(world, 0, {shopBuy: true});
-  assert.equal(world.players[0].combat.ammo, 30);
-  assert.equal(world.freeActivities.credits, 55);
+  assert.equal(world.players[0].combat.weapons.automatic, true);
+  assert.equal(world.players[0].combat.equipped, "automatic");
+  assert.equal(world.players[0].combat.ammo, ammoBefore);
+  assert.equal(world.freeActivities.credits, 0);
+  assert.ok(drainEvents(world).some(event => event.itemId === "automatic-weapon"));
 });
 
 test("boat supplies require the player's own boat at the dock", () => {

@@ -11,7 +11,7 @@ import {
   spawnRareCrate,
   storeActivityInput,
   updateActivities,
-} from "./free-roam-activities.js?v=43";
+} from "./free-roam-activities.js?v=44";
 // free-roam-combat.js?v=35 remains the stable combat base behind the 1.1 pistol layer.
 import {applyCombatDamage, combatStatus, ensureCombat, updateCombat} from "./free-roam-combat-v2.js?v=6";
 import {ensureMarauder, releaseStolenCargo, updateMarauder} from "./free-roam-marauder.js?v=33";
@@ -27,7 +27,7 @@ import {ensureHeavyPursuer, updateHeavyPursuer} from "./free-roam-heavy-pursuer.
 import {activeEliteBoatBoss, ensureEliteBoatBoss, updateEliteBoatBoss} from "./free-roam-elite-boat.js?v=2";
 import {retireClaimedKnifeCrates} from "./free-roam-unique-weapons.js?v=1";
 import {finishThreatIntelligence, prepareThreatIntelligence} from "./free-roam-threat-intelligence.js?v=2";
-import {suppressGameplayWhileShopping, updateMerchantShop} from "./free-roam-shop.js?v=3";
+import {suppressGameplayWhileShopping, updateMerchantShop} from "./free-roam-shop.js?v=4";
 import {
   contractStatus,
   ensureContracts,

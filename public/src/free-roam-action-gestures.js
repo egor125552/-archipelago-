@@ -14,10 +14,9 @@ export function classifyActionGesture({pointers, duration, dx, dy, movement, tap
     if (count !== 2) return null;
     if (horizontal > vertical * 1.15) return "weapon";
     if ((Number(dy) || 0) < 0) return "pump";
-    // A downward two-finger swipe used to disable gesture mode entirely.
-    // It is intentionally unassigned now so an imprecise swipe cannot lock
-    // a touch player out of the gesture controls.
-    return null;
+    // A deliberate downward two-finger swipe launches the existing
+    // server-authoritative mega-bomb action.
+    return "mega-bomb";
   }
 
   if (count === 1) {

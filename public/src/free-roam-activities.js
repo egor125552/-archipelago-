@@ -14,7 +14,7 @@ import {
   ensureShopState,
   grantDeliveryCredits,
   handleMerchantAction,
-} from "./free-roam-shop.js?v=3";
+} from "./free-roam-shop.js?v=4";
 import {
   completeContractDelivery,
   contractDeliveryBlocked,

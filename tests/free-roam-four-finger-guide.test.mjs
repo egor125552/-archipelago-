@@ -5,8 +5,8 @@ import {readFile} from "node:fs/promises";
 import {classifyActionGesture} from "../public/src/free-roam-action-gestures.js";
 import {turnBoatToSonar, updateSonarGuide} from "../public/src/free-roam-sonar-guide.js";
 
-test("two-finger downward swipes no longer disable gestures", () => {
-  assert.equal(classifyActionGesture({pointers: 2, duration: 300, dx: 4, dy: 90, movement: 90}), null);
+test("two-finger downward swipes launch the server-authoritative mega-bomb command", () => {
+  assert.equal(classifyActionGesture({pointers: 2, duration: 300, dx: 4, dy: 90, movement: 90}), "mega-bomb");
   assert.equal(classifyActionGesture({pointers: 2, duration: 300, dx: 90, dy: 4, movement: 90}), "weapon");
   assert.equal(classifyActionGesture({pointers: 2, duration: 300, dx: 4, dy: -90, movement: 90}), "pump");
 });
