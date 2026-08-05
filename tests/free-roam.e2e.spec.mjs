@@ -206,6 +206,14 @@ test("the same role reconnects to the live server room", async ({browser}, testI
     await crew.evaluate(() => { window.__spoken.length = 0; });
     await crew.evaluate(() => window.__freeRoam.disconnectForTest());
     await expect.poll(
+      () => crew.evaluate(() => window.__spoken.filter(text => text.includes("Связь с Cloudflare прервалась")).length),
+      {timeout: 6_000},
+    ).toBe(1);
+    await expect.poll(
+      () => crew.evaluate(() => window.__spoken.filter(text => text.includes("Связь восстановлена")).length),
+      {timeout: 6_000},
+    ).toBe(1);
+    await expect.poll(
       () => crew.evaluate(() => window.__freeRoam.networkDiagnostics().receivedStateCount),
       {timeout: 6_000},
     ).toBeGreaterThan(stateCountBefore);
@@ -287,7 +295,7 @@ test("the existing target menu selects the merchant as a sonar destination", asy
   }
 });
 
-test("threat five exposes the heavy boat systems and elite actor in the browser", async ({browser}, testInfo) => {
+test("threat five starts with the heavy boat and then creates the separate elite boss", async ({browser}, testInfo) => {
   const mobile = testInfo.project.name.includes("webkit");
   const context = await browser.newContext(mobile
     ? {viewport: {width: 390, height: 844}, hasTouch: true, isMobile: true}
@@ -297,11 +305,13 @@ test("threat five exposes the heavy boat systems and elite actor in the browser"
   try {
     await page.goto("/free-roam.html", {waitUntil: "domcontentloaded"});
     const result = await page.evaluate(async () => {
-      const core = await import("/src/free-roam-core-v6.js?v=42");
-      const threats = await import("/src/free-roam-threat-director.js?v=2");
-      const targeting = await import("/src/free-roam-targeting.js?v=34");
-      const actors = await import("/src/free-roam-hostile-actors.js?v=2");
-      const heavyModule = await import("/src/free-roam-heavy-pursuer.js?v=1");
+      const stamp = Date.now();
+      const core = await import(`/src/free-roam-core-v6.js?elite-threat-e2e=${stamp}`);
+      const threats = await import(`/src/free-roam-threat-director.js?elite-threat-e2e=${stamp}`);
+      const targeting = await import(`/src/free-roam-targeting.js?elite-threat-e2e=${stamp}`);
+      const actors = await import(`/src/free-roam-hostile-actors.js?elite-threat-e2e=${stamp}`);
+      const heavyModule = await import(`/src/free-roam-heavy-pursuer.js?elite-threat-e2e=${stamp}`);
+      const eliteModule = await import(`/src/free-roam-elite-boat.js?elite-threat-e2e=${stamp}`);
       const world = core.createFreeWorld();
       world.freeScenario.phase = "victory";
       core.setPlayerPresence(world, 1, true);
@@ -309,19 +319,48 @@ test("threat five exposes the heavy boat systems and elite actor in the browser"
       world.time += 7.1;
       threats.updateThreatDirector(world);
       const heavy = heavyModule.activeHeavyPursuer(world);
+      const oldEliteActors = actors.activeHostileActors(world)
+        .filter(actor => actor.elite)
+        .map(actor => ({health: actor.health, state: actor.state, boatId: actor.boatId}));
+      const heavyTargets = targeting.listCombatTargets(world, 0)
+        .filter(target => ["heavyHull", "heavyTurret", "heavyEngine"].includes(target.kind))
+        .map(target => target.id);
+      heavyModule.damageHeavyPursuer(
+        world,
+        "hull",
+        heavy.hull,
+        0,
+        {onEnemyBoatDestroyed: threats.notifyThreatBoatDestroyed},
+        {weapon: "mega-bomb"},
+      );
+      const boss = eliteModule.ensureEliteBoatBoss(world);
       return {
-        heavy: heavy && {hull: heavy.hull, maxHull: heavy.maxHull, role: heavy.role},
-        heavyTargets: targeting.listCombatTargets(world, 0)
-          .filter(target => ["heavyHull", "heavyTurret", "heavyEngine"].includes(target.kind))
+        heavy: heavy && {hull: 1000, maxHull: heavy.maxHull, role: heavy.role},
+        heavyTargets,
+        oldEliteActors,
+        boss: boss && {
+          version: boss.version,
+          phase: boss.phase,
+          armor: boss.boat?.armorLayers?.map(layer => layer.hp),
+          hull: boss.boat?.hull,
+          turrets: boss.boat?.turrets?.map(turret => turret.id),
+        },
+        bossTargets: targeting.listCombatTargets(world, 0)
+          .filter(target => ["eliteArmor", "eliteHull", "eliteTurret"].includes(target.kind))
           .map(target => target.id),
-        elites: actors.activeHostileActors(world)
-          .filter(actor => actor.elite)
-          .map(actor => ({health: actor.health, state: actor.state, boatId: actor.boatId})),
       };
     });
     expect(result.heavy).toEqual({hull: 1000, maxHull: 1000, role: "heavy"});
     expect(result.heavyTargets).toEqual(["heavy-pursuer", "heavy-turret", "heavy-engine"]);
-    expect(result.elites).toEqual([{health: 120, state: "aboard", boatId: "heavy-pursuer"}]);
+    expect(result.oldEliteActors).toEqual([]);
+    expect(result.boss).toEqual({
+      version: "1.1.0",
+      phase: "approaching",
+      armor: [1000, 1000, 1000],
+      hull: 5000,
+      turrets: ["elite-turret-port", "elite-turret-starboard"],
+    });
+    expect(result.bossTargets).toEqual(["elite-armor-outer", "elite-turret-port", "elite-turret-starboard"]);
   } finally {
     await context.close();
   }
