@@ -1,13 +1,9 @@
 name: Publish elite boss release branch
 
 on:
-  push:
+  pull_request:
     branches:
-      - agent/elite-boss-snapshot
-    paths:
-      - ".github/workflows/agent-repo-snapshot.yml"
-      - ".agent/elite-boss-release/**"
-      - ".agent/elite-boss-new-files/**"
+      - main
   workflow_dispatch:
 
 permissions:
