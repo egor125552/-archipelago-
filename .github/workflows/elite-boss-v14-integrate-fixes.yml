@@ -1,0 +1,216 @@
+name: Integrate Elite Boss V14 Fixes
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/elite-boss-v14-integrate-fixes.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Patch the authoritative boss implementation in place
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          core_path = Path("public/src/free-roam-elite-boat.js")
+          core = core_path.read_text()
+
+          def replace_regex(text, pattern, replacement, label):
+              updated, count = re.subn(pattern, replacement, text, count=1, flags=re.S)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected one replacement, got {count}")
+              return updated
+
+          core = core.replace(
+              'lastBoundaryHeading: null};',
+              'lastBoundaryHeading: null, currentDecision: {state: "observe", point: null, speed: 0}};',
+              1,
+          )
+
+          core = replace_regex(core, r'function normalizeArmorLayers\(value\) \{.*?\n\}\n\nfunction normalizeTurrets', '''function normalizeArmorLayers(value) {
+            const fallbacks = armorLayers();
+            if (Array.isArray(value) && value.length === fallbacks.length && value.every((layer, index) => layer && typeof layer === "object" && layer.id === fallbacks[index].id)) {
+              for (let index = 0; index < fallbacks.length; index += 1) {
+                const current = value[index], fallback = fallbacks[index];
+                current.id = fallback.id;
+                current.maxHp = Math.max(1, finite(current.maxHp, fallback.maxHp));
+                current.hp = clamp(current.hp ?? fallback.hp, 0, current.maxHp);
+                current.state = String(current.state || fallback.state);
+                current.criticalAnnounced = current.criticalAnnounced === true;
+                current.destroyedAnnounced = current.destroyedAnnounced === true;
+              }
+              return value;
+            }
+            const existing = values(value);
+            return fallbacks.map(fallback => {
+              const current = existing.find(layer => layer?.id === fallback.id);
+              if (!current) return fallback;
+              return {...fallback, ...current, id: fallback.id, hp: clamp(current.hp ?? fallback.hp, 0, current.maxHp ?? fallback.maxHp), maxHp: Math.max(1, finite(current.maxHp, fallback.maxHp))};
+            });
+          }
+
+          function normalizeTurrets''', 'armor identity')
+
+          core = replace_regex(core, r'function normalizeTurrets\(value\) \{.*?\n\}\n\nfunction normalizeBombBay', '''function normalizeTurrets(value) {
+            const fallbacks = [createTurret("port", "port"), createTurret("starboard", "starboard")];
+            if (Array.isArray(value) && value.length === fallbacks.length && value.every((turret, index) => turret && typeof turret === "object" && (turret.id === fallbacks[index].id || turret.side === fallbacks[index].side))) {
+              for (let index = 0; index < fallbacks.length; index += 1) {
+                const current = value[index], fallback = fallbacks[index];
+                current.id = fallback.id;
+                current.side = fallback.side;
+                current.maxHp = Math.max(1, finite(current.maxHp, fallback.maxHp));
+                current.hp = clamp(current.hp ?? fallback.hp, 0, current.maxHp);
+                current.destroyed = current.destroyed === true || current.hp <= 0;
+                if (!current.state) current.state = fallback.state;
+                if (!Number.isFinite(Number(current.fireCooldown))) current.fireCooldown = fallback.fireCooldown;
+                if (!Number.isFinite(Number(current.shotCooldown))) current.shotCooldown = fallback.shotCooldown;
+                if (!Number.isFinite(Number(current.windup))) current.windup = fallback.windup;
+                if (!Number.isFinite(Number(current.burstRemaining))) current.burstRemaining = fallback.burstRemaining;
+                if (!current.tacticalRole) current.tacticalRole = fallback.tacticalRole;
+              }
+              return value;
+            }
+            const existing = values(value);
+            return fallbacks.map(fallback => {
+              const current = existing.find(turret => turret?.id === fallback.id || turret?.side === fallback.side);
+              if (!current) return fallback;
+              return {...fallback, ...current, id: fallback.id, side: fallback.side, hp: clamp(current.hp ?? fallback.hp, 0, current.maxHp ?? fallback.maxHp), maxHp: Math.max(1, finite(current.maxHp, fallback.maxHp)), destroyed: current.destroyed === true || Number(current.hp) <= 0};
+            });
+          }
+
+          function normalizeBombBay''', 'turret identity')
+
+          core = replace_regex(core, r'function normalizeTacticalState\(value, playerCount\) \{.*?\n\}\n\nfunction defaultState', '''function normalizeTacticalState(value, playerCount) {
+            const fallback = createTacticalState(playerCount);
+            const tactical = value && typeof value === "object" ? value : fallback;
+            for (const [key, child] of Object.entries(fallback)) {
+              if (!Object.hasOwn(tactical, key)) tactical[key] = Array.isArray(child) ? [...child] : child && typeof child === "object" ? {...child} : child;
+            }
+            if (!Array.isArray(tactical.playerMemory)) tactical.playerMemory = [];
+            while (tactical.playerMemory.length < playerCount) tactical.playerMemory.push(createPlayerMemory());
+            if (tactical.playerMemory.length > playerCount) tactical.playerMemory.length = playerCount;
+            for (let index = 0; index < tactical.playerMemory.length; index += 1) {
+              const current = tactical.playerMemory[index] && typeof tactical.playerMemory[index] === "object" ? tactical.playerMemory[index] : (tactical.playerMemory[index] = createPlayerMemory());
+              for (const [key, child] of Object.entries(createPlayerMemory())) if (!Object.hasOwn(current, key)) current[key] = child;
+            }
+            if (!tactical.teamMemory || typeof tactical.teamMemory !== "object") tactical.teamMemory = {...fallback.teamMemory};
+            else for (const [key, child] of Object.entries(fallback.teamMemory)) if (!Object.hasOwn(tactical.teamMemory, key)) tactical.teamMemory[key] = child;
+            if (!Array.isArray(tactical.tacticHistory)) tactical.tacticHistory = [];
+            if (!tactical.tacticScores || typeof tactical.tacticScores !== "object") tactical.tacticScores = {};
+            if (!Array.isArray(tactical.salvoPlan)) tactical.salvoPlan = [];
+            if (!tactical.lastTurretHp || typeof tactical.lastTurretHp !== "object") tactical.lastTurretHp = {};
+            if (!tactical.currentDecision || typeof tactical.currentDecision !== "object") tactical.currentDecision = {state: "observe", point: null, speed: 0};
+            return tactical;
+          }
+
+          function defaultState''', 'tactical identity')
+
+          core = core.replace(
+              'function resolveBombBayDetonation(world, state, sourcePlayer, damage) {',
+              'function resolveBombBayDetonation(world, state, sourcePlayer, damage, exposedAtDestruction = false) {',
+              1,
+          )
+          core = core.replace(
+              'const exposed = ["opening", "open"].includes(state.bombBayState);',
+              'const exposed = Boolean(exposedAtDestruction);',
+              1,
+          )
+          old_bay = 'bay.destroyed = true; bay.state = "destroyed"; state.salvoRemaining = 0; state.salvoCooldown = 0; state.bombCooldown = Number.POSITIVE_INFINITY; state.bombRequests = []; setBombBayState(state, "destroyed");\n      emit(world, "elite-bomb-bay-destroyed", "Бомбоотсек уничтожен. Корабельные бомбы отключены до конца боя.", [0, 1], {sourcePlayer, x: boat.x, y: boat.y});\n      resolveBombBayDetonation(world, state, sourcePlayer, raw);'
+          new_bay = 'const exposedAtDestruction = exposed;\n      bay.destroyed = true; bay.state = "destroyed"; state.salvoRemaining = 0; state.salvoCooldown = 0; state.bombCooldown = 0; state.bombRequests = []; setBombBayState(state, "destroyed");\n      emit(world, "elite-bomb-bay-destroyed", "Бомбоотсек уничтожен. Корабельные бомбы отключены до конца боя.", [0, 1], {sourcePlayer, x: boat.x, y: boat.y});\n      resolveBombBayDetonation(world, state, sourcePlayer, raw, exposedAtDestruction);'
+          if old_bay not in core:
+              raise SystemExit("bomb bay destruction block not found")
+          core = core.replace(old_bay, new_bay, 1)
+
+          single_turret = '''  if (systems.livingTurrets.length === 1 && systems.bombBayAlive) {
+            const working = systems.livingTurrets[0];
+            const workingSideTurn = working.side === "port" ? -54 : 54;
+            if (metres < 72) {
+              const away = bearing(primary.point, boat) + tactical.movementSide * 46, vector = headingVector(away);
+              return {state: "single-turret-break-away", point: {x: clamp(boat.x + vector.x * 115, WORLD_BOUNDS.minX, WORLD_BOUNDS.maxX), y: clamp(boat.y + vector.y * 115, WORLD_BOUNDS.minY, WORLD_BOUNDS.maxY)}, speed: boat.maxSpeed};
+            }
+            const firingArc = bearing(boat, primary.point) + workingSideTurn, vector = headingVector(firingArc);
+            return {state: "single-turret-cautious-fire", point: {x: clamp(boat.x + vector.x * 90, WORLD_BOUNDS.minX, WORLD_BOUNDS.maxX), y: clamp(boat.y + vector.y * 90, WORLD_BOUNDS.minY, WORLD_BOUNDS.maxY)}, speed: 19.5};
+          }
+'''
+          marker = '  if (systems.disarmed) {'
+          if marker not in core:
+              raise SystemExit("disarmed marker not found")
+          core = core.replace(marker, single_turret + marker, 1)
+
+          old_update = '''    state.tactical.decisionCooldown = Math.max(0, finite(state.tactical.decisionCooldown) - seconds);
+            if (state.tactical.decisionCooldown <= 0) { assignTurretTargets(world, state, players); state.tactical.decisionCooldown = DECISION_INTERVAL_SECONDS; }
+            const decision = chooseMovement(world, state, players);
+            applyMovement(world, state, decision, seconds);'''
+          new_update = '''    state.tactical.decisionCooldown = Math.max(0, finite(state.tactical.decisionCooldown) - seconds);
+            if (state.tactical.decisionCooldown <= 0 || !state.tactical.currentDecision?.point) {
+              assignTurretTargets(world, state, players);
+              state.tactical.currentDecision = chooseMovement(world, state, players);
+              state.tactical.decisionCooldown = DECISION_INTERVAL_SECONDS;
+            }
+            applyMovement(world, state, state.tactical.currentDecision, seconds);'''
+          if old_update not in core:
+              raise SystemExit("decision block not found")
+          core = core.replace(old_update, new_update, 1)
+
+          old_target = 'if (!state.bombBay.destroyed && ["opening", "open"].includes(state.bombBayState)) targets.push({id: state.bombBay.id, kind: "eliteBombBay", component: "bomb-bay", bombBayId: state.bombBay.id, point: boat, label: "элитный катер, открытый бомбоотсек", assigned: boat.targetPlayer === attackerIndex});'
+          new_target = 'if (!state.bombBay.destroyed && ["opening", "open"].includes(state.bombBayState)) targets.push({id: state.bombBay.id, kind: "eliteTurret", component: "bomb-bay", turretId: state.bombBay.id, bombBayId: state.bombBay.id, point: {...boat, turrets: [...boat.turrets, state.bombBay]}, label: "элитный катер, открытый бомбоотсек", assigned: boat.targetPlayer === attackerIndex});'
+          if old_target not in core:
+              raise SystemExit("bomb bay target adapter not found")
+          core = core.replace(old_target, new_target, 1)
+          core_path.write_text(core)
+
+          bomb_path = Path("src/free-roam-mega-bomb-v37.js")
+          bomb = bomb_path.read_text()
+          bomb = bomb.replace(
+              '.filter(projectile => !before.has(String(projectile?.id || "")) && Number(projectile?.owner) < 0);',
+              '.filter(projectile => !before.has(String(projectile?.id || "")));',
+              1,
+          )
+          bomb = bomb.replace(
+              'const request = launchable[index] || launchable.find(candidate => (\n      candidate.sourceId === (projectile.sourceBoatId || projectile.sourceActorId)\n    ));',
+              'const request = launchable[index] || launchable.find(candidate => (\n      candidate.sourceId === (projectile.sourceBoatId || projectile.sourceActorId)\n    )) || pending[index] || pending[0] || null;',
+              1,
+          )
+          bomb_path.write_text(bomb)
+
+          test_path = Path("tests/free-roam-elite-boat-journal-v14.test.mjs")
+          test_text = test_path.read_text()
+          marker = '  setPlayerPresence(world, 1, coop);\n'
+          replacement = '  setPlayerPresence(world, 1, coop);\n  world.freeThreatDirector ||= {graceUntil: [0, 0]};\n  world.freeThreatDirector.graceUntil = [0, 0];\n'
+          if marker not in test_text:
+              raise SystemExit("journal test presence marker not found")
+          test_path.write_text(test_text.replace(marker, replacement, 1))
+          PY
+          node --check public/src/free-roam-elite-boat.js
+          node --check src/free-roam-mega-bomb-v37.js
+      - run: npm ci
+      - name: Run all tests
+        shell: bash
+        run: |
+          set +e
+          mkdir -p ci-results
+          npm test > ci-results/elite-boss-v14-fixes.txt 2>&1
+          status=$?
+          echo >> ci-results/elite-boss-v14-fixes.txt
+          echo "exit_code=${status}" >> ci-results/elite-boss-v14-fixes.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/src/free-roam-elite-boat.js src/free-roam-mega-bomb-v37.js tests/free-roam-elite-boat-journal-v14.test.mjs ci-results/elite-boss-v14-fixes.txt
+          git commit -m "fix: complete integrated elite boss state machine"
+          git push
+          exit ${status}
