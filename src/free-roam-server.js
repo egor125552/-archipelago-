@@ -7,7 +7,7 @@ import {
   setPlayerPresence,
   stepFreeWorld,
 } from "../public/src/free-roam-core-v6.js";
-import {applyCombatDamage} from "../public/src/free-roam-combat-v2.js?v=5";
+import {applyCombatDamage} from "../public/src/free-roam-combat-v2.js?v=6";
 import {applyCombatAiHotfixV163} from "../public/src/free-roam-combat-ai-hotfix-v163.js?v=1";
 import {replicatedFreeWorld} from "../public/src/free-roam-replication.js";
 import {reserveUnconnectedBoats} from "../public/src/free-roam-reserve-boats.js";
@@ -18,10 +18,6 @@ import {
   reportMegaBombStatus,
   stepMegaBombs,
 } from "./free-roam-mega-bomb.js";
-import {
-  finishEliteBossTacticsV12,
-  prepareEliteBossTacticsV12,
-} from "./free-roam-elite-boss-tactics-v12.js";
 
 export const FREE_TICK_MS = 40;
 const MAX_ELAPSED_SECONDS = 0.2;
@@ -161,10 +157,8 @@ function stepInChunks(world, elapsedSeconds) {
   let remaining = Math.min(MAX_ELAPSED_SECONDS, Math.max(0, Number(elapsedSeconds) || 0));
   while (remaining > 0.0001) {
     const chunk = Math.min(MAX_STEP_SECONDS, remaining);
-    prepareEliteBossTacticsV12(world, chunk);
     applyAuthoritativeCombatHotfix(world, 0);
     stepFreeWorld(world, chunk);
-    finishEliteBossTacticsV12(world, chunk);
     launchPendingEliteBossBombs(world);
     stepMegaBombs(world, chunk);
     applyAuthoritativeCombatHotfix(world, chunk);
