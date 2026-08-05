@@ -87,9 +87,10 @@ jobs:
           for path, replacements in exact_replacements.items():
               text = path.read_text()
               for old, new in replacements:
-                  if old not in text:
-                      raise SystemExit(f"missing cache contract in {path}: {old}")
-                  text = text.replace(old, new)
+                  if old in text:
+                      text = text.replace(old, new)
+                  elif new not in text:
+                      raise SystemExit(f"unexpected cache contract in {path}: {old} -> {new}")
               path.write_text(text)
           PY
           node --check public/src/free-roam-elite-boat.js
