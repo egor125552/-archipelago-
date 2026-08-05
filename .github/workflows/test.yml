@@ -31,3 +31,54 @@ jobs:
           name: test-output
           path: test-output.txt
           if-no-files-found: error
+
+  integrate-automatic-and-bomb-gesture:
+    if: github.event_name == 'pull_request' && github.head_ref == 'shop-automatic-bomb-gesture'
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Apply the integration stored in the PR
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/workflows/shop-automatic-bomb-gesture.yml')
+          lines = path.read_text().splitlines()
+          marker = '      - name: Integrate automatic purchase and iPhone bomb gesture'
+          marker_index = lines.index(marker)
+          run_index = next(
+              index for index in range(marker_index + 1, len(lines))
+              if lines[index] == '        run: |'
+          )
+          script = []
+          for line in lines[run_index + 1:]:
+              if line and not line.startswith('          '):
+                  break
+              script.append(line[10:] if line.startswith('          ') else '')
+          Path('/tmp/integrate-automatic-and-bomb.sh').write_text('\n'.join(script) + '\n')
+          PY
+          bash /tmp/integrate-automatic-and-bomb.sh
+      - run: npm ci
+      - name: Run complete project tests
+        run: npm test
+      - name: Publish verified implementation
+        shell: bash
+        run: |
+          rm -f \
+            .github/workflows/shop-automatic-bomb-gesture.yml \
+            .github/shop-automatic-bomb-gesture-trigger
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: sell missing automatics and add iPhone bomb gesture"
+          git push origin HEAD:${{ github.head_ref }}
