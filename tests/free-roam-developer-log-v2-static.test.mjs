@@ -8,5 +8,5 @@ test("developer log V2 captures authoritative server events and loads through V1
   assert.match(logger, /captureServerEvents/);
   assert.match(logger, /class LoggedWebSocket extends NativeWebSocket/);
   assert.match(logger, /logger-error-repeat/);
-  assert.match(entry, /free-roam-developer-log-v2\.js\?v=2/);
+  assert.match(entry, /free-roam-developer-log-v2\.js\?v=3/);
 });
