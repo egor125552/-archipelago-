@@ -37,6 +37,7 @@ jobs:
           python3 /tmp/integrate-elite-boss.py
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           for path in (
               Path("public/src/free-roam-elite-boat.js"),
@@ -46,8 +47,7 @@ jobs:
               text = text.replace("threatGraceActive(", "hostileRespawnGraceActive(")
               path.write_text(text)
 
-          server_grace = Path("src/free-roam-hostile-respawn-grace.js")
-          server_grace.write_text(
+          Path("src/free-roam-hostile-respawn-grace.js").write_text(
               'export {\n'
               '  enforceHostileRespawnGrace,\n'
               '  hostileRespawnGraceActive,\n'
@@ -55,43 +55,69 @@ jobs:
           )
 
           quality = Path("public/src/free-roam-quality-v1.js")
-          text = quality.read_text()
-          text = text.replace(
+          text = quality.read_text().replace(
               'free-roam-elite-boat-audio-v11.js?v=2',
               'free-roam-elite-boat-audio-v11.js?v=3',
           )
           quality.write_text(text)
 
-          exact_replacements = {
-              Path("tests/free-roam-boat-audio-cache-v171.test.mjs"): [
-                  (r"free-roam-quality-v1\.js\?v=6", r"free-roam-quality-v1\.js\?v=7"),
-                  (r"free-roam-player-boat-audio-v1\.js\?v=2", r"free-roam-player-boat-audio-v1\.js\?v=3"),
-                  (r"free-roam-audio-v5\.js\?v=44", r"free-roam-audio-v5\.js\?v=45"),
-              ],
-              Path("tests/free-roam-elite-audio-cache-v14.test.mjs"): [
-                  (r"assert.match(quality, /free-roam-elite-boat-audio-v11\.js\?v=2/);", r"assert.match(quality, /free-roam-elite-boat-audio-v11\.js\?v=3/);"),
-                  (r"assert.doesNotMatch(quality, /free-roam-elite-boat-audio-v11\.js\?v=1/);", r"assert.doesNotMatch(quality, /free-roam-elite-boat-audio-v11\.js\?v=2/);"),
-              ],
-              Path("tests/free-roam-elite-boat-audio-load-v11.test.mjs"): [
-                  (r"free-roam-quality-v1\.js\?v=6", r"free-roam-quality-v1\.js\?v=7"),
-                  (r"free-roam-elite-boat-audio-v11\.js\?v=1", r"free-roam-elite-boat-audio-v11\.js\?v=3"),
-                  (r"free-roam-audio-v5\.js\?v=44", r"free-roam-audio-v5\.js\?v=45"),
-              ],
-              Path("tests/free-roam-pistol-v41.test.mjs"): [
-                  (r"free-roam-pistol-audio\.js\?v=3", r"free-roam-pistol-audio\.js\?v=4"),
-              ],
-              Path("tests/free-roam-target-reconnect-v154.test.mjs"): [
-                  (r"free-roam-v4\.js\?v=56", r"free-roam-v4\.js\?v=57"),
-              ],
-          }
-          for path, replacements in exact_replacements.items():
+          def normalize(path, pattern, replacement):
               text = path.read_text()
-              for old, new in replacements:
-                  if old in text:
-                      text = text.replace(old, new)
-                  elif new not in text:
-                      raise SystemExit(f"unexpected cache contract in {path}: {old} -> {new}")
-              path.write_text(text)
+              updated, count = re.subn(pattern, lambda _: replacement, text)
+              if count == 0 and replacement not in text:
+                  raise SystemExit(f"missing cache contract in {path}: {pattern}")
+              path.write_text(updated)
+
+          normalize(
+              Path("tests/free-roam-boat-audio-cache-v171.test.mjs"),
+              r"free-roam-quality-v1\\\.js\\\?v=\d+",
+              r"free-roam-quality-v1\.js\?v=7",
+          )
+          normalize(
+              Path("tests/free-roam-boat-audio-cache-v171.test.mjs"),
+              r"free-roam-player-boat-audio-v1\\\.js\\\?v=\d+",
+              r"free-roam-player-boat-audio-v1\.js\?v=3",
+          )
+          normalize(
+              Path("tests/free-roam-boat-audio-cache-v171.test.mjs"),
+              r"free-roam-audio-v5\\\.js\\\?v=\d+",
+              r"free-roam-audio-v5\.js\?v=45",
+          )
+          normalize(
+              Path("tests/free-roam-elite-audio-cache-v14.test.mjs"),
+              r"assert\.match\(quality, /free-roam-elite-boat-audio-v11\\\.js\\\?v=\d+/\);",
+              r"assert.match(quality, /free-roam-elite-boat-audio-v11\.js\?v=3/);",
+          )
+          normalize(
+              Path("tests/free-roam-elite-audio-cache-v14.test.mjs"),
+              r"assert\.doesNotMatch\(quality, /free-roam-elite-boat-audio-v11\\\.js\\\?v=\d+/\);",
+              r"assert.doesNotMatch(quality, /free-roam-elite-boat-audio-v11\.js\?v=2/);",
+          )
+          normalize(
+              Path("tests/free-roam-elite-boat-audio-load-v11.test.mjs"),
+              r"free-roam-quality-v1\\\.js\\\?v=\d+",
+              r"free-roam-quality-v1\.js\?v=7",
+          )
+          normalize(
+              Path("tests/free-roam-elite-boat-audio-load-v11.test.mjs"),
+              r"free-roam-elite-boat-audio-v11\\\.js\\\?v=\d+",
+              r"free-roam-elite-boat-audio-v11\.js\?v=3",
+          )
+          normalize(
+              Path("tests/free-roam-elite-boat-audio-load-v11.test.mjs"),
+              r"free-roam-audio-v5\\\.js\\\?v=\d+",
+              r"free-roam-audio-v5\.js\?v=45",
+          )
+          normalize(
+              Path("tests/free-roam-pistol-v41.test.mjs"),
+              r"free-roam-pistol-audio\\\.js\\\?v=\d+",
+              r"free-roam-pistol-audio\.js\?v=4",
+          )
+          normalize(
+              Path("tests/free-roam-target-reconnect-v154.test.mjs"),
+              r"free-roam-v4\\\.js\\\?v=\d+",
+              r"free-roam-v4\.js\?v=57",
+          )
           PY
           node --check public/src/free-roam-elite-boat.js
           node --check public/src/free-roam-hostile-respawn-grace.js
