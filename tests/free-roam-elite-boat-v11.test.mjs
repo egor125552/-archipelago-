@@ -15,6 +15,8 @@ import {replicatedFreeWorld} from "../public/src/free-roam-replication.js";
 function setupWorld() {
   const world = createFreeWorld();
   world.freeScenario.phase = "victory";
+  world.freeThreatDirector ||= {graceUntil: [0, 0]};
+  world.freeThreatDirector.graceUntil ||= [0, 0];
   setPlayerPresence(world, 0, true);
   setPlayerPresence(world, 1, false);
   const player = world.players[0];
@@ -74,10 +76,11 @@ test("left and right physical turrets bracket different halves of the same movin
   state.bombCooldown = 99;
   for (const turret of state.boat.turrets) turret.fireCooldown = 0;
   for (let index = 0; index < 12; index += 1) updateEliteBoatBoss(world, 0.1, {});
-  const sections = new Set(state.projectiles.map(projectile => projectile.aimSection));
+  const shotEvents = world.events.filter(event => event.type === "elite-turret-shot");
+  const sections = new Set(shotEvents.map(event => event.aimSection));
   assert.equal(sections.has("rear"), true);
   assert.equal(sections.has("front"), true);
-  assert.ok(state.projectiles.every(projectile => Number.isFinite(projectile.vx) && Number.isFinite(projectile.vy)));
+  assert.ok(shotEvents.every(event => Number.isFinite(event.x) && Number.isFinite(event.y) && Number.isFinite(event.heading)));
 });
 
 test("the physical bomb bay opens, fires three bombs and reloads for five seconds", () => {
@@ -118,8 +121,9 @@ test("replication and the developer journal expose the elite boat, turrets and b
   const replica = replicatedFreeWorld(world);
   assert.equal(replica.freeEliteBoatBoss.bombBayState, "opening");
   assert.equal(replica.freeEliteBoatBoss.boat.turrets.length, 2);
-  const elite = activeEntitySnapshots(world).find(entity => entity.kind === "elite-boat");
-  const playerBoat = activeEntitySnapshots(world).find(entity => entity.kind === "player-boat");
+  const snapshots = activeEntitySnapshots(world);
+  const elite = snapshots.find(entity => entity.kind === "elite-boat");
+  const playerBoat = snapshots.find(entity => entity.kind === "player-boat");
   assert.ok(elite);
   assert.equal(elite.turrets.length, 2);
   assert.equal(elite.bombBayState, "opening");
