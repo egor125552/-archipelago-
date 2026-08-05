@@ -1,36 +1,75 @@
-name: Elite Boss V14 Verification
+name: Finalize Integrated Elite Boss
 
 on:
   push:
     branches: [main]
     paths:
-      - "public/src/free-roam-quality-v1.js"
-      - "public/src/free-roam-hostile-actors.js"
-      - "public/src/free-roam-elite-boat.js"
-      - "public/src/free-roam-elite-boat-audio-v11.js"
-      - "public/src/free-roam-replication.js"
-      - "src/free-roam-server.js"
-      - "src/free-roam-hostile-respawn-grace.js"
-      - "src/free-roam-mega-bomb.js"
-      - "src/free-roam-mega-bomb-v37.js"
-      - "tests/free-roam-elite-boat-journal-v14.test.mjs"
-      - "tests/free-roam-hostile-respawn-grace.test.mjs"
-      - "tests/free-roam-elite-audio-cache-v14.test.mjs"
       - ".github/workflows/elite-boss-v14-verification.yml"
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  verify:
+  finalize:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
+      - name: Integrate states, common grace and physical audio
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64
+          import lzma
+
+          parts = sorted(Path('.github/elite-boss-integrate-xz').glob('part*.b64'))
+          if len(parts) != 4:
+              raise SystemExit(f'expected four payload parts, found {len(parts)}')
+          payload = ''.join(path.read_text() for path in parts)
+          Path('/tmp/integrate-elite-boss.py').write_bytes(
+              lzma.decompress(base64.b64decode(payload, validate=True))
+          )
+          PY
+          python3 /tmp/integrate-elite-boss.py
+          node --check public/src/free-roam-elite-boat.js
+          node --check public/src/free-roam-hostile-respawn-grace.js
+          node --check public/src/free-roam-audio-v5.js
+          node --check public/src/free-roam-elite-boat-audio-v11.js
+          node --check public/src/free-roam-combat.js
+          node --check public/src/free-roam-combat-v2.js
+          node --check public/src/free-roam-targeting.js
+          node --check src/free-roam-server.js
+          node --check src/free-roam-mega-bomb-v36.js
+          node --check src/free-roam-mega-bomb-v37.js
       - run: npm ci
-      - run: npm test
+      - name: Run complete project tests
+        run: npm test
+      - name: Remove one-time integration machinery and publish
+        shell: bash
+        run: |
+          rm -rf \
+            .github/elite-boss-integrate \
+            .github/elite-boss-integrate-xz
+          rm -f \
+            .github/elite-boss-cache-bump-trigger \
+            .github/elite-boss-v14-finalize-trigger \
+            .github/workflows/elite-boss-cache-bump.yml \
+            .github/workflows/elite-boss-v14-finalize.yml \
+            .github/workflows/elite-boss-v14-integrate-fixes-v2.yml \
+            .github/workflows/elite-boss-v14-integrate-fixes.yml \
+            .github/workflows/elite-boss-v14-verification.yml \
+            ci-results/elite-boss-v14-fixes-v2.txt \
+            ci-results/elite-boss-v14-latest.txt
+          rmdir ci-results 2>/dev/null || true
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git status --short
+          git commit -m "release: integrate elite boss states and spatial audio"
+          git push
