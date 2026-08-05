@@ -1,8 +1,9 @@
 "use strict";
 
-import * as base from "./free-roam-mega-bomb-v36.js?v=37";
+import * as base from "./free-roam-mega-bomb-v36.js?v=38";
+import {hostileRespawnGraceActive} from "../public/src/free-roam-hostile-respawn-grace.js?v=1";
 
-export * from "./free-roam-mega-bomb-v36.js?v=37";
+export * from "./free-roam-mega-bomb-v36.js?v=38";
 
 export const HOSTILE_BOMB_SEMANTICS_VERSION = "1.1.0";
 
@@ -24,10 +25,6 @@ function playerPoint(world, index) {
   return player;
 }
 
-function graceActive(world, index) {
-  return Number.isInteger(index)
-    && (Number(world.freeThreatDirector?.graceUntil?.[index]) || 0) > (Number(world.time) || 0);
-}
 
 export function hostileBombTargetPlayerV37(world, request) {
   if (Number.isInteger(request?.targetPlayer)) return request.targetPlayer;
@@ -118,7 +115,7 @@ export function launchPendingEliteBossBombs(world) {
   if (!boss) return 0;
   const pending = values(boss.bombRequests)
     .map(request => ({...request, targetPlayer: hostileBombTargetPlayerV37(world, request)}));
-  const launchable = pending.filter(request => !graceActive(world, request.targetPlayer));
+  const launchable = pending.filter(request => !hostileRespawnGraceActive(world, request.targetPlayer));
   boss.bombRequests = launchable;
   const before = new Set(values(world.freeMegaBombs?.projectiles).map(projectile => String(projectile?.id || "")));
   const launched = base.launchPendingEliteBossBombs(world);
@@ -148,7 +145,7 @@ export function cancelGraceProtectedHostileBombsV37(world) {
   let cancelled = 0;
   const survivors = [];
   for (const projectile of values(state.projectiles)) {
-    if (Number(projectile?.owner) >= 0 || !graceActive(world, Number(projectile?.targetPlayer))) {
+    if (Number(projectile?.owner) >= 0 || !hostileRespawnGraceActive(world, Number(projectile?.targetPlayer))) {
       survivors.push(projectile);
       continue;
     }

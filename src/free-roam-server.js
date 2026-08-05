@@ -11,7 +11,7 @@ import {applyCombatDamage} from "../public/src/free-roam-combat-v2.js?v=6";
 import {applyCombatAiHotfixV163} from "../public/src/free-roam-combat-ai-hotfix-v163.js?v=1";
 import {replicatedFreeWorld} from "../public/src/free-roam-replication.js";
 import {reserveUnconnectedBoats} from "../public/src/free-roam-reserve-boats.js";
-import {enforceHostileRespawnGrace} from "./free-roam-hostile-respawn-grace.js";
+import {enforceHostileRespawnGrace} from "../public/src/free-roam-hostile-respawn-grace.js?v=1";
 import {
   ensureMegaBombState,
   launchMegaBomb,
@@ -158,7 +158,6 @@ function stepInChunks(world, elapsedSeconds) {
   let remaining = Math.min(MAX_ELAPSED_SECONDS, Math.max(0, Number(elapsedSeconds) || 0));
   while (remaining > 0.0001) {
     const chunk = Math.min(MAX_STEP_SECONDS, remaining);
-    delete world.freeEliteBossTacticsV12;
     enforceHostileRespawnGrace(world);
     applyAuthoritativeCombatHotfix(world, 0);
     stepFreeWorld(world, chunk);

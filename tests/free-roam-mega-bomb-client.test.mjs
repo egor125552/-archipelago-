@@ -33,7 +33,7 @@ test("the release client loads complete binary recordings through the shared aud
   const source = await readFile(new URL("../public/src/free-roam-mega-bomb-client-v25.js", import.meta.url), "utf8");
   assert.match(source, /mega-bomb-flight-real-v1\.mp3\?v=6/);
   assert.match(source, /mega-bomb-explosion-v12\.mp3\?v=14/);
-  assert.match(source, /free-roam-audio-v5\.js\?v=44/);
+  assert.match(source, /free-roam-audio-v5\.js\?v=45/);
   assert.match(source, /source\.loop = Boolean/);
   assert.match(source, /response\.arrayBuffer/);
   assert.doesNotMatch(source, /EXPLOSION_PARTS|KILL_AUDIO_PARTS|\.part-|\.b64|atob|Uint8Array/);

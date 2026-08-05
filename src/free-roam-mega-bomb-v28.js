@@ -1,7 +1,7 @@
 "use strict";
 
 import {dropCarriedCrate} from "../public/src/free-roam-activities.js?v=43";
-import {applyCombatDamage} from "../public/src/free-roam-combat-v2.js?v=5";
+import {applyCombatDamage} from "../public/src/free-roam-combat-v2.js?v=6";
 import {damageEnemyBoat} from "../public/src/free-roam-enemy-boats.js?v=3";
 import {damageHeavyPursuer} from "../public/src/free-roam-heavy-pursuer.js?v=3";
 import {damageHostileActor, releaseCrewFromBoat} from "../public/src/free-roam-hostile-actors.js?v=2";

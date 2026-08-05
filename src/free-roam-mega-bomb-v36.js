@@ -1,9 +1,9 @@
 "use strict";
 
 import * as base from "./free-roam-mega-bomb-v35.js";
-import {resolveCombatTarget} from "../public/src/free-roam-targeting.js?v=37";
+import {resolveCombatTarget} from "../public/src/free-roam-targeting.js?v=39";
 import {MEGA_BOMB_WORLD_BOUNDS, createMegaBombProjectile, headingVector} from "./free-roam-mega-bomb-physics-v1.js";
-import {damageEliteBoatBoss} from "../public/src/free-roam-elite-boat.js?v=1";
+import {damageEliteBoatBoss} from "../public/src/free-roam-elite-boat.js?v=2";
 
 export * from "./free-roam-mega-bomb-v35.js";
 

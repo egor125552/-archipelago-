@@ -4,8 +4,8 @@ import {readFile} from "node:fs/promises";
 
 test("Safari loads the updated elite boss audio helper", async () => {
   const quality = await readFile(new URL("../public/src/free-roam-quality-v1.js", import.meta.url), "utf8");
-  assert.match(quality, /free-roam-elite-boat-audio-v11\.js\?v=2/);
-  assert.doesNotMatch(quality, /free-roam-elite-boat-audio-v11\.js\?v=1/);
+  assert.match(quality, /free-roam-elite-boat-audio-v11\.js\?v=3/);
+  assert.doesNotMatch(quality, /free-roam-elite-boat-audio-v11\.js\?v=2/);
 });
 
 test("elite boss audio remains a narrow helper driven by authoritative server state", async () => {

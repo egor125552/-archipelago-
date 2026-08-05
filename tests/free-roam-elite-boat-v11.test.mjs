@@ -44,8 +44,8 @@ function setupWorld() {
 test("the abandoned-player-boat audio extension patches the active v44 audio class", async () => {
   const boatAudio = await readFile(new URL("../public/src/free-roam-player-boat-audio-v1.js", import.meta.url), "utf8");
   const quality = await readFile(new URL("../public/src/free-roam-quality-v1.js", import.meta.url), "utf8");
-  assert.match(boatAudio, /free-roam-audio-v5\.js\?v=44/);
-  assert.match(quality, /free-roam-player-boat-audio-v1\.js\?v=2/);
+  assert.match(boatAudio, /free-roam-audio-v5\.js\?v=45/);
+  assert.match(quality, /free-roam-player-boat-audio-v1\.js\?v=3/);
 });
 
 test("restored object-shaped boss collections are migrated centrally", () => {

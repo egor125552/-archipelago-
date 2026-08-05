@@ -1,6 +1,7 @@
 "use strict";
 
 import {addEliteCommander, hostileActorById} from "./free-roam-hostile-actors.js?v=3";
+import {hostileRespawnGraceActive} from "./free-roam-hostile-respawn-grace.js?v=1";
 
 export const ELITE_BOSS_VERSION = "1.4.0";
 export const ELITE_ARMOR_LAYER_HP = 1000;
@@ -122,8 +123,15 @@ function normalizeTurrets(value) {
 function normalizeBombBay(value) {
   const fallback = createBombBay();
   if (!value || typeof value !== "object") return fallback;
-  const hp = clamp(value.hp ?? fallback.hp, 0, value.maxHp ?? fallback.maxHp);
-  return {...fallback, ...value, id: fallback.id, hp, maxHp: Math.max(1, finite(value.maxHp, fallback.maxHp)), destroyed: value.destroyed === true || hp <= 0, state: value.destroyed === true || hp <= 0 ? "destroyed" : String(value.state || fallback.state)};
+  value.id = fallback.id;
+  value.maxHp = Math.max(1, finite(value.maxHp, fallback.maxHp));
+  value.hp = clamp(value.hp ?? fallback.hp, 0, value.maxHp);
+  value.destroyed = value.destroyed === true || value.hp <= 0;
+  value.state = value.destroyed ? "destroyed" : String(value.state || fallback.state);
+  if (!Number.isFinite(Number(value.ammo))) value.ammo = fallback.ammo;
+  value.exposed = value.destroyed ? false : ["opening", "open"].includes(value.state);
+  value.internalDetonationResolved = value.internalDetonationResolved === true;
+  return value;
 }
 
 function normalizeTacticalState(value, playerCount) {
@@ -171,6 +179,8 @@ function setBombBayState(state, next, timer = 0) {
 }
 
 export function ensureEliteBoatBoss(world) {
+  if (Object.hasOwn(world, "freeEliteBossTacticsV12")) delete world.freeEliteBossTacticsV12;
+  if (Object.hasOwn(world, "freeEliteBossJournalTactics")) delete world.freeEliteBossJournalTactics;
   world.freeEliteBoatBoss ||= defaultState(world.players?.length || 2);
   const state = world.freeEliteBoatBoss;
   state.version = ELITE_BOSS_VERSION;
@@ -213,9 +223,6 @@ export function eliteBossBoat(world) {
   return state?.boat?.alive ? state.boat : null;
 }
 
-function threatGraceActive(world, index) {
-  return (finite(world.freeThreatDirector?.graceUntil?.[index]) || 0) > (finite(world.time) || 0);
-}
 
 function playerPoint(world, index) {
   const player = world.players?.[index];
@@ -225,7 +232,7 @@ function playerPoint(world, index) {
 }
 
 function livingPlayers(world) {
-  return values(world.players).map((player, index) => ({player, index, point: playerPoint(world, index)})).filter(({player, index, point}) => world.freeActivities?.presence?.[index] !== false && player?.combat?.alive && point && !threatGraceActive(world, index));
+  return values(world.players).map((player, index) => ({player, index, point: playerPoint(world, index)})).filter(({player, index, point}) => world.freeActivities?.presence?.[index] !== false && player?.combat?.alive && point && !hostileRespawnGraceActive(world, index));
 }
 
 function nearestPlayer(world, source) {
@@ -515,7 +522,7 @@ function turretAimPoint(world, state, muzzle, turret, target, projectileSerial =
 }
 
 function spawnTurretBullet(world, state, boat, turret, target) {
-  if (state.projectiles.length >= BULLET_LIMIT || !target?.point || threatGraceActive(world, target.index)) return false;
+  if (state.projectiles.length >= BULLET_LIMIT || !target?.point || hostileRespawnGraceActive(world, target.index)) return false;
   const muzzle = turretPoint(boat, turret), serial = state.nextProjectileId++, predicted = turretAimPoint(world, state, muzzle, turret, target, serial);
   const angle = bearing(muzzle, predicted) * Math.PI / 180;
   const boatVelocity = headingVector(boat.heading), inherited = finite(boat.speed) * BULLET_INHERITANCE;
@@ -570,7 +577,7 @@ function occupantsForBoat(world, boat) {
   const occupants = [];
   for (let index = 0; index < values(world.players).length; index += 1) {
     const player = world.players[index];
-    if (!player?.combat?.alive || world.freeActivities?.presence?.[index] === false || threatGraceActive(world, index)) continue;
+    if (!player?.combat?.alive || world.freeActivities?.presence?.[index] === false || hostileRespawnGraceActive(world, index)) continue;
     if (String(player.activeBoat) === String(boat.id) || boat.driver === index || (boat.owner === index && ["boat", "roof"].includes(player.mode))) occupants.push(index);
   }
   return [...new Set(occupants)];
@@ -607,7 +614,7 @@ function updateFlybys(world, projectile, from, to) {
   for (let index = 0; index < values(world.players).length; index += 1) {
     if (projectile.flybyPlayers.includes(index)) continue;
     const point = playerPoint(world, index), player = world.players[index];
-    if (!point || !player?.combat?.alive || threatGraceActive(world, index)) continue;
+    if (!point || !player?.combat?.alive || hostileRespawnGraceActive(world, index)) continue;
     if (!segmentHit(from, to, point, BULLET_FLYBY_RADIUS) || segmentHit(from, to, point, 2.2)) continue;
     projectile.flybyPlayers.push(index);
     emit(world, "elite-bullet-flyby", "", [index], {projectileId: projectile.id, turretId: projectile.turretId, x: projectile.x, y: projectile.y, vx: projectile.vx, vy: projectile.vy, speed: projectile.speed});
@@ -631,14 +638,14 @@ function updateProjectiles(world, state, dt, helpers) {
     let ended = false;
     for (const boat of values(world.boats)) {
       if (!boat || boat.sunk || !segmentHit(from, next, boat, 6.8)) continue;
-      const protectedOccupants = occupantsForBoat(world, boat), linkedTargetProtected = Number.isInteger(projectile.targetPlayer) && threatGraceActive(world, projectile.targetPlayer);
+      const protectedOccupants = occupantsForBoat(world, boat), linkedTargetProtected = Number.isInteger(projectile.targetPlayer) && hostileRespawnGraceActive(world, projectile.targetPlayer);
       if (linkedTargetProtected && !protectedOccupants.length) continue;
       applyBoatPenetration(world, projectile, boat, helpers); endProjectile(world, state, projectile, "boat-impact", boat); ended = true; break;
     }
     if (ended) continue;
     for (let index = 0; index < values(world.players).length; index += 1) {
       const player = world.players[index];
-      if (!player?.combat?.alive || world.freeActivities?.presence?.[index] === false || threatGraceActive(world, index) || !["foot", "swim", "roof"].includes(player.mode)) continue;
+      if (!player?.combat?.alive || world.freeActivities?.presence?.[index] === false || hostileRespawnGraceActive(world, index) || !["foot", "swim", "roof"].includes(player.mode)) continue;
       if (!segmentHit(from, next, player, 1.9)) continue;
       helpers?.damagePlayer?.(world, index, 7.2, {weapon: "elite-automatic", heavy: true, eventType: "elite-bullet-player-hit", sourcePoint: {x: projectile.sourceX, y: projectile.sourceY}, announceHealth: false});
       emit(world, "elite-bullet-direct-hit", "", [index], {projectileId: projectile.id, turretId: projectile.turretId, damage: 7.2, x: player.x, y: player.y}); endProjectile(world, state, projectile, "target-impact", player); ended = true; break;
@@ -873,7 +880,7 @@ export function eliteBossCombatTargets(world, attackerIndex) {
     if (turret.destroyed) continue;
     targets.push({id: turret.id, kind: "eliteTurret", component: `turret-${turret.side}`, turretId: turret.id, point: boat, label: `элитный катер, ${turret.side === "port" ? "левая" : "правая"} скорострельная установка`, assigned: turret.targetPlayer === attackerIndex});
   }
-  if (!state.bombBay.destroyed && ["opening", "open"].includes(state.bombBayState)) targets.push({id: state.bombBay.id, kind: "eliteTurret", component: "bomb-bay", turretId: state.bombBay.id, bombBayId: state.bombBay.id, point: {...boat, turrets: [...boat.turrets, state.bombBay]}, label: "элитный катер, открытый бомбоотсек", assigned: boat.targetPlayer === attackerIndex});
+  if (!state.bombBay.destroyed && ["opening", "open"].includes(state.bombBayState)) targets.push({id: state.bombBay.id, kind: "eliteBombBay", component: "bomb-bay", bombBayId: state.bombBay.id, point: boat, label: "элитный катер, открытый бомбоотсек", assigned: boat.targetPlayer === attackerIndex});
   return targets;
 }
 

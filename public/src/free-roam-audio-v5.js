@@ -211,7 +211,7 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
     gain.gain.value = 0;
     source.connect(filter).connect(panner).connect(gain).connect(this.master);
     source.start();
-    this.marauderEngine = {source, filter, panner, gain};
+    this.marauderEngine = {source, filter, panner, gain, trackedId: null, trackedRole: null};
   }
 
   updateMarauderEngine(world) {
@@ -241,16 +241,26 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
     const nearbyElite = elite?.active && !elite.destroyed ? elite : null;
     const marauder = selectedElite || selectedHeavy || selectedEnemyBoat || selectedEscort || nearbyElite || nearestEnemyBoat || nearbyHeavy || primary;
     if (!this.ctx || !this.listenerPoint || !marauder?.active || marauder.destroyed) {
-      if (this.ctx && this.marauderEngine) this.marauderEngine.gain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.18);
+      if (this.ctx && this.marauderEngine) {
+        this.marauderEngine.gain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.18);
+        this.marauderEngine.trackedId = null;
+        this.marauderEngine.trackedRole = null;
+      }
       return;
     }
     const metres = distance(this.listenerPoint, marauder);
     if (metres > 190) {
-      if (this.marauderEngine) this.marauderEngine.gain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.18);
+      if (this.marauderEngine) {
+        this.marauderEngine.gain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.18);
+        this.marauderEngine.trackedId = null;
+        this.marauderEngine.trackedRole = null;
+      }
       return;
     }
     this.startMarauderEngine();
     if (!this.marauderEngine) return;
+    this.marauderEngine.trackedId = String(marauder.id || "");
+    this.marauderEngine.trackedRole = marauder.role || null;
     const proximity = clamp(1 - metres / 190, 0, 1);
     const speed = clamp(Math.abs(marauder.speed) / 16, 0, 1);
     const pan = relativeMovementPan(this.listenerPoint, marauder);

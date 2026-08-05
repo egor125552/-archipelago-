@@ -9,12 +9,12 @@ import {
 import {COMBAT_TUNING} from "./free-roam-combat-tuning.js?v=32";
 import {isCriticalHealth} from "./free-roam-critical-injury.js?v=32";
 import {activePursuers, damageEscort} from "./free-roam-pursuer-squad.js?v=33";
-import {describeCombatTarget, resolveCombatTarget} from "./free-roam-targeting.js?v=38";
+import {describeCombatTarget, resolveCombatTarget} from "./free-roam-targeting.js?v=39";
 import {activeHostileGunners, damageHostileGunner} from "./free-roam-hostile-gunners.js?v=32";
 import {activeEnemyBoats, damageEnemyBoat} from "./free-roam-enemy-boats.js?v=3";
 import {activeHostileActors, damageHostileActor} from "./free-roam-hostile-actors.js?v=3";
 import {activeHeavyPursuer, damageHeavyPursuer} from "./free-roam-heavy-pursuer.js?v=4";
-import {damageEliteBoatBoss} from "./free-roam-elite-boat.js?v=1";
+import {damageEliteBoatBoss} from "./free-roam-elite-boat.js?v=2";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));
@@ -462,9 +462,15 @@ function fireAutomatic(world, attackerIndex, helpers) {
     }
     return;
   }
-  if (["eliteArmor", "eliteHull", "eliteTurret"].includes(target.kind)) {
+  if (["eliteArmor", "eliteHull", "eliteTurret", "eliteBombBay"].includes(target.kind)) {
     damageEliteBoatBoss(world, target.component || "hull", 12, attackerIndex, {weapon: "automatic"});
-    if ((target.kind === "eliteTurret" && target.point?.turrets?.find(item => item.id === target.turretId)?.destroyed) || target.point?.destroyed) {
+    const boss = world.freeEliteBoatBoss;
+    const destroyed = target.kind === "eliteTurret"
+      ? boss?.boat?.turrets?.find(item => item.id === target.turretId)?.destroyed
+      : target.kind === "eliteBombBay"
+        ? boss?.bombBay?.destroyed
+        : boss?.boat?.destroyed;
+    if (destroyed) {
       combat.lockedTargetId = null;
       emit(world, "target-cleared", "", [attackerIndex], {sourcePlayer: attackerIndex});
     }

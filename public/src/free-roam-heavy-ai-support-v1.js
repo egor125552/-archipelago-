@@ -1,6 +1,6 @@
 "use strict";
 
-import {resolveCombatTarget} from "./free-roam-targeting.js?v=37";
+import {resolveCombatTarget} from "./free-roam-targeting.js?v=39";
 
 export const HEAVY_TARGET_IDS = new Set(["heavy-pursuer", "heavy-turret", "heavy-engine"]);
 export const MEGA_BOMB_RANGE = 320;

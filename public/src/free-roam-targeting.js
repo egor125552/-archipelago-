@@ -5,16 +5,10 @@ import {activeHostileGunners} from "./free-roam-hostile-gunners.js?v=32";
 import {activeEnemyBoats} from "./free-roam-enemy-boats.js?v=3";
 import {activeHostileActors} from "./free-roam-hostile-actors.js?v=3";
 import {heavyCombatTargets} from "./free-roam-heavy-pursuer.js?v=4";
-import {eliteBossCombatTargets} from "./free-roam-elite-boat.js?v=1";
+import {eliteBossCombatTargets} from "./free-roam-elite-boat.js?v=2";
 
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));
 
-function normalizeEliteBossCollections(world) {
-  const boat = world?.freeEliteBoatBoss?.boat;
-  if (!boat) return;
-  if (!Array.isArray(boat.armorLayers)) boat.armorLayers = Object.values(boat.armorLayers || {});
-  if (!Array.isArray(boat.turrets)) boat.turrets = Object.values(boat.turrets || {});
-}
 
 function playerModeLabel(player) {
   if (player?.mode === "boat") return "в лодке";
@@ -26,7 +20,6 @@ function playerModeLabel(player) {
 export function listCombatTargets(world, attackerIndex, maximumRange = Infinity) {
   const attacker = world.players?.[attackerIndex];
   if (!attacker) return [];
-  normalizeEliteBossCollections(world);
   const presence = world.freeActivities?.presence || [];
   const targets = [];
 

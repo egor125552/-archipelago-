@@ -1,6 +1,6 @@
 "use strict";
 
-import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=44";
+import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=45";
 
 const EVENT_NAME = "free-roam-mega-bomb-message";
 const FLIGHT_URL = new URL("../audio/mega-bomb-flight-real-v1.mp3?v=6", import.meta.url).href;

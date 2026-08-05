@@ -12,8 +12,8 @@ import {
   storeActivityInput,
   updateActivities,
 } from "./free-roam-activities.js?v=43";
-// free-roam-combat.js?v=34 remains the stable combat base behind the 1.1 pistol layer.
-import {applyCombatDamage, combatStatus, ensureCombat, updateCombat} from "./free-roam-combat-v2.js?v=5";
+// free-roam-combat.js?v=35 remains the stable combat base behind the 1.1 pistol layer.
+import {applyCombatDamage, combatStatus, ensureCombat, updateCombat} from "./free-roam-combat-v2.js?v=6";
 import {ensureMarauder, releaseStolenCargo, updateMarauder} from "./free-roam-marauder.js?v=33";
 import {ensureFreeScenario, scenarioStatus, updateFreeScenario} from "./free-roam-scenario.js?v=44";
 import {suppressIncapacitatedMovement, updatePhysicalActors} from "./free-roam-physical-actors.js?v=38";
@@ -24,7 +24,7 @@ import {ensureEnemyBoats, updateEnemyBoats} from "./free-roam-enemy-boats.js?v=3
 import {ensureHostileActors, releaseCrewFromBoat, updateHostileActors} from "./free-roam-hostile-actors.js?v=3";
 import {ensureThreatDirector, notifyThreatBoatDestroyed, threatLevel} from "./free-roam-threat-director.js?v=4";
 import {ensureHeavyPursuer, updateHeavyPursuer} from "./free-roam-heavy-pursuer.js?v=4";
-import {activeEliteBoatBoss, ensureEliteBoatBoss, updateEliteBoatBoss} from "./free-roam-elite-boat.js?v=1";
+import {activeEliteBoatBoss, ensureEliteBoatBoss, updateEliteBoatBoss} from "./free-roam-elite-boat.js?v=2";
 import {retireClaimedKnifeCrates} from "./free-roam-unique-weapons.js?v=1";
 import {finishThreatIntelligence, prepareThreatIntelligence} from "./free-roam-threat-intelligence.js?v=2";
 import {suppressGameplayWhileShopping, updateMerchantShop} from "./free-roam-shop.js?v=3";

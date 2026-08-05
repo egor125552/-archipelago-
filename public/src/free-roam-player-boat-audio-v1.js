@@ -1,6 +1,6 @@
 "use strict";
 
-import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=44";
+import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=45";
 import {spatialGainForDistance} from "./free-roam-audio-v4.js?v=38";
 import {relativeMovementPan} from "./free-roam-audio-v3.js?v=38";
 

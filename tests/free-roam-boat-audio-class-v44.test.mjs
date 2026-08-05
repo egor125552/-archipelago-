@@ -8,7 +8,7 @@ test("all active player-boat audio entrypoints use the same FreeRoamAudio class"
     readFile(new URL("../public/src/free-roam-quality-v1.js", import.meta.url), "utf8"),
     readFile(new URL("../public/src/free-roam-v4.js", import.meta.url), "utf8"),
   ]);
-  assert.match(boatAudio, /free-roam-audio-v5\.js\?v=44/);
-  assert.match(quality, /free-roam-audio-v5\.js\?v=44/);
-  assert.match(main, /free-roam-audio-v5\.js\?v=44/);
+  assert.match(boatAudio, /free-roam-audio-v5\.js\?v=45/);
+  assert.match(quality, /free-roam-audio-v5\.js\?v=45/);
+  assert.match(main, /free-roam-audio-v5\.js\?v=45/);
 });

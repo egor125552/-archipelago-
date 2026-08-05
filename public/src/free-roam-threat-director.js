@@ -5,7 +5,7 @@ import {activeHostileGunners} from "./free-roam-hostile-gunners.js?v=32";
 import {activeEnemyBoats, ensureEnemyBoats, startEnemyBoats} from "./free-roam-enemy-boats.js?v=3";
 import {activeHostileActors, ensureHostileActors, startHostileActors} from "./free-roam-hostile-actors.js?v=3";
 import {activeHeavyPursuer, ensureHeavyPursuer, startHeavyPursuer} from "./free-roam-heavy-pursuer.js?v=4";
-import {activeEliteBoatBoss, eliteBossCompleted, ensureEliteBoatBoss, resetEliteBoatBoss, startEliteBoatBoss} from "./free-roam-elite-boat.js?v=1";
+import {activeEliteBoatBoss, eliteBossCompleted, ensureEliteBoatBoss, resetEliteBoatBoss, startEliteBoatBoss} from "./free-roam-elite-boat.js?v=2";
 import {awardEncounter} from "./free-roam-encounter-loot.js?v=1";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
