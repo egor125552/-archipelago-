@@ -15,13 +15,12 @@ on:
       - "public/src/free-roam-elite-boat.js"
       - "public/src/free-roam-elite-boat-audio-v11.js"
       - "public/src/free-roam-replication.js"
-      - "public/src/free-roam-developer-log-v2.js"
       - "src/free-roam-server.js"
+      - "src/free-roam-hostile-respawn-grace.js"
       - "src/free-roam-mega-bomb.js"
-      - "src/free-roam-mega-bomb-v36.js"
       - "src/free-roam-mega-bomb-v37.js"
-      - "src/free-roam-elite-boss-tactics-v12.js"
       - "tests/free-roam-elite-boat-journal-v14.test.mjs"
+      - "tests/free-roam-hostile-respawn-grace.test.mjs"
       - ".github/workflows/elite-boss-v14-verification.yml"
   workflow_dispatch:
 
@@ -38,122 +37,6 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - name: Remove legacy elite layer and keep common systems fair
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          actor_path = Path('public/src/free-roam-hostile-actors.js')
-          actor = actor_path.read_text()
-          old_living = '''function livingPlayer(world, index) {
-            const player = world.players?.[index];
-            return world.freeActivities?.presence?.[index] && player?.combat?.alive ? player : null;
-          }'''
-          new_living = '''function threatGraceActive(world, index) {
-            return (Number(world.freeThreatDirector?.graceUntil?.[index]) || 0) > (Number(world.time) || 0);
-          }
-
-          function livingPlayer(world, index) {
-            const player = world.players?.[index];
-            return world.freeActivities?.presence?.[index] && player?.combat?.alive && !threatGraceActive(world, index) ? player : null;
-          }'''
-          if 'function threatGraceActive(world, index)' not in actor:
-            if old_living not in actor:
-              raise SystemExit('hostile actor livingPlayer block not found')
-            actor = actor.replace(old_living, new_living, 1)
-
-          old_boat = '''      if (!boat || boat.sunk || !segmentHit(projectile, next, boat, 6.5)) continue;
-                const damage = projectile.weapon === "pistol" ? 2 : 3;
-                boat.hull = clamp(boat.hull - damage, 0.05, 100);
-                boat.leak = clamp((Number(boat.leak) || 0) + damage * 0.04, 0, 16);
-                const occupants = world.players.map((player, index) => ({player, index})).filter(({player}) => ["boat", "roof"].includes(player.mode) && player.activeBoat === boat.id).map(({index}) => index);'''
-          new_boat = '''      if (!boat || boat.sunk || !segmentHit(projectile, next, boat, 6.5)) continue;
-                const occupants = world.players.map((player, index) => ({player, index}))
-                  .filter(({player}) => ["boat", "roof"].includes(player.mode) && String(player.activeBoat) === String(boat.id))
-                  .map(({index}) => index);
-                if (occupants.some(index => threatGraceActive(world, index))) continue;
-                const damage = projectile.weapon === "pistol" ? 2 : 3;
-                boat.hull = clamp(boat.hull - damage, 0.05, 100);
-                boat.leak = clamp((Number(boat.leak) || 0) + damage * 0.04, 0, 16);'''
-          if old_boat in actor:
-            actor = actor.replace(old_boat, new_boat, 1)
-
-          actor = actor.replace(
-            'if (!world.freeActivities?.presence?.[index] || !player?.combat?.alive || !["foot", "swim", "roof"].includes(player.mode)) continue;',
-            'if (!world.freeActivities?.presence?.[index] || !player?.combat?.alive || threatGraceActive(world, index) || !["foot", "swim", "roof"].includes(player.mode)) continue;',
-            1,
-          )
-          actor_path.write_text(actor)
-
-          boss_path = Path('public/src/free-roam-elite-boat.js')
-          boss = boss_path.read_text()
-          migration = '  world.freeEliteBoatBoss ||= defaultState(world.players?.length || 2);\n  delete world.freeEliteBossTacticsV12;\n  const state = world.freeEliteBoatBoss;'
-          current = '  world.freeEliteBoatBoss ||= defaultState(world.players?.length || 2);\n  const state = world.freeEliteBoatBoss;'
-          if 'delete world.freeEliteBossTacticsV12;' not in boss:
-            if current not in boss:
-              raise SystemExit('elite boss migration insertion point not found')
-            boss = boss.replace(current, migration, 1)
-          boss_path.write_text(boss)
-
-          log_path = Path('public/src/free-roam-developer-log-v2.js')
-          log = log_path.read_text()
-          log = log.replace(
-            'tacticsVersion: world.freeEliteBossTacticsV12?.version || null,',
-            'bossVersion: world.freeEliteBoatBoss?.version || null,',
-          )
-          log_path.write_text(log)
-
-          test_path = Path('tests/free-roam-elite-boat-journal-v14.test.mjs')
-          test = test_path.read_text()
-          old = '  assert.equal(fs.existsSync(new URL("../src/free-roam-elite-boss-journal-v13.js", import.meta.url)), false);'
-          new = '  assert.equal(fs.existsSync(new URL("../src/free-roam-elite-boss-tactics-v12.js", import.meta.url)), false);\n  assert.equal(fs.existsSync(new URL("../src/free-roam-elite-boss-journal-v13.js", import.meta.url)), false);'
-          if 'free-roam-elite-boss-tactics-v12.js' not in test:
-            if old not in test:
-              raise SystemExit('v14 no-layer assertion not found')
-            test = test.replace(old, new, 1)
-          test_path.write_text(test)
-          PY
-          rm -f src/free-roam-elite-boss-tactics-v12.js
-          rm -f tests/free-roam-elite-boss-tactics-v12.test.mjs
-          rm -f tests/free-roam-elite-v12-integration.test.mjs
-      - name: Keep the active browser cache chain on the integrated boss
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          replacements = {
-            'free-roam-elite-boat.js?v=1': 'free-roam-elite-boat.js?v=2',
-            'free-roam-elite-boat-audio-v11.js?v=1': 'free-roam-elite-boat-audio-v11.js?v=2',
-            'free-roam-core-v6.js?v=45': 'free-roam-core-v6.js?v=46',
-            'free-roam-combat-v2.js?v=5': 'free-roam-combat-v2.js?v=6',
-            'free-roam-combat.js?v=34': 'free-roam-combat.js?v=35',
-            'free-roam-targeting.js?v=38': 'free-roam-targeting.js?v=39',
-            'free-roam-replication.js?v=46': 'free-roam-replication.js?v=47',
-            'free-roam-mega-bomb-v36.js?v=37': 'free-roam-mega-bomb-v36.js?v=38',
-            'free-roam-mega-bomb-v37.js?v=1': 'free-roam-mega-bomb-v37.js?v=2',
-            'free-roam-quality-v1.js?v=6': 'free-roam-quality-v1.js?v=7',
-            'free-roam-v4.js?v=56': 'free-roam-v4.js?v=57',
-          }
-          for path in Path('.').rglob('*'):
-            if not path.is_file() or path.suffix not in {'.js', '.mjs', '.html'}:
-              continue
-            if any(part in {'.git', 'node_modules'} for part in path.parts):
-              continue
-            text = path.read_text()
-            updated = text
-            for old, new in replacements.items():
-              updated = updated.replace(old, new)
-            if updated != text:
-              path.write_text(updated)
-          PY
-          node --check public/src/free-roam-elite-boat.js
-          node --check public/src/free-roam-hostile-actors.js
-          node --check public/src/free-roam-replication.js
-          node --check src/free-roam-server.js
-          node --check src/free-roam-mega-bomb-v37.js
-          node --check public/src/free-roam-elite-boat-audio-v11.js
       - run: npm ci
       - name: Run complete test suite and publish exact result
         shell: bash
@@ -174,7 +57,7 @@ jobs:
           echo "finished=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> ci-results/elite-boss-v14-latest.txt
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A public src tests ci-results/elite-boss-v14-latest.txt
-          git commit -m "ci: verify integrated elite boss without side layer" || true
+          git add ci-results/elite-boss-v14-latest.txt
+          git commit -m "ci: record final elite boss verification [skip ci]" || true
           git push || true
           exit ${status}
