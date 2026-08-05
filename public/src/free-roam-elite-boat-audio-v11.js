@@ -2,10 +2,45 @@
 
 import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=44";
 
+const clamp = (value, min, max) => Math.max(min, Math.min(max, Number(value) || 0));
+const distance = (a, b) => Math.hypot(
+  (Number(a?.x) || 0) - (Number(b?.x) || 0),
+  (Number(a?.y) || 0) - (Number(b?.y) || 0),
+);
+
 if (!FreeRoamAudio.prototype.__eliteBoatAudioV12) {
   const inheritedHandleFreeEvent = FreeRoamAudio.prototype.handleFreeEvent;
+  const inheritedUpdateMarauderEngine = FreeRoamAudio.prototype.updateMarauderEngine;
 
   Object.defineProperty(FreeRoamAudio.prototype, "__eliteBoatAudioV12", {value: true});
+
+  FreeRoamAudio.prototype.updateMarauderEngine = function updateEliteBoatEngine(world) {
+    inheritedUpdateMarauderEngine.call(this, world);
+    const elite = world?.freeEliteBoatBoss?.boat;
+    if (!this.ctx || !this.marauderEngine || !this.listenerPoint || !elite?.active || elite.destroyed) return;
+    const metres = distance(this.listenerPoint, elite);
+    if (metres > 190) return;
+
+    const engine = elite.engineAudio || {};
+    const rpm = clamp(engine.rpm ?? Math.abs(Number(elite.speed) || 0) / Math.max(1, Number(elite.maxSpeed) || 23), 0, 1);
+    const load = clamp(engine.load, 0, 1);
+    const damage = clamp(engine.damage, 0, 1);
+    const turnLoad = clamp(engine.turnLoad, 0, 1);
+    const proximity = clamp(1 - metres / 190, 0, 1);
+    const now = this.ctx.currentTime;
+
+    let rate = 0.62 + rpm * 0.34;
+    if (engine.state === "full-power") rate += 0.06;
+    if (engine.state === "decelerating") rate -= 0.05;
+    if (engine.state === "hard-turn") rate += 0.025 * turnLoad;
+    if (engine.state === "damaged") rate -= 0.08 + damage * 0.07;
+    this.marauderEngine.source.playbackRate.setTargetAtTime(clamp(rate, 0.48, 1.08), now, 0.13);
+
+    const filter = 330 + proximity * 2450 + load * 520 - damage * 620;
+    this.marauderEngine.filter.frequency.setTargetAtTime(clamp(filter, 260, 3900), now, 0.16);
+    const gain = 0.012 + proximity * (0.13 + load * 0.055) + turnLoad * 0.018;
+    this.marauderEngine.gain.gain.setTargetAtTime(clamp(gain, 0, 0.23), now, 0.16);
+  };
 
   FreeRoamAudio.prototype.handleFreeEvent = function handleEliteBoatAudio(event, playerIndex) {
     if (!event?.targets?.includes(playerIndex)) return;
