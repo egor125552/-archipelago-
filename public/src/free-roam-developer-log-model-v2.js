@@ -74,6 +74,9 @@ export function activeEntitySnapshots(world) {
       driver: boat.driver ?? null,
       leak: roundLogNumber(boat.leak),
       fuel: roundLogNumber(boat.fuel),
+      water: roundLogNumber(boat.water),
+      throttle: roundLogNumber(boat.throttle),
+      sunk: boat.sunk === true,
     }));
   }
 
@@ -88,15 +91,15 @@ export function activeEntitySnapshots(world) {
     if (boat?.active && !boat.destroyed) result.push(snapshot("enemy-boat", boat.id, boat, {role: boat.role || null}));
   }
   for (const gunner of collectionValues(world?.freeHostileGunners?.gunners)) {
-    if (gunner?.active && !gunner.destroyed) {
-      result.push(snapshot("enemy-gunner", gunner.id, gunner, {pursuerId: gunner.pursuerId || null}));
-    }
+    if (gunner?.active && !gunner.destroyed) result.push(snapshot("enemy-gunner", gunner.id, gunner, {pursuerId: gunner.pursuerId || null}));
   }
   for (const actor of collectionValues(world?.freeHostileActors?.actors)) {
     if (actor?.active && !actor.destroyed) {
       result.push(snapshot("enemy-actor", actor.id, actor, {
         weapon: actor.weapon || null,
         elite: actor.elite === true,
+        commander: actor.commander === true,
+        armor: roundLogNumber(actor.armor),
         boatId: actor.boatId || null,
       }));
     }
@@ -115,6 +118,28 @@ export function activeEntitySnapshots(world) {
       destination: compactLogValue(diagnostics.destination ?? null),
     }));
   }
+
+  const eliteState = world?.freeEliteBoatBoss;
+  const elite = eliteState?.boat;
+  if (elite && eliteState?.active && !elite.destroyed) {
+    result.push(snapshot("elite-boat", elite.id || "elite-boat", elite, {
+      phase: eliteState.phase ?? null,
+      stage: eliteState.stage ?? null,
+      movementMode: elite.movementMode ?? null,
+      activeArmorIndex: roundLogNumber(elite.activeArmorIndex, 0),
+      armorLayers: collectionValues(elite.armorLayers).map(layer => ({id: layer.id, hp: roundLogNumber(layer.hp), state: layer.state ?? null})),
+      turrets: collectionValues(elite.turrets).map(turret => ({
+        id: turret.id, side: turret.side, hp: roundLogNumber(turret.hp), state: turret.state ?? null,
+        destroyed: turret.destroyed === true, targetPlayer: turret.targetPlayer ?? null,
+        burstRemaining: roundLogNumber(turret.burstRemaining, 0),
+      })),
+      bombBayState: eliteState.bombBayState ?? elite.bombBayState ?? null,
+      bombCooldown: roundLogNumber(eliteState.bombCooldown),
+      salvoRemaining: roundLogNumber(eliteState.salvoRemaining, 0),
+      bulletCount: collectionValues(eliteState.projectiles).length,
+      pendingBombCount: collectionValues(eliteState.bombRequests).length,
+    }));
+  }
   return result;
 }
 
@@ -126,7 +151,9 @@ export function entitySnapshotChanged(previous, next, now, heartbeatMs = 3000) {
   const structural = [
     "mode", "state", "active", "destroyed", "alive", "health", "hull", "engineHealth", "turretHealth",
     "targetPlayer", "equipped", "ammo", "pistolAmmo", "lockedTargetId", "activeBoat", "present",
-    "phase", "repairSystem", "repairProgress", "repairPlates", "tacticalMode", "suppressionPhase", "destination",
+    "phase", "stage", "repairSystem", "repairProgress", "repairPlates", "tacticalMode", "suppressionPhase", "destination",
+    "movementMode", "activeArmorIndex", "armorLayers", "turrets", "bombBayState", "bombCooldown", "salvoRemaining",
+    "bulletCount", "pendingBombCount", "owner", "driver", "leak", "fuel", "water", "throttle", "sunk",
   ].some(key => JSON.stringify(previous[key]) !== JSON.stringify(next[key]));
   return structural || moved >= 1.4 || heading >= 7 || speed >= 0.8 || now - (previous.loggedAt || 0) >= heartbeatMs;
 }
