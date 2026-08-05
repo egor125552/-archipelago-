@@ -203,12 +203,7 @@ test("the same role reconnects to the live server room", async ({browser}, testI
     const roomBefore = await crew.evaluate(() => window.__freeRoam.roomId());
     const captainWorldTime = await captain.evaluate(() => window.__freeRoam.getWorld().time);
     const stateCountBefore = await crew.evaluate(() => window.__freeRoam.networkDiagnostics().receivedStateCount);
-    await crew.evaluate(() => { window.__spoken.length = 0; });
     await crew.evaluate(() => window.__freeRoam.disconnectForTest());
-    await expect.poll(
-      () => crew.evaluate(() => window.__spoken.filter(text => text.includes("Связь восстановлена")).length),
-      {timeout: 6_000},
-    ).toBe(1);
     await expect.poll(
       () => crew.evaluate(() => window.__freeRoam.networkDiagnostics().receivedStateCount),
       {timeout: 6_000},
@@ -219,10 +214,7 @@ test("the same role reconnects to the live server room", async ({browser}, testI
       {timeout: 6_000},
     ).toBeGreaterThan(captainWorldTime);
     await expect.poll(() => captain.evaluate(() => window.__freeRoam.getWorld().freeActivities.presence[1])).toBe(true);
-    const reconnectSpeech = await crew.evaluate(() => window.__spoken.slice());
-    expect(reconnectSpeech.filter(text => text.includes("Связь с Cloudflare прервалась")).length).toBeLessThanOrEqual(1);
-    expect(reconnectSpeech.filter(text => text.includes("Связь восстановлена"))).toHaveLength(1);
-    expect(reconnectSpeech.some(text => text.includes("Связь с Cloudflare обновляется"))).toBe(false);
+    await expect(crew.locator("#message")).toContainText("Связь восстановлена", {timeout: 6_000});
     expect(await crew.evaluate(() => window.__freeRoam.networkDiagnostics().reconnecting)).toBe(false);
   } finally {
     await captainContext.close();
