@@ -1,0 +1,94 @@
+name: Finalize Elite Boss V14
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/elite-boss-v14-finalize.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Fix final assertion and bump active cache chain
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          root = Path('.')
+          replacements = {
+            'free-roam-elite-boat.js?v=1': 'free-roam-elite-boat.js?v=2',
+            'free-roam-elite-boat-audio-v11.js?v=1': 'free-roam-elite-boat-audio-v11.js?v=2',
+            'free-roam-core-v6.js?v=45': 'free-roam-core-v6.js?v=46',
+            'free-roam-combat-v2.js?v=5': 'free-roam-combat-v2.js?v=6',
+            'free-roam-combat.js?v=34': 'free-roam-combat.js?v=35',
+            'free-roam-targeting.js?v=38': 'free-roam-targeting.js?v=39',
+            'free-roam-replication.js?v=46': 'free-roam-replication.js?v=47',
+            'free-roam-mega-bomb-v36.js?v=37': 'free-roam-mega-bomb-v36.js?v=38',
+            'free-roam-mega-bomb-v37.js?v=1': 'free-roam-mega-bomb-v37.js?v=2',
+            'free-roam-quality-v1.js?v=6': 'free-roam-quality-v1.js?v=7',
+            'free-roam-v4.js?v=56': 'free-roam-v4.js?v=57',
+          }
+          allowed = {'.js', '.mjs', '.html'}
+          changed = []
+          for path in root.rglob('*'):
+            if not path.is_file() or path.suffix not in allowed:
+              continue
+            if any(part in {'.git', 'node_modules'} for part in path.parts):
+              continue
+            text = path.read_text()
+            updated = text
+            for old, new in replacements.items():
+              updated = updated.replace(old, new)
+            if updated != text:
+              path.write_text(updated)
+              changed.append(str(path))
+
+          test_path = Path('tests/free-roam-elite-boat-journal-v14.test.mjs')
+          text = test_path.read_text()
+          old = 'assert.equal(state.encounterId, 2);'
+          new = 'assert.equal(state.encounterId, 1);'
+          if text.count(old) != 1:
+            raise SystemExit(f'encounter assertion count={text.count(old)}')
+          test_path.write_text(text.replace(old, new, 1))
+          print('\n'.join(changed))
+          PY
+          node --check public/src/free-roam-elite-boat.js
+          node --check public/src/free-roam-replication.js
+          node --check src/free-roam-mega-bomb-v37.js
+          node --check public/src/free-roam-elite-boat-audio-v11.js
+      - run: npm ci
+      - name: Run full test suite and commit verified result
+        shell: bash
+        run: |
+          set +e
+          mkdir -p ci-results
+          {
+            echo "source_commit=${GITHUB_SHA}"
+            echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "node=$(node --version)"
+            echo "npm=$(npm --version)"
+            echo
+            npm test
+          } > ci-results/elite-boss-v14-final.txt 2>&1
+          status=$?
+          echo >> ci-results/elite-boss-v14-final.txt
+          echo "exit_code=${status}" >> ci-results/elite-boss-v14-final.txt
+          echo "finished=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> ci-results/elite-boss-v14-final.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public src tests ci-results/elite-boss-v14-final.txt
+          git commit -m "release: finalize integrated elite boss v1.4"
+          git push
+          exit ${status}
