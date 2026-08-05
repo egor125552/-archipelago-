@@ -47,7 +47,20 @@ jobs:
           node --check src/free-roam-mega-bomb-v37.js
       - run: npm ci
       - name: Run complete project tests
-        run: npm test
+        shell: bash
+        run: |
+          set +e
+          mkdir -p ci-results
+          npm test > ci-results/elite-boss-current.txt 2>&1
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add ci-results/elite-boss-current.txt
+            git commit -m "ci: record elite boss failing tests [skip ci]"
+            git push origin HEAD:${{ github.head_ref }}
+          fi
+          exit "$status"
       - name: Remove one-time integration machinery and publish verified branch
         shell: bash
         run: |
@@ -64,7 +77,8 @@ jobs:
             .github/workflows/elite-boss-v14-integrate-fixes.yml \
             .github/workflows/elite-boss-v14-verification.yml \
             ci-results/elite-boss-v14-fixes-v2.txt \
-            ci-results/elite-boss-v14-latest.txt
+            ci-results/elite-boss-v14-latest.txt \
+            ci-results/elite-boss-current.txt
           rmdir ci-results 2>/dev/null || true
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
