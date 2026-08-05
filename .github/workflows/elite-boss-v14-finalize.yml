@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/elite-boss-v14-finalize.yml"
+      - ".github/elite-boss-v14-finalize-trigger"
   workflow_dispatch:
 
 permissions:
