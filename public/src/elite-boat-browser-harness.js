@@ -17,6 +17,7 @@ function assert(condition, message) {
 async function run() {
   const world = createFreeWorld();
   world.freeScenario.phase = "victory";
+  world.freeThreatDirector ||= {graceUntil: [0, 0]};
   setPlayerPresence(world, 0, true);
   setPlayerPresence(world, 1, true);
   for (let index = 0; index < 2; index += 1) {
@@ -40,6 +41,7 @@ async function run() {
   for (let tick = 0; tick < 50; tick += 1) updateEliteBoatBoss(world, 0.04, {});
   const turretShots = world.events.filter(event => event.type === "elite-turret-shot");
   const shotTurrets = [...new Set(turretShots.map(event => event.turretId))].sort();
+  const aimSections = [...new Set(turretShots.map(event => event.aimSection))].sort();
   const launchPoints = new Map();
   for (const shot of turretShots) if (!launchPoints.has(shot.turretId)) launchPoints.set(shot.turretId, {x: shot.x, y: shot.y});
 
@@ -65,6 +67,7 @@ async function run() {
     version: state.version,
     initialTargets,
     shotTurrets,
+    aimSections,
     distinctLaunchPoints: points.length === 2 && (points[0].x !== points[1].x || points[0].y !== points[1].y),
     starboardContinued: shotsAfter > shotsBefore,
     portDestroyed: state.boat.turrets[0].destroyed,
@@ -79,9 +82,10 @@ async function run() {
     replicasEqual: JSON.stringify(left.freeEliteBoatBoss) === JSON.stringify(right.freeEliteBoatBoss),
   };
 
-  assert(result.version === "1.0.0", "wrong subsystem version");
+  assert(result.version === "1.1.0", "wrong subsystem version");
   assert(JSON.stringify(result.initialTargets) === JSON.stringify(["elite-armor-outer", "elite-turret-port", "elite-turret-starboard"]), "wrong initial targets");
   assert(JSON.stringify(result.shotTurrets) === JSON.stringify(["elite-turret-port", "elite-turret-starboard"]), "both turrets did not fire");
+  assert(JSON.stringify(result.aimSections) === JSON.stringify(["front", "rear"]), "turrets did not bracket front and rear halves");
   assert(result.distinctLaunchPoints, "turrets share one fake launch point");
   assert(result.portDestroyed && !result.starboardDestroyed && result.starboardContinued, "turret lifecycles are coupled");
   assert(result.armor.every(value => value === 0) && result.hullTarget === "elite-hull", "armor did not open hull sequentially");
