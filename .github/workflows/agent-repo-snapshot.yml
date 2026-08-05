@@ -12,9 +12,14 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
 
       - name: Rebuild and verify release patches
         run: |
@@ -34,12 +39,62 @@ jobs:
           git apply --index /tmp/elite-boss-release.patch
           git apply --index --check /tmp/elite-boss-new-files.patch
           git apply --index /tmp/elite-boss-new-files.patch
+          git rm --cached --force .github/workflows/elite-boat-release.yml
+          rm -f .github/workflows/elite-boat-release.yml
           git diff --cached --check
           test ! -e .agent
           test ! -e .github/workflows/agent-repo-snapshot.yml
           test -f public/src/free-roam-elite-boat.js
           test -f tests/free-roam-elite-boat-v1.test.mjs
-          test -f .github/workflows/elite-boat-release.yml
+          test -f tests/browser/elite-boat-browser.mjs
+
+      - name: Install project dependencies
+        run: npm ci
+
+      - name: Check changed JavaScript modules
+        run: |
+          node --check public/src/free-roam-elite-boat.js
+          node --check public/src/free-roam-hostile-actors.js
+          node --check public/src/free-roam-threat-director.js
+          node --check public/src/free-roam-threat-intelligence.js
+          node --check public/src/free-roam-targeting.js
+          node --check public/src/free-roam-combat.js
+          node --check public/src/free-roam-combat-v2.js
+          node --check public/src/free-roam-replication.js
+          node --check public/src/free-roam-audio-v5.js
+          node --check public/src/free-roam-core-v6.js
+          node --check public/src/free-roam-mega-bomb-client-v25.js
+          node --check src/free-roam-mega-bomb-v36.js
+          node --check src/free-roam-server.js
+
+      - name: Run the complete deterministic test suite
+        run: npm test
+
+      - name: Install Chromium test runtime
+        run: |
+          npm install --no-save --package-lock=false playwright@1.54.1
+          npx playwright install --with-deps chromium
+
+      - name: Start the real public web root
+        run: |
+          python3 -m http.server 4173 --directory public > /tmp/archipelago-elite-browser-http.log 2>&1 &
+          echo $! > /tmp/archipelago-elite-browser-http.pid
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:4173/elite-boat-browser-harness.html > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/archipelago-elite-browser-http.log
+          exit 1
+
+      - name: Run the full boss lifecycle in Chromium
+        env:
+          ARCHIPELAGO_TEST_URL: http://127.0.0.1:4173
+        run: node tests/browser/elite-boat-browser.mjs
+
+      - name: Validate Cloudflare Worker bundle
+        run: npx wrangler deploy --dry-run --outdir=.worker-elite-dry-run
 
       - name: Create one release commit
         run: |
@@ -47,3 +102,7 @@ jobs:
           git config user.email "release-agent@users.noreply.github.com"
           git commit -m "Выпустить элитного катера-босса 1.0"
           git push --force-with-lease origin HEAD:refs/heads/agent/elite-boat-release-1.0
+
+      - name: Show browser server log on failure
+        if: failure()
+        run: cat /tmp/archipelago-elite-browser-http.log || true
