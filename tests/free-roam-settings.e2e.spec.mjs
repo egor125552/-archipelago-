@@ -60,7 +60,7 @@ test("interface, speech, and reload settings persist from the main menu into the
     await page.getByRole("button", {name: "Настройки"}).click();
     await expect(page.getByRole("dialog", {name: "Настройки"})).toBeVisible();
     await expect(page.getByRole("heading", {name: "Внешний вид"})).toBeVisible();
-    await expect(page.getByRole("heading", {name: "Озвучка"})).toBeVisible();
+    await expect(page.getByRole("heading", {name: "Озвучка", exact: true})).toBeVisible();
     await expect(page.getByRole("heading", {name: "После обновления страницы"})).toBeVisible();
     await expect(page.getByText(/вариант «вернуться в тот же мир»/)).toBeVisible();
 
