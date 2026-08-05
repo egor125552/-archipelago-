@@ -4,13 +4,6 @@ on:
   push:
     branches: [main]
     paths:
-      - "public/free-roam.html"
-      - "public/src/free-roam-v4.js"
-      - "public/src/free-roam-core-v6.js"
-      - "public/src/free-roam-combat.js"
-      - "public/src/free-roam-combat-v2.js"
-      - "public/src/free-roam-targeting.js"
-      - "public/src/free-roam-quality-v1.js"
       - "public/src/free-roam-hostile-actors.js"
       - "public/src/free-roam-elite-boat.js"
       - "public/src/free-roam-elite-boat-audio-v11.js"
@@ -25,7 +18,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   verify:
@@ -37,80 +30,5 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - name: Prepare Safari cache chain and diagnostic
-        shell: bash
-        run: |
-          mkdir -p ci-results
-          set +e
-          python3 - <<'PY' > ci-results/elite-boss-v14-cache-step.txt 2>&1
-          from pathlib import Path
-
-          replacements = {
-            'free-roam-elite-boat.js?v=1': 'free-roam-elite-boat.js?v=2',
-            'free-roam-elite-boat-audio-v11.js?v=1': 'free-roam-elite-boat-audio-v11.js?v=2',
-            'free-roam-core-v6.js?v=45': 'free-roam-core-v6.js?v=46',
-            'free-roam-combat-v2.js?v=5': 'free-roam-combat-v2.js?v=6',
-            'free-roam-combat.js?v=34': 'free-roam-combat.js?v=35',
-            'free-roam-targeting.js?v=38': 'free-roam-targeting.js?v=39',
-            'free-roam-replication.js?v=46': 'free-roam-replication.js?v=47',
-            'free-roam-quality-v1.js?v=6': 'free-roam-quality-v1.js?v=7',
-            'free-roam-v4.js?v=56': 'free-roam-v4.js?v=57',
-          }
-          changed = []
-          for path in Path('.').rglob('*'):
-            if not path.is_file() or path.suffix not in {'.js', '.mjs', '.html'}:
-              continue
-            if any(part in {'.git', 'node_modules'} for part in path.parts):
-              continue
-            text = path.read_text()
-            updated = text
-            for old, new in replacements.items():
-              updated = updated.replace(old, new)
-            if updated != text:
-              path.write_text(updated)
-              changed.append(str(path))
-          print(f'changed_count={len(changed)}')
-          print('\n'.join(changed))
-          PY
-          cache_status=$?
-          echo "cache_exit_code=${cache_status}" >> ci-results/elite-boss-v14-cache-step.txt
-          node --check public/src/free-roam-elite-boat.js >> ci-results/elite-boss-v14-cache-step.txt 2>&1
-          syntax_status=$?
-          node --check public/src/free-roam-elite-boat-audio-v11.js >> ci-results/elite-boss-v14-cache-step.txt 2>&1 || syntax_status=$?
-          node --check public/src/free-roam-replication.js >> ci-results/elite-boss-v14-cache-step.txt 2>&1 || syntax_status=$?
-          node --check src/free-roam-server.js >> ci-results/elite-boss-v14-cache-step.txt 2>&1 || syntax_status=$?
-          node --check src/free-roam-hostile-respawn-grace.js >> ci-results/elite-boss-v14-cache-step.txt 2>&1 || syntax_status=$?
-          node --check src/free-roam-mega-bomb-v37.js >> ci-results/elite-boss-v14-cache-step.txt 2>&1 || syntax_status=$?
-          echo "syntax_exit_code=${syntax_status}" >> ci-results/elite-boss-v14-cache-step.txt
-          exit $((cache_status || syntax_status))
       - run: npm ci
-      - name: Run tests, publish only a verified cache chain, and preserve diagnostics
-        shell: bash
-        run: |
-          set +e
-          {
-            echo "commit=${GITHUB_SHA}"
-            echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-            echo "node=$(node --version)"
-            echo "npm=$(npm --version)"
-            echo
-            npm test
-          } > ci-results/elite-boss-v14-latest.txt 2>&1
-          status=$?
-          echo >> ci-results/elite-boss-v14-latest.txt
-          echo "exit_code=${status}" >> ci-results/elite-boss-v14-latest.txt
-          echo "finished=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> ci-results/elite-boss-v14-latest.txt
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if [ "$status" -eq 0 ]; then
-            git add public src tests ci-results/elite-boss-v14-latest.txt ci-results/elite-boss-v14-cache-step.txt
-            message="release: publish verified elite boss v1.4 cache chain [skip ci]"
-          else
-            git restore public src tests
-            git add ci-results/elite-boss-v14-latest.txt ci-results/elite-boss-v14-cache-step.txt
-            message="ci: record failed elite boss cache verification [skip ci]"
-          fi
-          git commit -m "$message" || true
-          git push || true
-          exit "$status"
+      - run: npm test
