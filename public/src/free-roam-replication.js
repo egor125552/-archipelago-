@@ -10,9 +10,7 @@ function select(source, keys) {
 }
 
 function compact(value) {
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? Math.round(value * 1_000) / 1_000 : 0;
-  }
+  if (typeof value === "number") return Number.isFinite(value) ? Math.round(value * 1_000) / 1_000 : 0;
   if (!value || typeof value !== "object") return value;
   if (Array.isArray(value)) return value.map(compact);
   const result = {};
@@ -33,16 +31,12 @@ function cloneValue(value) {
 
 function deltaNode(previous, next) {
   if (Object.is(previous, next)) return undefined;
-  if (!previous || !next || typeof previous !== "object" || typeof next !== "object") {
-    return cloneValue(next);
-  }
+  if (!previous || !next || typeof previous !== "object" || typeof next !== "object") return cloneValue(next);
   if (Array.isArray(previous) !== Array.isArray(next)) return {[REPLACE_KEY]: cloneValue(next)};
   if (Array.isArray(next) && previous.length !== next.length) return {[REPLACE_KEY]: cloneValue(next)};
 
   const delta = {};
-  const keys = Array.isArray(next)
-    ? next.map((_, index) => String(index))
-    : [...new Set([...Object.keys(previous), ...Object.keys(next)])];
+  const keys = Array.isArray(next) ? next.map((_, index) => String(index)) : [...new Set([...Object.keys(previous), ...Object.keys(next)])];
   for (const key of keys) {
     if (!Object.hasOwn(next, key)) {
       delta[key] = {[DELETE_KEY]: true};
@@ -60,9 +54,7 @@ function deltaNode(previous, next) {
 
 function applyDeltaNode(previous, delta) {
   if (!delta || typeof delta !== "object") return cloneValue(delta);
-  if (delta && typeof delta === "object" && Object.hasOwn(delta, REPLACE_KEY)) {
-    return cloneValue(delta[REPLACE_KEY]);
-  }
+  if (Object.hasOwn(delta, REPLACE_KEY)) return cloneValue(delta[REPLACE_KEY]);
   const result = Array.isArray(previous) ? previous.map(cloneValue) : cloneValue(previous || {});
   for (const [key, child] of Object.entries(delta || {})) {
     if (child && typeof child === "object" && child[DELETE_KEY]) {
@@ -92,22 +84,14 @@ const BOAT_FIELDS = Object.freeze([
   "floatingBrakeReadyAt", "refuelCanisters", "refuelActive", "refuelProgress",
   "engineServiceActive", "engineServiceProgress", "cargo", "cargoWeight", "cargoPumpBonus",
 ]);
-const PLAYER_FIELDS = Object.freeze([
-  "id", "mode", "activeBoat", "x", "y", "heading", "running", "airborne", "jumpHeight",
-]);
+const PLAYER_FIELDS = Object.freeze(["id", "mode", "activeBoat", "x", "y", "heading", "running", "airborne", "jumpHeight"]);
 const COMBAT_FIELDS = Object.freeze([
   "health", "alive", "respawnRemaining", "knockedDown", "knockdownRemaining", "stun",
   "stamina", "carriedCrate", "weapons", "equipped", "ammo", "pistolAmmo", "injuryMix", "lockedTargetId",
 ]);
-const PURSUER_FIELDS = Object.freeze([
-  "id", "x", "y", "heading", "speed", "hull", "maxHull", "active", "destroyed", "targetPlayer",
-]);
-const GUNNER_FIELDS = Object.freeze([
-  "id", "pursuerId", "targetPlayer", "x", "y", "heading", "health", "active", "destroyed", "returning",
-]);
-const ENEMY_BOAT_FIELDS = Object.freeze([
-  "id", "role", "x", "y", "heading", "speed", "hull", "maxHull", "active", "destroyed", "targetPlayer", "crewSeats",
-]);
+const PURSUER_FIELDS = Object.freeze(["id", "x", "y", "heading", "speed", "hull", "maxHull", "active", "destroyed", "targetPlayer"]);
+const GUNNER_FIELDS = Object.freeze(["id", "pursuerId", "targetPlayer", "x", "y", "heading", "health", "active", "destroyed", "returning"]);
+const ENEMY_BOAT_FIELDS = Object.freeze(["id", "role", "x", "y", "heading", "speed", "hull", "maxHull", "active", "destroyed", "targetPlayer", "crewSeats"]);
 const HEAVY_FIELDS = Object.freeze([
   "id", "role", "x", "y", "heading", "turretHeading", "speed", "hull", "maxHull", "engineHealth", "maxEngineHealth", "turretHealth", "maxTurretHealth",
   "engineDisabled", "turretDisabled", "active", "destroyed", "targetPlayer", "burstRemaining", "aimRemaining",
@@ -119,16 +103,13 @@ const HOSTILE_ACTOR_FIELDS = Object.freeze([
 const ELITE_BOAT_FIELDS = Object.freeze([
   "id", "role", "encounterId", "x", "y", "heading", "speed", "maxSpeed", "alive", "active", "destroyed", "targetPlayer",
   "activeArmorIndex", "armorLayers", "hull", "maxHull", "hullState", "turrets", "movementMode",
+  "bombBayState", "bombCooldown", "salvoRemaining",
 ]);
 const CRATE_FIELDS = Object.freeze([
   "id", "kind", "label", "rarity", "weight", "slots", "traits", "x", "y", "state", "carriedBy", "stowedBoat", "source",
-  "contractId", "contractDefinitionId", "contractCategory", "contractDamage", "waterExposure",
-  "extractionSeconds", "extractionProgress", "extracted",
+  "contractId", "contractDefinitionId", "contractCategory", "contractDamage", "waterExposure", "extractionSeconds", "extractionProgress", "extracted",
 ]);
 
-// Browsers render this view but never own the authoritative simulation. Host
-// inputs, collision caches, AI cooldowns and projectile physics stay inside
-// the Durable Object and can no longer flood a slower browser.
 export function replicatedFreeWorld(world) {
   const activities = world?.freeActivities || {};
   const scenario = world?.freeScenario || {};
@@ -143,10 +124,7 @@ export function replicatedFreeWorld(world) {
     version: world?.version,
     time: world?.time,
     boats: (world?.boats || []).map(boat => select(boat, BOAT_FIELDS)),
-    players: (world?.players || []).map(player => ({
-      ...select(player, PLAYER_FIELDS),
-      combat: select(player?.combat, COMBAT_FIELDS),
-    })),
+    players: (world?.players || []).map(player => ({...select(player, PLAYER_FIELDS), combat: select(player?.combat, COMBAT_FIELDS)})),
     tow: world?.tow ?? null,
     freeActivities: {
       presence: activities.presence,
@@ -158,9 +136,7 @@ export function replicatedFreeWorld(world) {
       crates: (activities.crates || []).map(crate => select(crate, CRATE_FIELDS)),
       marauder: select(activities.marauder, PURSUER_FIELDS),
     },
-    freeScenario: select(scenario, [
-      "phase", "warningUntil", "targets", "lockedTargetIds", "beaconUntil", "guideEnabled", "navigationModes",
-    ]),
+    freeScenario: select(scenario, ["phase", "warningUntil", "targets", "lockedTargetIds", "beaconUntil", "guideEnabled", "navigationModes"]),
     freeContracts: world?.freeContracts ? {
       offerIds: (world.freeContracts.offers || []).map(offer => offer.definitionId),
       activeContract: select(world.freeContracts.activeContract, [
@@ -216,8 +192,11 @@ export function replicatedFreeWorld(world) {
       stage: eliteBoss.stage,
       rewardReady: eliteBoss.rewardReady,
       commanderId: eliteBoss.commanderId,
+      bombBayState: eliteBoss.bombBayState,
+      bombCooldown: eliteBoss.bombCooldown,
+      salvoRemaining: eliteBoss.salvoRemaining,
       boat: select(eliteBoss.boat, ELITE_BOAT_FIELDS),
-      projectiles: (eliteBoss.projectiles || []).map(projectile => select(projectile, ["id", "turretId", "targetPlayer", "x", "y"])),
+      projectiles: (eliteBoss.projectiles || []).map(projectile => select(projectile, ["id", "turretId", "targetPlayer", "aimSection", "x", "y"])),
     }} : {}),
   });
 }

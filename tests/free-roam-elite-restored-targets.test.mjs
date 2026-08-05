@@ -69,18 +69,18 @@ test("restored elite boss object collections remain iterable combat targets", ()
   assert.ok(Array.isArray(world.freeEliteBoatBoss.boat.turrets));
   assert.deepEqual(
     targets.filter(target => target.id.startsWith("elite-")).map(target => target.id).sort(),
-    ["elite-armor-outer", "elite-turret-port"],
+    ["elite-armor-outer", "elite-turret-port", "elite-turret-starboard"],
   );
   const turret = targets.find(target => target.id === "elite-turret-port");
-  assert.match(describeCombatTarget(turret, 1, 2), /прочность 520/);
+  assert.match(describeCombatTarget(turret, 1, 3), /прочность 520/);
 });
 
-test("empty restored turret object does not crash eliteBossCombatTargets", () => {
+test("empty restored turret object is repaired into both physical turret targets", () => {
   const world = worldWithRestoredCollections({});
 
   assert.doesNotThrow(() => listCombatTargets(world, 0));
   assert.deepEqual(
     listCombatTargets(world, 0).filter(target => target.id.startsWith("elite-")).map(target => target.id),
-    ["elite-armor-outer"],
+    ["elite-armor-outer", "elite-turret-port", "elite-turret-starboard"],
   );
 });

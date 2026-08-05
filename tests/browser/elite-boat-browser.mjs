@@ -19,6 +19,7 @@ try {
 
     const world = core.createFreeWorld();
     world.freeScenario.phase = "victory";
+    world.freeThreatDirector ||= {graceUntil: [0, 0]};
     core.setPlayerPresence(world, 0, true);
     core.setPlayerPresence(world, 1, true);
     for (let index = 0; index < 2; index += 1) {
@@ -46,6 +47,7 @@ try {
     for (let tick = 0; tick < 50; tick += 1) bossApi.updateEliteBoatBoss(world, 0.04, {});
     const turretShots = world.events.filter(event => event.type === "elite-turret-shot");
     const shotTurrets = [...new Set(turretShots.map(event => event.turretId))];
+    const aimSections = [...new Set(turretShots.map(event => event.aimSection))];
     const muzzlePositions = [...new Set(turretShots.map(event => `${event.turretId}:${event.x.toFixed(2)}:${event.y.toFixed(2)}`))];
 
     bossApi.damageEliteBoatBoss(world, "turret-port", 520, 0, {weapon: "automatic"});
@@ -72,6 +74,7 @@ try {
       version: state.version,
       initialTargets,
       shotTurrets,
+      aimSections,
       muzzlePositions,
       projectilePeak: Math.max(0, ...world.events.filter(event => event.type === "elite-turret-shot").map((_event, index) => index + 1)),
       starboardContinued: shotsAfter > shotsBefore,
@@ -90,9 +93,10 @@ try {
   });
 
   assert.deepEqual(browserErrors, [], browserErrors.join("\n"));
-  assert.equal(result.version, "1.0.0");
+  assert.equal(result.version, "1.1.0");
   assert.deepEqual(result.initialTargets, ["elite-armor-outer", "elite-turret-port", "elite-turret-starboard"]);
   assert.deepEqual(result.shotTurrets.sort(), ["elite-turret-port", "elite-turret-starboard"]);
+  assert.deepEqual(result.aimSections.sort(), ["front", "rear"]);
   assert.ok(result.muzzlePositions.length >= 2, "turrets did not use distinct physical launch points");
   assert.equal(result.portDestroyed, true);
   assert.equal(result.starboardDestroyed, false);
@@ -106,7 +110,7 @@ try {
   assert.equal(result.completionEvents, 1);
   assert.equal(result.replicasEqual, true);
   assert.match(result.liveText, /Фаза completed/);
-  console.log(JSON.stringify({scenario: "elite-boat-release-1.0", ...result}, null, 2));
+  console.log(JSON.stringify({scenario: "elite-boat-release-1.1", ...result}, null, 2));
 } finally {
   await browser.close();
 }

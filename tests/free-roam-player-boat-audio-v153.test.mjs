@@ -58,7 +58,7 @@ test("the live audio wrapper installs the spatial boat patch before use", async 
     readFile(new URL("../public/src/free-roam-quality-v1.js", import.meta.url), "utf8"),
     readFile(new URL("../public/src/free-roam-player-boat-audio-v1.js", import.meta.url), "utf8"),
   ]);
-  assert.match(quality, /import "\.\/free-roam-player-boat-audio-v1\.js\?v=1"/);
+  assert.match(quality, /import "\.\/free-roam-player-boat-audio-v1\.js\?v=2"/);
   assert.match(patch, /playerBoatLoops \|\|= new Map/);
   assert.match(patch, /setTargetAtTime\(source\.engineGain, now, 0\.22\)/);
   assert.match(patch, /setTargetAtTime\(0, now, 0\.22\)/);

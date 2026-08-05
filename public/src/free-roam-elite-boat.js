@@ -2,20 +2,28 @@
 
 import {addEliteCommander, hostileActorById} from "./free-roam-hostile-actors.js?v=3";
 
-export const ELITE_BOSS_VERSION = "1.0.0";
+export const ELITE_BOSS_VERSION = "1.1.0";
 export const ELITE_ARMOR_LAYER_HP = 1000;
 export const ELITE_HULL_HP = 5000;
 export const ELITE_TURRET_HP = 520;
-export const ELITE_BULLET_SPEED = 132;
-export const ELITE_MAX_SPEED = 19.5;
+export const ELITE_BULLET_SPEED = 138;
+export const ELITE_MAX_SPEED = 23;
+export const ELITE_BOMB_RELOAD_SECONDS = 5;
 
 const ARMOR_IDS = Object.freeze(["outer", "middle", "inner"]);
 const WORLD_BOUNDS = Object.freeze({minX: 15, maxX: 405, minY: 84, maxY: 305});
+const BOMB_BAY_OPEN_SECONDS = 0.58;
+const BOMB_BAY_CLOSE_SECONDS = 0.42;
+const BOMB_SALVO_SIZE = 3;
+const BOMB_SALVO_INTERVAL = 0.42;
+const TURRET_BURST_SIZE = 20;
+const TURRET_SHOT_INTERVAL = 0.068;
 const clamp = (value, min, max) => Math.max(min, Math.min(max, Number(value) || 0));
 const distance = (a, b) => Math.hypot((Number(a?.x) || 0) - (Number(b?.x) || 0), (Number(a?.y) || 0) - (Number(b?.y) || 0));
 const wrapDeg = value => ((Number(value) + 180) % 360 + 360) % 360 - 180;
 const bearing = (from, to) => Math.atan2((Number(to?.x) || 0) - (Number(from?.x) || 0), -((Number(to?.y) || 0) - (Number(from?.y) || 0))) * 180 / Math.PI;
 const headingVector = heading => ({x: Math.sin((Number(heading) || 0) * Math.PI / 180), y: -Math.cos((Number(heading) || 0) * Math.PI / 180)});
+const values = value => Array.isArray(value) ? value : value && typeof value === "object" ? Object.values(value) : [];
 
 function emit(world, type, text = "", targets = [0, 1], extra = {}) {
   world.events ||= [];
@@ -47,8 +55,40 @@ function createTurret(id, side) {
     windup: 0,
     burstRemaining: 0,
     shotCooldown: 0,
-    fireCooldown: side === "port" ? 1.2 : 1.65,
+    fireCooldown: side === "port" ? 0.9 : 1.18,
   };
+}
+
+function normalizeArmorLayers(value) {
+  const existing = values(value);
+  return armorLayers().map(fallback => {
+    const current = existing.find(layer => layer?.id === fallback.id);
+    if (!current) return fallback;
+    return {
+      ...fallback,
+      ...current,
+      id: fallback.id,
+      hp: clamp(current.hp ?? fallback.hp, 0, current.maxHp ?? fallback.maxHp),
+      maxHp: Math.max(1, Number(current.maxHp) || fallback.maxHp),
+    };
+  });
+}
+
+function normalizeTurrets(value) {
+  const existing = values(value);
+  return [createTurret("port", "port"), createTurret("starboard", "starboard")].map(fallback => {
+    const current = existing.find(turret => turret?.id === fallback.id || turret?.side === fallback.side);
+    if (!current) return fallback;
+    return {
+      ...fallback,
+      ...current,
+      id: fallback.id,
+      side: fallback.side,
+      hp: clamp(current.hp ?? fallback.hp, 0, current.maxHp ?? fallback.maxHp),
+      maxHp: Math.max(1, Number(current.maxHp) || fallback.maxHp),
+      destroyed: current.destroyed === true || Number(current.hp) <= 0,
+    };
+  });
 }
 
 function defaultState() {
@@ -71,6 +111,8 @@ function defaultState() {
     bombCooldown: 0,
     salvoRemaining: 0,
     salvoCooldown: 0,
+    bombBayState: "closed",
+    bombBayTimer: 0,
     commanderId: null,
     commanderSpawned: false,
     deployRemaining: 0,
@@ -78,21 +120,42 @@ function defaultState() {
   };
 }
 
+function setBombBayState(state, next, timer = 0) {
+  state.bombBayState = next;
+  state.bombBayTimer = Math.max(0, Number(timer) || 0);
+  if (state.boat) {
+    state.boat.bombBayState = next;
+    state.boat.bombCooldown = state.bombCooldown;
+    state.boat.salvoRemaining = state.salvoRemaining;
+  }
+}
+
 export function ensureEliteBoatBoss(world) {
   world.freeEliteBoatBoss ||= defaultState();
   const state = world.freeEliteBoatBoss;
   state.version = ELITE_BOSS_VERSION;
-  if (!Array.isArray(state.projectiles)) state.projectiles = Object.values(state.projectiles || {});
-  if (!Array.isArray(state.bombRequests)) state.bombRequests = Object.values(state.bombRequests || {});
+  state.projectiles = values(state.projectiles);
+  state.bombRequests = values(state.bombRequests);
   if (!Number.isFinite(Number(state.nextProjectileId))) state.nextProjectileId = 1;
   if (!Number.isFinite(Number(state.nextBombRequestId))) state.nextBombRequestId = 1;
   if (!Number.isFinite(Number(state.bombCooldown))) state.bombCooldown = 0;
   if (!Number.isFinite(Number(state.salvoRemaining))) state.salvoRemaining = 0;
   if (!Number.isFinite(Number(state.salvoCooldown))) state.salvoCooldown = 0;
+  if (!Number.isFinite(Number(state.bombBayTimer))) state.bombBayTimer = 0;
   if (!Number.isFinite(Number(state.deployRemaining))) state.deployRemaining = 0;
+  if (!["closed", "opening", "open", "closing"].includes(state.bombBayState)) state.bombBayState = "closed";
   if (state.boat) {
-    state.boat.armorLayers ||= armorLayers();
-    state.boat.turrets ||= [createTurret("port", "port"), createTurret("starboard", "starboard")];
+    if (!Array.isArray(state.boat.armorLayers) || state.boat.armorLayers.length !== ARMOR_IDS.length) {
+      state.boat.armorLayers = normalizeArmorLayers(state.boat.armorLayers);
+    }
+    if (!Array.isArray(state.boat.turrets) || state.boat.turrets.length !== 2) {
+      state.boat.turrets = normalizeTurrets(state.boat.turrets);
+    }
+    if (!Number.isInteger(Number(state.boat.activeArmorIndex))) state.boat.activeArmorIndex = 0;
+    state.boat.activeArmorIndex = clamp(state.boat.activeArmorIndex, 0, ARMOR_IDS.length);
+    state.boat.bombBayState = state.bombBayState;
+    state.boat.bombCooldown = state.bombCooldown;
+    state.boat.salvoRemaining = state.salvoRemaining;
   }
   return state;
 }
@@ -107,9 +170,13 @@ export function eliteBossBoat(world) {
   return state?.boat?.alive ? state.boat : null;
 }
 
+function threatGraceActive(world, index) {
+  return (Number(world.freeThreatDirector?.graceUntil?.[index]) || 0) > (Number(world.time) || 0);
+}
+
 function livingPlayers(world) {
   return (world.players || []).map((player, index) => ({player, index}))
-    .filter(({player, index}) => world.freeActivities?.presence?.[index] !== false && player?.combat?.alive);
+    .filter(({player, index}) => world.freeActivities?.presence?.[index] !== false && player?.combat?.alive && !threatGraceActive(world, index));
 }
 
 function playerPoint(world, index) {
@@ -171,22 +238,24 @@ export function startEliteBoatBoss(world, threatEncounterId, anchor = {x: 210, y
     hullState: "protected",
     turrets: [createTurret("port", "port"), createTurret("starboard", "starboard")],
     movementMode: "intercept",
+    bombBayState: "closed",
+    bombCooldown: 0,
+    salvoRemaining: 0,
     ramCooldown: 0,
   };
   world.freeEliteBoatBoss = state;
-  emit(world, "elite-boss-approach", "После тяжёлого катера в бухту входит элитный корабль. Три слоя брони, две скорострельные установки и бомбоотсеки активны.", [0, 1], {
+  emit(world, "elite-boss-approach", "После тяжёлого катера в бухту входит элитный корабль. Три слоя брони, две физические скорострельные установки и закрытый бомбоотсек готовы к бою.", [0, 1], {
     encounterId: state.encounterId, threatEncounterId: state.threatEncounterId, x: point.x, y: point.y,
   });
   return state;
 }
 
 function clearEliteTargets(world) {
-  const prefix = "elite-";
   for (const player of world.players || []) {
     const combat = player?.combat;
     if (!combat) continue;
-    if (String(combat.lockedTargetId || "").startsWith(prefix)) combat.lockedTargetId = null;
-    if (String(combat.lastTargetRequestId || "").startsWith(prefix)) combat.lastTargetRequestId = null;
+    if (String(combat.lockedTargetId || "").startsWith("elite-")) combat.lockedTargetId = null;
+    if (String(combat.lastTargetRequestId || "").startsWith("elite-")) combat.lastTargetRequestId = null;
   }
 }
 
@@ -194,12 +263,12 @@ export function resetEliteBoatBoss(world, reason = "reset") {
   const state = ensureEliteBoatBoss(world);
   const commanderId = state.commanderId;
   if (commanderId && world.freeHostileActors) {
-    world.freeHostileActors.actors = (world.freeHostileActors.actors || []).filter(actor => actor.id !== commanderId);
-    world.freeHostileActors.projectiles = (world.freeHostileActors.projectiles || []).filter(projectile => projectile.actorId !== commanderId);
+    world.freeHostileActors.actors = values(world.freeHostileActors.actors).filter(actor => actor.id !== commanderId);
+    world.freeHostileActors.projectiles = values(world.freeHostileActors.projectiles).filter(projectile => projectile.actorId !== commanderId);
   }
   if (world.freeMegaBombs) {
     const encounterId = Number(state.encounterId) || 0;
-    world.freeMegaBombs.projectiles = (world.freeMegaBombs.projectiles || []).filter(projectile => Number(projectile?.eliteBossEncounterId) !== encounterId);
+    world.freeMegaBombs.projectiles = values(world.freeMegaBombs.projectiles).filter(projectile => Number(projectile?.eliteBossEncounterId) !== encounterId);
   }
   clearEliteTargets(world);
   const nextId = Math.max(0, Number(state.encounterId) || 0);
@@ -247,7 +316,7 @@ function transitionArmor(world, state, sourcePlayer) {
   state.stage = stageForIndex(boat.activeArmorIndex);
   if (boat.activeArmorIndex >= boat.armorLayers.length) {
     boat.hullState = "exposed";
-    emit(world, "elite-hull-exposed", "Все три слоя брони уничтожены. Основной корпус элитного катера открыт.", [0, 1], {
+    emit(world, "elite-hull-exposed", "Все три слоя брони уничтожены. Основной корпус элитного катера открыт. Бомбоотсек по-прежнему открывается только на время запуска.", [0, 1], {
       sourcePlayer, x: boat.x, y: boat.y,
     });
   } else {
@@ -276,29 +345,26 @@ export function damageEliteBoatBoss(world, component, amount, sourcePlayer = -1,
     if (turret.destroyed) return false;
     const before = turret.hp;
     turret.hp = clamp(before - raw, 0, turret.maxHp);
-    const applied = before - turret.hp;
     emit(world, "elite-turret-hit", "", audience, {
-      sourcePlayer, component, turretId: turret.id, damage: applied, weapon, x: boat.x, y: boat.y,
+      sourcePlayer, component, turretId: turret.id, damage: before - turret.hp, weapon, x: boat.x, y: boat.y,
     });
     if (turret.hp <= 0) {
       turret.destroyed = true;
       turret.state = "destroyed";
       turret.burstRemaining = 0;
       turret.windup = 0;
-      emit(world, "elite-turret-destroyed", `${turret.side === "port" ? "Левая" : "Правая"} скорострельная установка уничтожена. Вторая продолжает бой.`, [0, 1], {
+      emit(world, "elite-turret-destroyed", `${turret.side === "port" ? "Левая" : "Правая"} скорострельная установка уничтожена. Вторая продолжает физический огонь.`, [0, 1], {
         sourcePlayer, component, turretId: turret.id, x: boat.x, y: boat.y,
       });
     }
     return true;
   }
-
   if (weapon === "pistol") {
     emit(world, "armoured-target", "Пистолет не пробивает броню или корпус элитного катера. Выбери установку, автомат или мега-бомбу.", audience, {
       sourcePlayer, component, x: boat.x, y: boat.y,
     });
     return false;
   }
-
   const layer = activeArmor(boat);
   if (layer) {
     if (component && component !== `armor-${layer.id}` && component !== "armor") {
@@ -309,24 +375,20 @@ export function damageEliteBoatBoss(world, component, amount, sourcePlayer = -1,
     }
     const before = layer.hp;
     layer.hp = clamp(before - raw, 0, layer.maxHp);
-    const applied = before - layer.hp;
     emit(world, "elite-armor-hit", "", audience, {
-      sourcePlayer, layerId: layer.id, damage: applied, weapon, x: boat.x, y: boat.y,
+      sourcePlayer, layerId: layer.id, damage: before - layer.hp, weapon, x: boat.x, y: boat.y,
     });
     announceArmorDamage(world, state, layer, sourcePlayer);
     transitionArmor(world, state, sourcePlayer);
     return true;
   }
-
   if (!["hull", "armor"].includes(component || "hull")) return false;
   const before = boat.hull;
   boat.hull = clamp(before - raw, 0, boat.maxHull);
-  const applied = before - boat.hull;
   emit(world, "elite-hull-hit", "", audience, {
-    sourcePlayer, component: "hull", damage: applied, weapon, x: boat.x, y: boat.y,
+    sourcePlayer, component: "hull", damage: before - boat.hull, weapon, x: boat.x, y: boat.y,
   });
-  if (boat.hull > 0) return true;
-  beginBoatDestruction(world, state, sourcePlayer);
+  if (boat.hull <= 0) beginBoatDestruction(world, state, sourcePlayer);
   return true;
 }
 
@@ -347,8 +409,9 @@ function beginBoatDestruction(world, state, sourcePlayer) {
   state.salvoRemaining = 0;
   state.projectiles = [];
   state.bombRequests = [];
+  setBombBayState(state, "closed");
   clearEliteTargets(world);
-  emit(world, "elite-boat-destroyed", "Корпус элитного катера уничтожен. Корабельные установки замолчали, но бой ещё не окончен: командир готовится покинуть обломок.", [0, 1], {
+  emit(world, "elite-boat-destroyed", "Корпус элитного катера уничтожен. Установки и бомбоотсек отключены, но командир готовится покинуть обломок.", [0, 1], {
     sourcePlayer, encounterId: state.encounterId, x: boat.x, y: boat.y,
   });
 }
@@ -369,27 +432,37 @@ function turretPoint(boat, turret) {
   return {x: boat.x + forward.x * 3.6 + right.x * side * 3.2, y: boat.y + forward.y * 3.6 + right.y * side * 3.2};
 }
 
-function spawnTurretBullet(world, state, boat, turret, target) {
-  if (state.projectiles.length >= 96 || !target?.point) return false;
-  const muzzle = turretPoint(boat, turret);
-  const leadSeconds = clamp(distance(muzzle, target.point) / ELITE_BULLET_SPEED, 0, 1.35);
-  const targetVelocity = ["boat", "roof"].includes(target.player?.mode)
-    ? headingVector(target.point.heading) : {x: 0, y: 0};
-  const predicted = {
-    x: clamp(target.point.x + targetVelocity.x * (Number(target.point.speed) || 0) * leadSeconds * 0.72, 5, 415),
-    y: clamp(target.point.y + targetVelocity.y * (Number(target.point.speed) || 0) * leadSeconds * 0.72, 5, 315),
+function turretAimPoint(muzzle, turret, target) {
+  const point = target.point;
+  const movingBoat = ["boat", "roof"].includes(target.player?.mode);
+  const forward = movingBoat ? headingVector(point.heading) : {x: 0, y: 0};
+  const speed = movingBoat ? Number(point.speed) || 0 : 0;
+  const leadSeconds = clamp(distance(muzzle, point) / ELITE_BULLET_SPEED, 0, 1.45);
+  const section = turret.side === "port" ? -3.8 : 3.8;
+  const lateral = {x: Math.cos((Number(point.heading) || 0) * Math.PI / 180), y: Math.sin((Number(point.heading) || 0) * Math.PI / 180)};
+  const bracket = turret.side === "port" ? -1.15 : 1.15;
+  return {
+    x: clamp(point.x + forward.x * (speed * leadSeconds * 0.9 + section) + lateral.x * bracket, 5, 415),
+    y: clamp(point.y + forward.y * (speed * leadSeconds * 0.9 + section) + lateral.y * bracket, 5, 315),
   };
+}
+
+function spawnTurretBullet(world, state, boat, turret, target) {
+  if (state.projectiles.length >= 96 || !target?.point || threatGraceActive(world, target.index)) return false;
+  const muzzle = turretPoint(boat, turret);
+  const predicted = turretAimPoint(muzzle, turret, target);
   const angle = bearing(muzzle, predicted) * Math.PI / 180;
   const id = `elite-bullet-${state.encounterId}-${state.nextProjectileId++}`;
   state.projectiles.push({
     id, turretId: turret.id, targetPlayer: target.index,
     x: muzzle.x, y: muzzle.y, sourceX: muzzle.x, sourceY: muzzle.y,
     vx: Math.sin(angle) * ELITE_BULLET_SPEED, vy: -Math.cos(angle) * ELITE_BULLET_SPEED,
-    ttl: 3.6,
+    ttl: 3.6, aimSection: turret.side === "port" ? "rear" : "front",
   });
   emit(world, "elite-turret-shot", "", [0, 1], {
     projectileId: id, turretId: turret.id, side: turret.side, targetPlayer: target.index,
-    x: muzzle.x, y: muzzle.y, heading: turret.heading,
+    aimSection: turret.side === "port" ? "rear" : "front",
+    x: muzzle.x, y: muzzle.y, heading: bearing(muzzle, predicted),
   });
   return true;
 }
@@ -404,12 +477,12 @@ function updateTurrets(world, state, dt) {
     if (!target) {
       turret.burstRemaining = 0;
       turret.windup = 0;
-      turret.state = "ready";
+      turret.state = "holding";
       return;
     }
-    turret.heading = bearing(turretPoint(boat, turret), target.point);
+    turret.heading = bearing(turretPoint(boat, turret), turretAimPoint(turretPoint(boat, turret), turret, target));
     const metres = distance(boat, target.point);
-    if (metres > 210 || metres < 18) {
+    if (metres > 235 || metres < 15) {
       turret.burstRemaining = 0;
       turret.windup = 0;
       turret.state = "tracking";
@@ -419,7 +492,7 @@ function updateTurrets(world, state, dt) {
       turret.windup = Math.max(0, turret.windup - dt);
       turret.state = "spinning";
       if (turret.windup <= 0) {
-        turret.burstRemaining = 14;
+        turret.burstRemaining = TURRET_BURST_SIZE;
         turret.shotCooldown = 0;
         turret.state = "firing";
       }
@@ -430,22 +503,22 @@ function updateTurrets(world, state, dt) {
       if (turret.shotCooldown > 0) return;
       if (!spawnTurretBullet(world, state, boat, turret, target)) {
         turret.burstRemaining = 0;
-        turret.fireCooldown = 1;
+        turret.fireCooldown = 0.8;
         return;
       }
       turret.burstRemaining -= 1;
-      turret.shotCooldown = 0.085;
+      turret.shotCooldown = TURRET_SHOT_INTERVAL;
       if (turret.burstRemaining <= 0) {
-        turret.fireCooldown = turret.side === "port" ? 2.25 : 2.55;
+        turret.fireCooldown = turret.side === "port" ? 1.55 : 1.78;
         turret.state = "cooling";
         emit(world, "elite-turret-burst-end", "", [0, 1], {turretId: turret.id, side: turret.side, x: boat.x, y: boat.y});
       }
       return;
     }
     if (turret.fireCooldown <= 0) {
-      turret.windup = 0.52;
+      turret.windup = turret.side === "port" ? 0.34 : 0.42;
       turret.state = "spinning";
-      emit(world, "elite-turret-windup", `${turret.side === "port" ? "Левая" : "Правая"} установка раскручивается. Начинается плотная очередь.`, [target.index], {
+      emit(world, "elite-turret-windup", `${turret.side === "port" ? "Левая" : "Правая"} установка раскручивается и берёт ${turret.side === "port" ? "заднюю" : "переднюю"} половину цели.`, [target.index], {
         turretId: turret.id, side: turret.side, targetPlayer: target.index, eta: turret.windup, x: boat.x, y: boat.y,
       });
     }
@@ -464,7 +537,7 @@ function occupantsForBoat(world, boat) {
   const occupants = [];
   for (let index = 0; index < (world.players || []).length; index += 1) {
     const player = world.players[index];
-    if (!player?.combat?.alive || world.freeActivities?.presence?.[index] === false) continue;
+    if (!player?.combat?.alive || world.freeActivities?.presence?.[index] === false || threatGraceActive(world, index)) continue;
     if (String(player.activeBoat) === String(boat.id) || boat.driver === index || boat.owner === index && ["boat", "roof"].includes(player.mode)) occupants.push(index);
   }
   return [...new Set(occupants)];
@@ -483,13 +556,11 @@ function applyBoatPenetration(world, projectile, boat, helpers) {
     const humanDamage = 7.2 * penetration;
     helpers?.damagePlayer?.(world, index, humanDamage, {
       weapon: "elite-automatic", heavy: humanDamage >= 5.2, eventType: "elite-bullet-player-hit",
-      sourcePoint: {x: projectile.sourceX, y: projectile.sourceY},
-      announceHealth: false,
+      sourcePoint: {x: projectile.sourceX, y: projectile.sourceY}, announceHealth: false,
     });
     emit(world, "elite-bullet-penetration", "", [index], {
       projectileId: projectile.id, turretId: projectile.turretId, targetBoat: boat.id, targetPlayer: index,
-      hullDamage, humanDamage, penetration, hull: boat.hull, health: player.combat?.health,
-      x: boat.x, y: boat.y,
+      hullDamage, humanDamage, penetration, hull: boat.hull, health: player.combat?.health, x: boat.x, y: boat.y,
     });
   }
   if (!occupants.length) {
@@ -506,6 +577,9 @@ function updateProjectiles(world, state, dt, helpers) {
     let hit = false;
     for (const boat of world.boats || []) {
       if (!boat || boat.sunk || !segmentHit(projectile, next, boat, 6.8)) continue;
+      const protectedOccupants = occupantsForBoat(world, boat);
+      const linkedTargetProtected = Number.isInteger(projectile.targetPlayer) && threatGraceActive(world, projectile.targetPlayer);
+      if (linkedTargetProtected && !protectedOccupants.length) continue;
       applyBoatPenetration(world, projectile, boat, helpers);
       hit = true;
       break;
@@ -513,12 +587,10 @@ function updateProjectiles(world, state, dt, helpers) {
     if (hit) continue;
     for (let index = 0; index < (world.players || []).length; index += 1) {
       const player = world.players[index];
-      if (!player?.combat?.alive || world.freeActivities?.presence?.[index] === false || !["foot", "swim", "roof"].includes(player.mode)) continue;
+      if (!player?.combat?.alive || world.freeActivities?.presence?.[index] === false || threatGraceActive(world, index) || !["foot", "swim", "roof"].includes(player.mode)) continue;
       if (!segmentHit(projectile, next, player, 1.9)) continue;
       helpers?.damagePlayer?.(world, index, 7.2, {weapon: "elite-automatic", heavy: true, eventType: "elite-bullet-player-hit", sourcePoint: {x: projectile.sourceX, y: projectile.sourceY}, announceHealth: false});
-      emit(world, "elite-bullet-direct-hit", "", [index], {
-        projectileId: projectile.id, turretId: projectile.turretId, damage: 7.2, x: player.x, y: player.y,
-      });
+      emit(world, "elite-bullet-direct-hit", "", [index], {projectileId: projectile.id, turretId: projectile.turretId, damage: 7.2, x: player.x, y: player.y});
       hit = true;
       break;
     }
@@ -533,22 +605,32 @@ function updateProjectiles(world, state, dt, helpers) {
 
 function desiredMovement(world, boat) {
   const target = nearestPlayer(world, boat);
-  if (!target?.point) return {point: boat, speed: 0, mode: "idle"};
+  if (!target?.point) return {point: boat, speed: 0, mode: "holding-fire"};
   boat.targetPlayer = target.index;
-  const targetVector = headingVector(target.point.heading);
+  const point = target.point;
+  const targetForward = headingVector(point.heading);
+  const targetSpeed = Number(point.speed) || 0;
   const predicted = {
-    x: clamp(target.point.x + targetVector.x * (Number(target.point.speed) || 0) * 1.8, WORLD_BOUNDS.minX, WORLD_BOUNDS.maxX),
-    y: clamp(target.point.y + targetVector.y * (Number(target.point.speed) || 0) * 1.8, WORLD_BOUNDS.minY, WORLD_BOUNDS.maxY),
+    x: clamp(point.x + targetForward.x * targetSpeed * 2.8, WORLD_BOUNDS.minX, WORLD_BOUNDS.maxX),
+    y: clamp(point.y + targetForward.y * targetSpeed * 2.8, WORLD_BOUNDS.minY, WORLD_BOUNDS.maxY),
   };
-  const metres = distance(boat, target.point);
-  if (metres > 150) return {point: predicted, speed: ELITE_MAX_SPEED, mode: "intercept"};
-  if (metres < 72) {
-    const away = headingVector(bearing(target.point, boat));
-    return {point: {x: clamp(boat.x + away.x * 80, WORLD_BOUNDS.minX, WORLD_BOUNDS.maxX), y: clamp(boat.y + away.y * 80, WORLD_BOUNDS.minY, WORLD_BOUNDS.maxY)}, speed: 17.5, mode: "break-away"};
+  const metres = distance(boat, point);
+  const edge = boat.x < 34 || boat.x > 386 || boat.y < 103 || boat.y > 286;
+  if (edge) return {point: {x: 210, y: 194}, speed: 20, mode: "boundary-recovery"};
+  if (metres > 185) return {point: predicted, speed: ELITE_MAX_SPEED, mode: "hard-intercept"};
+  if (metres < 58) {
+    const away = headingVector(bearing(point, boat));
+    return {point: {x: clamp(boat.x + away.x * 105, WORLD_BOUNDS.minX, WORLD_BOUNDS.maxX), y: clamp(boat.y + away.y * 105, WORLD_BOUNDS.minY, WORLD_BOUNDS.maxY)}, speed: 22, mode: "break-away"};
   }
-  const orbitHeading = bearing(target.point, boat) + (boat.x < target.point.x ? 72 : -72);
+  const orbitSide = boat.x < point.x ? 1 : -1;
+  const orbitHeading = bearing(point, boat) + orbitSide * (metres > 125 ? 48 : 78);
   const orbit = headingVector(orbitHeading);
-  return {point: {x: clamp(target.point.x + orbit.x * 112, WORLD_BOUNDS.minX, WORLD_BOUNDS.maxX), y: clamp(target.point.y + orbit.y * 112, WORLD_BOUNDS.minY, WORLD_BOUNDS.maxY)}, speed: 13.5, mode: "standoff"};
+  const radius = metres > 125 ? 96 : 108;
+  return {
+    point: {x: clamp(predicted.x + orbit.x * radius, WORLD_BOUNDS.minX, WORLD_BOUNDS.maxX), y: clamp(predicted.y + orbit.y * radius, WORLD_BOUNDS.minY, WORLD_BOUNDS.maxY)},
+    speed: metres > 125 ? 20.5 : 17.5,
+    mode: metres > 125 ? "flanking-intercept" : "crossfire-orbit",
+  };
 }
 
 function updateMovement(world, state, dt) {
@@ -556,21 +638,21 @@ function updateMovement(world, state, dt) {
   const desired = desiredMovement(world, boat);
   boat.movementMode = desired.mode;
   const wantedHeading = bearing(boat, desired.point);
-  boat.heading = wrapDeg(boat.heading + clamp(wrapDeg(wantedHeading - boat.heading), -95 * dt, 95 * dt));
-  boat.speed += clamp(desired.speed - boat.speed, -9 * dt, 7.5 * dt);
+  boat.heading = wrapDeg(boat.heading + clamp(wrapDeg(wantedHeading - boat.heading), -128 * dt, 128 * dt));
+  boat.speed += clamp(desired.speed - boat.speed, -15 * dt, 11 * dt);
   const vector = headingVector(boat.heading);
   const before = {x: boat.x, y: boat.y};
   boat.x = clamp(boat.x + vector.x * boat.speed * dt, WORLD_BOUNDS.minX, WORLD_BOUNDS.maxX);
   boat.y = clamp(boat.y + vector.y * boat.speed * dt, WORLD_BOUNDS.minY, WORLD_BOUNDS.maxY);
   if (boat.x === before.x && boat.y === before.y) {
-    boat.heading = wrapDeg(boat.heading + 110 * dt);
-    boat.speed = Math.max(4, boat.speed * 0.7);
+    boat.heading = wrapDeg(boat.heading + 145 * dt);
+    boat.speed = Math.max(7, boat.speed * 0.65);
   }
   if (state.phase === "approaching") {
     const target = nearestPlayer(world, boat);
-    if (target?.point && distance(boat, target.point) <= 175) {
+    if (target?.point && distance(boat, target.point) <= 195) {
       state.phase = "boat-combat";
-      emit(world, "elite-boss-combat-start", "Элитный катер вошёл в боевую дистанцию. Активен внешний слой брони.", [0, 1], {
+      emit(world, "elite-boss-combat-start", "Элитный катер вошёл в боевую дистанцию. Установки физически делят цель на переднюю и заднюю половины.", [0, 1], {
         encounterId: state.encounterId, x: boat.x, y: boat.y,
       });
     }
@@ -584,32 +666,75 @@ function requestBomb(world, state, source, target, sourceType) {
   return true;
 }
 
+function closeBombBay(world, state, announce = true) {
+  if (state.bombBayState === "closed" || state.bombBayState === "closing") return;
+  setBombBayState(state, "closing", BOMB_BAY_CLOSE_SECONDS);
+  if (announce) emit(world, "elite-bomb-bay-closing", "Бомбоотсек закрывается. Перезарядка пять секунд.", [0, 1], {x: state.boat.x, y: state.boat.y, reload: ELITE_BOMB_RELOAD_SECONDS});
+}
+
 function updateBombSalvo(world, state, dt) {
   const boat = state.boat;
   state.bombCooldown = Math.max(0, state.bombCooldown - dt);
   state.salvoCooldown = Math.max(0, state.salvoCooldown - dt);
-  if (!boat.alive || !["approaching", "boat-combat"].includes(state.phase)) return;
-  if (state.salvoRemaining > 0) {
+  state.bombBayTimer = Math.max(0, state.bombBayTimer - dt);
+  boat.bombCooldown = state.bombCooldown;
+  boat.salvoRemaining = state.salvoRemaining;
+  boat.bombBayState = state.bombBayState;
+  if (!boat.alive || !["approaching", "boat-combat"].includes(state.phase)) {
+    state.salvoRemaining = 0;
+    setBombBayState(state, "closed");
+    return;
+  }
+  const target = nearestPlayer(world, boat);
+  if (!target?.point) {
+    state.salvoRemaining = 0;
+    if (["opening", "open"].includes(state.bombBayState)) closeBombBay(world, state, false);
+    if (state.bombBayState === "closing" && state.bombBayTimer <= 0) setBombBayState(state, "closed");
+    return;
+  }
+  if (state.bombBayState === "closing") {
+    if (state.bombBayTimer <= 0) {
+      setBombBayState(state, "closed");
+      emit(world, "elite-bomb-bay-closed", "Бомбоотсек закрыт.", [0, 1], {x: boat.x, y: boat.y});
+    }
+    return;
+  }
+  if (state.bombBayState === "opening") {
+    if (state.bombBayTimer > 0) return;
+    setBombBayState(state, "open");
+    state.salvoRemaining = BOMB_SALVO_SIZE;
+    state.salvoCooldown = 0;
+    emit(world, "elite-bomb-salvo", "Бомбоотсек открыт. Начинается короткий залп из трёх физических бомб.", [target.index], {
+      sourceId: boat.id, targetPlayer: target.index, count: BOMB_SALVO_SIZE, x: boat.x, y: boat.y,
+    });
+  }
+  if (state.bombBayState === "open") {
+    if (state.salvoRemaining <= 0) {
+      state.bombCooldown = ELITE_BOMB_RELOAD_SECONDS;
+      boat.bombCooldown = state.bombCooldown;
+      closeBombBay(world, state);
+      return;
+    }
     if (state.salvoCooldown > 0) return;
-    const target = nearestPlayer(world, boat);
-    if (!target?.point) { state.salvoRemaining = 0; return; }
     if (requestBomb(world, state, boat, target.point, "elite-boat")) {
       state.salvoRemaining -= 1;
-      state.salvoCooldown = 0.42;
+      state.salvoCooldown = BOMB_SALVO_INTERVAL;
+      boat.salvoRemaining = state.salvoRemaining;
       emit(world, "elite-bomb-launch", "", [0, 1], {sourceId: boat.id, targetPlayer: target.index, remainingInSalvo: state.salvoRemaining, x: boat.x, y: boat.y});
     }
-    if (state.salvoRemaining <= 0) state.bombCooldown = 10.5;
+    if (state.salvoRemaining <= 0) {
+      state.bombCooldown = ELITE_BOMB_RELOAD_SECONDS;
+      boat.bombCooldown = state.bombCooldown;
+      closeBombBay(world, state);
+    }
     return;
   }
   if (state.bombCooldown > 0 || state.bombRequests.length > 2) return;
-  const target = nearestPlayer(world, boat);
-  if (!target?.point) return;
   const metres = distance(boat, target.point);
-  if (metres < 45 || metres > 190) return;
-  state.salvoRemaining = 3;
-  state.salvoCooldown = 0;
-  emit(world, "elite-bomb-salvo", "Бомбоотсеки открыты. Элитный катер запускает короткий залп из трёх физических бомб.", [target.index], {
-    sourceId: boat.id, targetPlayer: target.index, count: 3, x: boat.x, y: boat.y,
+  if (metres < 42 || metres > 205) return;
+  setBombBayState(state, "opening", BOMB_BAY_OPEN_SECONDS);
+  emit(world, "elite-bomb-bay-opening", "Створки бомбоотсека открываются. До запуска меньше секунды.", [target.index], {
+    sourceId: boat.id, targetPlayer: target.index, eta: BOMB_BAY_OPEN_SECONDS, x: boat.x, y: boat.y,
   });
 }
 
