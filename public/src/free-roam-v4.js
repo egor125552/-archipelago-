@@ -3,13 +3,13 @@
 import {
   WORLD,
   playerStatus,
-} from "./free-roam-core-v6.js?v=46";
+} from "./free-roam-core-v6.js?v=47";
 import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=45";
 import {predictLocalWorld, reconcileLocalPrediction} from "./free-roam-client-prediction.js?v=41";
 import {applyReplicatedWorldDelta} from "./free-roam-replication.js?v=47";
 import {createSpeechController} from "./free-roam-speech.js?v=41";
 import {directionFromDelta} from "./free-roam-gesture-model.js";
-import {classifyActionGesture, gestureMetrics} from "./free-roam-action-gestures.js";
+import {classifyActionGesture, gestureMetrics} from "./free-roam-action-gestures.js?v=2";
 import {contextualSonarAction, targetMenuGestureAction} from "./free-roam-target-gesture-policy.js?v=1";
 import {
   reconnectDelay,
@@ -18,7 +18,7 @@ import {
 } from "./free-roam-reconnect-policy.js?v=1";
 import {resolveCombatTarget} from "./free-roam-targeting.js?v=39";
 import {createTargetMenu} from "./free-roam-target-menu.js?v=37";
-import {MERCHANT, SHOP_ITEMS} from "./free-roam-shop.js?v=3";
+import {MERCHANT, SHOP_ITEMS} from "./free-roam-shop.js?v=4";
 import {CONTRACT_BOARD} from "./free-roam-contracts.js?v=4";
 import {cargoDefinition} from "./free-roam-contract-catalog.js?v=1";
 
@@ -39,6 +39,7 @@ const localInput = {
   weapon: false,
   sonar: false,
   guide: false,
+  megaBomb: false,
   targetId: null,
   navigationTargetId: "objective",
   shopPrevious: false,
@@ -125,7 +126,11 @@ function nearContractBoard() {
 
 function selectedShopItem() {
   const index = Number(world?.freeActivities?.shopSelection?.[playerIndex]) || 0;
-  return SHOP_ITEMS[((index % SHOP_ITEMS.length) + SHOP_ITEMS.length) % SHOP_ITEMS.length] || SHOP_ITEMS[0];
+  const item = SHOP_ITEMS[((index % SHOP_ITEMS.length) + SHOP_ITEMS.length) % SHOP_ITEMS.length] || SHOP_ITEMS[0];
+  if (item?.id === "automatic-ammo" && !world?.players?.[playerIndex]?.combat?.weapons?.automatic) {
+    return {...item, label: "автомат"};
+  }
+  return item;
 }
 
 function nearMerchant() {
@@ -552,6 +557,7 @@ function releaseAllMovement() {
   localInput.weapon = false;
   localInput.sonar = false;
   localInput.guide = false;
+  localInput.megaBomb = false;
   localInput.shopPrevious = false;
   localInput.shopNext = false;
   localInput.shopBuy = false;
@@ -946,6 +952,7 @@ function runGestureCommand(command) {
   else if (command === "weapon") actionPulse("weapon");
   else if (command === "sonar") useSonarOrCombatTargets();
   else if (command === "guide") actionPulse("guide");
+  else if (command === "mega-bomb") actionPulse("megaBomb");
   else if (command === "targets") targetMenu.open();
   else if (command === "pump") {
     toggleControl("pump");
