@@ -9,6 +9,13 @@ import {eliteBossCombatTargets} from "./free-roam-elite-boat.js?v=1";
 
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));
 
+function normalizeEliteBossCollections(world) {
+  const boat = world?.freeEliteBoatBoss?.boat;
+  if (!boat) return;
+  if (!Array.isArray(boat.armorLayers)) boat.armorLayers = Object.values(boat.armorLayers || {});
+  if (!Array.isArray(boat.turrets)) boat.turrets = Object.values(boat.turrets || {});
+}
+
 function playerModeLabel(player) {
   if (player?.mode === "boat") return "в лодке";
   if (player?.mode === "roof") return "на крыше лодки";
@@ -19,6 +26,7 @@ function playerModeLabel(player) {
 export function listCombatTargets(world, attackerIndex, maximumRange = Infinity) {
   const attacker = world.players?.[attackerIndex];
   if (!attacker) return [];
+  normalizeEliteBossCollections(world);
   const presence = world.freeActivities?.presence || [];
   const targets = [];
 
@@ -119,6 +127,9 @@ export function describeCombatTarget(target, position = 0, total = 1) {
   if (!target) return "Доступных целей нет.";
   const number = Math.max(1, position + 1);
   const metres = Math.round(target.distance);
+  const turretList = Array.isArray(target.point?.turrets)
+    ? target.point.turrets
+    : Object.values(target.point?.turrets || {});
   const hull = ["boat", "marauder", "escort"].includes(target.kind)
     ? `, корпус ${Math.round(target.point?.hull || 0)}`
     : ["enemyBoat"].includes(target.kind)
@@ -128,7 +139,7 @@ export function describeCombatTarget(target, position = 0, total = 1) {
           : target.kind === "heavyEngine" ? `, прочность ${Math.round(target.point?.engineHealth || 0)}`
           : target.kind === "eliteArmor" ? `, броня ${Math.round(target.point?.armorLayers?.[target.point?.activeArmorIndex]?.hp || 0)}`
             : target.kind === "eliteHull" ? `, корпус ${Math.round(target.point?.hull || 0)}`
-              : target.kind === "eliteTurret" ? `, прочность ${Math.round(target.point?.turrets?.find(item => item.id === target.turretId)?.hp || 0)}`
+              : target.kind === "eliteTurret" ? `, прочность ${Math.round(turretList.find(item => item.id === target.turretId)?.hp || 0)}`
                 : ["gunner", "hostileActor", "elite"].includes(target.kind)
               ? `, здоровье ${Math.round(target.point?.health || 0)}`
               : "";
