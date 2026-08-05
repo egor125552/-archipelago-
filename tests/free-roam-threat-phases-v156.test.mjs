@@ -89,7 +89,7 @@ test("knife enemies leave the shore, catch a swimmer, and strike", () => {
   assert.ok(damage > 0);
 });
 
-test("level-five opening deploys phase two immediately and final reserves once", () => {
+test("threat five no longer creates a parallel phase-two or final reserve wave", () => {
   const world = createFreeWorld();
   world.freeActivities.presence = [true, false];
   world.freeThreatDirector = {active: true, level: 5, encounterId: 177};
@@ -98,23 +98,17 @@ test("level-five opening deploys phase two immediately and final reserves once",
   world.freeHostileActors.active = true;
   world.freeHostileActors.actors = [];
   prepareThreatIntelligence(world);
-  assert.equal(world.freeHostileActors.actors.filter(actor => actor.active).length, 10);
-  assert.equal(world.events.filter(event => event.type === "contract-threat-phase-two").length, 1);
+  assert.equal(world.freeHostileActors.actors.length, 0);
+  assert.equal(world.events.some(event => event.type === "contract-threat-phase-two"), false);
   world.freeHeavyPursuer.boat.destroyed = true;
   world.freeHeavyPursuer.boat.active = false;
-  world.time += 4.6;
+  world.time += 8;
   prepareThreatIntelligence(world);
-  assert.equal(world.freeHostileActors.actors.filter(actor => actor.active).length, 16);
-  assert.ok(world.freeHostileActors.actors.some(actor => actor.weapon === "knife"));
-  assert.ok(world.freeHostileActors.actors.some(actor => actor.weapon === "automatic"));
-  const count = world.freeHostileActors.actors.length;
-  world.time += 12;
-  prepareThreatIntelligence(world);
-  assert.equal(world.freeHostileActors.actors.length, count);
-  assert.equal(world.events.filter(event => event.type === "contract-threat-final-wave").length, 1);
+  assert.equal(world.freeHostileActors.actors.length, 0);
+  assert.equal(world.events.some(event => event.type === "contract-threat-final-wave"), false);
 });
 
-test("cooperative final phase creates twenty-two distributed fighters and three boats", () => {
+test("direct legacy final-wave calls are disabled when the elite boss subsystem exists", () => {
   const world = createFreeWorld();
   world.freeActivities.presence = [true, true];
   world.freeThreatDirector = {active: true, level: 5, encounterId: 188};
@@ -122,10 +116,9 @@ test("cooperative final phase creates twenty-two distributed fighters and three 
   world.freeHeavyPursuer.boat = {id: "heavy-pursuer", role: "heavy", x: 210, y: 150, heading: 0, active: true, destroyed: false};
   world.freeHostileActors.active = true;
   world.freeHostileActors.actors = [];
-  assert.equal(spawnFinalThreatWave(world), 25);
-  assert.equal(world.freeHostileActors.actors.length, 22);
-  assert.equal(world.freeEnemyBoats.boats.length, 3);
-  assert.deepEqual(new Set(world.freeHostileActors.actors.map(actor => actor.targetPlayer)), new Set([0, 1]));
+  assert.equal(spawnFinalThreatWave(world), 0);
+  assert.equal(world.freeHostileActors.actors.length, 0);
+  assert.equal(world.freeEnemyBoats?.boats?.length || 0, 0);
 });
 
 test("enemy knife hits use the existing centered combat-impact audio event", () => {

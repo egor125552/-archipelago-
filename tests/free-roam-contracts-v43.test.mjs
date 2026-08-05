@@ -30,7 +30,13 @@ function openAndAccept(world, selection = 0) {
   unlockBoard(world);
   tap(world, 0, {action: true});
   world.freeContracts.boardSelection[0] = selection;
+  const category = world.freeContracts.offers[selection]?.category;
   tap(world, 0, {boardAccept: true});
+  if (category === "dangerous") {
+    // Threat 2 is the default accessible selection, then choose its first offer.
+    tap(world, 0, {boardAccept: true});
+    tap(world, 0, {boardAccept: true});
+  }
   return world.freeContracts.activeContract;
 }
 

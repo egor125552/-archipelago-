@@ -71,7 +71,7 @@ test("dangerous work opens real threat counts and accepts a threat-five order", 
   pulse(world, 0, "boardNext");
   pulse(world, 0, "boardNext");
   assert.match(lastText(world), /Угроза 5 из пяти/);
-  assert.match(lastText(world), /тяжёлый катер и элитный стрелок/);
+  assert.match(lastText(world), /тяжёлый катер, элитный катер и командир/);
 
   pulse(world, 0, "boardAccept");
   assert.equal(world.freeContracts.boardMode[0], "danger-offers");

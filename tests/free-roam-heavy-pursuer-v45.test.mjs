@@ -4,12 +4,13 @@ import assert from "node:assert/strict";
 import {createFreeWorld, setPlayerInput, setPlayerPresence, stepFreeWorld} from "../public/src/free-roam-core-v6.js";
 import {activeEnemyBoats, damageEnemyBoat} from "../public/src/free-roam-enemy-boats.js";
 import {activeHostileActors, damageHostileActor} from "../public/src/free-roam-hostile-actors.js";
+import {damageEliteBoatBoss, ensureEliteBoatBoss, updateEliteBoatBoss} from "../public/src/free-roam-elite-boat.js";
 import {
   activeHeavyPursuer,
   damageHeavyPursuer,
   heavyCombatTargets,
 } from "../public/src/free-roam-heavy-pursuer.js";
-import {startThreatEncounter, updateThreatDirector} from "../public/src/free-roam-threat-director.js";
+import {notifyThreatBoatDestroyed, startThreatEncounter, updateThreatDirector} from "../public/src/free-roam-threat-director.js";
 
 function run(world, seconds, dt = 0.05) {
   for (let elapsed = 0; elapsed < seconds; elapsed += dt) stepFreeWorld(world, dt);
@@ -56,16 +57,14 @@ function destroyAllExceptHeavy(world) {
   }
 }
 
-test("threat five creates a scaled heavy boat, four escorts in coop and one elite actor", () => {
+test("threat five creates the heavy boat first and does not preload the separate boss", () => {
   const coop = worldForFive(true);
   const heavy = activeHeavyPursuer(coop);
   assert.ok(heavy);
   assert.equal(heavy.maxHull, 1000);
   assert.equal(1 + coop.freePursuerSquad.escorts.length + activeEnemyBoats(coop).length, 4);
-  const elites = activeHostileActors(coop).filter(actor => actor.elite);
-  assert.equal(elites.length, 1);
-  assert.equal(elites[0].health, 120);
-  assert.equal(elites[0].boatId, heavy.id);
+  assert.equal(activeHostileActors(coop).some(actor => actor.elite), false);
+  assert.equal(ensureEliteBoatBoss(coop).active, false);
 
   const solo = worldForFive(false);
   assert.equal(activeHeavyPursuer(solo).maxHull, 700);
@@ -120,63 +119,47 @@ test("heavy gun announces a windup before producing a long finite barrage", () =
   assert.ok(shots <= 28, `a finite barrage must stop at 28 shots, got ${shots}`);
 });
 
-test("elite actor is fast but remains slower than the running player and telegraphs knife attacks", () => {
-  const world = worldForFive(false);
-  const elite = activeHostileActors(world).find(actor => actor.elite);
-  const player = world.players[0];
-  player.mode = "foot";
-  player.activeBoat = null;
-  player.x = 210;
-  player.y = 58;
-  elite.state = "foot";
-  elite.x = 218;
-  elite.y = 58;
-  elite.targetPlayer = 0;
-  elite.targetLockUntil = world.time + 10;
-  run(world, 0.1);
-  assert.ok(world.events.some(event => event.type === "elite-knife-windup"));
-
-  elite.windupRemaining = 0;
-  elite.attackCooldown = 5;
-  elite.x = 260;
-  const before = elite.x;
-  run(world, 1);
-  const enemyTravel = before - elite.x;
-  assert.ok(enemyTravel <= 11.2, `elite travelled ${enemyTravel}`);
-  assert.ok(enemyTravel < 12.5);
-});
-
-test("destroyed heavy boat releases its elite into the water", () => {
+test("destroying the heavy boat starts the separate three-layer elite boss", () => {
   const world = worldForFive(false);
   const heavy = activeHeavyPursuer(world);
-  const elite = activeHostileActors(world).find(actor => actor.elite);
-  assert.equal(elite.state, "aboard");
-  placeAttackerNearHeavy(world);
-  damageHeavyPursuer(world, "hull", heavy.hull, 0, {
-    onEnemyBoatDestroyed(targetWorld, boat) {
-      for (const actor of activeHostileActors(targetWorld)) {
-        if (actor.boatId === boat.id && actor.state === "aboard") {
-          actor.state = "swim";
-          actor.x = boat.x;
-          actor.y = boat.y;
-        }
-      }
-    },
-  }, {weapon: "automatic"});
-  assert.equal(heavy.destroyed, true);
-  assert.equal(elite.state, "swim");
-  assert.equal(elite.active, true);
+  heavy.active = false;
+  heavy.destroyed = true;
+  notifyThreatBoatDestroyed(world, heavy, 0);
+  const boss = ensureEliteBoatBoss(world);
+  assert.equal(boss.active, true);
+  assert.equal(boss.boat.armorLayers.length, 3);
+  assert.equal(boss.boat.armorLayers.every(layer => layer.hp === 1000), true);
+  assert.equal(activeHostileActors(world).some(actor => actor.commander), false);
 });
 
-test("clearing threat five grants 500 credits and six physical loot crates exactly once", () => {
+test("destroyed heavy boat does not release the old attached elite actor", () => {
+  const world = worldForFive(false);
+  const heavy = activeHeavyPursuer(world);
+  heavy.active = false;
+  heavy.destroyed = true;
+  notifyThreatBoatDestroyed(world, heavy, 0);
+  assert.equal(activeHostileActors(world).some(actor => actor.id.startsWith("elite-") && !actor.commander), false);
+  assert.equal(ensureEliteBoatBoss(world).active, true);
+});
+
+test("threat five rewards only after the elite commander is defeated, exactly once", () => {
   const world = worldForFive(true);
   world.freeActivities.credits = 25;
   destroyAllExceptHeavy(world);
-  const elite = activeHostileActors(world).find(actor => actor.elite);
-  damageHostileActor(world, elite.id, elite.health, 0, {weapon: "automatic"});
   const heavy = activeHeavyPursuer(world);
-  placeAttackerNearHeavy(world);
-  damageHeavyPursuer(world, "hull", heavy.hull, 0, {}, {weapon: "automatic"});
+  heavy.active = false;
+  heavy.destroyed = true;
+  notifyThreatBoatDestroyed(world, heavy, 0);
+  const boss = ensureEliteBoatBoss(world);
+  boss.phase = "boat-combat";
+  for (const layer of ["outer", "middle", "inner"]) damageEliteBoatBoss(world, `armor-${layer}`, 1000, 0, {weapon: "automatic"});
+  damageEliteBoatBoss(world, "hull", 5000, 0, {weapon: "automatic"});
+  for (let index = 0; index < 50; index += 1) updateEliteBoatBoss(world, 0.04, {});
+  assert.equal(world.freeActivities.credits, 25, "the ship alone must not award victory");
+  const commander = activeHostileActors(world).find(actor => actor.commander);
+  assert.ok(commander);
+  damageHostileActor(world, commander.id, commander.health + commander.armor, 0, {weapon: "automatic"});
+  updateEliteBoatBoss(world, 0.04, {});
   updateThreatDirector(world);
   assert.equal(world.freeActivities.credits, 525);
   assert.equal(world.freeActivities.crates.filter(crate => crate.source === "encounter").length, 6);

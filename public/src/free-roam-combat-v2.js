@@ -5,9 +5,10 @@ import {COMBAT_TUNING} from "./free-roam-combat-tuning.js?v=33";
 import {damageHostileGunner} from "./free-roam-hostile-gunners.js?v=32";
 import {damageEscort} from "./free-roam-pursuer-squad.js?v=33";
 import {damageEnemyBoat} from "./free-roam-enemy-boats.js?v=3";
-import {damageHostileActor} from "./free-roam-hostile-actors.js?v=2";
-import {damageHeavyPursuer} from "./free-roam-heavy-pursuer.js?v=3";
-import {describeCombatTarget, listCombatTargets, resolveCombatTarget} from "./free-roam-targeting.js?v=35";
+import {damageHostileActor} from "./free-roam-hostile-actors.js?v=3";
+import {damageHeavyPursuer} from "./free-roam-heavy-pursuer.js?v=4";
+import {damageEliteBoatBoss} from "./free-roam-elite-boat.js?v=1";
+import {describeCombatTarget, listCombatTargets, resolveCombatTarget} from "./free-roam-targeting.js?v=38";
 
 export const PISTOL_START_AMMO = 36;
 export const COMBAT_TARGET_LOCK_RANGE = 320;
@@ -273,6 +274,10 @@ function firePistol(world, attackerIndex, helpers) {
     return;
   }
 
+  if (["eliteArmor", "eliteHull", "eliteTurret"].includes(target.kind)) {
+    damageEliteBoatBoss(world, target.component || "hull", COMBAT_TUNING.pistolDamage, attackerIndex, {weapon: "pistol"});
+    return;
+  }
   if (["heavyHull", "heavyTurret", "heavyEngine"].includes(target.kind)) {
     damageHeavyPursuer(world, target.component || "hull", COMBAT_TUNING.pistolDamage, attackerIndex, helpers, {weapon: "pistol"});
     return;

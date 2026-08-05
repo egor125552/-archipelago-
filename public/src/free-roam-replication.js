@@ -114,6 +114,11 @@ const HEAVY_FIELDS = Object.freeze([
 ]);
 const HOSTILE_ACTOR_FIELDS = Object.freeze([
   "id", "boatId", "targetPlayer", "x", "y", "heading", "state", "weapon", "health", "maxHealth", "active", "destroyed", "elite",
+  "commander", "armor", "armorMax", "automaticAmmo", "pistolAmmo", "bombAmmo", "bombCooldown",
+]);
+const ELITE_BOAT_FIELDS = Object.freeze([
+  "id", "role", "encounterId", "x", "y", "heading", "speed", "maxSpeed", "alive", "active", "destroyed", "targetPlayer",
+  "activeArmorIndex", "armorLayers", "hull", "maxHull", "hullState", "turrets", "movementMode",
 ]);
 const CRATE_FIELDS = Object.freeze([
   "id", "kind", "label", "rarity", "weight", "slots", "traits", "x", "y", "state", "carriedBy", "stowedBoat", "source",
@@ -133,6 +138,7 @@ export function replicatedFreeWorld(world) {
   const hostileActors = world?.freeHostileActors || {};
   const threat = world?.freeThreatDirector || {};
   const heavy = world?.freeHeavyPursuer || {};
+  const eliteBoss = world?.freeEliteBoatBoss || {};
   return compact({
     version: world?.version,
     time: world?.time,
@@ -200,6 +206,18 @@ export function replicatedFreeWorld(world) {
       encounterId: heavy.encounterId,
       boat: select(heavy.boat, HEAVY_FIELDS),
       projectiles: (heavy.projectiles || []).map(projectile => select(projectile, ["id", "x", "y"])),
+    }} : {}),
+    ...(eliteBoss.active || eliteBoss.boat || eliteBoss.phase === "completed" ? {freeEliteBoatBoss: {
+      version: eliteBoss.version,
+      active: eliteBoss.active,
+      encounterId: eliteBoss.encounterId,
+      threatEncounterId: eliteBoss.threatEncounterId,
+      phase: eliteBoss.phase,
+      stage: eliteBoss.stage,
+      rewardReady: eliteBoss.rewardReady,
+      commanderId: eliteBoss.commanderId,
+      boat: select(eliteBoss.boat, ELITE_BOAT_FIELDS),
+      projectiles: (eliteBoss.projectiles || []).map(projectile => select(projectile, ["id", "turretId", "targetPlayer", "x", "y"])),
     }} : {}),
   });
 }

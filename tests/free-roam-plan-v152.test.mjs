@@ -34,6 +34,10 @@ function acceptCategory(world, category) {
   tap(world, 0, {action: true});
   world.freeContracts.boardSelection[0] = world.freeContracts.offers.findIndex(offer => offer.category === category);
   tap(world, 0, {boardAccept: true});
+  if (category === "dangerous") {
+    tap(world, 0, {boardAccept: true});
+    tap(world, 0, {boardAccept: true});
+  }
   const active = world.freeContracts.activeContract;
   const crate = world.freeActivities.crates.find(candidate => candidate.id === active.crateId);
   return {active, crate};

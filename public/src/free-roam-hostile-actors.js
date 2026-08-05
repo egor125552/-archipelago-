@@ -1,5 +1,7 @@
 "use strict";
 
+import {MEGA_BOMB_RELOAD_SECONDS} from "./free-roam-mega-bomb-tuning.js?v=1";
+
 import {activePursuers, activePursuerById} from "./free-roam-pursuer-squad.js?v=33";
 import {activeEnemyBoats, enemyBoatById} from "./free-roam-enemy-boats.js?v=3";
 
@@ -35,8 +37,8 @@ function boatById(world, id) {
   return activePursuerById(world, id) || enemyBoatById(world, id) || (world.freeHeavyPursuer?.boat?.id === id && world.freeHeavyPursuer.boat.active ? world.freeHeavyPursuer.boat : null);
 }
 
-function createActor(id, boat, weapon, targetPlayer, elite = false) {
-  const maxHealth = elite ? 120 : weapon === "knife" ? 58 : weapon === "automatic" ? 52 : 44;
+function createActor(id, boat, weapon, targetPlayer, elite = false, commander = false) {
+  const maxHealth = commander ? 600 : elite ? 120 : weapon === "knife" ? 58 : weapon === "automatic" ? 52 : 44;
   return {
     id,
     boatId: boat.id,
@@ -51,6 +53,13 @@ function createActor(id, boat, weapon, targetPlayer, elite = false) {
     active: true,
     destroyed: false,
     elite,
+    commander,
+    armor: commander ? 200 : 0,
+    armorMax: commander ? 200 : 0,
+    automaticAmmo: commander ? 90 : null,
+    pistolAmmo: commander ? 30 : null,
+    bombAmmo: commander ? 5 : 0,
+    bombCooldown: commander ? 2.5 : 0,
     fireCooldown: 0.8,
     aimRemaining: 0,
     burstRemaining: 0,
@@ -106,9 +115,35 @@ export function addEliteActor(world, boat, targetPlayer, encounterId) {
   return actor;
 }
 
+export function addEliteCommander(world, wreck, targetPlayer, encounterId) {
+  const state = ensureHostileActors(world);
+  const id = `elite-commander-${encounterId}`;
+  const existing = state.actors.find(actor => actor.id === id);
+  if (existing) return existing;
+  const actor = createActor(id, wreck, "automatic", targetPlayer, true, true);
+  actor.boatId = null;
+  actor.state = Number(wreck?.y) <= 72 ? "foot" : "swim";
+  actor.x = clamp(Number(wreck?.x) || 210, 5, 415);
+  actor.y = clamp(Number(wreck?.y) || 180, 5, 313);
+  actor.heading = Number(wreck?.heading) || 0;
+  actor.strandedAt = Number(world.time) || 0;
+  actor.targetLockUntil = Number(world.time) || 0;
+  state.actors.push(actor);
+  state.active = true;
+  return actor;
+}
+
 function livingPlayer(world, index) {
   const player = world.players?.[index];
   return world.freeActivities?.presence?.[index] && player?.combat?.alive ? player : null;
+}
+
+function targetPoint(world, player) {
+  if (!player) return null;
+  if (["boat", "roof"].includes(player.mode)) {
+    return (world.boats || []).find(boat => String(boat?.id) === String(player.activeBoat)) || world.boats?.[player.activeBoat] || player;
+  }
+  return player;
 }
 
 function chooseTarget(world, actor) {
@@ -178,7 +213,17 @@ function updateMovement(world, actor, dt) {
     return;
   }
   const target = chooseTarget(world, actor);
+  const targetActor = targetPoint(world, target);
   if (actor.state === "swim") {
+    if (actor.commander) {
+      const destination = target && ["swim", "boat", "roof"].includes(target.mode)
+        ? targetActor
+        : {x: clamp(targetActor?.x ?? actor.x, 5, 415), y: 69};
+      const metres = moveTowards(actor, destination, 6.4, dt);
+      if (actor.y <= 71 && target?.mode === "foot") actor.state = "foot";
+      else if (metres <= 4 && target?.mode === "swim") actor.state = "swim";
+      return;
+    }
     const boardingBoat = nearestBoardingBoat(world, actor);
     const destination = boardingBoat || {x: actor.x, y: 69};
     const metres = moveTowards(actor, destination, actor.elite ? 5.2 : 4.2, dt);
@@ -200,6 +245,11 @@ function updateMovement(world, actor, dt) {
   }
   if (!target) return;
   if (["boat", "roof"].includes(target.mode)) {
+    if (actor.commander) {
+      const metres = distance(actor, targetActor);
+      if (metres > 18) moveTowards(actor, targetActor, actor.state === "swim" ? 6.4 : 9.2, dt, 313);
+      return;
+    }
     const boardingBoat = nearestBoardingBoat(world, actor);
     if (boardingBoat && distance(actor, boardingBoat) < 85) {
       actor.boatId = boardingBoat.id;
@@ -208,18 +258,46 @@ function updateMovement(world, actor, dt) {
     }
     return;
   }
-  const metres = distance(actor, target);
-  let desiredSpeed = actor.elite ? (metres > 4 ? 10.8 : 0) : actor.weapon === "knife" ? 9.6 : metres > 28 ? 8.2 : metres < 13 ? -4.5 : 0;
+  const metres = distance(actor, targetActor);
+  let desiredSpeed = actor.commander
+    ? (metres > 34 ? 11.8 : metres < 9 ? -6.2 : 4.5)
+    : actor.elite ? (metres > 4 ? 10.8 : 0) : actor.weapon === "knife" ? 9.6 : metres > 28 ? 8.2 : metres < 13 ? -4.5 : 0;
   if (actor.elite && actor.windupRemaining > 0) desiredSpeed = 0;
-  moveTowards(actor, target, desiredSpeed, dt, 70);
+  moveTowards(actor, targetActor, desiredSpeed, dt, 70);
 }
 
 function spawnProjectile(world, state, actor, speed = 70) {
   const target = livingPlayer(world, actor.targetPlayer);
-  if (!target || !["foot", "swim", "roof"].includes(target.mode) || state.projectiles.length >= 24) return false;
-  const angle = bearing(actor, target) * Math.PI / 180;
+  const point = targetPoint(world, target);
+  if (!target || !point || (!actor.commander && !["foot", "swim", "roof"].includes(target.mode)) || state.projectiles.length >= 24) return false;
+  const angle = bearing(actor, point) * Math.PI / 180;
   state.projectiles.push({id: `hostile-bullet-${state.nextProjectileId++}`, actorId: actor.id, targetPlayer: actor.targetPlayer, x: actor.x, y: actor.y, sourceX: actor.x, sourceY: actor.y, vx: Math.sin(angle) * speed, vy: -Math.cos(angle) * speed, ttl: 4.2, weapon: actor.weapon});
   emit(world, "enemy-gun-shot", "", [0, 1], {sourcePlayer: -1, gunnerId: actor.id, sourcePursuerId: actor.boatId, targetPlayer: actor.targetPlayer, weapon: actor.weapon, x: actor.x, y: actor.y, heading: actor.heading});
+  return true;
+}
+
+function requestCommanderBomb(world, actor, target) {
+  const boss = world.freeEliteBoatBoss;
+  if (!boss || !actor.commander || actor.bombAmmo <= 0 || actor.bombCooldown > 0) return false;
+  if ((boss.bombRequests || []).some(request => request.sourceId === actor.id)) return false;
+  boss.bombRequests ||= [];
+  boss.nextBombRequestId = Math.max(1, Number(boss.nextBombRequestId) || 1);
+  boss.bombRequests.push({
+    id: `commander-bomb-request-${boss.encounterId}-${boss.nextBombRequestId++}`,
+    sourceType: "elite-commander",
+    sourceId: actor.id,
+    x: actor.x,
+    y: actor.y,
+    heading: bearing(actor, target),
+    targetX: target.x,
+    targetY: target.y,
+    createdAt: world.time,
+  });
+  actor.bombAmmo -= 1;
+  actor.bombCooldown = MEGA_BOMB_RELOAD_SECONDS;
+  emit(world, "elite-commander-bomb", "Командир бросил физическую бомбу. Слушай её полёт и уходи из зоны взрыва.", [actor.targetPlayer], {
+    actorId: actor.id, targetPlayer: actor.targetPlayer, remaining: actor.bombAmmo, x: actor.x, y: actor.y,
+  });
   return true;
 }
 
@@ -227,15 +305,26 @@ function updateWeapon(world, state, actor, dt, helpers) {
   actor.fireCooldown = Math.max(0, actor.fireCooldown - dt);
   actor.burstCooldown = Math.max(0, actor.burstCooldown - dt);
   actor.attackCooldown = Math.max(0, actor.attackCooldown - dt);
+  actor.bombCooldown = Math.max(0, (Number(actor.bombCooldown) || 0) - dt);
   if (actor.state === "aboard" || actor.state === "boarding" || actor.state === "disembarking") return;
   const target = chooseTarget(world, actor);
   if (!target || !target.combat?.alive) return;
-  const metres = distance(actor, target);
-  const melee = actor.weapon === "knife" || (actor.elite && metres <= 7.5);
+  const point = targetPoint(world, target);
+  const metres = distance(actor, point);
+  if (actor.commander) {
+    if (metres >= 34 && metres <= 115 && actor.bombAmmo > 0 && actor.bombCooldown <= 0) {
+      if (requestCommanderBomb(world, actor, point)) return;
+    }
+    actor.weapon = metres <= 8.5 ? "knife"
+      : metres <= 44 && actor.pistolAmmo > 0 ? "pistol"
+        : actor.automaticAmmo > 0 ? "automatic"
+          : actor.pistolAmmo > 0 ? "pistol" : "knife";
+  }
+  const melee = actor.weapon === "knife" || (actor.elite && !actor.commander && metres <= 7.5);
   if (melee) {
     if (actor.windupRemaining > 0) {
       actor.windupRemaining = Math.max(0, actor.windupRemaining - dt);
-      if (actor.windupRemaining <= 0 && distance(actor, target) <= (actor.elite ? 8.5 : 5.5)) {
+      if (actor.windupRemaining <= 0 && distance(actor, point) <= (actor.elite ? 8.5 : 5.5)) {
         helpers?.damagePlayer?.(world, actor.targetPlayer, actor.elite ? 32 : 17, {weapon: "knife", heavy: actor.elite, eventType: "enemy-knife-hit", sourcePoint: {x: actor.x, y: actor.y}});
         actor.attackCooldown = actor.elite ? 1.8 : 1.25;
       }
@@ -254,7 +343,11 @@ function updateWeapon(world, state, actor, dt, helpers) {
   }
   if (actor.burstRemaining > 0) {
     if (actor.burstCooldown > 0) return;
-    if (!spawnProjectile(world, state, actor, actor.weapon === "pistol" ? 64 : 72)) { actor.burstRemaining = 0; return; }
+    if (!spawnProjectile(world, state, actor, actor.weapon === "pistol" ? 68 : actor.commander ? 84 : 72)) { actor.burstRemaining = 0; return; }
+    if (actor.commander) {
+      if (actor.weapon === "pistol") actor.pistolAmmo = Math.max(0, actor.pistolAmmo - 1);
+      else if (actor.weapon === "automatic") actor.automaticAmmo = Math.max(0, actor.automaticAmmo - 1);
+    }
     actor.burstRemaining -= 1;
     actor.burstCooldown = actor.weapon === "pistol" ? 0.28 : 0.15;
     if (actor.burstRemaining <= 0) actor.fireCooldown = actor.elite ? 1.45 : actor.weapon === "pistol" ? 1.15 : 1.8;
@@ -313,14 +406,23 @@ function updateProjectiles(world, state, dt, helpers) {
 export function damageHostileActor(world, actorId, amount, sourcePlayer = -1, details = {}) {
   const actor = activeHostileActors(world).find(candidate => candidate.id === actorId);
   if (!actor || amount <= 0) return false;
-  actor.health = clamp(actor.health - amount, 0, actor.maxHealth);
-  emit(world, "hostile-actor-hit", `Попадание по ${actor.elite ? "элитному стрелку" : "вражескому бойцу"}. Осталось ${Math.round(actor.health)}.`, [sourcePlayer].filter(index => index >= 0), {sourcePlayer, actorId, weapon: details.weapon, damage: amount, health: actor.health, x: actor.x, y: actor.y});
+  let remaining = Math.max(0, Number(amount) || 0);
+  let armorDamage = 0;
+  if (actor.commander && actor.armor > 0) {
+    armorDamage = Math.min(actor.armor, remaining);
+    actor.armor = clamp(actor.armor - armorDamage, 0, actor.armorMax);
+    remaining -= armorDamage;
+    emit(world, "elite-commander-armor-hit", `Попадание по броне командира. Броня ${Math.round(actor.armor)}.`, [sourcePlayer].filter(index => index >= 0), {sourcePlayer, actorId, weapon: details.weapon, damage: armorDamage, armor: actor.armor, x: actor.x, y: actor.y});
+  }
+  if (remaining > 0) actor.health = clamp(actor.health - remaining, 0, actor.maxHealth);
+  const label = actor.commander ? "элитному командиру" : actor.elite ? "элитному стрелку" : "вражескому бойцу";
+  emit(world, "hostile-actor-hit", `Попадание по ${label}. Осталось ${Math.round(actor.health)}.`, [sourcePlayer].filter(index => index >= 0), {sourcePlayer, actorId, weapon: details.weapon, damage: remaining, armorDamage, health: actor.health, armor: actor.armor, x: actor.x, y: actor.y});
   if (actor.health > 0) return true;
   actor.active = false;
   actor.destroyed = true;
   actor.state = "dead";
   actor.burstRemaining = 0;
-  emit(world, actor.elite ? "elite-destroyed" : "hostile-actor-destroyed", actor.elite ? "Элитный стрелок повержен." : "Вражеский боец повержен.", [0, 1], {sourcePlayer, actorId, elite: actor.elite, x: actor.x, y: actor.y});
+  emit(world, actor.elite ? "elite-destroyed" : "hostile-actor-destroyed", actor.commander ? "Элитный командир повержен." : actor.elite ? "Элитный стрелок повержен." : "Вражеский боец повержен.", [0, 1], {sourcePlayer, actorId, elite: actor.elite, commander: actor.commander, x: actor.x, y: actor.y});
   return true;
 }
 

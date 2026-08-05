@@ -9,11 +9,12 @@ import {
 import {COMBAT_TUNING} from "./free-roam-combat-tuning.js?v=32";
 import {isCriticalHealth} from "./free-roam-critical-injury.js?v=32";
 import {activePursuers, damageEscort} from "./free-roam-pursuer-squad.js?v=33";
-import {describeCombatTarget, resolveCombatTarget} from "./free-roam-targeting.js?v=35";
+import {describeCombatTarget, resolveCombatTarget} from "./free-roam-targeting.js?v=38";
 import {activeHostileGunners, damageHostileGunner} from "./free-roam-hostile-gunners.js?v=32";
 import {activeEnemyBoats, damageEnemyBoat} from "./free-roam-enemy-boats.js?v=3";
-import {activeHostileActors, damageHostileActor} from "./free-roam-hostile-actors.js?v=2";
+import {activeHostileActors, damageHostileActor} from "./free-roam-hostile-actors.js?v=3";
 import {activeHeavyPursuer, damageHeavyPursuer} from "./free-roam-heavy-pursuer.js?v=4";
+import {damageEliteBoatBoss} from "./free-roam-elite-boat.js?v=1";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));
@@ -233,15 +234,17 @@ function damagePlayer(world, targetIndex, amount, attackerIndex, details, helper
     x: target.x,
     y: target.y,
   });
-  emit(world, "combat-health", `Здоровье ${Math.round(combat.health)}.`, [targetIndex], {
-    sourcePlayer: attackerIndex,
-    targetPlayer: targetIndex,
-    weapon: details.weapon,
-    damage: amount,
-    health: combat.health,
-    x: target.x,
-    y: target.y,
-  });
+  if (details.announceHealth !== false) {
+    emit(world, "combat-health", `Здоровье ${Math.round(combat.health)}.`, [targetIndex], {
+      sourcePlayer: attackerIndex,
+      targetPlayer: targetIndex,
+      weapon: details.weapon,
+      damage: amount,
+      health: combat.health,
+      x: target.x,
+      y: target.y,
+    });
+  }
   if (combat.health <= 0) {
     killPlayer(world, targetIndex, attackerIndex, helpers);
     return true;
@@ -269,6 +272,7 @@ export function applyCombatDamage(world, targetIndex, amount, attackerIndex = -1
     heavy: Boolean(details.heavy),
     eventType: details.eventType || "combat-hit",
     sourcePoint: details.sourcePoint || null,
+    announceHealth: details.announceHealth !== false,
   }, helpers);
 }
 
@@ -453,6 +457,14 @@ function fireAutomatic(world, attackerIndex, helpers) {
   if (["hostileActor", "elite"].includes(target.kind)) {
     damageHostileActor(world, target.actorId, 12, attackerIndex, {weapon: "automatic"});
     if (target.point?.destroyed) {
+      combat.lockedTargetId = null;
+      emit(world, "target-cleared", "", [attackerIndex], {sourcePlayer: attackerIndex});
+    }
+    return;
+  }
+  if (["eliteArmor", "eliteHull", "eliteTurret"].includes(target.kind)) {
+    damageEliteBoatBoss(world, target.component || "hull", 12, attackerIndex, {weapon: "automatic"});
+    if ((target.kind === "eliteTurret" && target.point?.turrets?.find(item => item.id === target.turretId)?.destroyed) || target.point?.destroyed) {
       combat.lockedTargetId = null;
       emit(world, "target-cleared", "", [attackerIndex], {sourcePlayer: attackerIndex});
     }
