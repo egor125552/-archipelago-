@@ -61,6 +61,36 @@ jobs:
               'free-roam-elite-boat-audio-v11.js?v=3',
           )
           quality.write_text(text)
+
+          exact_replacements = {
+              Path("tests/free-roam-boat-audio-cache-v171.test.mjs"): [
+                  (r"free-roam-quality-v1\.js\?v=6", r"free-roam-quality-v1\.js\?v=7"),
+                  (r"free-roam-player-boat-audio-v1\.js\?v=2", r"free-roam-player-boat-audio-v1\.js\?v=3"),
+                  (r"free-roam-audio-v5\.js\?v=44", r"free-roam-audio-v5\.js\?v=45"),
+              ],
+              Path("tests/free-roam-elite-audio-cache-v14.test.mjs"): [
+                  (r"assert.match(quality, /free-roam-elite-boat-audio-v11\.js\?v=2/);", r"assert.match(quality, /free-roam-elite-boat-audio-v11\.js\?v=3/);"),
+                  (r"assert.doesNotMatch(quality, /free-roam-elite-boat-audio-v11\.js\?v=1/);", r"assert.doesNotMatch(quality, /free-roam-elite-boat-audio-v11\.js\?v=2/);"),
+              ],
+              Path("tests/free-roam-elite-boat-audio-load-v11.test.mjs"): [
+                  (r"free-roam-quality-v1\.js\?v=6", r"free-roam-quality-v1\.js\?v=7"),
+                  (r"free-roam-elite-boat-audio-v11\.js\?v=1", r"free-roam-elite-boat-audio-v11\.js\?v=3"),
+                  (r"free-roam-audio-v5\.js\?v=44", r"free-roam-audio-v5\.js\?v=45"),
+              ],
+              Path("tests/free-roam-pistol-v41.test.mjs"): [
+                  (r"free-roam-pistol-audio\.js\?v=3", r"free-roam-pistol-audio\.js\?v=4"),
+              ],
+              Path("tests/free-roam-target-reconnect-v154.test.mjs"): [
+                  (r"free-roam-v4\.js\?v=56", r"free-roam-v4\.js\?v=57"),
+              ],
+          }
+          for path, replacements in exact_replacements.items():
+              text = path.read_text()
+              for old, new in replacements:
+                  if old not in text:
+                      raise SystemExit(f"missing cache contract in {path}: {old}")
+                  text = text.replace(old, new)
+              path.write_text(text)
           PY
           node --check public/src/free-roam-elite-boat.js
           node --check public/src/free-roam-hostile-respawn-grace.js
