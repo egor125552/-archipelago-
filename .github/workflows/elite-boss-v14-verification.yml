@@ -1,0 +1,51 @@
+name: Elite Boss V14 Verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "public/src/free-roam-elite-boat.js"
+      - "public/src/free-roam-elite-boat-audio-v11.js"
+      - "public/src/free-roam-replication.js"
+      - "src/free-roam-mega-bomb-v37.js"
+      - "tests/free-roam-elite-boat-journal-v14.test.mjs"
+      - ".github/workflows/elite-boss-v14-verification.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Run complete test suite and publish exact result
+        shell: bash
+        run: |
+          set +e
+          mkdir -p ci-results
+          {
+            echo "commit=${GITHUB_SHA}"
+            echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "node=$(node --version)"
+            echo "npm=$(npm --version)"
+            echo
+            npm test
+          } > ci-results/elite-boss-v14-latest.txt 2>&1
+          status=$?
+          echo >> ci-results/elite-boss-v14-latest.txt
+          echo "exit_code=${status}" >> ci-results/elite-boss-v14-latest.txt
+          echo "finished=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> ci-results/elite-boss-v14-latest.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ci-results/elite-boss-v14-latest.txt
+          git commit -m "ci: record elite boss v14 verification" || true
+          git push || true
+          exit ${status}
