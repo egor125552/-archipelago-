@@ -1,0 +1,2866 @@
+commit=2ce1e9b962a2f9fe44e1890d5c625c5c542eee29
+started=2026-08-05T14:42:46Z
+node=v22.23.1
+npm=10.9.8
+
+
+> echo-archipelago@1.7.1 test
+> node --test tests/*.test.mjs
+
+TAP version 13
+# Subtest: solo assistant pumps a dangerous leak
+ok 1 - solo assistant pumps a dangerous leak
+  ---
+  duration_ms: 3.107695
+  type: 'test'
+  ...
+# Subtest: coop enforces captain and crew responsibilities
+ok 2 - coop enforces captain and crew responsibilities
+  ---
+  duration_ms: 0.468863
+  type: 'test'
+  ...
+# Subtest: sonar has cooldown and gives directional target
+ok 3 - sonar has cooldown and gives directional target
+  ---
+  duration_ms: 1.348441
+  type: 'test'
+  ...
+# Subtest: high load eventually stalls the engine
+ok 4 - high load eventually stalls the engine
+  ---
+  duration_ms: 19.549188
+  type: 'test'
+  ...
+# Subtest: collision creates damage and flooding but has contact cooldown
+ok 5 - collision creates damage and flooding but has contact cooldown
+  ---
+  duration_ms: 0.795104
+  type: 'test'
+  ...
+# Subtest: rescue requires slow sustained action
+ok 6 - rescue requires slow sustained action
+  ---
+  duration_ms: 1.106705
+  type: 'test'
+  ...
+# Subtest: complete mission can be won with both survivors and safe docking
+ok 7 - complete mission can be won with both survivors and safe docking
+  ---
+  duration_ms: 0.770151
+  type: 'test'
+  ...
+# Subtest: danger thresholds emit one-shot warning sounds without frame spam
+ok 8 - danger thresholds emit one-shot warning sounds without frame spam
+  ---
+  duration_ms: 0.421231
+  type: 'test'
+  ...
+# Subtest: invalid role command returns audible denial
+ok 9 - invalid role command returns audible denial
+  ---
+  duration_ms: 0.829034
+  type: 'test'
+  ...
+# Subtest: remote footsteps pan relative to listener heading
+ok 10 - remote footsteps pan relative to listener heading
+  ---
+  duration_ms: 1.285285
+  type: 'test'
+  ...
+# Subtest: turning the listener rotates the audible side
+ok 11 - turning the listener rotates the audible side
+  ---
+  duration_ms: 0.225339
+  type: 'test'
+  ...
+# Subtest: a tiny turn cannot throw a sound behind the listener from far left to far right
+ok 12 - a tiny turn cannot throw a sound behind the listener from far left to far right
+  ---
+  duration_ms: 0.17347
+  type: 'test'
+  ...
+# Subtest: walking sideways does not reinterpret the same fixed target as the opposite side
+ok 13 - walking sideways does not reinterpret the same fixed target as the opposite side
+  ---
+  duration_ms: 0.177335
+  type: 'test'
+  ...
+# Subtest: free-roam mechanics map onto familiar operation sound events
+ok 14 - free-roam mechanics map onto familiar operation sound events
+  ---
+  duration_ms: 1.393031
+  type: 'test'
+  ...
+# Subtest: ramming uses the established collision sound path
+ok 15 - ramming uses the established collision sound path
+  ---
+  duration_ms: 0.236859
+  type: 'test'
+  ...
+# Subtest: shore impacts keep the operation shoreline branch
+ok 16 - shore impacts keep the operation shoreline branch
+  ---
+  duration_ms: 0.209539
+  type: 'test'
+  ...
+# Subtest: Safari receives a new outer module URL for the restored boat audio patch
+ok 17 - Safari receives a new outer module URL for the restored boat audio patch
+  ---
+  duration_ms: 7.28277
+  type: 'test'
+  ...
+# Subtest: all active player-boat audio entrypoints use the same FreeRoamAudio class
+ok 18 - all active player-boat audio entrypoints use the same FreeRoamAudio class
+  ---
+  duration_ms: 5.485251
+  type: 'test'
+  ...
+# Subtest: iPhone-style action exits a stopped boat beside salvage without stowing it
+ok 19 - iPhone-style action exits a stopped boat beside salvage without stowing it
+  ---
+  duration_ms: 25.153717
+  type: 'test'
+  ...
+# Subtest: one accessible action starts timed crowbar work and pickup stays separate
+ok 20 - one accessible action starts timed crowbar work and pickup stays separate
+  ---
+  duration_ms: 24.624911
+  type: 'test'
+  ...
+# Subtest: board navigation survives activity input normalization
+ok 21 - board navigation survives activity input normalization
+  ---
+  duration_ms: 1.752745
+  type: 'test'
+  ...
+# Subtest: merchant can fully restore a docked boat and install scrap upgrades
+ok 22 - merchant can fully restore a docked boat and install scrap upgrades
+  ---
+  duration_ms: 5.30462
+  type: 'test'
+  ...
+# Subtest: combat target menu remains populated when guns are empty
+ok 23 - combat target menu remains populated when guns are empty
+  ---
+  duration_ms: 3.118046
+  type: 'test'
+  ...
+# Subtest: heavy threat uses 700 solo hull, 1000 coop hull and a long burst
+ok 24 - heavy threat uses 700 solo hull, 1000 coop hull and a long burst
+  ---
+  duration_ms: 7.124295
+  type: 'test'
+  ...
+# Subtest: audio wrappers target the same audio class as the live client
+ok 25 - audio wrappers target the same audio class as the live client
+  ---
+  duration_ms: 15.695894
+  type: 'test'
+  ...
+# Subtest: a boat is guided to the landing instead of through the shore for a land crate
+ok 26 - a boat is guided to the landing instead of through the shore for a land crate
+  ---
+  duration_ms: 5.202191
+  type: 'test'
+  ...
+# Subtest: after disembarking the same locked land crate becomes the direct target
+ok 27 - after disembarking the same locked land crate becomes the direct target
+  ---
+  duration_ms: 0.874332
+  type: 'test'
+  ...
+# Subtest: choosing a land-crate landing replaces the previous delivered crate lock
+ok 28 - choosing a land-crate landing replaces the previous delivered crate lock
+  ---
+  duration_ms: 17.222543
+  type: 'test'
+  ...
+# Subtest: entering a cargo action zone announces one clear double-signal prompt
+ok 29 - entering a cargo action zone announces one clear double-signal prompt
+  ---
+  duration_ms: 9.78472
+  type: 'test'
+  ...
+# Subtest: a joining player appears beside a shore player instead of far away
+ok 30 - a joining player appears beside a shore player instead of far away
+  ---
+  duration_ms: 0.98443
+  type: 'test'
+  ...
+# Subtest: a leaking boat moored at the landing does not fill while its player fetches a land crate
+ok 31 - a leaking boat moored at the landing does not fill while its player fetches a land crate
+  ---
+  duration_ms: 25.858138
+  type: 'test'
+  ...
+# Subtest: new heavy pursuer enters physically before combat
+ok 32 - new heavy pursuer enters physically before combat
+  ---
+  duration_ms: 5.484748
+  type: 'test'
+  ...
+# Subtest: destroying armour exposes a live core instead of killing heavy boat
+ok 33 - destroying armour exposes a live core instead of killing heavy boat
+  ---
+  duration_ms: 0.86662
+  type: 'test'
+  ...
+# Subtest: systems are armoured before breach and vulnerable after breach
+ok 34 - systems are armoured before breach and vulnerable after breach
+  ---
+  duration_ms: 0.715324
+  type: 'test'
+  ...
+# Subtest: V164 records a destroyed turret but never starts its deleted repair lifecycle
+ok 35 - V164 records a destroyed turret but never starts its deleted repair lifecycle
+  ---
+  duration_ms: 0.455515
+  type: 'test'
+  ...
+# Subtest: enemy assigned to a dead player physically searches the last position
+ok 36 - enemy assigned to a dead player physically searches the last position
+  ---
+  duration_ms: 0.780491
+  type: 'test'
+  ...
+# Subtest: all enemy projectile families are removed at their physical maximum range
+ok 37 - all enemy projectile families are removed at their physical maximum range
+  ---
+  duration_ms: 0.44984
+  type: 'test'
+  ...
+# Subtest: overlay discards a legacy one-tick retarget movement
+ok 38 - overlay discards a legacy one-tick retarget movement
+  ---
+  duration_ms: 1.267598
+  type: 'test'
+  ...
+# Subtest: engine repair starts only after physical stopping
+ok 39 - engine repair starts only after physical stopping
+  ---
+  duration_ms: 1.514771
+  type: 'test'
+  ...
+# Subtest: armour destruction starts a physical full-throttle escape
+ok 40 - armour destruction starts a physical full-throttle escape
+  ---
+  duration_ms: 2.164764
+  type: 'test'
+  ...
+# Subtest: destroyed exposed turret triggers retreat and repair
+ok 41 - destroyed exposed turret triggers retreat and repair
+  ---
+  duration_ms: 0.567269
+  type: 'test'
+  ...
+# Subtest: exposed turret repair consumes a plate and restores the system
+ok 42 - exposed turret repair consumes a plate and restores the system
+  ---
+  duration_ms: 0.495373
+  type: 'test'
+  ...
+# Subtest: destroyed exposed engine coasts to a stop before repairing
+ok 43 - destroyed exposed engine coasts to a stop before repairing
+  ---
+  duration_ms: 0.898354
+  type: 'test'
+  ...
+# Subtest: pre-breach destroyed turret also has a repair fallback
+ok 44 - pre-breach destroyed turret also has a repair fallback
+  ---
+  duration_ms: 0.394177
+  type: 'test'
+  ...
+# Subtest: turret destroyed during the armour-breach escape is still repaired
+ok 45 - turret destroyed during the armour-breach escape is still repaired
+  ---
+  duration_ms: 0.298863
+  type: 'test'
+  ...
+# Subtest: armed player makes the boss open distance and keep the turret available
+ok 46 - armed player makes the boss open distance and keep the turret available
+  ---
+  duration_ms: 2.496403
+  type: 'test'
+  ...
+# Subtest: zero ammo is not read telepathically
+ok 47 - zero ammo is not read telepathically
+  ---
+  duration_ms: 0.308575
+  type: 'test'
+  ...
+# Subtest: observed empty weapons make the boss approach cautiously
+ok 48 - observed empty weapons make the boss approach cautiously
+  ---
+  duration_ms: 1.231416
+  type: 'test'
+  ...
+# Subtest: a new shot cancels the unarmed assumption
+ok 49 - a new shot cancels the unarmed assumption
+  ---
+  duration_ms: 0.320968
+  type: 'test'
+  ...
+# Subtest: swimmer becomes the priority and triggers aggressive closing
+ok 50 - swimmer becomes the priority and triggers aggressive closing
+  ---
+  duration_ms: 0.226162
+  type: 'test'
+  ...
+# Subtest: repair is aborted when a pursuer is inside mega-bomb clearance
+ok 51 - repair is aborted when a pursuer is inside mega-bomb clearance
+  ---
+  duration_ms: 1.149389
+  type: 'test'
+  ...
+# Subtest: repair abort removes a contradictory repair announcement
+ok 52 - repair abort removes a contradictory repair announcement
+  ---
+  duration_ms: 0.406058
+  type: 'test'
+  ...
+# Subtest: destroyed engine does not produce a magical escape
+ok 53 - destroyed engine does not produce a magical escape
+  ---
+  duration_ms: 0.184097
+  type: 'test'
+  ...
+# Subtest: incoming bomb interrupts a stationary repair
+ok 54 - incoming bomb interrupts a stationary repair
+  ---
+  duration_ms: 0.456173
+  type: 'test'
+  ...
+# Subtest: destroyed engine keeps a healthy turret firing during repair
+ok 55 - destroyed engine keeps a healthy turret firing during repair
+  ---
+  duration_ms: 1.403203
+  type: 'test'
+  ...
+# Subtest: destroyed turret cannot fire while the engine is repaired
+ok 56 - destroyed turret cannot fire while the engine is repaired
+  ---
+  duration_ms: 0.268791
+  type: 'test'
+  ...
+# Subtest: destroyed hull stops defensive fire completely
+ok 57 - destroyed hull stops defensive fire completely
+  ---
+  duration_ms: 0.181268
+  type: 'test'
+  ...
+# Subtest: one or two automatic hits do not trigger a panic escape
+ok 58 - one or two automatic hits do not trigger a panic escape
+  ---
+  duration_ms: 0.664193
+  type: 'test'
+  ...
+# Subtest: three rapid automatic hits trigger an immediate full-speed escape
+ok 59 - three rapid automatic hits trigger an immediate full-speed escape
+  ---
+  duration_ms: 3.791346
+  type: 'test'
+  ...
+# Subtest: widely separated hits do not combine into suppression
+ok 60 - widely separated hits do not combine into suppression
+  ---
+  duration_ms: 0.301516
+  type: 'test'
+  ...
+# Subtest: a destroyed engine never receives a magical suppression escape
+ok 61 - a destroyed engine never receives a magical suppression escape
+  ---
+  duration_ms: 0.315191
+  type: 'test'
+  ...
+# Subtest: escape eventually regroups and returns when the player stops chasing
+ok 62 - escape eventually regroups and returns when the player stops chasing
+  ---
+  duration_ms: 0.648318
+  type: 'test'
+  ...
+# Subtest: ordinary turret repair clearance is based on automatic range, not mega-bomb range
+ok 63 - ordinary turret repair clearance is based on automatic range, not mega-bomb range
+  ---
+  duration_ms: 1.882565
+  type: 'test'
+  ...
+# Subtest: an incorrectly aborted turret repair resumes when already outside automatic range
+ok 64 - an incorrectly aborted turret repair resumes when already outside automatic range
+  ---
+  duration_ms: 0.798412
+  type: 'test'
+  ...
+# Subtest: a turretless heavy boat with a healthy engine physically escapes a close player
+ok 65 - a turretless heavy boat with a healthy engine physically escapes a close player
+  ---
+  duration_ms: 2.094517
+  type: 'test'
+  ...
+# Subtest: a destroyed engine still cannot receive a magical repair escape
+ok 66 - a destroyed engine still cannot receive a magical repair escape
+  ---
+  duration_ms: 0.221527
+  type: 'test'
+  ...
+# Subtest: an incoming mega-bomb still interrupts a distant turret repair
+ok 67 - an incoming mega-bomb still interrupts a distant turret repair
+  ---
+  duration_ms: 0.759361
+  type: 'test'
+  ...
+# Subtest: real incoming mega-bomb prevents turret repair even at safe direct-fire distance
+ok 68 - real incoming mega-bomb prevents turret repair even at safe direct-fire distance
+  ---
+  duration_ms: 2.353848
+  type: 'test'
+  ...
+# Subtest: repair route remains inside physical heavy-boat bounds
+ok 69 - repair route remains inside physical heavy-boat bounds
+  ---
+  duration_ms: 2.673104
+  type: 'test'
+  ...
+# Subtest: target messages distinguish alive, direct-fire range and bomb range
+ok 70 - target messages distinguish alive, direct-fire range and bomb range
+  ---
+  duration_ms: 0.899911
+  type: 'test'
+  ...
+# Subtest: V172 does not give movement to a heavy boat with a destroyed engine
+ok 71 - V172 does not give movement to a heavy boat with a destroyed engine
+  ---
+  duration_ms: 1.247767
+  type: 'test'
+  ...
+# Subtest: V172 persists one stable repair destination
+ok 72 - V172 persists one stable repair destination
+  ---
+  duration_ms: 1.23247
+  type: 'test'
+  ...
+# Subtest: real-log regression: moving turretless heavy keeps one route instead of endless rerouting
+ok 73 - real-log regression: moving turretless heavy keeps one route instead of endless rerouting
+  ---
+  duration_ms: 18.858934
+  type: 'test'
+  ...
+# Subtest: repair begins only after direct-fire clearance and no bomb threat
+ok 74 - repair begins only after direct-fire clearance and no bomb threat
+  ---
+  duration_ms: 1.276351
+  type: 'test'
+  ...
+# Subtest: authoritative server applies the combat hotfix before and after each step
+ok 75 - authoritative server applies the combat hotfix before and after each step
+  ---
+  duration_ms: 1.319123
+  type: 'test'
+  ...
+# Subtest: V172 distinguishes automatic and mega-bomb target bands
+ok 76 - V172 distinguishes automatic and mega-bomb target bands
+  ---
+  duration_ms: 0.879333
+  type: 'test'
+  ...
+# Subtest: far selected target does not keep a replacement lock when no replacement was requested
+ok 77 - far selected target does not keep a replacement lock when no replacement was requested
+  ---
+  duration_ms: 2.915551
+  type: 'test'
+  ...
+# Subtest: alive target between automatic and mega-bomb ranges stays locked
+ok 78 - alive target between automatic and mega-bomb ranges stays locked
+  ---
+  duration_ms: 2.914438
+  type: 'test'
+  ...
+# Subtest: alive target beyond mega-bomb range gets an accurate distance message
+ok 79 - alive target beyond mega-bomb range gets an accurate distance message
+  ---
+  duration_ms: 0.583416
+  type: 'test'
+  ...
+# Subtest: destroyed target keeps the original unavailable result
+ok 80 - destroyed target keeps the original unavailable result
+  ---
+  duration_ms: 0.320357
+  type: 'test'
+  ...
+# Subtest: automatic fire is suppressed while selected target is out of direct range
+ok 81 - automatic fire is suppressed while selected target is out of direct range
+  ---
+  duration_ms: 0.533601
+  type: 'test'
+  ...
+# Subtest: turret repair uses one stable route and begins when that route is safe
+ok 82 - turret repair uses one stable route and begins when that route is safe
+  ---
+  duration_ms: 3.981578
+  type: 'test'
+  ...
+# Subtest: logger accepts object-mapped replicated collections
+ok 83 - logger accepts object-mapped replicated collections
+  ---
+  duration_ms: 0.881904
+  type: 'test'
+  ...
+# Subtest: out-of-range direct fire is suppressed before base combat runs
+ok 84 - out-of-range direct fire is suppressed before base combat runs
+  ---
+  duration_ms: 1.015883
+  type: 'test'
+  ...
+# Subtest: authoritative hotfix uses one heavy controller instead of the V164-V176 layer chain
+ok 85 - authoritative hotfix uses one heavy controller instead of the V164-V176 layer chain
+  ---
+  duration_ms: 3.636914
+  type: 'test'
+  ...
+# Subtest: journal regression: duplicate phases, ceasefires and windups are collapsed
+ok 86 - journal regression: duplicate phases, ceasefires and windups are collapsed
+  ---
+  duration_ms: 1.45756
+  type: 'test'
+  ...
+# Subtest: forty-seven repair-start events become one announcement
+ok 87 - forty-seven repair-start events become one announcement
+  ---
+  duration_ms: 0.435425
+  type: 'test'
+  ...
+# Subtest: repair has a twenty metre hysteresis band
+ok 88 - repair has a twenty metre hysteresis band
+  ---
+  duration_ms: 0.40072
+  type: 'test'
+  ...
+# Subtest: heavy reacts before its engine reaches zero
+ok 89 - heavy reacts before its engine reaches zero
+  ---
+  duration_ms: 1.124952
+  type: 'test'
+  ...
+# Subtest: the player's mass-bomb tactic changes spacing and repair cover
+ok 90 - the player's mass-bomb tactic changes spacing and repair cover
+  ---
+  duration_ms: 0.732391
+  type: 'test'
+  ...
+# Subtest: V175 remains directly below the authoritative V176 layer
+ok 91 - V175 remains directly below the authoritative V176 layer
+  ---
+  duration_ms: 10.931147
+  type: 'test'
+  ...
+# Subtest: dangerous work opens real threat counts and accepts a threat-five order
+ok 92 - dangerous work opens real threat counts and accepts a threat-five order
+  ---
+  duration_ms: 3.47455
+  type: 'test'
+  ...
+# Subtest: back moves one level at a time before closing the board
+ok 93 - back moves one level at a time before closing the board
+  ---
+  duration_ms: 1.226209
+  type: 'test'
+  ...
+# Subtest: each player keeps an independent board level
+ok 94 - each player keeps an independent board level
+  ---
+  duration_ms: 0.537761
+  type: 'test'
+  ...
+# Subtest: old saved contract state migrates without losing the board
+ok 95 - old saved contract state migrates without losing the board
+  ---
+  duration_ms: 1.836768
+  type: 'test'
+  ...
+# Subtest: contract catalogue contains 96 unique manually named cargo definitions
+ok 96 - contract catalogue contains 96 unique manually named cargo definitions
+  ---
+  duration_ms: 1.112787
+  type: 'test'
+  ...
+# Subtest: the contract board is locked until the opening pursuit is defeated
+ok 97 - the contract board is locked until the opening pursuit is defeated
+  ---
+  duration_ms: 23.993274
+  type: 'test'
+  ...
+# Subtest: two players accepting at the same time still create one shared contract
+ok 98 - two players accepting at the same time still create one shared contract
+  ---
+  duration_ms: 6.951436
+  type: 'test'
+  ...
+# Subtest: normal offers do not repeat while their deck still contains unseen cargo
+ok 99 - normal offers do not repeat while their deck still contains unseen cargo
+  ---
+  duration_ms: 16.380159
+  type: 'test'
+  ...
+# Subtest: salvage requires physical extraction and a nearby teammate speeds it up
+ok 100 - salvage requires physical extraction and a nearby teammate speeds it up
+  ---
+  duration_ms: 20.892056
+  type: 'test'
+  ...
+# Subtest: taking dangerous contract cargo starts combat and suspends navigation sonar
+ok 101 - taking dangerous contract cargo starts combat and suspends navigation sonar
+  ---
+  duration_ms: 12.628663
+  type: 'test'
+  ...
+# Subtest: manual pump uses the operation water rates
+ok 102 - manual pump uses the operation water rates
+  ---
+  duration_ms: 4.407315
+  type: 'test'
+  ...
+# Subtest: one repair plate keeps the operation duration and repair amounts
+ok 103 - one repair plate keeps the operation duration and repair amounts
+  ---
+  duration_ms: 1.20096
+  type: 'test'
+  ...
+# Subtest: full flooding starts the 45 second operation recovery window
+ok 104 - full flooding starts the 45 second operation recovery window
+  ---
+  duration_ms: 2.987653
+  type: 'test'
+  ...
+# Subtest: a towed boat can install a plate while moving
+ok 105 - a towed boat can install a plate while moving
+  ---
+  duration_ms: 1.989675
+  type: 'test'
+  ...
+# Subtest: free roam uses operation steering authority and centers the rudder on release
+ok 106 - free roam uses operation steering authority and centers the rudder on release
+  ---
+  duration_ms: 4.172874
+  type: 'test'
+  ...
+# Subtest: F still attaches the existing physical tow rope
+ok 107 - F still attaches the existing physical tow rope
+  ---
+  duration_ms: 0.696714
+  type: 'test'
+  ...
+# Subtest: space uses the familiar floating brake while driving
+ok 108 - space uses the familiar floating brake while driving
+  ---
+  duration_ms: 0.445647
+  type: 'test'
+  ...
+# Subtest: walking steps are broadcast with source position and movement side
+ok 109 - walking steps are broadcast with source position and movement side
+  ---
+  duration_ms: 1.024968
+  type: 'test'
+  ...
+# Subtest: Shift running is faster than walking and the shore has finite side bounds
+ok 110 - Shift running is faster than walking and the shore has finite side bounds
+  ---
+  duration_ms: 7.86877
+  type: 'test'
+  ...
+# Subtest: the finite shore still allows the player to enter the water
+ok 111 - the finite shore still allows the player to enter the water
+  ---
+  duration_ms: 0.878064
+  type: 'test'
+  ...
+# Subtest: jump has an airborne arc and a distinct landing event
+ok 112 - jump has an airborne arc and a distinct landing event
+  ---
+  duration_ms: 1.466937
+  type: 'test'
+  ...
+# Subtest: tow follows a turning tower without snapping and produces spatial strain cues
+ok 113 - tow follows a turning tower without snapping and produces spatial strain cues
+  ---
+  duration_ms: 4.910614
+  type: 'test'
+  ...
+# Subtest: a towed player can break the rope only by sustained opposing thrust
+ok 114 - a towed player can break the rope only by sustained opposing thrust
+  ---
+  duration_ms: 2.819376
+  type: 'test'
+  ...
+# Subtest: boats hit an audible finite outer boundary
+ok 115 - boats hit an audible finite outer boundary
+  ---
+  duration_ms: 0.768469
+  type: 'test'
+  ...
+# Subtest: the v5 rope is solved once and survives turns in both directions
+ok 116 - the v5 rope is solved once and survives turns in both directions
+  ---
+  duration_ms: 5.043021
+  type: 'test'
+  ...
+# Subtest: the attacker hears the impact but not the victim health or victim knockdown phrase
+ok 117 - the attacker hears the impact but not the victim health or victim knockdown phrase
+  ---
+  duration_ms: 20.813253
+  type: 'test'
+  ...
+# Subtest: a healthy heavy hit does not knock a player down
+ok 118 - a healthy heavy hit does not knock a player down
+  ---
+  duration_ms: 6.146139
+  type: 'test'
+  ...
+# Subtest: a hit that leaves seven health causes the real critical knockdown
+ok 119 - a hit that leaves seven health causes the real critical knockdown
+  ---
+  duration_ms: 1.939569
+  type: 'test'
+  ...
+# Subtest: full muffling starts at critical health and then follows health recovery exactly
+ok 120 - full muffling starts at critical health and then follows health recovery exactly
+  ---
+  duration_ms: 2.154473
+  type: 'test'
+  ...
+# Subtest: destroyed enemies are not included in repeated entity snapshots
+ok 121 - destroyed enemies are not included in repeated entity snapshots
+  ---
+  duration_ms: 1.172586
+  type: 'test'
+  ...
+# Subtest: developer log V2 compresses repeated logger failures
+ok 122 - developer log V2 compresses repeated logger failures
+  ---
+  duration_ms: 1.039093
+  type: 'test'
+  ...
+# Subtest: developer log V2 records outgoing free-input packets
+ok 123 - developer log V2 records outgoing free-input packets
+  ---
+  duration_ms: 1.248111
+  type: 'test'
+  ...
+# Subtest: developer logger records events from authoritative websocket messages
+ok 124 - developer logger records events from authoritative websocket messages
+  ---
+  duration_ms: 0.962994
+  type: 'test'
+  ...
+# Subtest: developer log V2 captures authoritative server events and loads through V1 entry
+ok 125 - developer log V2 captures authoritative server events and loads through V1 entry
+  ---
+  duration_ms: 0.947484
+  type: 'test'
+  ...
+# Subtest: elite bomb-bay audio is loaded through the live Safari cache chain
+ok 126 - elite bomb-bay audio is loaded through the live Safari cache chain
+  ---
+  duration_ms: 1.689376
+  type: 'test'
+  ...
+# Subtest: elite boat 1.1 documentation fixes bomb-bay and grace semantics
+ok 127 - elite boat 1.1 documentation fixes bomb-bay and grace semantics
+  ---
+  duration_ms: 5.99558
+  type: 'test'
+  ...
+# Subtest: journal tactics are part of the authoritative boss state, not a parallel layer
+ok 128 - journal tactics are part of the authoritative boss state, not a parallel layer
+  ---
+  duration_ms: 4.895621
+  type: 'test'
+  ...
+# Subtest: memory persists for the encounter and two turrets split primary and secondary targets
+not ok 129 - memory persists for the encounter and two turrets split primary and secondary targets
+  ---
+  duration_ms: 5.642996
+  type: 'test'
+  location: '/home/runner/work/-archipelago-/-archipelago-/tests/free-roam-elite-boat-journal-v14.test.mjs:62:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    1 !== 2
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 2
+  actual: 1
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///home/runner/work/-archipelago-/-archipelago-/tests/free-roam-elite-boat-journal-v14.test.mjs:79:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+  ...
+# Subtest: closed bomb bay is strongly protected, open bay is a real target and its destruction disables bombs
+ok 130 - closed bomb bay is strongly protected, open bay is a real target and its destruction disables bombs
+  ---
+  duration_ms: 40.076167
+  type: 'test'
+  ...
+# Subtest: turret bullets are physical server objects and retain boat velocity
+ok 131 - turret bullets are physical server objects and retain boat velocity
+  ---
+  duration_ms: 3.122935
+  type: 'test'
+  ...
+# Subtest: a bomb salvo stores mixed tactical roles and uses roughly ten seconds of reload
+ok 132 - a bomb salvo stores mixed tactical roles and uses roughly ten seconds of reload
+  ---
+  duration_ms: 3.577367
+  type: 'test'
+  ...
+# Subtest: losing one turret changes combat posture and complete disarmament switches to survival or physical ram
+ok 133 - losing one turret changes combat posture and complete disarmament switches to survival or physical ram
+  ---
+  duration_ms: 1.597787
+  type: 'test'
+  ...
+# Subtest: hostile bomb launcher keeps tactical role and physical source velocity
+not ok 134 - hostile bomb launcher keeps tactical role and physical source velocity
+  ---
+  duration_ms: 3.426709
+  type: 'test'
+  location: '/home/runner/work/-archipelago-/-archipelago-/tests/free-roam-elite-boat-journal-v14.test.mjs:167:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+    
+    + null
+    - 'route-denial'
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'route-denial'
+  actual: ~
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///home/runner/work/-archipelago-/-archipelago-/tests/free-roam-elite-boat-journal-v14.test.mjs:187:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: two-player elite boss remains bounded at the authoritative 25 Hz tick
+ok 135 - two-player elite boss remains bounded at the authoritative 25 Hz tick
+  ---
+  duration_ms: 1317.50916
+  type: 'test'
+  ...
+# 1500 authoritative ticks: 1306.7 ms; max snapshot 23129 bytes; bullets 36; bombs 3; events 11
+# Subtest: elite boat 1.1 release contract remains explicit
+ok 136 - elite boat 1.1 release contract remains explicit
+  ---
+  duration_ms: 1.550091
+  type: 'test'
+  ...
+# Subtest: valid elite arrays and turret objects keep identity across authoritative ticks
+not ok 137 - valid elite arrays and turret objects keep identity across authoritative ticks
+  ---
+  duration_ms: 6.916602
+  type: 'test'
+  location: '/home/runner/work/-archipelago-/-archipelago-/tests/free-roam-elite-boat-state-identity-v11.test.mjs:13:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Values have same structure but are not reference-equal:
+    
+    [
+      {
+        criticalAnnounced: false,
+        destroyedAnnounced: false,
+        hp: 1000,
+        id: 'outer',
+        maxHp: 1000,
+        state: 'active'
+      },
+      {
+        criticalAnnounced: false,
+        destroyedAnnounced: false,
+        hp: 1000,
+        id: 'middle',
+        maxHp: 1000,
+        state: 'protected'
+      },
+      {
+        criticalAnnounced: false,
+        destroyedAnnounced: false,
+        hp: 1000,
+        id: 'inner',
+        maxHp: 1000,
+        state: 'protected'
+      }
+    ]
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    0:
+      id: 'outer'
+      hp: 1000
+      maxHp: 1000
+      state: 'active'
+      criticalAnnounced: false
+      destroyedAnnounced: false
+    1:
+      id: 'middle'
+      hp: 1000
+      maxHp: 1000
+      state: 'protected'
+      criticalAnnounced: false
+      destroyedAnnounced: false
+    2:
+      id: 'inner'
+      hp: 1000
+      maxHp: 1000
+      state: 'protected'
+      criticalAnnounced: false
+      destroyedAnnounced: false
+  actual:
+    0:
+      id: 'outer'
+      hp: 1000
+      maxHp: 1000
+      state: 'active'
+      criticalAnnounced: false
+      destroyedAnnounced: false
+    1:
+      id: 'middle'
+      hp: 1000
+      maxHp: 1000
+      state: 'protected'
+      criticalAnnounced: false
+      destroyedAnnounced: false
+    2:
+      id: 'inner'
+      hp: 1000
+      maxHp: 1000
+      state: 'protected'
+      criticalAnnounced: false
+      destroyedAnnounced: false
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///home/runner/work/-archipelago-/-archipelago-/tests/free-roam-elite-boat-state-identity-v11.test.mjs:37:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.start (node:internal/test_runner/test:944:17)
+    startSubtestAfterBootstrap (node:internal/test_runner/harness:296:17)
+  ...
+# Subtest: threat five starts the separate elite boss only after the heavy boat is destroyed
+ok 138 - threat five starts the separate elite boss only after the heavy boat is destroyed
+  ---
+  duration_ms: 11.590732
+  type: 'test'
+  ...
+# Subtest: three armor layers are sequential and the hull cannot be skipped
+ok 139 - three armor layers are sequential and the hull cannot be skipped
+  ---
+  duration_ms: 4.18903
+  type: 'test'
+  ...
+# Subtest: the two turrets have independent health, muzzle positions and firing cycles
+ok 140 - the two turrets have independent health, muzzle positions and firing cycles
+  ---
+  duration_ms: 5.411584
+  type: 'test'
+  ...
+# Subtest: one physical turret bullet can damage an occupied boat and its protected occupant
+ok 141 - one physical turret bullet can damage an occupied boat and its protected occupant
+  ---
+  duration_ms: 1.708775
+  type: 'test'
+  ...
+# Subtest: the ship stays in map bounds and its projectile population is bounded
+ok 142 - the ship stays in map bounds and its projectile population is bounded
+  ---
+  duration_ms: 145.849447
+  type: 'test'
+  ...
+# Subtest: the boat fires a finite three-bomb salvo through the common physical bomb system
+ok 143 - the boat fires a finite three-bomb salvo through the common physical bomb system
+  ---
+  duration_ms: 17.377996
+  type: 'test'
+  ...
+# Subtest: destroying the hull deploys exactly one physical commander and victory waits for the commander
+ok 144 - destroying the hull deploys exactly one physical commander and victory waits for the commander
+  ---
+  duration_ms: 3.167741
+  type: 'test'
+  ...
+# Subtest: reset clears commander, projectiles, pending bombs and locked elite targets
+ok 145 - reset clears commander, projectiles, pending bombs and locked elite targets
+  ---
+  duration_ms: 1.978603
+  type: 'test'
+  ...
+# Subtest: starting a new threat encounter cleans the old boss lifecycle before replacement
+ok 146 - starting a new threat encounter cleans the old boss lifecycle before replacement
+  ---
+  duration_ms: 1.182314
+  type: 'test'
+  ...
+# Subtest: replication gives both clients the same boss phase, layers, turrets and physical bullets
+ok 147 - replication gives both clients the same boss phase, layers, turrets and physical bullets
+  ---
+  duration_ms: 2.521094
+  type: 'test'
+  ...
+# Subtest: the abandoned-player-boat audio extension patches the active v44 audio class
+ok 148 - the abandoned-player-boat audio extension patches the active v44 audio class
+  ---
+  duration_ms: 5.75789
+  type: 'test'
+  ...
+# Subtest: restored object-shaped boss collections are migrated centrally
+ok 149 - restored object-shaped boss collections are migrated centrally
+  ---
+  duration_ms: 4.246269
+  type: 'test'
+  ...
+# Subtest: respawn grace prevents target acquisition, bullets and bomb-bay opening
+ok 150 - respawn grace prevents target acquisition, bullets and bomb-bay opening
+  ---
+  duration_ms: 9.056652
+  type: 'test'
+  ...
+# Subtest: left and right physical turrets bracket different halves of the same moving boat
+ok 151 - left and right physical turrets bracket different halves of the same moving boat
+  ---
+  duration_ms: 4.942348
+  type: 'test'
+  ...
+# Subtest: the physical bomb bay opens, fires three bombs and reloads for five seconds
+not ok 152 - the physical bomb bay opens, fires three bombs and reloads for five seconds
+  ---
+  duration_ms: 4.150308
+  type: 'test'
+  location: '/home/runner/work/-archipelago-/-archipelago-/tests/free-roam-elite-boat-v11.test.mjs:86:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    
+    10 !== 5
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 5
+  actual: 10
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///home/runner/work/-archipelago-/-archipelago-/tests/free-roam-elite-boat-v11.test.mjs:95:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: the faster movement remains physical and bounded
+ok 153 - the faster movement remains physical and bounded
+  ---
+  duration_ms: 5.654643
+  type: 'test'
+  ...
+# Subtest: replication and the developer journal expose the elite boat, turrets and bomb bay
+ok 154 - replication and the developer journal expose the elite boat, turrets and bomb bay
+  ---
+  duration_ms: 2.980353
+  type: 'test'
+  ...
+# Subtest: two-second respawn grace clears hostile ordnance and readies short weapon cooldowns
+ok 155 - two-second respawn grace clears hostile ordnance and readies short weapon cooldowns
+  ---
+  duration_ms: 2.592167
+  type: 'test'
+  ...
+# Subtest: ready bomb bay starts a physical close bomb run instead of static orbiting
+ok 156 - ready bomb bay starts a physical close bomb run instead of static orbiting
+  ---
+  duration_ms: 0.591575
+  type: 'test'
+  ...
+# Subtest: new turret and commander bullets receive physical predictive crossfire velocity
+ok 157 - new turret and commander bullets receive physical predictive crossfire velocity
+  ---
+  duration_ms: 2.362085
+  type: 'test'
+  ...
+# Subtest: restored elite boss object collections remain iterable combat targets
+ok 158 - restored elite boss object collections remain iterable combat targets
+  ---
+  duration_ms: 5.266595
+  type: 'test'
+  ...
+# Subtest: empty restored turret object is repaired into both physical turret targets
+ok 159 - empty restored turret object is repaired into both physical turret targets
+  ---
+  duration_ms: 0.860539
+  type: 'test'
+  ...
+# Subtest: authoritative server wraps the canonical elite boss step with tactics 1.2
+ok 160 - authoritative server wraps the canonical elite boss step with tactics 1.2
+  ---
+  duration_ms: 1.361304
+  type: 'test'
+  ...
+# Subtest: live mega-bomb alias uses hostile bomb semantics v37
+ok 161 - live mega-bomb alias uses hostile bomb semantics v37
+  ---
+  duration_ms: 0.283299
+  type: 'test'
+  ...
+# Subtest: developer journal compresses unchanged server ticks and repeated input packets
+ok 162 - developer journal compresses unchanged server ticks and repeated input packets
+  ---
+  duration_ms: 0.361356
+  type: 'test'
+  ...
+# Subtest: two-finger downward swipes no longer disable gestures
+ok 163 - two-finger downward swipes no longer disable gestures
+  ---
+  duration_ms: 1.123511
+  type: 'test'
+  ...
+# Subtest: a stationary four-finger press requests one sonar turn
+ok 164 - a stationary four-finger press requests one sonar turn
+  ---
+  duration_ms: 0.208021
+  type: 'test'
+  ...
+# Subtest: sonar guidance snaps the boat heading once and never stays enabled
+ok 165 - sonar guidance snaps the boat heading once and never stays enabled
+  ---
+  duration_ms: 2.022812
+  type: 'test'
+  ...
+# Subtest: the instant turn refuses to act away from the helm
+ok 166 - the instant turn refuses to act away from the helm
+  ---
+  duration_ms: 0.293246
+  type: 'test'
+  ...
+# Subtest: four-finger chords block the three-finger automatic arming path
+ok 167 - four-finger chords block the three-finger automatic arming path
+  ---
+  duration_ms: 9.066915
+  type: 'test'
+  ...
+# Subtest: swipes resolve in all four directions
+ok 168 - swipes resolve in all four directions
+  ---
+  duration_ms: 0.823068
+  type: 'test'
+  ...
+# Subtest: two-finger pump gesture rejects drags and slow taps
+ok 169 - two-finger pump gesture rejects drags and slow taps
+  ---
+  duration_ms: 0.196452
+  type: 'test'
+  ...
+# Subtest: automatic damage against the heavy boat falls continuously with distance
+ok 170 - automatic damage against the heavy boat falls continuously with distance
+  ---
+  duration_ms: 2.406519
+  type: 'test'
+  ...
+# Subtest: weak long-range automatic fire does not trigger the same panic as a close burst
+ok 171 - weak long-range automatic fire does not trigger the same panic as a close burst
+  ---
+  duration_ms: 10.566471
+  type: 'test'
+  ...
+# Subtest: archive regression: a repaired healthy turret fires while returning and cannot stay silent for 46 seconds
+ok 172 - archive regression: a repaired healthy turret fires while returning and cannot stay silent for 46 seconds
+  ---
+  duration_ms: 36.460531
+  type: 'test'
+  ...
+# Subtest: the heavy boat completes a seven-second field repair under weak survivable fire
+ok 173 - the heavy boat completes a seven-second field repair under weak survivable fire
+  ---
+  duration_ms: 27.031938
+  type: 'test'
+  ...
+# Subtest: closing the distance aborts a field repair instead of granting free healing
+ok 174 - closing the distance aborts a field repair instead of granting free healing
+  ---
+  duration_ms: 3.188646
+  type: 'test'
+  ...
+# Subtest: destroyed armour becomes the internal hull instead of deleting the heavy boat
+ok 175 - destroyed armour becomes the internal hull instead of deleting the heavy boat
+  ---
+  duration_ms: 5.453165
+  type: 'test'
+  ...
+# Subtest: movement performed by the base layer is discarded before the owner controller runs
+ok 176 - movement performed by the base layer is discarded before the owner controller runs
+  ---
+  duration_ms: 0.594716
+  type: 'test'
+  ...
+# Subtest: authoritative hotfix imports one heavy controller and no V164-V176 chain
+ok 177 - authoritative hotfix imports one heavy controller and no V164-V176 chain
+  ---
+  duration_ms: 10.626447
+  type: 'test'
+  ...
+# Subtest: old repair phases migrate into the single canonical state machine
+ok 178 - old repair phases migrate into the single canonical state machine
+  ---
+  duration_ms: 0.397575
+  type: 'test'
+  ...
+# Subtest: destroyed turret starts one repair escape
+ok 179 - destroyed turret starts one repair escape
+  ---
+  duration_ms: 5.729067
+  type: 'test'
+  ...
+# Subtest: a close player aborts turret repair and no later layer resurrects it
+ok 180 - a close player aborts turret repair and no later layer resurrects it
+  ---
+  duration_ms: 1.439128
+  type: 'test'
+  ...
+# Subtest: engine destruction during an escape always takes priority and stops the boat
+ok 181 - engine destruction during an escape always takes priority and stops the boat
+  ---
+  duration_ms: 0.758236
+  type: 'test'
+  ...
+# Subtest: a living heavy target remains locked for a long-range mega-bomb
+ok 182 - a living heavy target remains locked for a long-range mega-bomb
+  ---
+  duration_ms: 0.901652
+  type: 'test'
+  ...
+# Subtest: an old heavy from another encounter is removed with crew, shots and locks
+ok 183 - an old heavy from another encounter is removed with crew, shots and locks
+  ---
+  duration_ms: 1.237977
+  type: 'test'
+  ...
+# Subtest: a due heavy phase adopts the damaged boat instead of spawning a fresh one
+ok 184 - a due heavy phase adopts the damaged boat instead of spawning a fresh one
+  ---
+  duration_ms: 0.701059
+  type: 'test'
+  ...
+# Subtest: a duplicate heavy spawned during the step is replaced by the damaged original
+ok 185 - a duplicate heavy spawned during the step is replaced by the damaged original
+  ---
+  duration_ms: 1.475057
+  type: 'test'
+  ...
+# Subtest: a freshly spawned current-encounter heavy is never retired because the controller cache is stale
+ok 186 - a freshly spawned current-encounter heavy is never retired because the controller cache is stale
+  ---
+  duration_ms: 2.360349
+  type: 'test'
+  ...
+# Subtest: threat five creates the heavy boat first and does not preload the separate boss
+ok 187 - threat five creates the heavy boat first and does not preload the separate boss
+  ---
+  duration_ms: 9.898254
+  type: 'test'
+  ...
+# Subtest: heavy hull, turret and engine are separate combat targets
+ok 188 - heavy hull, turret and engine are separate combat targets
+  ---
+  duration_ms: 2.537886
+  type: 'test'
+  ...
+# Subtest: pistol cannot pierce heavy armour while close automatic fire disables systems
+ok 189 - pistol cannot pierce heavy armour while close automatic fire disables systems
+  ---
+  duration_ms: 2.179456
+  type: 'test'
+  ...
+# Subtest: heavy gun announces a windup before producing a long finite barrage
+ok 190 - heavy gun announces a windup before producing a long finite barrage
+  ---
+  duration_ms: 61.690624
+  type: 'test'
+  ...
+# Subtest: destroying the heavy boat starts the separate three-layer elite boss
+ok 191 - destroying the heavy boat starts the separate three-layer elite boss
+  ---
+  duration_ms: 2.56315
+  type: 'test'
+  ...
+# Subtest: destroyed heavy boat does not release the old attached elite actor
+ok 192 - destroyed heavy boat does not release the old attached elite actor
+  ---
+  duration_ms: 1.166437
+  type: 'test'
+  ...
+# Subtest: threat five rewards only after the elite commander is defeated, exactly once
+ok 193 - threat five rewards only after the elite commander is defeated, exactly once
+  ---
+  duration_ms: 7.307181
+  type: 'test'
+  ...
+# HEAVY_REPAIR_DIAGNOSTIC {"time":130.0999999999989,"phases":["escape","stopping","repairing","returning"],"phase":"returning","repairSystem":null,"repairProgress":0,"repairRouteClearance":null,"requiredClearance":220,"repairReroutes":0,"destination":null,"boat":{"x":16,"y":86,"heading":-60.72074902853922,"speed":0,"turretHealth":163.20000000000002,"turretDisabled":false},"player":{"x":210,"y":200},"recentEvents":["heavy-system-recovery-v1","heavy-repair-stopping-v1","heavy-repair-start-v1","heavy-repair-progress-v1","heavy-repair-progress-v1","heavy-repair-progress-v1","heavy-repair-complete-v1","target-locked-long-range-v1"]}
+# HEAVY_REPAIR_REPEAT_DIAGNOSTIC {"time":130.0999999999989,"phases":["escape","stopping","repairing","returning"],"phase":"returning","repairSystem":null,"repairProgress":0,"repairRouteClearance":null,"requiredClearance":220,"repairReroutes":0,"destination":null,"boat":{"x":16,"y":86,"heading":-60.72074902853922,"speed":0,"turretHealth":163.20000000000002,"turretDisabled":false},"player":{"x":210,"y":200},"recentEvents":["heavy-system-recovery-v1","heavy-repair-stopping-v1","heavy-repair-start-v1","heavy-repair-progress-v1","heavy-repair-progress-v1","heavy-repair-progress-v1","heavy-repair-complete-v1","target-locked-long-range-v1"]}
+# Subtest: repair safety adapts when fixed 236 metres is geometrically impossible
+ok 194 - repair safety adapts when fixed 236 metres is geometrically impossible
+  ---
+  duration_ms: 6.818141
+  type: 'test'
+  ...
+# Subtest: the real central-map case reaches a stop, repairs once and returns
+ok 195 - the real central-map case reaches a stop, repairs once and returns
+  ---
+  duration_ms: 32.298162
+  type: 'test'
+  ...
+# Subtest: high-speed repair approach cannot orbit forever outside the six-metre radius
+ok 196 - high-speed repair approach cannot orbit forever outside the six-metre radius
+  ---
+  duration_ms: 1.142336
+  type: 'test'
+  ...
+# Subtest: a repaired turret is not mistaken for a newly destroyed turret
+ok 197 - a repaired turret is not mistaken for a newly destroyed turret
+  ---
+  duration_ms: 59.673646
+  type: 'test'
+  ...
+# Subtest: V164 no longer contains the parallel heavy repair implementation
+ok 198 - V164 no longer contains the parallel heavy repair implementation
+  ---
+  duration_ms: 2.590978
+  type: 'test'
+  ...
+# Subtest: an old saved retreat is reset for adoption by the unified V166+ lifecycle
+ok 199 - an old saved retreat is reset for adoption by the unified V166+ lifecycle
+  ---
+  duration_ms: 0.314013
+  type: 'test'
+  ...
+# Subtest: destroying a pre-breach turret cannot start the deleted V164 retreat
+ok 200 - destroying a pre-breach turret cannot start the deleted V164 retreat
+  ---
+  duration_ms: 2.112514
+  type: 'test'
+  ...
+# Subtest: an isolated low-hull heavy boat settles into its own firing range instead of swinging across the map edge
+ok 201 - an isolated low-hull heavy boat settles into its own firing range instead of swinging across the map edge
+  ---
+  duration_ms: 140.493795
+  type: 'test'
+  ...
+# Subtest: combat releases the legacy 999 second turret cooldown and the real installation fires
+ok 202 - combat releases the legacy 999 second turret cooldown and the real installation fires
+  ---
+  duration_ms: 20.546258
+  type: 'test'
+  ...
+# Subtest: sustained close automatic damage predicts a lethal chase and starts escape well above 200 hull
+ok 203 - sustained close automatic damage predicts a lethal chase and starts escape well above 200 hull
+  ---
+  duration_ms: 5.037355
+  type: 'test'
+  ...
+# Subtest: real log regression: close damage applied before prepare is measured across server ticks
+ok 204 - real log regression: close damage applied before prepare is measured across server ticks
+  ---
+  duration_ms: 2.52862
+  type: 'test'
+  ...
+# Subtest: one accidental pre-step mega-bomb clip makes an exposed core retreat before the static threshold
+ok 205 - one accidental pre-step mega-bomb clip makes an exposed core retreat before the static threshold
+  ---
+  duration_ms: 1.172946
+  type: 'test'
+  ...
+# Subtest: critical escape persists, reaches emergency speed and keeps a healthy turret firing cover
+ok 206 - critical escape persists, reaches emergency speed and keeps a healthy turret firing cover
+  ---
+  duration_ms: 18.519831
+  type: 'test'
+  ...
+# Subtest: hostile explosion text describes an enemy bomb instead of counting opponents
+ok 207 - hostile explosion text describes an enemy bomb instead of counting opponents
+  ---
+  duration_ms: 1.234426
+  type: 'test'
+  ...
+# Subtest: bomb request is associated with the nearest real player target
+ok 208 - bomb request is associated with the nearest real player target
+  ---
+  duration_ms: 0.451483
+  type: 'test'
+  ...
+# Subtest: an already flying hostile bomb cannot damage a player during respawn grace
+ok 209 - an already flying hostile bomb cannot damage a player during respawn grace
+  ---
+  duration_ms: 0.525618
+  type: 'test'
+  ...
+# Subtest: free-roam players never enter operation rooms
+ok 210 - free-roam players never enter operation rooms
+  ---
+  duration_ms: 2.071856
+  type: 'test'
+  ...
+# Subtest: free-roam room codes have a separate readable prefix
+ok 211 - free-roam room codes have a separate readable prefix
+  ---
+  duration_ms: 0.285313
+  type: 'test'
+  ...
+# Subtest: manual target selection holds an enemy beyond automatic range but within 320 metres
+ok 212 - manual target selection holds an enemy beyond automatic range but within 320 metres
+  ---
+  duration_ms: 7.601059
+  type: 'test'
+  ...
+# Subtest: automatic fire keeps the far lock, spends no ammo and gives one range notice
+ok 213 - automatic fire keeps the far lock, spends no ammo and gives one range notice
+  ---
+  duration_ms: 2.542841
+  type: 'test'
+  ...
+# Subtest: pistol keeps the same far target without spending a cartridge
+ok 214 - pistol keeps the same far target without spending a cartridge
+  ---
+  duration_ms: 1.220947
+  type: 'test'
+  ...
+# Subtest: destroying the retained target selects one real replacement without loss chatter
+ok 215 - destroying the retained target selects one real replacement without loss chatter
+  ---
+  duration_ms: 1.048691
+  type: 'test'
+  ...
+# Subtest: a target beyond the long-range contract is rejected
+ok 216 - a target beyond the long-range contract is rejected
+  ---
+  duration_ms: 0.977911
+  type: 'test'
+  ...
+# Subtest: release explosion and kill cue are complete direct MP3 files
+ok 217 - release explosion and kill cue are complete direct MP3 files
+  ---
+  duration_ms: 6.516081
+  type: 'test'
+  ...
+# Subtest: release client contains no browser-side audio reconstruction
+ok 218 - release client contains no browser-side audio reconstruction
+  ---
+  duration_ms: 2.124358
+  type: 'test'
+  ...
+# Subtest: mega-bomb and kill recordings ship as complete direct MP3 files
+ok 219 - mega-bomb and kill recordings ship as complete direct MP3 files
+  ---
+  duration_ms: 5.135374
+  type: 'test'
+  ...
+# Subtest: legacy ammo worlds migrate once to the current twenty-five-charge stock
+ok 220 - legacy ammo worlds migrate once to the current twenty-five-charge stock
+  ---
+  duration_ms: 1.189023
+  type: 'test'
+  ...
+# Subtest: mega-bomb bridge sends a true/false zero-sequence pulse without replacing normal input
+ok 221 - mega-bomb bridge sends a true/false zero-sequence pulse without replacing normal input
+  ---
+  duration_ms: 6.482609
+  type: 'test'
+  ...
+# Subtest: flight pan follows the authoritative server pan
+ok 222 - flight pan follows the authoritative server pan
+  ---
+  duration_ms: 1.287063
+  type: 'test'
+  ...
+# Subtest: the real flight recording follows physical velocity
+ok 223 - the real flight recording follows physical velocity
+  ---
+  duration_ms: 0.32578
+  type: 'test'
+  ...
+# Subtest: approaching and receding radial speed change the same recording
+ok 224 - approaching and receding radial speed change the same recording
+  ---
+  duration_ms: 0.262023
+  type: 'test'
+  ...
+# Subtest: server occlusion makes the physical flight quieter and more muffled
+ok 225 - server occlusion makes the physical flight quieter and more muffled
+  ---
+  duration_ms: 0.190089
+  type: 'test'
+  ...
+# Subtest: the release client loads complete binary recordings through the shared audio graph
+ok 226 - the release client loads complete binary recordings through the shared audio graph
+  ---
+  duration_ms: 6.520106
+  type: 'test'
+  ...
+# Subtest: close blast can kill the owner and the second player
+ok 227 - close blast can kill the owner and the second player
+  ---
+  duration_ms: 31.702621
+  type: 'test'
+  ...
+# Subtest: blast damages the launcher's own boat
+ok 228 - blast damages the launcher's own boat
+  ---
+  duration_ms: 4.477123
+  type: 'test'
+  ...
+# Subtest: a moving boat changes the authoritative launch velocity
+ok 229 - a moving boat changes the authoritative launch velocity
+  ---
+  duration_ms: 3.187209
+  type: 'test'
+  ...
+# Subtest: low shore hit emits a ricochet and reverses the real trajectory
+ok 230 - low shore hit emits a ricochet and reverses the real trajectory
+  ---
+  duration_ms: 4.532469
+  type: 'test'
+  ...
+# Subtest: a fixed explosion tail follows listener movement without changing the server source
+ok 231 - a fixed explosion tail follows listener movement without changing the server source
+  ---
+  duration_ms: 2.539693
+  type: 'test'
+  ...
+# Subtest: the client follow-up is local presentation and never a network producer
+ok 232 - the client follow-up is local presentation and never a network producer
+  ---
+  duration_ms: 6.939771
+  type: 'test'
+  ...
+# Subtest: the live alias loads both the existing client and the local follow-up with cache busters
+ok 233 - the live alias loads both the existing client and the local follow-up with cache busters
+  ---
+  duration_ms: 1.580631
+  type: 'test'
+  ...
+# Subtest: ordinary combat movement does not receive speculative mega-bomb lead
+ok 234 - ordinary combat movement does not receive speculative mega-bomb lead
+  ---
+  duration_ms: 1.510292
+  type: 'test'
+  ...
+# Subtest: unified repair escape prediction follows the real turn toward its destination
+ok 235 - unified repair escape prediction follows the real turn toward its destination
+  ---
+  duration_ms: 0.751431
+  type: 'test'
+  ...
+# Subtest: a repair-stopped heavy is not given fake movement lead
+ok 236 - a repair-stopped heavy is not given fake movement lead
+  ---
+  duration_ms: 0.971107
+  type: 'test'
+  ...
+# Subtest: deleted V164 retreating phase is never predicted by V36
+ok 237 - deleted V164 retreating phase is never predicted by V36
+  ---
+  duration_ms: 0.216968
+  type: 'test'
+  ...
+# Subtest: boat momentum changes real launch velocity
+ok 238 - boat momentum changes real launch velocity
+  ---
+  duration_ms: 1.164537
+  type: 'test'
+  ...
+# Subtest: a low shore collision reflects physical velocity and loses energy
+ok 239 - a low shore collision reflects physical velocity and loses energy
+  ---
+  duration_ms: 1.75606
+  type: 'test'
+  ...
+# Subtest: a high projectile crosses the same shore instead of hitting an invisible wall
+ok 240 - a high projectile crosses the same shore instead of hitting an invisible wall
+  ---
+  duration_ms: 0.367984
+  type: 'test'
+  ...
+# Subtest: world boundary gives an explicit ricochet or impact instead of deleting the bomb
+ok 241 - world boundary gives an explicit ricochet or impact instead of deleting the bomb
+  ---
+  duration_ms: 0.22054
+  type: 'test'
+  ...
+# Subtest: falling into open water reports water impact
+ok 242 - falling into open water reports water impact
+  ---
+  duration_ms: 0.293916
+  type: 'test'
+  ...
+# Subtest: heading convention remains north zero and east ninety
+ok 243 - heading convention remains north zero and east ninety
+  ---
+  duration_ms: 0.112907
+  type: 'test'
+  ...
+# Subtest: one explosion carries its initial spatial state without follow-up event spam
+ok 244 - one explosion carries its initial spatial state without follow-up event spam
+  ---
+  duration_ms: 1.995932
+  type: 'test'
+  ...
+# Subtest: revisiting retained events never emits or duplicates acoustic updates
+ok 245 - revisiting retained events never emits or duplicates acoustic updates
+  ---
+  duration_ms: 0.516274
+  type: 'test'
+  ...
+# Subtest: current mega-bomb physics produces a real ballistic arc
+ok 246 - current mega-bomb physics produces a real ballistic arc
+  ---
+  duration_ms: 1.703511
+  type: 'test'
+  ...
+# Subtest: legacy saved projectiles are normalized without refilling player stock
+ok 247 - legacy saved projectiles are normalized without refilling player stock
+  ---
+  duration_ms: 0.587998
+  type: 'test'
+  ...
+# Subtest: north-facing player at y 8.6 is warned instead of receiving an instant ricochet
+ok 248 - north-facing player at y 8.6 is warned instead of receiving an instant ricochet
+  ---
+  duration_ms: 1.274136
+  type: 'test'
+  ...
+# Subtest: an untargeted launch with enough forward water is not blocked by the safety check
+ok 249 - an untargeted launch with enough forward water is not blocked by the safety check
+  ---
+  duration_ms: 0.181583
+  type: 'test'
+  ...
+# Subtest: server mega-bomb flies, destroys a group and applies honest splash to the heavy boat
+ok 250 - server mega-bomb flies, destroys a group and applies honest splash to the heavy boat
+  ---
+  duration_ms: 96.639046
+  type: 'test'
+  ...
+# Subtest: a player cannot stack a second mega-bomb while the first one is flying
+ok 251 - a player cannot stack a second mega-bomb while the first one is flying
+  ---
+  duration_ms: 7.820845
+  type: 'test'
+  ...
+# Subtest: a fist attack reaches a nearby physical player at nine metres
+ok 252 - a fist attack reaches a nearby physical player at nine metres
+  ---
+  duration_ms: 16.409163
+  type: 'test'
+  ...
+# Subtest: a knocked-down player cannot crawl while the stun is active
+ok 253 - a knocked-down player cannot crawl while the stun is active
+  ---
+  duration_ms: 8.733797
+  type: 'test'
+  ...
+# Subtest: three ordinary paced fist hits produce a real stun at critical health
+ok 254 - three ordinary paced fist hits produce a real stun at critical health
+  ---
+  duration_ms: 5.674777
+  type: 'test'
+  ...
+# Subtest: a knocked-down player cannot use the action until getting back up
+ok 255 - a knocked-down player cannot use the action until getting back up
+  ---
+  duration_ms: 2.598958
+  type: 'test'
+  ...
+# Subtest: health waits after the last hit, then smoothly recovers to full
+ok 256 - health waits after the last hit, then smoothly recovers to full
+  ---
+  duration_ms: 125.867176
+  type: 'test'
+  ...
+# Subtest: the stun filter gradually opens as injury fades
+ok 257 - the stun filter gradually opens as injury fades
+  ---
+  duration_ms: 0.274979
+  type: 'test'
+  ...
+# Subtest: players are solid and announce one nearby living player instead of passing through
+ok 258 - players are solid and announce one nearby living player instead of passing through
+  ---
+  duration_ms: 6.549417
+  type: 'test'
+  ...
+# Subtest: a player cannot walk through a boat or the active pursuer
+ok 259 - a player cannot walk through a boat or the active pursuer
+  ---
+  duration_ms: 1.629468
+  type: 'test'
+  ...
+# Subtest: a carried crate is accepted at the dock when the action is pressed
+ok 260 - a carried crate is accepted at the dock when the action is pressed
+  ---
+  duration_ms: 1.771429
+  type: 'test'
+  ...
+# Subtest: approaching a loaded enemy boat clearly explains how to steal its cargo
+ok 261 - approaching a loaded enemy boat clearly explains how to steal its cargo
+  ---
+  duration_ms: 1.644109
+  type: 'test'
+  ...
+# Subtest: the interface explicitly shows that a player is stunned
+ok 262 - the interface explicitly shows that a player is stunned
+  ---
+  duration_ms: 9.600494
+  type: 'test'
+  ...
+# Subtest: every player starts with a pistol and a separate magazine reserve
+ok 263 - every player starts with a pistol and a separate magazine reserve
+  ---
+  duration_ms: 4.46282
+  type: 'test'
+  ...
+# Subtest: Z selects the starting pistol without changing the automatic ammunition type
+ok 264 - Z selects the starting pistol without changing the automatic ammunition type
+  ---
+  duration_ms: 19.617992
+  type: 'test'
+  ...
+# Subtest: the pistol uses automatic-style hold fire but shoots slower and for less damage
+ok 265 - the pistol uses automatic-style hold fire but shoots slower and for less damage
+  ---
+  duration_ms: 15.428984
+  type: 'test'
+  ...
+# Subtest: pistol ammunition is included in the authoritative replicated world
+ok 266 - pistol ammunition is included in the authoritative replicated world
+  ---
+  duration_ms: 1.640791
+  type: 'test'
+  ...
+# Subtest: the production page loads the pistol sound and pistol integration modules
+ok 267 - the production page loads the pistol sound and pistol integration modules
+  ---
+  duration_ms: 8.90414
+  type: 'test'
+  ...
+# Subtest: dangerous cargo starts its threat on first pickup and never retriggers
+ok 268 - dangerous cargo starts its threat on first pickup and never retriggers
+  ---
+  duration_ms: 25.805431
+  type: 'test'
+  ...
+# Subtest: threat one creates an audible observer without becoming a combat target
+ok 269 - threat one creates an audible observer without becoming a combat target
+  ---
+  duration_ms: 86.344968
+  type: 'test'
+  ...
+# Subtest: a nearby salvage teammate helps only after starting their own work
+ok 270 - a nearby salvage teammate helps only after starting their own work
+  ---
+  duration_ms: 11.88453
+  type: 'test'
+  ...
+# Subtest: a stopped boat can be left into open water without changing gesture controls
+ok 271 - a stopped boat can be left into open water without changing gesture controls
+  ---
+  duration_ms: 10.194198
+  type: 'test'
+  ...
+# Subtest: blocked dangerous delivery speaks once per dock visit
+ok 272 - blocked dangerous delivery speaks once per dock visit
+  ---
+  duration_ms: 12.64823
+  type: 'test'
+  ...
+# Subtest: merchant recovers a sunk owned boat from anywhere and preserves cargo
+ok 273 - merchant recovers a sunk owned boat from anywhere and preserves cargo
+  ---
+  duration_ms: 5.272859
+  type: 'test'
+  ...
+# Subtest: opening pursuit and contract combat hide navigation sonar but keep combat targets
+ok 274 - opening pursuit and contract combat hide navigation sonar but keep combat targets
+  ---
+  duration_ms: 16.400341
+  type: 'test'
+  ...
+# Subtest: destroyed selected enemy automatically advances to another combat target
+ok 275 - destroyed selected enemy automatically advances to another combat target
+  ---
+  duration_ms: 4.951164
+  type: 'test'
+  ...
+# Subtest: leaving a boat exposes both player-owned boats as stereo sources
+ok 276 - leaving a boat exposes both player-owned boats as stereo sources
+  ---
+  duration_ms: 5.273171
+  type: 'test'
+  ...
+# Subtest: the occupied local boat is not doubled by spatial audio
+ok 277 - the occupied local boat is not doubled by spatial audio
+  ---
+  duration_ms: 0.863895
+  type: 'test'
+  ...
+# Subtest: boat sound fades continuously with distance
+ok 278 - boat sound fades continuously with distance
+  ---
+  duration_ms: 1.145206
+  type: 'test'
+  ...
+# Subtest: a stalled drifting boat produces wake but no motor
+ok 279 - a stalled drifting boat produces wake but no motor
+  ---
+  duration_ms: 0.884345
+  type: 'test'
+  ...
+# Subtest: the live audio wrapper installs the spatial boat patch before use
+ok 280 - the live audio wrapper installs the spatial boat patch before use
+  ---
+  duration_ms: 8.33344
+  type: 'test'
+  ...
+# Subtest: pursuer bullets hand zero hull to the canonical emergency lifecycle
+ok 281 - pursuer bullets hand zero hull to the canonical emergency lifecycle
+  ---
+  duration_ms: 29.871574
+  type: 'test'
+  ...
+# Subtest: pursuers stop damaging emergency hull but can still hit its living passenger
+ok 282 - pursuers stop damaging emergency hull but can still hit its living passenger
+  ---
+  duration_ms: 2.218351
+  type: 'test'
+  ...
+# Subtest: threat-group bullets hand zero hull to the canonical emergency lifecycle
+ok 283 - threat-group bullets hand zero hull to the canonical emergency lifecycle
+  ---
+  duration_ms: 1.755654
+  type: 'test'
+  ...
+# Subtest: threat group stops damaging emergency hull but can still shoot its passenger
+ok 284 - threat group stops damaging emergency hull but can still shoot its passenger
+  ---
+  duration_ms: 0.900742
+  type: 'test'
+  ...
+# Subtest: a page reload can start input numbering from one in the same free-roam world
+ok 285 - a page reload can start input numbering from one in the same free-roam world
+  ---
+  duration_ms: 8.376779
+  type: 'test'
+  ...
+# Subtest: sequence protection remains isolated to each connection and each player
+ok 286 - sequence protection remains isolated to each connection and each player
+  ---
+  duration_ms: 129.452044
+  type: 'test'
+  ...
+# Subtest: knife sonar is offered before pursuit, not during it
+ok 287 - knife sonar is offered before pursuit, not during it
+  ---
+  duration_ms: 0.958835
+  type: 'test'
+  ...
+# Subtest: arrival guidance runs once after the final sonar target is selected
+ok 288 - arrival guidance runs once after the final sonar target is selected
+  ---
+  duration_ms: 0.290922
+  type: 'test'
+  ...
+# Subtest: claimed knife crates are consumed and cannot announce a respawn
+ok 289 - claimed knife crates are consumed and cannot announce a respawn
+  ---
+  duration_ms: 0.293108
+  type: 'test'
+  ...
+# Subtest: unclaimed knife remains available
+ok 290 - unclaimed knife remains available
+  ---
+  duration_ms: 0.132095
+  type: 'test'
+  ...
+# Subtest: gesture mode guards accidental exits without persisting world identity in the browser
+ok 291 - gesture mode guards accidental exits without persisting world identity in the browser
+  ---
+  duration_ms: 0.36443
+  type: 'test'
+  ...
+# Subtest: reload preference stays opt-in and is owned by the settings module
+ok 292 - reload preference stays opt-in and is owned by the settings module
+  ---
+  duration_ms: 0.144652
+  type: 'test'
+  ...
+# Subtest: an empty server room keeps both player boats outside the playable world
+ok 293 - an empty server room keeps both player boats outside the playable world
+  ---
+  duration_ms: 6.257873
+  type: 'test'
+  ...
+# Subtest: solo play activates only the connected player's boat
+ok 294 - solo play activates only the connected player's boat
+  ---
+  duration_ms: 3.1831
+  type: 'test'
+  ...
+# Subtest: the second player's boat appears nearby only when that player joins
+ok 295 - the second player's boat appears nearby only when that player joins
+  ---
+  duration_ms: 3.850761
+  type: 'test'
+  ...
+# Subtest: reconnecting keeps the existing boat position and state
+ok 296 - reconnecting keeps the existing boat position and state
+  ---
+  duration_ms: 2.46516
+  type: 'test'
+  ...
+# Subtest: a new free world contains audible salvage and treats the second player as absent until connected
+ok 297 - a new free world contains audible salvage and treats the second player as absent until connected
+  ---
+  duration_ms: 8.216728
+  type: 'test'
+  ...
+# Subtest: a player can pick up a plate crate, stow it, deliver it and improve the boat
+ok 298 - a player can pick up a plate crate, stow it, deliver it and improve the boat
+  ---
+  duration_ms: 28.386033
+  type: 'test'
+  ...
+# Subtest: cargo weight slows a loaded boat without stopping it
+ok 299 - cargo weight slows a loaded boat without stopping it
+  ---
+  duration_ms: 38.885248
+  type: 'test'
+  ...
+# Subtest: short and held X attacks differ, while a healthy heavy hit pushes without false knockdown
+ok 300 - short and held X attacks differ, while a healthy heavy hit pushes without false knockdown
+  ---
+  duration_ms: 8.172307
+  type: 'test'
+  ...
+# Subtest: three quick light punches knock down an opponent only at critical health
+ok 301 - three quick light punches knock down an opponent only at critical health
+  ---
+  duration_ms: 9.163127
+  type: 'test'
+  ...
+# Subtest: the second player can steal a stowed crate from the other player's boat
+ok 302 - the second player can steal a stowed crate from the other player's boat
+  ---
+  duration_ms: 2.557853
+  type: 'test'
+  ...
+# Subtest: a rare automatic fires while held and can destroy the pursuer
+ok 303 - a rare automatic fires while held and can destroy the pursuer
+  ---
+  duration_ms: 7.14716
+  type: 'test'
+  ...
+# Subtest: death drops carried cargo, leaves the boat and respawns the player at the dock after eight seconds
+ok 304 - death drops carried cargo, leaves the boat and respawns the player at the dock after eight seconds
+  ---
+  duration_ms: 41.491108
+  type: 'test'
+  ...
+# Subtest: the marauder targets loaded boats, can steal cargo and remains serializable
+ok 305 - the marauder targets loaded boats, can steal cargo and remains serializable
+  ---
+  duration_ms: 10.404258
+  type: 'test'
+  ...
+# Subtest: the release UI exposes accessible combat controls and local MP3 assets
+ok 306 - the release UI exposes accessible combat controls and local MP3 assets
+  ---
+  duration_ms: 10.458839
+  type: 'test'
+  ...
+# Subtest: the pursuer stays away until salvage and weapon objectives are complete
+ok 307 - the pursuer stays away until salvage and weapon objectives are complete
+  ---
+  duration_ms: 281.182399
+  type: 'test'
+  ...
+# Subtest: sonar reports exactly one current objective and opens one temporary beacon
+ok 308 - sonar reports exactly one current objective and opens one temporary beacon
+  ---
+  duration_ms: 3.891957
+  type: 'test'
+  ...
+# Subtest: sonar keeps the same crate locked while the player moves across nearest-crate boundaries
+ok 309 - sonar keeps the same crate locked while the player moves across nearest-crate boundaries
+  ---
+  duration_ms: 1.963068
+  type: 'test'
+  ...
+# Subtest: one sonar press keeps guidance active long enough to reach a distant crate
+ok 310 - one sonar press keeps guidance active long enough to reach a distant crate
+  ---
+  duration_ms: 71.337682
+  type: 'test'
+  ...
+# Subtest: loading a nearby crate does not also announce that action F failed
+ok 311 - loading a nearby crate does not also announce that action F failed
+  ---
+  duration_ms: 2.879428
+  type: 'test'
+  ...
+# Subtest: on foot the spoken side of a locked target stays world-stable after a sideways step
+ok 312 - on foot the spoken side of a locked target stays world-stable after a sideways step
+  ---
+  duration_ms: 10.166077
+  type: 'test'
+  ...
+# Subtest: a player ram hits first and separates the boats instead of gluing them together
+ok 313 - a player ram hits first and separates the boats instead of gluing them together
+  ---
+  duration_ms: 3.226066
+  type: 'test'
+  ...
+# Subtest: an enemy ram also pushes the pursuer away and starts a recovery run
+ok 314 - an enemy ram also pushes the pursuer away and starts a recovery run
+  ---
+  duration_ms: 1.647123
+  type: 'test'
+  ...
+# Subtest: punching an armoured pursuer clearly explains the valid attacks
+ok 315 - punching an armoured pursuer clearly explains the valid attacks
+  ---
+  duration_ms: 2.783174
+  type: 'test'
+  ...
+# Subtest: the Durable Object simulation accepts both players' inputs and rejects stale commands
+ok 316 - the Durable Object simulation accepts both players' inputs and rejects stale commands
+  ---
+  duration_ms: 30.429414
+  type: 'test'
+  ...
+# Subtest: replication omits simulation internals and stays materially smaller than the full world
+ok 317 - replication omits simulation internals and stays materially smaller than the full world
+  ---
+  duration_ms: 1.560422
+  type: 'test'
+  ...
+# Subtest: acknowledged render states round-trip through a small delta
+ok 318 - acknowledged render states round-trip through a small delta
+  ---
+  duration_ms: 6.445295
+  type: 'test'
+  ...
+# Subtest: local prediction responds immediately but a large server correction still wins
+ok 319 - local prediction responds immediately but a large server correction still wins
+  ---
+  duration_ms: 1.924768
+  type: 'test'
+  ...
+# Subtest: releasing predicted throttle keeps the same useful physical coast as the server
+ok 320 - releasing predicted throttle keeps the same useful physical coast as the server
+  ---
+  duration_ms: 1.012375
+  type: 'test'
+  ...
+# Subtest: the automatic crate grants the requested one hundred rounds
+ok 321 - the automatic crate grants the requested one hundred rounds
+  ---
+  duration_ms: 0.835488
+  type: 'test'
+  ...
+# Subtest: server-side pursuer gunfire stays finite and sends render-only projectiles
+ok 322 - server-side pursuer gunfire stays finite and sends render-only projectiles
+  ---
+  duration_ms: 542.747337
+  type: 'test'
+  ...
+# Subtest: a one-shot weapon command survives true and false before the next server tick
+ok 323 - a one-shot weapon command survives true and false before the next server tick
+  ---
+  duration_ms: 28.953473
+  type: 'test'
+  ...
+# Subtest: continuous movement still uses the newest state instead of being latched
+ok 324 - continuous movement still uses the newest state instead of being latched
+  ---
+  duration_ms: 3.928682
+  type: 'test'
+  ...
+# Subtest: free-roam settings move risky toggles behind a dedicated menu
+ok 325 - free-roam settings move risky toggles behind a dedicated menu
+  ---
+  duration_ms: 8.952261
+  type: 'test'
+  ...
+# Subtest: delivery credit values follow cargo rarity
+ok 326 - delivery credit values follow cargo rarity
+  ---
+  duration_ms: 1.287798
+  type: 'test'
+  ...
+# Subtest: an existing boat delivery awards shared credits exactly once
+ok 327 - an existing boat delivery awards shared credits exactly once
+  ---
+  duration_ms: 28.588826
+  type: 'test'
+  ...
+# Subtest: the merchant only opens on foot inside the action range
+ok 328 - the merchant only opens on foot inside the action range
+  ---
+  duration_ms: 5.755957
+  type: 'test'
+  ...
+# Subtest: one purchase pulse buys one pistol ammunition pack
+ok 329 - one purchase pulse buys one pistol ammunition pack
+  ---
+  duration_ms: 4.608677
+  type: 'test'
+  ...
+# Subtest: a held shop input is edge-triggered instead of buying every frame
+ok 330 - a held shop input is edge-triggered instead of buying every frame
+  ---
+  duration_ms: 3.711196
+  type: 'test'
+  ...
+# Subtest: insufficient credits never change inventory
+ok 331 - insufficient credits never change inventory
+  ---
+  duration_ms: 2.381289
+  type: 'test'
+  ...
+# Subtest: automatic ammunition can be purchased before the automatic is found
+ok 332 - automatic ammunition can be purchased before the automatic is found
+  ---
+  duration_ms: 2.793303
+  type: 'test'
+  ...
+# Subtest: boat supplies require the player's own boat at the dock
+ok 333 - boat supplies require the player's own boat at the dock
+  ---
+  duration_ms: 5.071931
+  type: 'test'
+  ...
+# Subtest: shopping suppresses movement and combat commands on the server
+ok 334 - shopping suppresses movement and combat commands on the server
+  ---
+  duration_ms: 4.103968
+  type: 'test'
+  ...
+# Subtest: selecting merchant navigation makes sonar target the trading dock
+ok 335 - selecting merchant navigation makes sonar target the trading dock
+  ---
+  duration_ms: 1.823822
+  type: 'test'
+  ...
+# Subtest: active pursuit keeps combat sonar priority over merchant navigation
+ok 336 - active pursuit keeps combat sonar priority over merchant navigation
+  ---
+  duration_ms: 3.511322
+  type: 'test'
+  ...
+# Subtest: credits and shop state are included in replicated server snapshots
+ok 337 - credits and shop state are included in replicated server snapshots
+  ---
+  duration_ms: 2.533079
+  type: 'test'
+  ...
+# Subtest: shop capacity limits reject oversized purchases without spending credits
+ok 338 - shop capacity limits reject oversized purchases without spending credits
+  ---
+  duration_ms: 7.190786
+  type: 'test'
+  ...
+# Subtest: a crate directly underfoot remains collectible beside the merchant
+ok 339 - a crate directly underfoot remains collectible beside the merchant
+  ---
+  duration_ms: 1.879677
+  type: 'test'
+  ...
+# Subtest: a tiny footstep across a nearby sonar line cannot flip full stereo sides
+ok 340 - a tiny footstep across a nearby sonar line cannot flip full stereo sides
+  ---
+  duration_ms: 1.754772
+  type: 'test'
+  ...
+# Subtest: shore crates line up with their reachable landing instead of jumping sideways after exit
+ok 341 - shore crates line up with their reachable landing instead of jumping sideways after exit
+  ---
+  duration_ms: 2.942055
+  type: 'test'
+  ...
+# Subtest: the exact twelve metre double-signal boundary also allows F to pick up the crate
+ok 342 - the exact twelve metre double-signal boundary also allows F to pick up the crate
+  ---
+  duration_ms: 12.677856
+  type: 'test'
+  ...
+# Subtest: walking into the dock with a carried crate unloads it without F
+ok 343 - walking into the dock with a carried crate unloads it without F
+  ---
+  duration_ms: 9.645532
+  type: 'test'
+  ...
+# Subtest: speak is delayed after cancel instead of being dropped in the same task
+ok 344 - speak is delayed after cancel instead of being dropped in the same task
+  ---
+  duration_ms: 2.150797
+  type: 'test'
+  ...
+# Subtest: rapid target changes keep only the newest announcement
+ok 345 - rapid target changes keep only the newest announcement
+  ---
+  duration_ms: 0.289637
+  type: 'test'
+  ...
+# Subtest: cancel without replacement removes a pending phrase
+ok 346 - cancel without replacement removes a pending phrase
+  ---
+  duration_ms: 0.213315
+  type: 'test'
+  ...
+# Subtest: journal identity is recorded when encounter 12 is retired before encounter 13
+ok 347 - journal identity is recorded when encounter 12 is retired before encounter 13
+  ---
+  duration_ms: 2.412801
+  type: 'test'
+  ...
+# Subtest: operation steering gives usable authority at low and cruising speed
+ok 348 - operation steering gives usable authority at low and cruising speed
+  ---
+  duration_ms: 0.81841
+  type: 'test'
+  ...
+# Subtest: reverse steering changes heading in the opposite physical direction
+ok 349 - reverse steering changes heading in the opposite physical direction
+  ---
+  duration_ms: 0.128169
+  type: 'test'
+  ...
+# Subtest: released wheel requests immediate rudder centering
+ok 350 - released wheel requests immediate rudder centering
+  ---
+  duration_ms: 0.125385
+  type: 'test'
+  ...
+# Subtest: combat target gestures tolerate iPhone two-finger vertical swipes
+ok 351 - combat target gestures tolerate iPhone two-finger vertical swipes
+  ---
+  duration_ms: 0.802221
+  type: 'test'
+  ...
+# Subtest: the combat menu can repeat its current target without closing
+ok 352 - the combat menu can repeat its current target without closing
+  ---
+  duration_ms: 6.198919
+  type: 'test'
+  ...
+# Subtest: reconnect policy accepts an automatically recreated exact room
+ok 353 - reconnect policy accepts an automatically recreated exact room
+  ---
+  duration_ms: 0.182456
+  type: 'test'
+  ...
+# Subtest: live gesture and reconnect code routes combat sonar and force-expires stalled sockets
+ok 354 - live gesture and reconnect code routes combat sonar and force-expires stalled sockets
+  ---
+  duration_ms: 5.980925
+  type: 'test'
+  ...
+# Subtest: threat three creates three distinct tactical boats and physical crews
+ok 355 - threat three creates three distinct tactical boats and physical crews
+  ---
+  duration_ms: 6.304962
+  type: 'test'
+  ...
+# Subtest: threat four creates six boats, six actors and distributes pressure across both players
+ok 356 - threat four creates six boats, six actors and distributes pressure across both players
+  ---
+  duration_ms: 1.706648
+  type: 'test'
+  ...
+# Subtest: physical crew disembarks, swims after its boat is destroyed and can board another boat
+ok 357 - physical crew disembarks, swims after its boat is destroyed and can board another boat
+  ---
+  duration_ms: 40.796696
+  type: 'test'
+  ...
+# Subtest: knife, pistol and automatic routes all damage physical enemies
+ok 358 - knife, pistol and automatic routes all damage physical enemies
+  ---
+  duration_ms: 9.804906
+  type: 'test'
+  ...
+# Subtest: combat target menu hides navigation entries during an active encounter
+ok 359 - combat target menu hides navigation entries during an active encounter
+  ---
+  duration_ms: 2.254407
+  type: 'test'
+  ...
+# Subtest: clearing threat four grants one battle reward and four physical loot crates
+ok 360 - clearing threat four grants one battle reward and four physical loot crates
+  ---
+  duration_ms: 2.206652
+  type: 'test'
+  ...
+# Subtest: abandoning or cancelling a battle removes active boats, actors and projectiles
+ok 361 - abandoning or cancelling a battle removes active boats, actors and projectiles
+  ---
+  duration_ms: 1.069482
+  type: 'test'
+  ...
+# Subtest: shared lifecycle reset removes only the old heavy and its owned processes
+ok 362 - shared lifecycle reset removes only the old heavy and its owned processes
+  ---
+  duration_ms: 4.457929
+  type: 'test'
+  ...
+# Subtest: object-mapped actor state from an older save is cleaned without flattening unrelated entries
+ok 363 - object-mapped actor state from an older save is cleaned without flattening unrelated entries
+  ---
+  duration_ms: 0.468923
+  type: 'test'
+  ...
+# Subtest: starting any new contract clears the old boss before creating the new encounter
+ok 364 - starting any new contract clears the old boss before creating the new encounter
+  ---
+  duration_ms: 1.689963
+  type: 'test'
+  ...
+# Subtest: source reset runs before the encounter number advances
+ok 365 - source reset runs before the encounter number advances
+  ---
+  duration_ms: 0.244821
+  type: 'test'
+  ...
+# Subtest: two-finger sonar and three-finger target menu remain separate
+ok 366 - two-finger sonar and three-finger target menu remain separate
+  ---
+  duration_ms: 0.908543
+  type: 'test'
+  ...
+# Subtest: physical contract enemies keep the menu active even if the contract flag is late
+ok 367 - physical contract enemies keep the menu active even if the contract flag is late
+  ---
+  duration_ms: 7.350233
+  type: 'test'
+  ...
+# Subtest: death redistributes pressure and respawn has short reacquisition grace
+ok 368 - death redistributes pressure and respawn has short reacquisition grace
+  ---
+  duration_ms: 13.820621
+  type: 'test'
+  ...
+# Subtest: when both players are dead hostile fire pauses instead of attacking corpses
+ok 369 - when both players are dead hostile fire pauses instead of attacking corpses
+  ---
+  duration_ms: 1.210626
+  type: 'test'
+  ...
+# Subtest: two players locking the same enemy make it evade without increasing health
+ok 370 - two players locking the same enemy make it evade without increasing health
+  ---
+  duration_ms: 2.245534
+  type: 'test'
+  ...
+# Subtest: fast manoeuvring boats can turn some physical bullet hits into near misses
+ok 371 - fast manoeuvring boats can turn some physical bullet hits into near misses
+  ---
+  duration_ms: 1.1625
+  type: 'test'
+  ...
+# Subtest: ranged hostile actors eventually run out of ammunition and draw knives
+ok 372 - ranged hostile actors eventually run out of ammunition and draw knives
+  ---
+  duration_ms: 1.826357
+  type: 'test'
+  ...
+# Subtest: the heavy turret already fires physical projectiles at a player on shore
+ok 373 - the heavy turret already fires physical projectiles at a player on shore
+  ---
+  duration_ms: 5.477748
+  type: 'test'
+  ...
+# Subtest: enemy rammers still physically drive into player boats
+ok 374 - enemy rammers still physically drive into player boats
+  ---
+  duration_ms: 2.142813
+  type: 'test'
+  ...
+# Subtest: core wraps existing combat modules with the intelligence director
+ok 375 - core wraps existing combat modules with the intelligence director
+  ---
+  duration_ms: 15.03306
+  type: 'test'
+  ...
+# Subtest: premature phase-two forces are removed before the heavy phase starts
+ok 376 - premature phase-two forces are removed before the heavy phase starts
+  ---
+  duration_ms: 3.385513
+  type: 'test'
+  ...
+# Subtest: a solo death is not announced as two dead players
+ok 377 - a solo death is not announced as two dead players
+  ---
+  duration_ms: 4.422421
+  type: 'test'
+  ...
+# Subtest: two present players produce one shared all-dead notice
+ok 378 - two present players produce one shared all-dead notice
+  ---
+  duration_ms: 0.612858
+  type: 'test'
+  ...
+# Subtest: knife enemies leave the shore, catch a swimmer, and strike
+ok 379 - knife enemies leave the shore, catch a swimmer, and strike
+  ---
+  duration_ms: 9.5233
+  type: 'test'
+  ...
+# Subtest: threat five no longer creates a parallel phase-two or final reserve wave
+ok 380 - threat five no longer creates a parallel phase-two or final reserve wave
+  ---
+  duration_ms: 0.682597
+  type: 'test'
+  ...
+# Subtest: direct legacy final-wave calls are disabled when the elite boss subsystem exists
+ok 381 - direct legacy final-wave calls are disabled when the elite boss subsystem exists
+  ---
+  duration_ms: 0.714727
+  type: 'test'
+  ...
+# Subtest: enemy knife hits use the existing centered combat-impact audio event
+ok 382 - enemy knife hits use the existing centered combat-impact audio event
+  ---
+  duration_ms: 0.542233
+  type: 'test'
+  ...
+# Subtest: a pursuer trophy unloads at the dock and sonar returns to ordinary cargo afterward
+ok 383 - a pursuer trophy unloads at the dock and sonar returns to ordinary cargo afterward
+  ---
+  duration_ms: 29.921732
+  type: 'test'
+  ...
+# Subtest: victory does not invent a dock target when no trophy is being carried
+ok 384 - victory does not invent a dock target when no trophy is being carried
+  ---
+  duration_ms: 1.134018
+  type: 'test'
+  ...
+# Subtest: both players spawn nearby in separate boats
+ok 385 - both players spawn nearby in separate boats
+  ---
+  duration_ms: 2.154088
+  type: 'test'
+  ...
+# Subtest: free roam uses operation steering authority and centers the rudder on release
+ok 386 - free roam uses operation steering authority and centers the rudder on release
+  ---
+  duration_ms: 3.352882
+  type: 'test'
+  ...
+# Subtest: F still attaches the existing physical tow rope
+ok 387 - F still attaches the existing physical tow rope
+  ---
+  duration_ms: 0.464189
+  type: 'test'
+  ...
+# Subtest: space uses the familiar floating brake while driving
+ok 388 - space uses the familiar floating brake while driving
+  ---
+  duration_ms: 0.369264
+  type: 'test'
+  ...
+# Subtest: walking steps are broadcast with source position and movement side
+ok 389 - walking steps are broadcast with source position and movement side
+  ---
+  duration_ms: 0.455201
+  type: 'test'
+  ...
+# Subtest: desktop controls use the requested MacBook layout
+ok 390 - desktop controls use the requested MacBook layout
+  ---
+  duration_ms: 1.853926
+  type: 'test'
+  ...
+# Subtest: VoiceOver chords and typing fields are never captured
+ok 391 - VoiceOver chords and typing fields are never captured
+  ---
+  duration_ms: 0.30443
+  type: 'test'
+  ...
+# Subtest: captain and crew are matched into the oldest compatible room
+ok 392 - captain and crew are matched into the oldest compatible room
+  ---
+  duration_ms: 1.206154
+  type: 'test'
+  ...
+# Subtest: automatic entry fills whichever role is actually missing
+ok 393 - automatic entry fills whichever role is actually missing
+  ---
+  duration_ms: 0.354114
+  type: 'test'
+  ...
+# Subtest: room list contains only rooms waiting for the opposite player
+ok 394 - room list contains only rooms waiting for the opposite player
+  ---
+  duration_ms: 1.036306
+  type: 'test'
+  ...
+# Subtest: generated room codes are readable and deterministic in tests
+ok 395 - generated room codes are readable and deterministic in tests
+  ---
+  duration_ms: 0.31443
+  type: 'test'
+  ...
+# Subtest: Worker WebSocket URL follows the current secure origin
+ok 396 - Worker WebSocket URL follows the current secure origin
+  ---
+  duration_ms: 1.128941
+  type: 'test'
+  ...
+# Subtest: legacy manual room normalization remains unchanged
+ok 397 - legacy manual room normalization remains unchanged
+  ---
+  duration_ms: 0.348047
+  type: 'test'
+  ...
+# Subtest: room codes contain only ASCII letters and digits
+ok 398 - room codes contain only ASCII letters and digits
+  ---
+  duration_ms: 1.365909
+  type: 'test'
+  ...
+# Subtest: room codes are trimmed and capped at six characters
+ok 399 - room codes are trimmed and capped at six characters
+  ---
+  duration_ms: 0.239155
+  type: 'test'
+  ...
+# Subtest: level one completion opens level two, selects it and funds one shop choice
+ok 400 - level one completion opens level two, selects it and funds one shop choice
+  ---
+  duration_ms: 1.917029
+  type: 'test'
+  ...
+# Subtest: profile progress survives a storage round trip
+ok 401 - profile progress survives a storage round trip
+  ---
+  duration_ms: 0.628744
+  type: 'test'
+  ...
+# Subtest: Kasatka remains locked until level three and then becomes selectable
+ok 402 - Kasatka remains locked until level three and then becomes selectable
+  ---
+  duration_ms: 0.32541
+  type: 'test'
+  ...
+# Subtest: high-speed collision damage grows nonlinearly and is severe
+ok 403 - high-speed collision damage grows nonlinearly and is severe
+  ---
+  duration_ms: 6.932255
+  type: 'test'
+  ...
+# Subtest: mini armor absorbs the first part of a violent impact
+ok 404 - mini armor absorbs the first part of a violent impact
+  ---
+  duration_ms: 1.13312
+  type: 'test'
+  ...
+# Subtest: purchased coast brake stops exactly within five seconds after release
+ok 405 - purchased coast brake stops exactly within five seconds after release
+  ---
+  duration_ms: 12.535084
+  type: 'test'
+  ...
+# Subtest: level three Kasatka has a stable protected hull and distinct model
+ok 406 - level three Kasatka has a stable protected hull and distinct model
+  ---
+  duration_ms: 1.443178
+  type: 'test'
+  ...
+# Subtest: an unlocked Kasatka can be used for replaying an earlier operation
+ok 407 - an unlocked Kasatka can be used for replaying an earlier operation
+  ---
+  duration_ms: 0.676427
+  type: 'test'
+  ...
+# Subtest: all advanced-level direct center lines stay physically open
+ok 408 - all advanced-level direct center lines stay physically open
+  ---
+  duration_ms: 0.794585
+  type: 'test'
+  ...
+# Subtest: advanced operations remain completable by center, gas and rope
+ok 409 - advanced operations remain completable by center, gas and rope
+  ---
+  duration_ms: 112.19681
+  type: 'test'
+  ...
+# Subtest: release UI exposes levels, shop, armor and the distinct Kasatka engine
+ok 410 - release UI exposes levels, shop, armor and the distinct Kasatka engine
+  ---
+  duration_ms: 25.279402
+  type: 'test'
+  ...
+# Subtest: owned shop items are carried into a run loadout
+ok 411 - owned shop items are carried into a run loadout
+  ---
+  duration_ms: 0.422041
+  type: 'test'
+  ...
+# Subtest: complete real route uses normal controls with no teleports
+ok 412 - complete real route uses normal controls with no teleports
+  ---
+  duration_ms: 43.755926
+  type: 'test'
+  ...
+# Subtest: storedList revives contiguous numeric-key objects
+ok 413 - storedList revives contiguous numeric-key objects
+  ---
+  duration_ms: 1.952338
+  type: 'test'
+  ...
+# Subtest: persisted free worlds restore combat collections as arrays
+ok 414 - persisted free worlds restore combat collections as arrays
+  ---
+  duration_ms: 1.692061
+  type: 'test'
+  ...
+# Subtest: enemy boat ensure repairs a malformed live snapshot
+ok 415 - enemy boat ensure repairs a malformed live snapshot
+  ---
+  duration_ms: 0.154833
+  type: 'test'
+  ...
+# Subtest: startup physically collapses legacy saves to one newest world
+ok 416 - startup physically collapses legacy saves to one newest world
+  ---
+  duration_ms: 15.48126
+  type: 'test'
+  ...
+# Subtest: many live rooms may exist but only the first can become durable
+ok 417 - many live rooms may exist but only the first can become durable
+  ---
+  duration_ms: 4.004081
+  type: 'test'
+  ...
+# Subtest: world identity is never persisted in browser storage
+ok 418 - world identity is never persisted in browser storage
+  ---
+  duration_ms: 8.435906
+  type: 'test'
+  ...
+# Subtest: browser can discover the one durable world from the server
+ok 419 - browser can discover the one durable world from the server
+  ---
+  duration_ms: 31.204406
+  type: 'test'
+  ...
+# Subtest: nearest entry and explicit resume are separate paths
+ok 420 - nearest entry and explicit resume are separate paths
+  ---
+  duration_ms: 6.299712
+  type: 'test'
+  ...
+# Subtest: a long-range rope tells the player to keep driving until auto-approach range
+ok 421 - a long-range rope tells the player to keep driving until auto-approach range
+  ---
+  duration_ms: 21.754988
+  type: 'test'
+  ...
+# Subtest: auto-approach suppresses the obsolete rope-too-far warning and completes rescue
+ok 422 - auto-approach suppresses the obsolete rope-too-far warning and completes rescue
+  ---
+  duration_ms: 17.121535
+  type: 'test'
+  ...
+# Subtest: negative speed is exposed as reverse motion in status and location
+ok 423 - negative speed is exposed as reverse motion in status and location
+  ---
+  duration_ms: 2.793991
+  type: 'test'
+  ...
+# Subtest: the near-standstill steering warning is replaced once the boat gains speed
+ok 424 - the near-standstill steering warning is replaced once the boat gains speed
+  ---
+  duration_ms: 1.042557
+  type: 'test'
+  ...
+# Subtest: release UI explains loading, route state, one-click braking and cache generation 27
+ok 425 - release UI explains loading, route state, one-click braking and cache generation 27
+  ---
+  duration_ms: 9.799801
+  type: 'test'
+  ...
+# Subtest: the mission uses a finite named bay
+ok 426 - the mission uses a finite named bay
+  ---
+  duration_ms: 3.894381
+  type: 'test'
+  ...
+# Subtest: sonar speaks once and the beacon follows boat heading
+ok 427 - sonar speaks once and the beacon follows boat heading
+  ---
+  duration_ms: 14.703604
+  type: 'test'
+  ...
+# Subtest: location report explains zone, target, shore and obstacle
+ok 428 - location report explains zone, target, shore and obstacle
+  ---
+  duration_ms: 0.635382
+  type: 'test'
+  ...
+# Subtest: wreck remains solid and cannot be crossed while throttle is held
+ok 429 - wreck remains solid and cannot be crossed while throttle is held
+  ---
+  duration_ms: 4.108531
+  type: 'test'
+  ...
+# Subtest: first survivor is reachable and rescuable with ordinary controls
+ok 430 - first survivor is reachable and rescuable with ordinary controls
+  ---
+  duration_ms: 21.815197
+  type: 'test'
+  ...
+# Subtest: v9 uses separate recorded river, wake and bilge sources
+ok 431 - v9 uses separate recorded river, wake and bilge sources
+  ---
+  duration_ms: 1.127736
+  type: 'test'
+  ...
+# Subtest: wake is enabled only while the boat is actually moving
+ok 432 - wake is enabled only while the boat is actually moving
+  ---
+  duration_ms: 0.375271
+  type: 'test'
+  ...
+# Subtest: flooding closes the global mix filter instead of merely lowering volume
+ok 433 - flooding closes the global mix filter instead of merely lowering volume
+  ---
+  duration_ms: 0.318245
+  type: 'test'
+  ...
+# Subtest: legacy sea fallback is removed after river buffers load
+ok 434 - legacy sea fallback is removed after river buffers load
+  ---
+  duration_ms: 0.162337
+  type: 'test'
+  ...
+# Subtest: an idle boat stays in place in the calm river bay
+ok 435 - an idle boat stays in place in the calm river bay
+  ---
+  duration_ms: 38.906629
+  type: 'test'
+  ...
+# Subtest: full flooding starts an emergency window instead of instant defeat
+ok 436 - full flooding starts an emergency window instead of instant defeat
+  ---
+  duration_ms: 1.194992
+  type: 'test'
+  ...
+# Subtest: a flooded boat can be recovered with a patch and pump
+ok 437 - a flooded boat can be recovered with a patch and pump
+  ---
+  duration_ms: 24.2945
+  type: 'test'
+  ...
+# Subtest: ignoring a fully flooded boat eventually ends the operation
+ok 438 - ignoring a fully flooded boat eventually ends the operation
+  ---
+  duration_ms: 45.24646
+  type: 'test'
+  ...
+# Subtest: movement state changes only when the boat actually gets underway
+ok 439 - movement state changes only when the boat actually gets underway
+  ---
+  duration_ms: 4.343513
+  type: 'test'
+  ...
+# Subtest: captain and crew enter one room and exchange gameplay packets
+ok 440 - captain and crew enter one room and exchange gameplay packets
+  ---
+  duration_ms: 17.039833
+  type: 'test'
+  ...
+# Subtest: join button can create a crew room that later accepts a captain
+ok 441 - join button can create a crew room that later accepts a captain
+  ---
+  duration_ms: 1.588105
+  type: 'test'
+  ...
+# Subtest: free-roam is server authoritative and slow clients receive only the newest state
+ok 442 - free-roam is server authoritative and slow clients receive only the newest state
+  ---
+  duration_ms: 78.633517
+  type: 'test'
+  ...
+# Subtest: a reconnect claims the same free-roam room and role
+ok 443 - a reconnect claims the same free-roam room and role
+  ---
+  duration_ms: 5.773752
+  type: 'test'
+  ...
+# Subtest: a missing free-roam reconnect room is recreated with the same code
+ok 444 - a missing free-roam reconnect room is recreated with the same code
+  ---
+  duration_ms: 1.711257
+  type: 'test'
+  ...
+# Subtest: an exact reconnect replaces a stale open free-roam socket without losing the world
+ok 445 - an exact reconnect replaces a stale open free-roam socket without losing the world
+  ---
+  duration_ms: 4.82971
+  type: 'test'
+  ...
+# Subtest: free mode has no timeout
+ok 446 - free mode has no timeout
+  ---
+  duration_ms: 60.526519
+  type: 'test'
+  ...
+# Subtest: timed mode keeps the four minute ending
+ok 447 - timed mode keeps the four minute ending
+  ---
+  duration_ms: 27.598875
+  type: 'test'
+  ...
+# Subtest: steering creates feedback and changes course
+ok 448 - steering creates feedback and changes course
+  ---
+  duration_ms: 0.664757
+  type: 'test'
+  ...
+# Subtest: sonar describes an objective and a hazard
+ok 449 - sonar describes an objective and a hazard
+  ---
+  duration_ms: 0.693973
+  type: 'test'
+  ...
+1..449
+# tests 449
+# suites 0
+# pass 445
+# fail 4
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 5230.330597
+
+exit_code=1
+finished=2026-08-05T14:42:51Z
