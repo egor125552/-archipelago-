@@ -35,8 +35,36 @@ jobs:
           )
           PY
           python3 /tmp/integrate-elite-boss.py
+          python3 - <<'PY'
+          from pathlib import Path
+
+          for path in (
+              Path("public/src/free-roam-elite-boat.js"),
+              Path("src/free-roam-server.js"),
+          ):
+              text = path.read_text()
+              text = text.replace("threatGraceActive(", "hostileRespawnGraceActive(")
+              path.write_text(text)
+
+          server_grace = Path("src/free-roam-hostile-respawn-grace.js")
+          server_grace.write_text(
+              'export {\n'
+              '  enforceHostileRespawnGrace,\n'
+              '  hostileRespawnGraceActive,\n'
+              '} from "../public/src/free-roam-hostile-respawn-grace.js";\n'
+          )
+
+          quality = Path("public/src/free-roam-quality-v1.js")
+          text = quality.read_text()
+          text = text.replace(
+              'free-roam-elite-boat-audio-v11.js?v=2',
+              'free-roam-elite-boat-audio-v11.js?v=3',
+          )
+          quality.write_text(text)
+          PY
           node --check public/src/free-roam-elite-boat.js
           node --check public/src/free-roam-hostile-respawn-grace.js
+          node --check src/free-roam-hostile-respawn-grace.js
           node --check public/src/free-roam-audio-v5.js
           node --check public/src/free-roam-elite-boat-audio-v11.js
           node --check public/src/free-roam-combat.js
