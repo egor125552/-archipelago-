@@ -46,28 +46,15 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - name: Apply the integration stored in the PR
+      - name: Apply automatic purchase and iPhone bomb gesture
         shell: bash
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          path = Path('.github/workflows/shop-automatic-bomb-gesture.yml')
-          lines = path.read_text().splitlines()
-          marker = '      - name: Integrate automatic purchase and iPhone bomb gesture'
-          marker_index = lines.index(marker)
-          run_index = next(
-              index for index in range(marker_index + 1, len(lines))
-              if lines[index] == '        run: |'
-          )
-          script = []
-          for line in lines[run_index + 1:]:
-              if line and not line.startswith('          '):
-                  break
-              script.append(line[10:] if line.startswith('          ') else '')
-          Path('/tmp/integrate-automatic-and-bomb.sh').write_text('\n'.join(script) + '\n')
-          PY
-          bash /tmp/integrate-automatic-and-bomb.sh
+          python3 .github/integrate-automatic-bomb.py
+          node --check public/src/free-roam-shop-v8.js
+          node --check public/src/free-roam-action-gestures.js
+          node --check public/src/free-roam-v4.js
+          node --check public/src/free-roam-activities.js
+          node --check public/src/free-roam-core-v6.js
       - run: npm ci
       - name: Run complete project tests
         run: npm test
@@ -76,7 +63,8 @@ jobs:
         run: |
           rm -f \
             .github/workflows/shop-automatic-bomb-gesture.yml \
-            .github/shop-automatic-bomb-gesture-trigger
+            .github/shop-automatic-bomb-gesture-trigger \
+            .github/integrate-automatic-bomb.py
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
