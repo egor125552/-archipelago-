@@ -111,11 +111,11 @@ test("the two turrets have independent health, muzzle positions and firing cycle
   starboard.fireCooldown = 0;
   updateEliteBoatBoss(world, 0.1, {});
   for (let index = 0; index < 8; index += 1) updateEliteBoatBoss(world, 0.1, {});
-  const shots = state.projectiles.filter(projectile => projectile.turretId === starboard.id);
-  assert.ok(shots.length > 0);
-  assert.equal(state.projectiles.some(projectile => projectile.turretId === port.id), false);
-  const shotEvent = world.events.find(event => event.type === "elite-turret-shot" && event.turretId === starboard.id);
-  assert.ok(shotEvent);
+  const shotEvents = world.events.filter(event => event.type === "elite-turret-shot" && event.turretId === starboard.id);
+  assert.ok(shotEvents.length > 0, "the surviving physical turret must continue firing even if its bullets have already hit");
+  assert.equal(world.events.some(event => event.type === "elite-turret-shot" && event.turretId === port.id), false);
+  const shotEvent = shotEvents[0];
+  assert.equal(shotEvent.aimSection, "front");
   assert.notEqual(Math.round(shotEvent.x * 10), Math.round(state.boat.x * 10));
 });
 
