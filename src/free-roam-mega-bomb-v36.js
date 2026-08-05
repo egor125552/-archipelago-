@@ -2,7 +2,8 @@
 
 import * as base from "./free-roam-mega-bomb-v35.js";
 import {resolveCombatTarget} from "../public/src/free-roam-targeting.js?v=37";
-import {MEGA_BOMB_WORLD_BOUNDS, headingVector} from "./free-roam-mega-bomb-physics-v1.js";
+import {MEGA_BOMB_WORLD_BOUNDS, createMegaBombProjectile, headingVector} from "./free-roam-mega-bomb-physics-v1.js";
+import {damageEliteBoatBoss} from "../public/src/free-roam-elite-boat.js?v=1";
 
 export * from "./free-roam-mega-bomb-v35.js";
 
@@ -178,3 +179,121 @@ export function launchMegaBomb(world, playerIndex) {
 }
 
 export {MAX_LEAD_DISTANCE, MAX_LEAD_TIME, MOVING_REPAIR_PHASES};
+
+
+function eliteSource(world, request) {
+  if (request?.sourceType === "elite-commander") {
+    return values(world?.freeHostileActors?.actors).find(actor => actor?.id === request.sourceId && actor.active && !actor.destroyed) || null;
+  }
+  const boat = world?.freeEliteBoatBoss?.boat;
+  return boat?.alive && boat.id === request?.sourceId ? boat : null;
+}
+
+function emitHostileLaunch(world, projectile, request) {
+  world.events ||= [];
+  world.events.push({
+    type: "mega-bomb-launch",
+    text: "",
+    targets: [0, 1],
+    at: world.time,
+    operationEvent: true,
+    sourcePlayer: -1,
+    hostile: true,
+    sourceType: request.sourceType,
+    sourceId: request.sourceId,
+    projectileId: projectile.id,
+    x: projectile.x, y: projectile.y, z: projectile.z,
+    vx: projectile.vx, vy: projectile.vy, vz: projectile.vz,
+    heading: projectile.heading,
+    targetX: projectile.targetX, targetY: projectile.targetY,
+    intendedDistance: projectile.intendedDistance,
+    intendedFlightTime: projectile.intendedFlightTime,
+    maxAge: projectile.maxAge,
+    speed: Math.hypot(projectile.vx, projectile.vy, projectile.vz),
+  });
+  if (world.events.length > 180) world.events.splice(0, world.events.length - 180);
+}
+
+export function launchPendingEliteBossBombs(world) {
+  const boss = world?.freeEliteBoatBoss;
+  if (!boss || !Array.isArray(boss.bombRequests) || !boss.bombRequests.length) return 0;
+  const state = base.ensureMegaBombState(world);
+  let launched = 0;
+  const pending = boss.bombRequests.splice(0, boss.bombRequests.length);
+  for (const request of pending) {
+    const source = eliteSource(world, request);
+    if (!source) continue;
+    const target = {
+      x: clamp(request.targetX, MEGA_BOMB_WORLD_BOUNDS.minX, MEGA_BOMB_WORLD_BOUNDS.maxX),
+      y: clamp(request.targetY, MEGA_BOMB_WORLD_BOUNDS.minY, MEGA_BOMB_WORLD_BOUNDS.maxY),
+    };
+    const heading = bearing(source, target);
+    const direction = headingVector(heading);
+    const start = {
+      x: clamp(Number(source.x) + direction.x * 3.2, MEGA_BOMB_WORLD_BOUNDS.minX, MEGA_BOMB_WORLD_BOUNDS.maxX),
+      y: clamp(Number(source.y) + direction.y * 3.2, MEGA_BOMB_WORLD_BOUNDS.minY, MEGA_BOMB_WORLD_BOUNDS.maxY),
+      z: request.sourceType === "elite-commander" ? 1.9 : 2.55,
+    };
+    const inherited = request.sourceType === "elite-boat"
+      ? {vx: direction.x * (Number(source.speed) || 0), vy: direction.y * (Number(source.speed) || 0)}
+      : {vx: 0, vy: 0};
+    const intendedDistance = clamp(distance(start, target), 22, 205);
+    const projectile = createMegaBombProjectile({
+      id: `hostile-mega-bomb-${boss.encounterId}-${state.nextId++}`,
+      owner: -1,
+      start,
+      heading,
+      intendedDistance,
+      inheritedVelocity: inherited,
+    });
+    Object.assign(projectile, {
+      targetX: target.x,
+      targetY: target.y,
+      targetId: null,
+      sourceBoatId: request.sourceType === "elite-boat" ? source.id : null,
+      sourceActorId: request.sourceType === "elite-commander" ? source.id : null,
+      hostile: true,
+      eliteBossEncounterId: boss.encounterId,
+    });
+    state.projectiles.push(projectile);
+    emitHostileLaunch(world, projectile, request);
+    launched += 1;
+  }
+  return launched;
+}
+
+function applyEliteExplosionDamage(world, event, targetId) {
+  if (Number(event?.sourcePlayer) < 0) return false;
+  const boss = world?.freeEliteBoatBoss;
+  const boat = boss?.boat;
+  if (!boss?.active || !boat?.alive) return false;
+  const metres = distance(event, boat);
+  if (metres > 38) return false;
+  const baseDamage = clamp(230 * (1 - metres / 46), 18, 230);
+  const exact = String(targetId || "");
+  if (exact === "elite-turret-port") {
+    damageEliteBoatBoss(world, "turret-port", baseDamage * 1.35, event.sourcePlayer, {weapon: "mega-bomb"});
+    damageEliteBoatBoss(world, "armor", baseDamage * 0.22, event.sourcePlayer, {weapon: "mega-bomb"});
+  } else if (exact === "elite-turret-starboard") {
+    damageEliteBoatBoss(world, "turret-starboard", baseDamage * 1.35, event.sourcePlayer, {weapon: "mega-bomb"});
+    damageEliteBoatBoss(world, "armor", baseDamage * 0.22, event.sourcePlayer, {weapon: "mega-bomb"});
+  } else {
+    damageEliteBoatBoss(world, exact.startsWith("elite-armor-") ? `armor-${exact.slice("elite-armor-".length)}` : "hull", baseDamage, event.sourcePlayer, {weapon: "mega-bomb"});
+    for (const turret of boat.turrets || []) {
+      if (!turret.destroyed) damageEliteBoatBoss(world, `turret-${turret.side}`, baseDamage * 0.16, event.sourcePlayer, {weapon: "mega-bomb"});
+    }
+  }
+  event.eliteBossDamage = Math.round(baseDamage);
+  event.eliteBossEncounterId = boss.encounterId;
+  return true;
+}
+
+export function stepMegaBombs(world, dt) {
+  const targetByProjectile = new Map(values(world?.freeMegaBombs?.projectiles).map(projectile => [String(projectile?.id || ""), String(projectile?.targetId || "")]));
+  const eventStart = values(world?.events).length;
+  base.stepMegaBombs(world, dt);
+  for (const event of values(world?.events).slice(eventStart)) {
+    if (event?.type !== "mega-bomb-explosion") continue;
+    applyEliteExplosionDamage(world, event, targetByProjectile.get(String(event.projectileId || "")));
+  }
+}

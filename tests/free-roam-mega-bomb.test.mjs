@@ -91,7 +91,7 @@ function pulseBomb(server) {
   assert.equal(applyServerFreeInput(server, "captain", {megaBomb: false}, 0), true);
 }
 
-test("server mega-bomb flies, destroys a group and heavily damages the heavy turret", () => {
+test("server mega-bomb flies, destroys a group and applies honest splash to the heavy boat", () => {
   const server = createServerFreeRoom(1_000);
   setServerFreePresence(server, "captain", true);
   const player = server.world.players[0];
@@ -119,9 +119,10 @@ test("server mega-bomb flies, destroys a group and heavily damages the heavy tur
   assert.ok(events.some(event => event.type === "mega-bomb-flight"), "the flight must emit spatial positions before impact");
   assert.equal(server.world.freeEnemyBoats.boats[0].destroyed, true);
   assert.equal(server.world.freeEnemyBoats.boats[1].destroyed, true);
-  assert.ok(server.world.freeHeavyPursuer.boat.turretHealth < 90, "a near heavy turret must lose most of its durability");
+  assert.ok(server.world.freeHeavyPursuer.boat.turretHealth < 240, "a nearby non-targeted heavy turret must take splash damage");
   assert.ok(server.world.freeHeavyPursuer.boat.hull < 700, "the heavy hull must also take blast damage");
-  assert.equal(player.combat.health, 100, "the first version intentionally has no friendly blast damage");
+  assert.ok(player.combat.health < 100, "a careless launch close to the owner must cause real friendly blast damage");
+  assert.ok(player.combat.health > 0, "the tested distance should injure rather than instantly kill the owner");
   assert.equal(player.combat.megaBombAmmo, MEGA_BOMB_START_AMMO - 1);
   assert.ok(explosion.radius === MEGA_BOMB_RADIUS);
   assert.ok(explosion.destroyedCount >= 2);

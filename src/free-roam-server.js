@@ -14,6 +14,7 @@ import {reserveUnconnectedBoats} from "../public/src/free-roam-reserve-boats.js"
 import {
   ensureMegaBombState,
   launchMegaBomb,
+  launchPendingEliteBossBombs,
   reportMegaBombStatus,
   stepMegaBombs,
 } from "./free-roam-mega-bomb.js";
@@ -167,6 +168,7 @@ function stepInChunks(world, elapsedSeconds) {
     // second pass reacts to the authoritative results of this exact tick.
     applyAuthoritativeCombatHotfix(world, 0);
     stepFreeWorld(world, chunk);
+    launchPendingEliteBossBombs(world);
     stepMegaBombs(world, chunk);
     applyAuthoritativeCombatHotfix(world, chunk);
     remaining -= chunk;

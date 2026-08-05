@@ -1,6 +1,6 @@
 "use strict";
 
-import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=43";
+import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=44";
 
 const EVENT_NAME = "free-roam-mega-bomb-message";
 const FLIGHT_URL = new URL("../audio/mega-bomb-flight-real-v1.mp3?v=6", import.meta.url).href;
@@ -81,7 +81,7 @@ function coordinateDistance(event, value) {
   return Math.max(0, Number(value?.distance) || 0);
 }
 
-function spatialState(event, playerIndex, kind) {
+export function spatialState(event, playerIndex, kind) {
   const value = event?.spatial?.[playerIndex] || {};
   const distance = coordinateDistance(event, value);
   const speed = Math.max(0, Number(value.speed) || Number(event?.speed) || Math.hypot(

@@ -3,8 +3,9 @@
 import {activePursuers, assignedPursuerForPlayer} from "./free-roam-pursuer-squad.js?v=33";
 import {activeHostileGunners} from "./free-roam-hostile-gunners.js?v=32";
 import {activeEnemyBoats} from "./free-roam-enemy-boats.js?v=3";
-import {activeHostileActors} from "./free-roam-hostile-actors.js?v=2";
-import {heavyCombatTargets} from "./free-roam-heavy-pursuer.js?v=3";
+import {activeHostileActors} from "./free-roam-hostile-actors.js?v=3";
+import {heavyCombatTargets} from "./free-roam-heavy-pursuer.js?v=4";
+import {eliteBossCombatTargets} from "./free-roam-elite-boat.js?v=1";
 
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));
 
@@ -87,13 +88,15 @@ export function listCombatTargets(world, attackerIndex, maximumRange = Infinity)
     });
   }
   for (const target of heavyCombatTargets(world, attackerIndex)) targets.push(target);
+  for (const target of eliteBossCombatTargets(world, attackerIndex)) targets.push(target);
   for (const actor of activeHostileActors(world)) {
     targets.push({
       id: actor.id,
       kind: actor.elite ? "elite" : "hostileActor",
       actorId: actor.id,
       point: actor,
-      label: actor.elite ? "элитный стрелок"
+      label: actor.commander ? "элитный командир"
+        : actor.elite ? "элитный стрелок"
         : actor.weapon === "knife" ? "ножевой противник"
           : actor.weapon === "pistol" ? "вражеский пистолетчик" : "вражеский автоматчик",
       assigned: actor.targetPlayer === attackerIndex,
@@ -123,7 +126,10 @@ export function describeCombatTarget(target, position = 0, total = 1) {
       : target.kind === "heavyHull" ? `, корпус ${Math.round(target.point?.hull || 0)}`
         : target.kind === "heavyTurret" ? `, прочность ${Math.round(target.point?.turretHealth || 0)}`
           : target.kind === "heavyEngine" ? `, прочность ${Math.round(target.point?.engineHealth || 0)}`
-            : ["gunner", "hostileActor", "elite"].includes(target.kind)
+          : target.kind === "eliteArmor" ? `, броня ${Math.round(target.point?.armorLayers?.[target.point?.activeArmorIndex]?.hp || 0)}`
+            : target.kind === "eliteHull" ? `, корпус ${Math.round(target.point?.hull || 0)}`
+              : target.kind === "eliteTurret" ? `, прочность ${Math.round(target.point?.turrets?.find(item => item.id === target.turretId)?.hp || 0)}`
+                : ["gunner", "hostileActor", "elite"].includes(target.kind)
               ? `, здоровье ${Math.round(target.point?.health || 0)}`
               : "";
   return `Цель ${number} из ${Math.max(1, total)}: ${target.label}, ${metres} метров${hull}.`;

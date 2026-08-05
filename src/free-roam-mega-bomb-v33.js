@@ -1,12 +1,14 @@
 "use strict";
 
+import {MEGA_BOMB_RELOAD_SECONDS} from "../public/src/free-roam-mega-bomb-tuning.js?v=1";
+
 import * as base from "./free-roam-mega-bomb-v32.js";
 import {catalogForCategory} from "../public/src/free-roam-contract-catalog.js";
 
 export * from "./free-roam-mega-bomb-v32.js";
 
 const MAX_STOCK = 45;
-const RELOAD_SECONDS = 5.5;
+const RELOAD_SECONDS = MEGA_BOMB_RELOAD_SECONDS;
 const FOCUSED_MULTIPLIERS = Object.freeze({
   "heavy-turret": Object.freeze({turret: 1.25, engine: 0.16, hull: 0.18}),
   "heavy-engine": Object.freeze({turret: 0.18, engine: 0.88, hull: 0.18}),

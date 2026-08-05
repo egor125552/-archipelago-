@@ -23,7 +23,7 @@ test("free-roam settings move risky toggles behind a dedicated menu", async () =
   assert.match(html, /Войти в ближайший мир/);
   assert.match(html, /id="controlModeButton"[^>]*hidden/);
   assert.match(html, /id="speechButton"[^>]*hidden/);
-  assert.match(html, /free-roam-settings-v1\.js\?v=2/);
+  assert.match(html, /free-roam-settings-v1\.js\?v=3/);
 
   assert.match(script, /echo-free-roam-interface-settings-v1/);
   assert.match(script, /quickControl:\s*false/);

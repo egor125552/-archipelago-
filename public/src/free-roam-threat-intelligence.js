@@ -349,6 +349,7 @@ function finalPhaseReady(world, state) {
 }
 
 export function spawnFinalThreatWave(world, state = ensureState(world)) {
+  if (world.freeEliteBoatBoss?.version) return 0;
   const director = world.freeThreatDirector;
   const heavy = world.freeHeavyPursuer?.boat;
   if (!director?.active || director.level < 5 || !heavy || state.finalWaveSpawned) return 0;
@@ -373,6 +374,16 @@ export function spawnFinalThreatWave(world, state = ensureState(world)) {
 function updateThreatPhases(world, state) {
   const director = world.freeThreatDirector;
   if (!director?.active || director.level < 5) return;
+  // Release 1.0 gives threat five one clear sequence:
+  // initial force -> heavy boat -> elite boat boss -> commander.
+  // The old automatic reinforcement phases would create a second, contradictory
+  // “final wave”, overload audio, and could delay the real boss indefinitely.
+  if (world.freeEliteBoatBoss?.version) {
+    state.phase = world.freeEliteBoatBoss.active || world.freeEliteBoatBoss.phase === "completed" ? 3 : 1;
+    state.phase2Spawned = false;
+    state.finalWaveSpawned = false;
+    return;
+  }
   const heavy = world.freeHeavyPursuer?.boat;
   if (heavy?.active && !heavy.destroyed && !state.phase2Spawned) startSecondPhase(world, state);
   if (finalPhaseReady(world, state)) spawnFinalThreatWave(world, state);
@@ -550,7 +561,7 @@ function applyFiniteAmmunition(world, frame, state) {
   for (const event of events) {
     if (event.type !== "enemy-gun-shot" || !event.gunnerId) continue;
     const actor = (world.freeHostileActors?.actors || []).find(candidate => candidate.id === event.gunnerId);
-    if (!actor || actor.weapon === "knife" || actor.destroyed) continue;
+    if (!actor || actor.commander || actor.weapon === "knife" || actor.destroyed) continue;
     if (!Number.isFinite(actor.smartAmmo)) actor.smartAmmo = actor.elite ? 24 : actor.weapon === "automatic" ? 12 : 6;
     actor.smartAmmo = Math.max(0, actor.smartAmmo - 1);
     if (actor.smartAmmo > 0) continue;

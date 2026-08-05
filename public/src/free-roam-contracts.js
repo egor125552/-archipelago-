@@ -2,7 +2,7 @@
 
 import {catalogForCategory, cargoDefinition} from "./free-roam-contract-catalog.js";
 import {contractBonusMultiplier, waterExposureTick} from "./free-roam-cargo-traits.js";
-import {cancelThreatEncounter, startThreatEncounter, threatEncounterActive, updateThreatDirector} from "./free-roam-threat-director.js?v=3";
+import {cancelThreatEncounter, startThreatEncounter, threatEncounterActive, updateThreatDirector} from "./free-roam-threat-director.js?v=4";
 
 export const CONTRACT_BOARD = Object.freeze({id: "contract-board", kind: "contract-board", label: "доска заказов", x: 194, y: 58});
 export const CONTRACT_BOARD_ACTION_RANGE = 8.5;
@@ -14,7 +14,7 @@ const THREAT_LABELS = Object.freeze({
   2: "лёгкая погоня: один катер",
   3: "вооружённая погоня: несколько преследователей",
   4: "засада: таранщики, стрелки и высадка",
-  5: "две фазы: тяжёлый катер и элитный стрелок",
+  5: "три фазы: тяжёлый катер, элитный катер и командир",
 });
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const distance = (a, b) => Math.hypot((Number(a?.x) || 0) - (Number(b?.x) || 0), (Number(a?.y) || 0) - (Number(b?.y) || 0));

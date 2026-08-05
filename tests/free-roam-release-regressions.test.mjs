@@ -56,7 +56,7 @@ test("gesture mode guards accidental exits without persisting world identity in 
   assert.doesNotMatch(startupSource, /sessionStorage/);
   assert.match(startupSource, /globalThis\.__freeRoamSessionGuard/);
   assert.match(startupSource, /autoResumeEnabled: \(\) => false/);
-  assert.match(freeRoamHtml, /free-roam-startup-v1\.js\?v=8/);
+  assert.match(freeRoamHtml, /free-roam-startup-v1\.js\?v=10/);
   assert.match(startupSource, /gestureMode && directPointerClick/);
   assert.match(startupSource, /leaveConfirmUntil = now \+ 2800/);
   assert.match(startupSource, /touchmove/);

@@ -5,31 +5,24 @@ import test from "node:test";
 import {ensureMegaBombState, MEGA_BOMB_START_AMMO} from "../src/free-roam-mega-bomb.js";
 
 const assets = [
-  "../public/audio/mega-bomb-flight-real-v1.mp3",
-  "../public/audio/mega-bomb-explosion-real-v1.mp3",
-];
-const killParts = [
-  "../public/audio/enemy-killed-v1.part-00.b64",
-  "../public/audio/enemy-killed-v1.part-01.b64",
-  "../public/audio/enemy-killed-v1.part-02.b64",
-  "../public/audio/enemy-killed-v1.part-03.b64",
+  ["../public/audio/mega-bomb-flight-real-v1.mp3", 10_000],
+  ["../public/audio/mega-bomb-explosion-v12.mp3", 50_000],
+  ["../public/audio/enemy-killed-v5.mp3", 1_000],
 ];
 
-test("real mega-bomb and kill-confirmation recordings ship as MP3 assets", async () => {
-  for (const relative of assets) {
+test("mega-bomb and kill recordings ship as complete direct MP3 files", async () => {
+  for (const [relative, minimum] of assets) {
     const url = new URL(relative, import.meta.url);
     const info = await stat(url);
-    const head = await readFile(url).then(buffer => buffer.subarray(0, 3).toString("ascii"));
-    assert.ok(info.size > 10_000, `${relative} must contain a real recording`);
-    assert.ok(head === "ID3" || head.charCodeAt(0) === 0xff, `${relative} must be MP3 data`);
+    const bytes = await readFile(url);
+    assert.ok(info.size > minimum, `${relative} must contain a complete recording`);
+    const id3 = bytes.subarray(0, 3).toString("ascii") === "ID3";
+    const frame = bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0;
+    assert.ok(id3 || frame, `${relative} must be MP3 data`);
   }
-  const encoded = (await Promise.all(killParts.map(relative => readFile(new URL(relative, import.meta.url), "utf8")))).join("");
-  const killBytes = Buffer.from(encoded, "base64");
-  assert.ok(killBytes.length > 10_000, "kill confirmation must contain the supplied real recording");
-  assert.ok(killBytes.subarray(0, 3).toString("ascii") === "ID3" || killBytes[0] === 0xff);
 });
 
-test("old fifty-charge test worlds migrate once to one hundred charges", () => {
+test("legacy ammo worlds migrate once to the current twenty-five-charge stock", () => {
   const world = {
     players: [
       {combat: {megaBombAmmo: 7, megaBombCooldown: 0, weapons: {}}},
@@ -38,9 +31,10 @@ test("old fifty-charge test worlds migrate once to one hundred charges", () => {
     freeMegaBombs: {projectiles: [], nextId: 1, ammoVersion: 2},
   };
   ensureMegaBombState(world);
-  assert.equal(MEGA_BOMB_START_AMMO, 100);
-  assert.deepEqual(world.players.map(player => player.combat.megaBombAmmo), [100, 100]);
-  world.players[0].combat.megaBombAmmo = 87;
+  assert.equal(MEGA_BOMB_START_AMMO, 25);
+  assert.deepEqual(world.players.map(player => player.combat.megaBombStock), [25, 25]);
+  world.players[0].combat.megaBombStock = 17;
   ensureMegaBombState(world);
-  assert.equal(world.players[0].combat.megaBombAmmo, 87, "migration must not refill repeatedly");
+  assert.equal(world.players[0].combat.megaBombStock, 17, "migration must not refill repeatedly");
+  assert.equal(world.players[0].combat.megaBombAmmo, 17);
 });
