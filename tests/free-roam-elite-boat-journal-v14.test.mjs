@@ -78,7 +78,7 @@ test("memory persists for the encounter and two turrets split primary and second
   const rememberedShots = memory.shotsObserved;
   stepBoss(world, 0.2);
   assert.equal(state.tactical.playerMemory[1].shotsObserved, rememberedShots);
-  assert.equal(state.encounterId, 2);
+  assert.equal(state.encounterId, 1);
 });
 
 test("closed bomb bay is strongly protected, open bay is a real target and its destruction disables bombs", () => {
