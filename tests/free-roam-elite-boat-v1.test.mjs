@@ -99,12 +99,14 @@ test("three armor layers are sequential and the hull cannot be skipped", () => {
 
 test("the two turrets have independent health, muzzle positions and firing cycles", () => {
   const world = bossWorld(true);
-  const state = ensureEliteBoatBoss(world);
-  const [port, starboard] = state.boat.turrets;
+  let state = ensureEliteBoatBoss(world);
+  let [port, starboard] = state.boat.turrets;
   assert.notEqual(port.id, starboard.id);
   assert.equal(port.hp, ELITE_TURRET_HP);
   assert.equal(starboard.hp, ELITE_TURRET_HP);
   damageEliteBoatBoss(world, "turret-port", ELITE_TURRET_HP, 0, {weapon: "automatic"});
+  state = ensureEliteBoatBoss(world);
+  [port, starboard] = state.boat.turrets;
   assert.equal(port.destroyed, true);
   assert.equal(starboard.destroyed, false);
 
