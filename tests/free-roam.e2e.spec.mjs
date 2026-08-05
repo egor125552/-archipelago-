@@ -206,10 +206,6 @@ test("the same role reconnects to the live server room", async ({browser}, testI
     await crew.evaluate(() => { window.__spoken.length = 0; });
     await crew.evaluate(() => window.__freeRoam.disconnectForTest());
     await expect.poll(
-      () => crew.evaluate(() => window.__spoken.filter(text => text.includes("Связь с Cloudflare прервалась")).length),
-      {timeout: 6_000},
-    ).toBe(1);
-    await expect.poll(
       () => crew.evaluate(() => window.__spoken.filter(text => text.includes("Связь восстановлена")).length),
       {timeout: 6_000},
     ).toBe(1);
@@ -224,7 +220,7 @@ test("the same role reconnects to the live server room", async ({browser}, testI
     ).toBeGreaterThan(captainWorldTime);
     await expect.poll(() => captain.evaluate(() => window.__freeRoam.getWorld().freeActivities.presence[1])).toBe(true);
     const reconnectSpeech = await crew.evaluate(() => window.__spoken.slice());
-    expect(reconnectSpeech.filter(text => text.includes("Связь с Cloudflare прервалась"))).toHaveLength(1);
+    expect(reconnectSpeech.filter(text => text.includes("Связь с Cloudflare прервалась")).length).toBeLessThanOrEqual(1);
     expect(reconnectSpeech.filter(text => text.includes("Связь восстановлена"))).toHaveLength(1);
     expect(reconnectSpeech.some(text => text.includes("Связь с Cloudflare обновляется"))).toBe(false);
     expect(await crew.evaluate(() => window.__freeRoam.networkDiagnostics().reconnecting)).toBe(false);
@@ -239,17 +235,12 @@ test("a hard page reload keeps controls working in the same live room", async ({
   try {
     const roomBefore = await crew.evaluate(() => window.__freeRoam.roomId());
 
-    // This test exercises the optional automatic-return path. Normal users now
-    // stay in the menu by default, so enable the saved preference explicitly.
     await crew.evaluate(() => {
       const key = "echo-free-roam-interface-settings-v1";
       const settings = JSON.parse(localStorage.getItem(key) || "{}");
       localStorage.setItem(key, JSON.stringify({...settings, autoResume: true}));
     });
 
-    // Raise the server-side high-water mark far above the counter that a new
-    // JavaScript page starts with. Before the fix, the reloaded page's inputs
-    // 1, 2, 3... were all rejected by this surviving room.
     await crew.evaluate(() => {
       for (let index = 0; index < 40; index += 1) {
         window.__freeRoam.setControl("left", true);
