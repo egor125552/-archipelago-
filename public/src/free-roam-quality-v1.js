@@ -1,6 +1,6 @@
 "use strict";
 
-import "./free-roam-player-boat-audio-v1.js?v=1";
+import "./free-roam-player-boat-audio-v1.js?v=2";
 import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=44";
 import {predictLocalWorld} from "./free-roam-client-prediction.js?v=41";
 import {
