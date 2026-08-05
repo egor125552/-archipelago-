@@ -1,0 +1,57 @@
+name: Elite Boss Cache Bump
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/elite-boss-cache-bump-trigger"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bump browser module chain
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          replacements = {
+            'free-roam-elite-boat.js?v=1': 'free-roam-elite-boat.js?v=2',
+            'free-roam-elite-boat-audio-v11.js?v=1': 'free-roam-elite-boat-audio-v11.js?v=2',
+            'free-roam-core-v6.js?v=45': 'free-roam-core-v6.js?v=46',
+            'free-roam-combat-v2.js?v=5': 'free-roam-combat-v2.js?v=6',
+            'free-roam-combat.js?v=34': 'free-roam-combat.js?v=35',
+            'free-roam-targeting.js?v=38': 'free-roam-targeting.js?v=39',
+            'free-roam-replication.js?v=46': 'free-roam-replication.js?v=47',
+            'free-roam-mega-bomb-v36.js?v=37': 'free-roam-mega-bomb-v36.js?v=38',
+            'free-roam-mega-bomb-v37.js?v=1': 'free-roam-mega-bomb-v37.js?v=2',
+            'free-roam-quality-v1.js?v=6': 'free-roam-quality-v1.js?v=7',
+            'free-roam-v4.js?v=56': 'free-roam-v4.js?v=57',
+          }
+          changed = []
+          for path in Path('.').rglob('*'):
+            if not path.is_file() or path.suffix not in {'.js', '.mjs', '.html'}:
+              continue
+            if any(part in {'.git', 'node_modules'} for part in path.parts):
+              continue
+            text = path.read_text()
+            updated = text
+            for old, new in replacements.items():
+              updated = updated.replace(old, new)
+            if updated != text:
+              path.write_text(updated)
+              changed.append(str(path))
+          if not changed:
+            raise SystemExit('no cache-buster replacements were applied')
+          print('\n'.join(changed))
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public src tests
+          git commit -m "chore: bump elite boss browser cache chain"
+          git push
