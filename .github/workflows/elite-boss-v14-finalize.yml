@@ -20,7 +20,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - name: Fix final assertion and bump active cache chain
+      - name: Bump active cache chain
         shell: bash
         run: |
           python3 - <<'PY'
@@ -54,14 +54,6 @@ jobs:
             if updated != text:
               path.write_text(updated)
               changed.append(str(path))
-
-          test_path = Path('tests/free-roam-elite-boat-journal-v14.test.mjs')
-          text = test_path.read_text()
-          old = 'assert.equal(state.encounterId, 2);'
-          new = 'assert.equal(state.encounterId, 1);'
-          if text.count(old) != 1:
-            raise SystemExit(f'encounter assertion count={text.count(old)}')
-          test_path.write_text(text.replace(old, new, 1))
           print('\n'.join(changed))
           PY
           node --check public/src/free-roam-elite-boat.js
