@@ -29,10 +29,7 @@ jobs:
           import base64
           import lzma
 
-          parts = sorted(Path('.github/elite-boss-integrate-xz').glob('part*.b64'))
-          if len(parts) != 4:
-              raise SystemExit(f'expected four payload parts, found {len(parts)}')
-          payload = ''.join(path.read_text() for path in parts)
+          payload = Path('.github/elite-boss-integrate-xz/fixed.b64').read_text()
           Path('/tmp/integrate-elite-boss.py').write_bytes(
               lzma.decompress(base64.b64decode(payload, validate=True))
           )
@@ -58,6 +55,7 @@ jobs:
             .github/elite-boss-integrate \
             .github/elite-boss-integrate-xz
           rm -f \
+            .github/elite-boss-pr-trigger \
             .github/elite-boss-cache-bump-trigger \
             .github/elite-boss-v14-finalize-trigger \
             .github/workflows/elite-boss-cache-bump.yml \
