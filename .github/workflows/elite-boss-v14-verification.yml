@@ -1,22 +1,22 @@
-name: Finalize Integrated Elite Boss
+name: Verify Integrated Elite Boss
 
 on:
-  push:
+  pull_request:
     branches: [main]
-    paths:
-      - ".github/workflows/elite-boss-v14-verification.yml"
-      - ".github/elite-boss-integrate-xz/trigger"
-  workflow_dispatch:
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: write
 
 jobs:
-  finalize:
+  verify-and-integrate:
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -51,7 +51,7 @@ jobs:
       - run: npm ci
       - name: Run complete project tests
         run: npm test
-      - name: Remove one-time integration machinery and publish
+      - name: Remove one-time integration machinery and publish verified branch
         shell: bash
         run: |
           rm -rf \
@@ -72,5 +72,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git status --short
-          git commit -m "release: integrate elite boss states and spatial audio"
-          git push
+          git commit -m "release: integrate elite boss states and spatial audio [skip ci]"
+          git push origin HEAD:${{ github.head_ref }}
