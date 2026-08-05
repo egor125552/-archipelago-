@@ -83,7 +83,7 @@ test("left and right physical turrets bracket different halves of the same movin
   assert.ok(shotEvents.every(event => Number.isFinite(event.x) && Number.isFinite(event.y) && Number.isFinite(event.heading)));
 });
 
-test("the physical bomb bay opens, fires three bombs and reloads for five seconds", () => {
+test("the physical bomb bay opens, fires three bombs and reloads for about ten seconds", () => {
   const {world, state} = setupWorld();
   for (const turret of state.boat.turrets) turret.destroyed = true;
   state.bombCooldown = 0;
@@ -92,8 +92,8 @@ test("the physical bomb bay opens, fires three bombs and reloads for five second
   assert.ok(world.events.some(event => event.type === "elite-bomb-bay-opening"));
   assert.ok(world.events.some(event => event.type === "elite-bomb-salvo"));
   assert.ok(world.events.some(event => event.type === "elite-bomb-bay-closing"));
-  assert.equal(ELITE_BOMB_RELOAD_SECONDS, 5);
-  assert.ok(state.bombCooldown > 3 && state.bombCooldown <= 5);
+  assert.equal(ELITE_BOMB_RELOAD_SECONDS, 10);
+  assert.ok(state.bombCooldown > 8 && state.bombCooldown <= 10);
   assert.equal(state.salvoRemaining, 0);
 });
 
