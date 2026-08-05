@@ -145,8 +145,12 @@ export function ensureEliteBoatBoss(world) {
   if (!Number.isFinite(Number(state.deployRemaining))) state.deployRemaining = 0;
   if (!["closed", "opening", "open", "closing"].includes(state.bombBayState)) state.bombBayState = "closed";
   if (state.boat) {
-    state.boat.armorLayers = normalizeArmorLayers(state.boat.armorLayers);
-    state.boat.turrets = normalizeTurrets(state.boat.turrets);
+    if (!Array.isArray(state.boat.armorLayers) || state.boat.armorLayers.length !== ARMOR_IDS.length) {
+      state.boat.armorLayers = normalizeArmorLayers(state.boat.armorLayers);
+    }
+    if (!Array.isArray(state.boat.turrets) || state.boat.turrets.length !== 2) {
+      state.boat.turrets = normalizeTurrets(state.boat.turrets);
+    }
     if (!Number.isInteger(Number(state.boat.activeArmorIndex))) state.boat.activeArmorIndex = 0;
     state.boat.activeArmorIndex = clamp(state.boat.activeArmorIndex, 0, ARMOR_IDS.length);
     state.boat.bombBayState = state.bombBayState;
