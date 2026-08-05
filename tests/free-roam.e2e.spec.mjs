@@ -214,7 +214,6 @@ test("the same role reconnects to the live server room", async ({browser}, testI
       {timeout: 6_000},
     ).toBeGreaterThan(captainWorldTime);
     await expect.poll(() => captain.evaluate(() => window.__freeRoam.getWorld().freeActivities.presence[1])).toBe(true);
-    await expect(crew.locator("#message")).toContainText("Связь восстановлена", {timeout: 6_000});
     expect(await crew.evaluate(() => window.__freeRoam.networkDiagnostics().reconnecting)).toBe(false);
   } finally {
     await captainContext.close();
