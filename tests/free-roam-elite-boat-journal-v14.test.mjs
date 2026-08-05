@@ -21,6 +21,8 @@ function bossWorld(coop = true) {
   world.freeScenario.phase = "victory";
   setPlayerPresence(world, 0, true);
   setPlayerPresence(world, 1, coop);
+  world.freeThreatDirector ||= {graceUntil: [0, 0]};
+  world.freeThreatDirector.graceUntil = [0, 0];
   for (let index = 0; index < world.players.length; index += 1) {
     const player = world.players[index];
     player.mode = "boat";

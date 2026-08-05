@@ -63,12 +63,27 @@ function createPlayerMemory() {
 }
 
 function createTacticalState(playerCount = 2) {
-  return {decisionCooldown: 0, movementState: "observe", movementStateUntil: 0, movementSide: 1, primaryTarget: null, secondaryTarget: null, playerMemory: Array.from({length: playerCount}, () => createPlayerMemory()), teamMemory: {encirclement: 0, splitPressure: 0, lastBreakoutAt: -999}, tacticHistory: [], tacticScores: {}, lastHull: null, lastTurretHp: {}, lastBombBayHp: null, salvoSerial: 0, salvoPlan: [], salvoPlanIndex: 0, disarmedSince: null, boundaryContacts: 0, lastBoundaryHeading: null};
+  return {decisionCooldown: 0, movementState: "observe", movementStateUntil: 0, movementSide: 1, primaryTarget: null, secondaryTarget: null, playerMemory: Array.from({length: playerCount}, () => createPlayerMemory()), teamMemory: {encirclement: 0, splitPressure: 0, lastBreakoutAt: -999}, tacticHistory: [], tacticScores: {}, lastHull: null, lastTurretHp: {}, lastBombBayHp: null, salvoSerial: 0, salvoPlan: [], salvoPlanIndex: 0, disarmedSince: null, boundaryContacts: 0, lastBoundaryHeading: null, currentDecision: {state: "observe", point: null, speed: 0}};
 }
 
 function normalizeArmorLayers(value) {
+  const fallbacks = armorLayers();
+  const valid = Array.isArray(value) && value.length === fallbacks.length
+    && value.every((layer, index) => layer && typeof layer === "object" && layer.id === fallbacks[index].id);
+  if (valid) {
+    for (let index = 0; index < fallbacks.length; index += 1) {
+      const current = value[index], fallback = fallbacks[index];
+      current.id = fallback.id;
+      current.maxHp = Math.max(1, finite(current.maxHp, fallback.maxHp));
+      current.hp = clamp(current.hp ?? fallback.hp, 0, current.maxHp);
+      current.state = String(current.state || fallback.state);
+      current.criticalAnnounced = current.criticalAnnounced === true;
+      current.destroyedAnnounced = current.destroyedAnnounced === true;
+    }
+    return value;
+  }
   const existing = values(value);
-  return armorLayers().map(fallback => {
+  return fallbacks.map(fallback => {
     const current = existing.find(layer => layer?.id === fallback.id);
     if (!current) return fallback;
     return {...fallback, ...current, id: fallback.id, hp: clamp(current.hp ?? fallback.hp, 0, current.maxHp ?? fallback.maxHp), maxHp: Math.max(1, finite(current.maxHp, fallback.maxHp))};
@@ -76,8 +91,28 @@ function normalizeArmorLayers(value) {
 }
 
 function normalizeTurrets(value) {
+  const fallbacks = [createTurret("port", "port"), createTurret("starboard", "starboard")];
+  const valid = Array.isArray(value) && value.length === fallbacks.length
+    && value.every((turret, index) => turret && typeof turret === "object" && (turret.id === fallbacks[index].id || turret.side === fallbacks[index].side));
+  if (valid) {
+    for (let index = 0; index < fallbacks.length; index += 1) {
+      const current = value[index], fallback = fallbacks[index];
+      current.id = fallback.id;
+      current.side = fallback.side;
+      current.maxHp = Math.max(1, finite(current.maxHp, fallback.maxHp));
+      current.hp = clamp(current.hp ?? fallback.hp, 0, current.maxHp);
+      current.destroyed = current.destroyed === true || current.hp <= 0;
+      if (!current.state) current.state = fallback.state;
+      if (!Number.isFinite(Number(current.fireCooldown))) current.fireCooldown = fallback.fireCooldown;
+      if (!Number.isFinite(Number(current.shotCooldown))) current.shotCooldown = fallback.shotCooldown;
+      if (!Number.isFinite(Number(current.windup))) current.windup = fallback.windup;
+      if (!Number.isFinite(Number(current.burstRemaining))) current.burstRemaining = fallback.burstRemaining;
+      if (!current.tacticalRole) current.tacticalRole = fallback.tacticalRole;
+    }
+    return value;
+  }
   const existing = values(value);
-  return [createTurret("port", "port"), createTurret("starboard", "starboard")].map(fallback => {
+  return fallbacks.map(fallback => {
     const current = existing.find(turret => turret?.id === fallback.id || turret?.side === fallback.side);
     if (!current) return fallback;
     return {...fallback, ...current, id: fallback.id, side: fallback.side, hp: clamp(current.hp ?? fallback.hp, 0, current.maxHp ?? fallback.maxHp), maxHp: Math.max(1, finite(current.maxHp, fallback.maxHp)), destroyed: current.destroyed === true || Number(current.hp) <= 0};
@@ -93,16 +128,27 @@ function normalizeBombBay(value) {
 
 function normalizeTacticalState(value, playerCount) {
   const fallback = createTacticalState(playerCount);
-  const tactical = value && typeof value === "object" ? {...fallback, ...value} : fallback;
-  tactical.playerMemory = values(tactical.playerMemory);
-  while (tactical.playerMemory.length < playerCount) tactical.playerMemory.push(createPlayerMemory());
-  tactical.playerMemory = tactical.playerMemory.slice(0, playerCount).map(memory => ({...createPlayerMemory(), ...(memory || {})}));
-  tactical.teamMemory = {...fallback.teamMemory, ...(tactical.teamMemory || {})};
-  tactical.tacticHistory = values(tactical.tacticHistory);
-  tactical.tacticScores = tactical.tacticScores && typeof tactical.tacticScores === "object" ? tactical.tacticScores : {};
-  tactical.salvoPlan = values(tactical.salvoPlan);
-  tactical.lastTurretHp = tactical.lastTurretHp && typeof tactical.lastTurretHp === "object" ? tactical.lastTurretHp : {};
-  return tactical;
+  const current = value && typeof value === "object" ? value : fallback;
+  for (const [key, child] of Object.entries(fallback)) {
+    if (!Object.hasOwn(current, key)) current[key] = Array.isArray(child) ? [...child] : child && typeof child === "object" ? {...child} : child;
+  }
+  if (!Array.isArray(current.playerMemory)) current.playerMemory = [];
+  while (current.playerMemory.length < playerCount) current.playerMemory.push(createPlayerMemory());
+  if (current.playerMemory.length > playerCount) current.playerMemory.length = playerCount;
+  for (let index = 0; index < current.playerMemory.length; index += 1) {
+    const memory = current.playerMemory[index] && typeof current.playerMemory[index] === "object"
+      ? current.playerMemory[index]
+      : (current.playerMemory[index] = createPlayerMemory());
+    for (const [key, child] of Object.entries(createPlayerMemory())) if (!Object.hasOwn(memory, key)) memory[key] = child;
+  }
+  if (!current.teamMemory || typeof current.teamMemory !== "object") current.teamMemory = {...fallback.teamMemory};
+  else for (const [key, child] of Object.entries(fallback.teamMemory)) if (!Object.hasOwn(current.teamMemory, key)) current.teamMemory[key] = child;
+  if (!Array.isArray(current.tacticHistory)) current.tacticHistory = [];
+  if (!current.tacticScores || typeof current.tacticScores !== "object") current.tacticScores = {};
+  if (!Array.isArray(current.salvoPlan)) current.salvoPlan = [];
+  if (!current.lastTurretHp || typeof current.lastTurretHp !== "object") current.lastTurretHp = {};
+  if (!current.currentDecision || typeof current.currentDecision !== "object") current.currentDecision = {state: "observe", point: null, speed: 0};
+  return current;
 }
 
 function defaultState(playerCount = 2) {
@@ -291,11 +337,11 @@ function turretByComponent(boat, component) {
   return null;
 }
 
-function resolveBombBayDetonation(world, state, sourcePlayer, damage) {
+function resolveBombBayDetonation(world, state, sourcePlayer, damage, exposedAtDestruction = false) {
   const bay = state.bombBay;
   if (bay.internalDetonationResolved) return;
   bay.internalDetonationResolved = true;
-  const exposed = ["opening", "open"].includes(state.bombBayState);
+  const exposed = Boolean(exposedAtDestruction);
   const phaseWeight = state.bombBayState === "open" ? 0.44 : state.bombBayState === "opening" ? 0.31 : 0.08;
   const damageWeight = clamp(damage / Math.max(1, bay.maxHp), 0, 1) * 0.35;
   const deterministic = ((state.encounterId * 31 + state.tactical.salvoSerial * 17 + Math.round(finite(world.time) * 10)) % 100) / 100;
@@ -343,9 +389,10 @@ export function damageEliteBoatBoss(world, component, amount, sourcePlayer = -1,
     recordDamagePressure(state, sourcePlayer, before - bay.hp);
     emit(world, exposed ? "elite-bomb-bay-hit" : "elite-bomb-bay-armoured-hit", exposed ? "" : "Закрытые створки почти полностью приняли удар.", audience, {sourcePlayer, damage: before - bay.hp, protected: !exposed, weapon, x: boat.x, y: boat.y});
     if (bay.hp <= 0) {
-      bay.destroyed = true; bay.state = "destroyed"; state.salvoRemaining = 0; state.salvoCooldown = 0; state.bombCooldown = Number.POSITIVE_INFINITY; state.bombRequests = []; setBombBayState(state, "destroyed");
+      const exposedAtDestruction = exposed;
+      bay.destroyed = true; bay.state = "destroyed"; state.salvoRemaining = 0; state.salvoCooldown = 0; state.bombCooldown = 0; state.bombRequests = []; setBombBayState(state, "destroyed");
       emit(world, "elite-bomb-bay-destroyed", "Бомбоотсек уничтожен. Корабельные бомбы отключены до конца боя.", [0, 1], {sourcePlayer, x: boat.x, y: boat.y});
-      resolveBombBayDetonation(world, state, sourcePlayer, raw);
+      resolveBombBayDetonation(world, state, sourcePlayer, raw, exposedAtDestruction);
     }
     return true;
   }
@@ -641,6 +688,17 @@ function chooseMovement(world, state, players) {
     return {state: "protect-system", point: {x: clamp(boat.x + vector.x * 120, WORLD_BOUNDS.minX, WORLD_BOUNDS.maxX), y: clamp(boat.y + vector.y * 120, WORLD_BOUNDS.minY, WORLD_BOUNDS.maxY)}, speed: Math.max(20, boat.speed)};
   }
   boat.tactical.protectedSystem = null;
+
+if (systems.livingTurrets.length === 1 && systems.bombBayAlive) {
+  const working = systems.livingTurrets[0];
+  const workingSideTurn = working.side === "port" ? -54 : 54;
+  if (metres < 72) {
+    const away = bearing(primary.point, boat) + tactical.movementSide * 46, vector = headingVector(away);
+    return {state: "single-turret-break-away", point: {x: clamp(boat.x + vector.x * 115, WORLD_BOUNDS.minX, WORLD_BOUNDS.maxX), y: clamp(boat.y + vector.y * 115, WORLD_BOUNDS.minY, WORLD_BOUNDS.maxY)}, speed: boat.maxSpeed};
+  }
+  const firingArc = bearing(boat, primary.point) + workingSideTurn, vector = headingVector(firingArc);
+  return {state: "single-turret-cautious-fire", point: {x: clamp(boat.x + vector.x * 90, WORLD_BOUNDS.minX, WORLD_BOUNDS.maxX), y: clamp(boat.y + vector.y * 90, WORLD_BOUNDS.minY, WORLD_BOUNDS.maxY)}, speed: 19.5};
+}
   if (systems.disarmed) {
     if (tactical.disarmedSince === null) tactical.disarmedSince = now;
     const canRam = metres < 36 && boat.hull > boat.maxHull * 0.38 && boat.ramCooldown <= 0;
@@ -788,10 +846,14 @@ export function updateEliteBoatBoss(world, dt, helpers = {}) {
   if (["boat-combat", "approaching"].includes(state.phase) && state.boat?.alive) {
     observePlayers(world, state, seconds);
     const players = updateThreatScores(world, state);
-    state.tactical.decisionCooldown = Math.max(0, finite(state.tactical.decisionCooldown) - seconds);
-    if (state.tactical.decisionCooldown <= 0) { assignTurretTargets(world, state, players); state.tactical.decisionCooldown = DECISION_INTERVAL_SECONDS; }
-    const decision = chooseMovement(world, state, players);
-    applyMovement(world, state, decision, seconds);
+
+state.tactical.decisionCooldown = Math.max(0, finite(state.tactical.decisionCooldown) - seconds);
+if (state.tactical.decisionCooldown <= 0 || !state.tactical.currentDecision?.point) {
+  assignTurretTargets(world, state, players);
+  state.tactical.currentDecision = chooseMovement(world, state, players);
+  state.tactical.decisionCooldown = DECISION_INTERVAL_SECONDS;
+}
+applyMovement(world, state, state.tactical.currentDecision, seconds);
     updateTurrets(world, state, seconds);
     updateProjectiles(world, state, seconds, helpers);
     updateBombSalvo(world, state, seconds, players);
@@ -811,7 +873,7 @@ export function eliteBossCombatTargets(world, attackerIndex) {
     if (turret.destroyed) continue;
     targets.push({id: turret.id, kind: "eliteTurret", component: `turret-${turret.side}`, turretId: turret.id, point: boat, label: `элитный катер, ${turret.side === "port" ? "левая" : "правая"} скорострельная установка`, assigned: turret.targetPlayer === attackerIndex});
   }
-  if (!state.bombBay.destroyed && ["opening", "open"].includes(state.bombBayState)) targets.push({id: state.bombBay.id, kind: "eliteBombBay", component: "bomb-bay", bombBayId: state.bombBay.id, point: boat, label: "элитный катер, открытый бомбоотсек", assigned: boat.targetPlayer === attackerIndex});
+  if (!state.bombBay.destroyed && ["opening", "open"].includes(state.bombBayState)) targets.push({id: state.bombBay.id, kind: "eliteTurret", component: "bomb-bay", turretId: state.bombBay.id, bombBayId: state.bombBay.id, point: {...boat, turrets: [...boat.turrets, state.bombBay]}, label: "элитный катер, открытый бомбоотсек", assigned: boat.targetPlayer === attackerIndex});
   return targets;
 }
 

@@ -123,13 +123,13 @@ export function launchPendingEliteBossBombs(world) {
   const before = new Set(values(world.freeMegaBombs?.projectiles).map(projectile => String(projectile?.id || "")));
   const launched = base.launchPendingEliteBossBombs(world);
   const fresh = values(world.freeMegaBombs?.projectiles)
-    .filter(projectile => !before.has(String(projectile?.id || "")) && Number(projectile?.owner) < 0);
+    .filter(projectile => !before.has(String(projectile?.id || "")));
 
   for (let index = 0; index < fresh.length; index += 1) {
     const projectile = fresh[index];
     const request = launchable[index] || launchable.find(candidate => (
       candidate.sourceId === (projectile.sourceBoatId || projectile.sourceActorId)
-    ));
+    )) || pending[index] || pending[0] || null;
     projectile.targetPlayer = Number.isInteger(request?.targetPlayer)
       ? request.targetPlayer
       : hostileBombTargetPlayerV37(world, projectile);
