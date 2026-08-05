@@ -18,6 +18,10 @@ import {
   reportMegaBombStatus,
   stepMegaBombs,
 } from "./free-roam-mega-bomb.js";
+import {
+  finishEliteBossTacticsV12,
+  prepareEliteBossTacticsV12,
+} from "./free-roam-elite-boss-tactics-v12.js";
 
 export const FREE_TICK_MS = 40;
 const MAX_ELAPSED_SECONDS = 0.2;
@@ -67,9 +71,7 @@ function ensureInputBuffers(serverRoom) {
 function bufferedInput(serverRoom, playerIndex) {
   const result = withoutPulseInputs(serverRoom.receivedInputs[playerIndex]);
   const pending = serverRoom.pendingPulses[playerIndex] || {};
-  for (const key of PULSE_INPUT_KEYS) {
-    if (pending[key]) result[key] = true;
-  }
+  for (const key of PULSE_INPUT_KEYS) if (pending[key]) result[key] = true;
   return result;
 }
 
@@ -147,15 +149,10 @@ export function applyServerFreeInput(serverRoom, role, input, rawSequence) {
   const normalized = normalizeInput(input);
   const previous = serverRoom.receivedInputs[playerIndex] || normalizeInput({});
   const pending = serverRoom.pendingPulses[playerIndex] || (serverRoom.pendingPulses[playerIndex] = {});
-  for (const key of PULSE_INPUT_KEYS) {
-    if (normalized[key] && !previous[key]) pending[key] = true;
-  }
+  for (const key of PULSE_INPUT_KEYS) if (normalized[key] && !previous[key]) pending[key] = true;
   serverRoom.receivedInputs[playerIndex] = normalized;
 
   setPlayerPresence(serverRoom.world, playerIndex, true);
-  // Continuous controls apply immediately. One-shot commands are held in a
-  // server-side latch until an authoritative tick consumes them, so a quick
-  // true/false pair cannot disappear during Worker cold start or event-loop load.
   setPlayerInput(serverRoom.world, playerIndex, withoutPulseInputs(normalized));
   return true;
 }
@@ -164,10 +161,10 @@ function stepInChunks(world, elapsedSeconds) {
   let remaining = Math.min(MAX_ELAPSED_SECONDS, Math.max(0, Number(elapsedSeconds) || 0));
   while (remaining > 0.0001) {
     const chunk = Math.min(MAX_STEP_SECONDS, remaining);
-    // The first pass snapshots roof exposure before projectiles move. The
-    // second pass reacts to the authoritative results of this exact tick.
+    prepareEliteBossTacticsV12(world, chunk);
     applyAuthoritativeCombatHotfix(world, 0);
     stepFreeWorld(world, chunk);
+    finishEliteBossTacticsV12(world, chunk);
     launchPendingEliteBossBombs(world);
     stepMegaBombs(world, chunk);
     applyAuthoritativeCombatHotfix(world, chunk);

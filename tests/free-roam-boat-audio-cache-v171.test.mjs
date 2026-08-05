@@ -14,5 +14,5 @@ test("Safari receives a new outer module URL for the restored boat audio patch",
   assert.match(quality, /free-roam-player-boat-audio-v1\.js\?v=2/);
   assert.match(boatAudio, /free-roam-audio-v5\.js\?v=44/);
   assert.match(html, /free-roam-developer-log-v1\.js\?v=2/);
-  assert.match(logEntry, /free-roam-developer-log-v2\.js\?v=3/);
+  assert.match(logEntry, /free-roam-developer-log-v2\.js\?v=4/);
 });

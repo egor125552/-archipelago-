@@ -12,6 +12,8 @@ const MAX_ENTRIES = 60000;
 const POLL_INTERVAL_MS = 250;
 const ENTITY_HEARTBEAT_MS = 3000;
 const NETWORK_HEARTBEAT_MS = 2000;
+const SERVER_STATE_HEARTBEAT_MS = 2000;
+const INPUT_PACKET_HEARTBEAT_MS = 2000;
 const EVENT_MEMORY_LIMIT = 24000;
 const ERROR_REPEAT_WINDOW_MS = 5000;
 const ACTIVE_INPUT_KEYS = [
@@ -26,6 +28,7 @@ const state = {
   enabled: readEnabled(), entries: [], droppedEntries: 0, sequence: 0,
   startedAt: new Date().toISOString(), timer: 0, lastInput: null,
   lastNetwork: null, lastNetworkAt: 0, lastWorldSummary: "",
+  lastServerState: null, lastServerStateAt: 0, lastPacketInput: null, lastInputPacketAt: 0,
   entitySnapshots: new Map(), seenEventIds: new Set(), seenEventQueue: [],
   lastMessage: "", lastErrorKey: "", lastErrorAt: 0, repeatedErrors: 0,
 };
@@ -107,13 +110,25 @@ function captureSocketMessage(raw) {
   try { message = JSON.parse(raw); } catch (_) { return; }
   if (Array.isArray(message.events)) captureServerEvents(message.events);
   if (message.type === "free-state" || message.world || message.worldDelta) {
-    append("server-state", {
+    const now = performance.now();
+    const snapshot = {
       type: message.type || null, sequence: message.sequence ?? null,
       serverAt: message.serverAt ?? null, ackInput: message.ackInput ?? null,
       fullWorld: Boolean(message.world),
       deltaKeys: message.worldDelta && typeof message.worldDelta === "object" ? Object.keys(message.worldDelta) : [],
       eventCount: Array.isArray(message.events) ? message.events.length : 0,
-    });
+    };
+    const previousSequence = Number(state.lastServerState?.sequence);
+    const nextSequence = Number(snapshot.sequence);
+    const sequenceGap = Number.isFinite(previousSequence) && Number.isFinite(nextSequence) && nextSequence > previousSequence + 1;
+    const important = snapshot.fullWorld || snapshot.eventCount > 0 || sequenceGap
+      || now - state.lastServerStateAt >= SERVER_STATE_HEARTBEAT_MS;
+    if (important) {
+      append("server-state", {...snapshot, compressedTicks: state.lastServerState && Number.isFinite(nextSequence) && Number.isFinite(previousSequence)
+        ? Math.max(0, nextSequence - previousSequence - 1) : 0});
+      state.lastServerStateAt = now;
+    }
+    state.lastServerState = compactLogValue(snapshot);
   } else if (!["free-pong", "heartbeat"].includes(message.type)) {
     append("server-message", {type: message.type || null, room: message.room || null, role: message.role || null, matched: message.matched ?? null});
   }
@@ -122,8 +137,16 @@ function captureSocketSend(raw) {
   if (!state.enabled || typeof raw !== "string") return;
   let message;
   try { message = JSON.parse(raw); } catch (_) { return; }
-  if (message.type === "free-input") append("client-input-packet", {sequence: message.sequence ?? null, input: message.input || null});
-  else if (!["heartbeat", "free-ping"].includes(message.type)) append("client-message", {type: message.type || null});
+  if (message.type === "free-input") {
+    const now = performance.now();
+    const input = compactLogValue(message.input || null);
+    const changed = JSON.stringify(input) !== JSON.stringify(state.lastPacketInput);
+    if (changed || now - state.lastInputPacketAt >= INPUT_PACKET_HEARTBEAT_MS) {
+      append("client-input-packet", {sequence: message.sequence ?? null, input, heartbeat: !changed});
+      state.lastInputPacketAt = now;
+    }
+    state.lastPacketInput = input;
+  } else if (!["heartbeat", "free-ping"].includes(message.type)) append("client-message", {type: message.type || null});
 }
 
 function installWebSocketTap() {
@@ -207,6 +230,17 @@ function scanWorldSummary(world) {
       heavy: world.freeHeavyPursuer?.projectiles?.length || 0,
       megaBombs: world.freeMegaBombs?.projectiles?.length || 0,
     },
+    elite: {
+      phase: world.freeEliteBoatBoss?.phase || null,
+      stage: world.freeEliteBoatBoss?.stage || null,
+      movementMode: world.freeEliteBoatBoss?.boat?.movementMode || null,
+      bombBayState: world.freeEliteBoatBoss?.bombBayState || null,
+      bombCooldown: roundLogNumber(world.freeEliteBoatBoss?.bombCooldown),
+      bullets: world.freeEliteBoatBoss?.projectiles?.length || 0,
+      pendingBombs: world.freeEliteBoatBoss?.bombRequests?.length || 0,
+      commanderId: world.freeEliteBoatBoss?.commanderId || null,
+      tacticsVersion: world.freeEliteBossTacticsV12?.version || null,
+    },
   };
   const serialized = JSON.stringify(summary);
   if (serialized !== state.lastWorldSummary) { state.lastWorldSummary = serialized; append("world-summary", {summary}); }
@@ -220,6 +254,7 @@ function poll() {
 function resetSession() {
   state.entries = []; state.droppedEntries = 0; state.sequence = 0; state.startedAt = new Date().toISOString();
   state.lastInput = null; state.lastNetwork = null; state.lastNetworkAt = 0; state.lastWorldSummary = "";
+  state.lastServerState = null; state.lastServerStateAt = 0; state.lastPacketInput = null; state.lastInputPacketAt = 0;
   state.entitySnapshots.clear(); state.seenEventIds.clear(); state.seenEventQueue = [];
   state.lastMessage = ""; state.lastErrorKey = ""; state.lastErrorAt = 0; state.repeatedErrors = 0;
   updateStatus();
