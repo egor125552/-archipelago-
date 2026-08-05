@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
     paths:
+      - "public/src/free-roam-quality-v1.js"
       - "public/src/free-roam-hostile-actors.js"
       - "public/src/free-roam-elite-boat.js"
       - "public/src/free-roam-elite-boat-audio-v11.js"
@@ -14,6 +15,7 @@ on:
       - "src/free-roam-mega-bomb-v37.js"
       - "tests/free-roam-elite-boat-journal-v14.test.mjs"
       - "tests/free-roam-hostile-respawn-grace.test.mjs"
+      - "tests/free-roam-elite-audio-cache-v14.test.mjs"
       - ".github/workflows/elite-boss-v14-verification.yml"
   workflow_dispatch:
 
