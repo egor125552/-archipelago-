@@ -102,8 +102,13 @@ const HOSTILE_ACTOR_FIELDS = Object.freeze([
 ]);
 const ELITE_BOAT_FIELDS = Object.freeze([
   "id", "role", "encounterId", "x", "y", "heading", "speed", "maxSpeed", "alive", "active", "destroyed", "targetPlayer",
-  "activeArmorIndex", "armorLayers", "hull", "maxHull", "hullState", "turrets", "movementMode",
-  "bombBayState", "bombCooldown", "salvoRemaining",
+  "activeArmorIndex", "armorLayers", "hull", "maxHull", "hullState", "turrets", "movementMode", "movementState",
+  "bombBayState", "bombCooldown", "salvoRemaining", "bombBay", "ramCooldown", "tactical", "engineAudio",
+]);
+const ELITE_PROJECTILE_FIELDS = Object.freeze([
+  "id", "turretId", "targetPlayer", "aimSection", "tacticalLane",
+  "x", "y", "previousX", "previousY", "vx", "vy", "speed", "energy", "mass",
+  "spawnedAt", "ttl", "inheritedBoatVelocity", "endReason",
 ]);
 const CRATE_FIELDS = Object.freeze([
   "id", "kind", "label", "rarity", "weight", "slots", "traits", "x", "y", "state", "carriedBy", "stowedBoat", "source",
@@ -195,8 +200,10 @@ export function replicatedFreeWorld(world) {
       bombBayState: eliteBoss.bombBayState,
       bombCooldown: eliteBoss.bombCooldown,
       salvoRemaining: eliteBoss.salvoRemaining,
+      bombBay: select(eliteBoss.bombBay, ["id", "hp", "maxHp", "state", "destroyed", "exposed"]),
       boat: select(eliteBoss.boat, ELITE_BOAT_FIELDS),
-      projectiles: (eliteBoss.projectiles || []).map(projectile => select(projectile, ["id", "turretId", "targetPlayer", "aimSection", "x", "y"])),
+      projectiles: (eliteBoss.projectiles || []).map(projectile => select(projectile, ELITE_PROJECTILE_FIELDS)),
+      projectileEndEvents: (eliteBoss.projectileEndEvents || []).slice(-16),
     }} : {}),
   });
 }
