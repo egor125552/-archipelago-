@@ -7,7 +7,7 @@ import {
   hostileRespawnGraceActive,
 } from "../src/free-roam-hostile-respawn-grace.js";
 
-// Architectural guard: grace stays stateless and the authoritative boss has no side AI layer.
+// Architectural guard: no parallel boss AI; grace is a stateless shared safety helper.
 test("the obsolete elite tactical side layer no longer exists", () => {
   assert.equal(fs.existsSync(new URL("../src/free-roam-elite-boss-tactics-v12.js", import.meta.url)), false);
   assert.equal(fs.existsSync(new URL("../src/free-roam-elite-boss-journal-v13.js", import.meta.url)), false);
