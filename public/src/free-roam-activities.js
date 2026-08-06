@@ -118,6 +118,7 @@ export function ensureActivities(world) {
     boat.cargo ||= [];
     if (!Number.isFinite(boat.cargoWeight)) boat.cargoWeight = 0;
     if (!Number.isFinite(boat.cargoPumpBonus)) boat.cargoPumpBonus = 0;
+    if (!Number.isInteger(boat.cargoCapacity)) boat.cargoCapacity = 5;
   }
   return state;
 }
@@ -244,7 +245,8 @@ function stow(world, crate, boat, playerIndex) {
     const existing = world.freeActivities.crates.find(candidate => candidate.id === id);
     return sum + cargoSlotCost(existing);
   }, 0);
-  if (!crate || !boat || occupiedSlots + cargoSlotCost(crate) > 5) return false;
+  const capacity = Math.max(1, Math.floor(Number(boat?.cargoCapacity) || 5));
+  if (!crate || !boat || occupiedSlots + cargoSlotCost(crate) > capacity) return false;
   crate.state = "stowed";
   crate.carriedBy = null;
   crate.stowedBoat = boat.id;
