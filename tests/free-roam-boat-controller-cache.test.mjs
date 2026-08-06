@@ -8,6 +8,7 @@ test("Safari entry points resolve the rebuilt controller modules", async () => {
   const html = await readFile(new URL("../public/free-roam.html", import.meta.url), "utf8");
   assert.match(html, /free-roam-core-v8\.js\?v=2[^\n]+free-roam-core-v8\.js\?v=4/);
   assert.match(html, /free-roam-replication-v2\.js\?v=1[^\n]+free-roam-replication-v2\.js\?v=2/);
+  assert.match(html, /free-roam-client-prediction\.js\?v=42[^\n]+free-roam-client-prediction\.js\?v=43/);
   assert.match(html, /free-roam-dual-turret-client\.js\?v=5/);
   assert.match(html, /free-roam-v4\.js\?v=62/);
 });
