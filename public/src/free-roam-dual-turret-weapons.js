@@ -5,7 +5,7 @@ import {
   DUAL_TURRET_SHOT_INTERVAL,
   DUAL_TURRET_WEAPON_ID,
 } from "./free-roam-dual-turret-config.js?v=3";
-import {dualTurretBoat, playerDualTurret} from "./free-roam-dual-turret-boat.js?v=4";
+import {dualTurretBoat} from "./free-roam-dual-turret-boat.js?v=4";
 import {fireDualTurretHitscan} from "./free-roam-dual-turret-projectiles.js?v=4";
 
 const wrapDeg = value => ((Number(value) + 180) % 360 + 360) % 360 - 180;
@@ -22,6 +22,15 @@ function controllerState(world) {
   state.previousWeapon ||= Array.from({length: world.players?.length || 2}, () => false);
   while (state.previousWeapon.length < world.players.length) state.previousWeapon.push(false);
   return state;
+}
+
+function mountedTurret(world, playerIndex) {
+  const state = world?.freeDualTurretBoat;
+  const boat = dualTurretBoat(world);
+  const player = world?.players?.[playerIndex];
+  if (!state || !boat || player?.mode !== "boat" || player.activeBoat !== boat.id) return null;
+  const seat = boat.crew?.indexOf(playerIndex) ?? -1;
+  return seat >= 0 ? state.turrets?.[seat] || null : null;
 }
 
 function inputObjects(world, playerIndex) {
@@ -79,7 +88,7 @@ function cycleWeapon(world, playerIndex, mounted) {
   if (combat.equipped !== DUAL_TURRET_WEAPON_ID) combat.lastPersonalWeapon = combat.equipped;
   combat.equipped = available[current >= 0 ? (current + 1) % available.length : 0];
   if (combat.equipped !== DUAL_TURRET_WEAPON_ID) combat.lastPersonalWeapon = combat.equipped;
-  const turret = playerDualTurret(world, playerIndex);
+  const turret = mountedTurret(world, playerIndex);
   const suffix = combat.equipped === DUAL_TURRET_WEAPON_ID && turret
     ? ` ${turret.label}, патронов ${turret.ammo}.`
     : ".";
@@ -168,7 +177,7 @@ export function prepareDualTurretWeaponStep(world) {
   for (let playerIndex = 0; playerIndex < world.players.length; playerIndex += 1) {
     const input = currentInput(world, playerIndex);
     const combat = world.players[playerIndex]?.combat;
-    const turret = playerDualTurret(world, playerIndex);
+    const turret = mountedTurret(world, playerIndex);
     const mounted = Boolean(turret);
     if (!mounted && combat?.equipped === DUAL_TURRET_WEAPON_ID) combat.equipped = fallbackWeapon(combat);
     const rising = Boolean(input.weapon && !state.previousWeapon[playerIndex]);
