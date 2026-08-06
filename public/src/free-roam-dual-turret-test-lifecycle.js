@@ -5,11 +5,8 @@ import {
   DUAL_TURRET_HULL_POINTS,
   DUAL_TURRET_RECOVERY_SECONDS,
   DUAL_TURRET_START_AMMO,
-} from "./free-roam-dual-turret-config.js?v=2";
-import {
-  dualTurretBoat,
-  prepareDualTurretBoatRoom,
-} from "./free-roam-dual-turret-boat.js?v=2";
+} from "./free-roam-dual-turret-config.js?v=3";
+import {dualTurretBoat, prepareDualTurretBoatRoom} from "./free-roam-dual-turret-boat.js?v=3";
 import {ensureDualTurretPurchaseState} from "./free-roam-dual-turret-purchase.js?v=2";
 
 const DOCK_CANDIDATES = Object.freeze([
@@ -36,13 +33,11 @@ export function ensureDualTurretPrototypeState(world) {
     recoveryRemaining: null,
     warned30: false,
     warned10: false,
-    revision: 2,
+    revision: 3,
   };
   const state = world.freeDualTurretPrototype;
-  if (!Number.isFinite(Number(state.revision))) state.revision = 2;
-  if (state.recoveryRemaining != null && !Number.isFinite(Number(state.recoveryRemaining))) {
-    state.recoveryRemaining = null;
-  }
+  state.revision = 3;
+  if (state.recoveryRemaining != null && !Number.isFinite(Number(state.recoveryRemaining))) state.recoveryRemaining = null;
   state.warned30 = Boolean(state.warned30);
   state.warned10 = Boolean(state.warned10);
   return state;
@@ -60,9 +55,7 @@ function chooseDockPosition(world, boat) {
   let best = DOCK_CANDIDATES[0];
   let bestClearance = -Infinity;
   for (const candidate of DOCK_CANDIDATES) {
-    const clearance = obstacles.length
-      ? Math.min(...obstacles.map(obstacle => distance(candidate, obstacle)))
-      : Infinity;
+    const clearance = obstacles.length ? Math.min(...obstacles.map(obstacle => distance(candidate, obstacle))) : Infinity;
     if (clearance > bestClearance) {
       best = candidate;
       bestClearance = clearance;
@@ -73,50 +66,49 @@ function chooseDockPosition(world, boat) {
 
 function fullyRestorePrototype(world, boat) {
   const position = chooseDockPosition(world, boat);
-  boat.x = position.x;
-  boat.y = position.y;
-  boat.heading = 0;
-  boat.speed = 0;
-  boat.throttle = 0;
-  boat.rudder = 0;
-  boat.driver = null;
-  boat.crew = [null, null];
-  boat.sunk = false;
-  boat.reserved = false;
-  boat.connectionActivated = true;
-  boat.structuralHull = DUAL_TURRET_HULL_POINTS;
-  boat.maxStructuralHull = DUAL_TURRET_HULL_POINTS;
-  boat.hull = 100;
-  boat.armor = DUAL_TURRET_ARMOR_POINTS;
-  boat.armorMax = DUAL_TURRET_ARMOR_POINTS;
-  boat.water = 0;
-  boat.leak = 0;
-  boat.fuel = 100;
-  boat.engineTemp = 24;
-  boat.engineStalled = true;
-  boat.prototypeIdleStall = true;
-  boat.pumpActive = false;
-  boat.repairPatches = 5;
-  boat.hullRepairProgress = 0;
-  boat.repairQuarter = 0;
-  boat.dualRepairProgress = 0;
-  boat.dualRepairQuarter = 0;
-  boat.emergencyActive = false;
-  boat.emergencyRemaining = 45;
-  boat.emergencyWarned15 = false;
-  boat.emergencyWarned5 = false;
-  boat.restartProgress = 0;
-  boat.boundaryContact = null;
-  boat.collisionCooldown = 0;
-  boat.dualCollisionCooldown = 0;
-  boat.dualCollisionGraceUntil = (Number(world.time) || 0) + 2.5;
-  boat.refuelActive = false;
-  boat.refuelProgress = 0;
-  boat.engineServiceActive = false;
-  boat.engineServiceProgress = 0;
-  boat.cargo = [];
-  boat.cargoWeight = 0;
-  boat.prototypeRevision = 2;
+  Object.assign(boat, {
+    x: position.x,
+    y: position.y,
+    heading: 0,
+    speed: 0,
+    throttle: 0,
+    rudder: 0,
+    driver: null,
+    crew: [null, null],
+    sunk: false,
+    reserved: false,
+    connectionActivated: true,
+    structuralHull: DUAL_TURRET_HULL_POINTS,
+    maxStructuralHull: DUAL_TURRET_HULL_POINTS,
+    hull: 100,
+    armor: DUAL_TURRET_ARMOR_POINTS,
+    armorMax: DUAL_TURRET_ARMOR_POINTS,
+    water: 0,
+    leak: 0,
+    fuel: 100,
+    engineTemp: 24,
+    engineStalled: false,
+    prototypeIdleStall: false,
+    pumpActive: false,
+    repairPatches: 5,
+    hullRepairProgress: 0,
+    repairQuarter: 0,
+    emergencyActive: false,
+    emergencyRemaining: 45,
+    emergencyWarned15: false,
+    emergencyWarned5: false,
+    restartProgress: 0,
+    boundaryContact: null,
+    collisionCooldown: 0,
+    additionalCollisionCooldown: 0,
+    refuelActive: false,
+    refuelProgress: 0,
+    engineServiceActive: false,
+    engineServiceProgress: 0,
+    cargo: [],
+    cargoWeight: 0,
+    prototypeRevision: 3,
+  });
   for (const turret of boat.turrets || []) {
     turret.assignedPlayer = null;
     turret.cooldown = 0;
@@ -136,36 +128,28 @@ export function prepareDualTurretPrototypeRoom(world) {
   return boat;
 }
 
-function upgradeExistingPrototype(boat) {
-  if ((Number(boat.prototypeRevision) || 0) >= 2) return;
-  boat.prototypeRevision = 2;
-  for (const turret of boat.turrets || []) turret.ammo = DUAL_TURRET_START_AMMO;
-}
-
 export function prepareDualTurretPrototypeStep(world) {
   ensureDualTurretPurchaseState(world);
   const state = ensureDualTurretPrototypeState(world);
   const boat = dualTurretBoat(world);
   if (!boat || boat.reserved) return {boat, state};
-  upgradeExistingPrototype(boat);
+  if ((Number(boat.prototypeRevision) || 0) < 3) {
+    boat.prototypeRevision = 3;
+    boat.prototypeIdleStall = false;
+    for (const turret of boat.turrets || []) turret.ammo = Math.max(Number(turret.ammo) || 0, DUAL_TURRET_START_AMMO);
+  }
 
+  // An empty boat is stopped, not repeatedly marked as a failed engine. The
+  // old idle-stall loop caused a new "Мотор запущен" event every few seconds.
   const occupied = (boat.crew || []).some(Number.isInteger);
   if (!boat.sunk && !occupied) {
     boat.throttle = 0;
+    boat.rudder = 0;
     if (Math.abs(Number(boat.speed) || 0) < 0.15) boat.speed = 0;
-    if (!boat.emergencyActive) {
-      boat.engineStalled = true;
-      boat.prototypeIdleStall = true;
-    }
-  } else if (!boat.sunk && occupied && boat.prototypeIdleStall) {
-    const safeToStart = (Number(boat.fuel) || 0) > 0.01
-      && (Number(boat.water) || 0) <= 35
-      && (Number(boat.structuralHull) || 0) >= 5
-      && (Number(boat.engineTemp) || 0) < 92
-      && !boat.emergencyActive;
-    if (safeToStart) {
+    boat.prototypeIdleStall = false;
+    if (boat.engineStalled && Number(boat.fuel) > 0.01 && Number(boat.water) <= 35 && Number(boat.engineTemp) < 92 && !boat.emergencyActive) {
       boat.engineStalled = false;
-      boat.prototypeIdleStall = false;
+      boat.restartProgress = 0;
     }
   }
   return {boat, state};
@@ -175,7 +159,6 @@ export function finishDualTurretPrototypeStep(world, context, dt) {
   const boat = context?.boat || dualTurretBoat(world);
   const state = context?.state || ensureDualTurretPrototypeState(world);
   if (!boat || boat.reserved) return boat;
-
   if (!boat.sunk) {
     state.recoveryRemaining = null;
     state.warned30 = false;
