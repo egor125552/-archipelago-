@@ -1,14 +1,13 @@
 "use strict";
 
-import {resolveCombatTarget} from "./free-roam-targeting.js?v=39";
+import {listCombatTargets, resolveCombatTarget} from "./free-roam-targeting.js?v=39";
 import {
+  DUAL_TURRET_AUTO_TARGET_RANGE,
   DUAL_TURRET_SHOT_INTERVAL,
   DUAL_TURRET_WEAPON_ID,
-} from "./free-roam-dual-turret-config.js?v=3";
+} from "./free-roam-dual-turret-config.js?v=5";
 import {dualTurretBoat} from "./free-roam-dual-turret-boat.js?v=4";
-import {fireDualTurretHitscan} from "./free-roam-dual-turret-projectiles.js?v=4";
-
-const wrapDeg = value => ((Number(value) + 180) % 360 + 360) % 360 - 180;
+import {fireDualTurretHitscan} from "./free-roam-dual-turret-projectiles.js?v=5";
 
 function emit(world, type, text, targets = [0, 1], extra = {}) {
   world.events ||= [];
@@ -21,6 +20,10 @@ function controllerState(world) {
   const state = world.freeDualTurretBoat;
   state.previousWeapon ||= Array.from({length: world.players?.length || 2}, () => false);
   while (state.previousWeapon.length < world.players.length) state.previousWeapon.push(false);
+  for (const turret of state.turrets || []) {
+    delete turret.minimumRelativeHeading;
+    delete turret.maximumRelativeHeading;
+  }
   return state;
 }
 
@@ -110,6 +113,62 @@ function targetAllowedForBoat(world, boat, target) {
   return true;
 }
 
+function automaticHostileTarget(world, playerIndex, boat) {
+  return listCombatTargets(world, playerIndex, DUAL_TURRET_AUTO_TARGET_RANGE)
+    .find(target => targetAllowedForBoat(world, boat, target)
+      && !["player", "boat"].includes(target.kind)) || null;
+}
+
+export function selectDualTurretTarget(world, playerIndex, boat) {
+  const combat = world.players?.[playerIndex]?.combat;
+  const locked = resolveCombatTarget(
+    world,
+    playerIndex,
+    combat?.lockedTargetId,
+    DUAL_TURRET_AUTO_TARGET_RANGE,
+  );
+  if (locked && targetAllowedForBoat(world, boat, locked)) return locked;
+  if (combat?.lockedTargetId) combat.lockedTargetId = null;
+  const automatic = automaticHostileTarget(world, playerIndex, boat);
+  if (automatic && combat) combat.lockedTargetId = automatic.id;
+  return automatic;
+}
+
+function announceAutomaticTarget(world, playerIndex, combat, target) {
+  if (!target || !combat || combat.lastTurretAutoTargetId === target.id) return;
+  combat.lastTurretAutoTargetId = target.id;
+  emit(world, "target-auto-locked", `Бортовая установка автоматически выбрала цель: ${target.label}.`, [playerIndex], {
+    sourcePlayer: playerIndex,
+    targetId: target.id,
+    targetKind: target.kind,
+    x: target.point.x,
+    y: target.point.y,
+  });
+}
+
+function refreshTargetAfterShot(world, playerIndex, boat, previousTarget) {
+  if (!previousTarget) return;
+  const combat = world.players?.[playerIndex]?.combat;
+  const remaining = resolveCombatTarget(
+    world,
+    playerIndex,
+    previousTarget.id,
+    DUAL_TURRET_AUTO_TARGET_RANGE,
+  );
+  if (remaining && targetAllowedForBoat(world, boat, remaining)) return;
+  if (combat?.lockedTargetId === previousTarget.id) combat.lockedTargetId = null;
+  const replacement = automaticHostileTarget(world, playerIndex, boat);
+  if (replacement && combat) {
+    combat.lockedTargetId = replacement.id;
+    announceAutomaticTarget(world, playerIndex, combat, replacement);
+  } else if (combat) {
+    combat.lastTurretAutoTargetId = null;
+    emit(world, "target-cleared", "Живых боевых целей для бортовой установки не осталось.", [playerIndex], {
+      sourcePlayer: playerIndex,
+    });
+  }
+}
+
 function deny(world, playerIndex, turret, text) {
   const now = Number(world.time) || 0;
   if (now - (Number(turret.lastDeniedAt) || -999) < 1.2) return;
@@ -127,21 +186,12 @@ function tryFire(world, playerIndex, turret, boat) {
     return false;
   }
   const combat = world.players?.[playerIndex]?.combat;
-  const target = resolveCombatTarget(world, playerIndex, combat?.lockedTargetId, 620);
-  if (!target) {
-    deny(world, playerIndex, turret, "Сначала выбери боевую цель для бортовой установки.");
-    return false;
-  }
-  if (!targetAllowedForBoat(world, boat, target)) {
-    deny(world, playerIndex, turret, "Нельзя навести установку на свой бронекатер или его экипаж.");
-    return false;
-  }
-  const heading = targetBearing(boat, target.point);
-  const relative = wrapDeg(heading - boat.heading);
-  if (relative < turret.minimumRelativeHeading || relative > turret.maximumRelativeHeading) {
-    deny(world, playerIndex, turret, `Цель вне сектора: поверни бронекатер к ${turret.side < 0 ? "левому" : "правому"} борту.`);
-    return false;
-  }
+  const lockedBefore = combat?.lockedTargetId || null;
+  const target = selectDualTurretTarget(world, playerIndex, boat);
+  if (target && target.id !== lockedBefore) announceAutomaticTarget(world, playerIndex, combat, target);
+  const heading = target
+    ? targetBearing(boat, target.point)
+    : (Number.isFinite(Number(turret.heading)) ? Number(turret.heading) : Number(boat.heading) || 0);
   turret.heading = heading;
   turret.cooldown = DUAL_TURRET_SHOT_INTERVAL;
   turret.ammo -= 1;
@@ -165,8 +215,9 @@ function tryFire(world, playerIndex, turret, boat) {
     y: shot.y,
     impactX: shot.impactX,
     impactY: shot.impactY,
-    targetId: target.id,
+    targetId: target?.id ?? null,
   });
+  refreshTargetAfterShot(world, playerIndex, boat, target);
   return true;
 }
 

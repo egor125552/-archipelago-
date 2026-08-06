@@ -15,6 +15,7 @@ export const DUAL_TURRET_COLLISION_RADIUS = 7.5;
 export const DUAL_TURRET_WEAPON_ID = "dual-turret";
 export const DUAL_TURRET_SHOT_DAMAGE = 14;
 export const DUAL_TURRET_SHOT_INTERVAL = 0.18;
+export const DUAL_TURRET_AUTO_TARGET_RANGE = 620;
 // Retained for saved-state compatibility. New mounted shots are immediate and
 // are never replicated as moving projectile objects.
 export const DUAL_TURRET_PROJECTILE_SPEED = 0;
@@ -41,15 +42,11 @@ export const DUAL_TURRET_DEFINITIONS = Object.freeze([
     label: "левая установка",
     playerIndex: 0,
     side: -1,
-    minimumRelativeHeading: -138,
-    maximumRelativeHeading: 38,
   }),
   Object.freeze({
     id: "dual-turret-starboard",
     label: "правая установка",
     playerIndex: 1,
     side: 1,
-    minimumRelativeHeading: -38,
-    maximumRelativeHeading: 138,
   }),
 ]);

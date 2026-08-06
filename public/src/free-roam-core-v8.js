@@ -14,7 +14,7 @@ import {
 import {
   finishDualTurretWeaponStep,
   prepareDualTurretWeaponStep,
-} from "./free-roam-dual-turret-weapons.js?v=4";
+} from "./free-roam-dual-turret-weapons.js?v=5";
 import {applyDualTurretSpeech} from "./free-roam-dual-turret-speech.js?v=1";
 import {ensureDualTurretPhysicsProfile} from "./free-roam-dual-turret-physics.js?v=1";
 import {
@@ -25,6 +25,7 @@ import {
   activeBoatIds,
   attachBoatTransitionMetadata,
 } from "./free-roam-boat-events.js?v=1";
+import {isPlayerNearMerchant} from "./free-roam-shop.js?v=5";
 
 export * from "./free-roam-core-v7.js?v=1";
 export {prepareDualTurretBoatRoom};
@@ -42,6 +43,19 @@ function ensureController(world, options) {
   return state;
 }
 
+export function merchantOwnsAction(world, playerIndex, nextInput) {
+  return Boolean(nextInput?.action && isPlayerNearMerchant(world?.players?.[playerIndex]));
+}
+
+export function prepareFreeRoamPlayerInput(world, playerIndex, nextInput) {
+  if (!merchantOwnsAction(world, playerIndex, nextInput)) {
+    return prepareDualTurretInput(world, playerIndex, nextInput);
+  }
+  const held = world?.freeDualTurretBoat?.rawActionHeld;
+  if (Array.isArray(held)) held[playerIndex] = Boolean(nextInput?.action);
+  return {...(nextInput || {})};
+}
+
 export function createFreeWorld() {
   const world = base.createFreeWorld();
   ensureController(world, {activate: true});
@@ -54,7 +68,7 @@ export function setPlayerInput(world, playerIndex, nextInput) {
   ensureController(world, {activate: false});
   const eventStart = world.events?.length || 0;
   const previousBoatIds = activeBoatIds(world);
-  base.setPlayerInput(world, playerIndex, prepareDualTurretInput(world, playerIndex, nextInput));
+  base.setPlayerInput(world, playerIndex, prepareFreeRoamPlayerInput(world, playerIndex, nextInput));
   attachBoatTransitionMetadata(world, eventStart, previousBoatIds);
   applyDualTurretSpeech(world, eventStart);
 }

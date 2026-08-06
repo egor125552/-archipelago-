@@ -9,7 +9,10 @@ import {damageHostileActor} from "./free-roam-hostile-actors.js?v=3";
 import {damageHeavyPursuer} from "./free-roam-heavy-pursuer.js?v=4";
 import {damageEliteBoatBoss} from "./free-roam-elite-boat.js?v=2";
 import {releaseStolenCargo} from "./free-roam-marauder.js?v=33";
-import {DUAL_TURRET_SHOT_DAMAGE} from "./free-roam-dual-turret-config.js?v=3";
+import {
+  DUAL_TURRET_AUTO_TARGET_RANGE,
+  DUAL_TURRET_SHOT_DAMAGE,
+} from "./free-roam-dual-turret-config.js?v=5";
 
 const rad = value => Number(value) * Math.PI / 180;
 
@@ -35,6 +38,14 @@ function muzzlePoint(boat, turret) {
   return {
     x: Number(boat?.x) + Math.sin(direction) * forward + Math.cos(direction) * lateral,
     y: Number(boat?.y) - Math.cos(direction) * forward + Math.sin(direction) * lateral,
+  };
+}
+
+function emptyImpactPoint(muzzle, heading) {
+  const direction = rad(heading);
+  return {
+    x: muzzle.x + Math.sin(direction) * DUAL_TURRET_AUTO_TARGET_RANGE,
+    y: muzzle.y - Math.cos(direction) * DUAL_TURRET_AUTO_TARGET_RANGE,
   };
 }
 
@@ -104,8 +115,9 @@ function applyTargetDamage(world, target, shot) {
 export function fireDualTurretHitscan(world, {boat, turret, sourcePlayer, heading, target}) {
   const state = controllerState(world);
   const muzzle = muzzlePoint(boat, turret);
-  const impactX = Number(target?.point?.x) || muzzle.x;
-  const impactY = Number(target?.point?.y) || muzzle.y;
+  const emptyImpact = emptyImpactPoint(muzzle, heading);
+  const impactX = Number.isFinite(Number(target?.point?.x)) ? Number(target.point.x) : emptyImpact.x;
+  const impactY = Number.isFinite(Number(target?.point?.y)) ? Number(target.point.y) : emptyImpact.y;
   const shot = {
     id: `dual-shot-${state.nextShotId++}`,
     turretId: turret.id,
