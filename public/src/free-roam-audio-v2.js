@@ -10,9 +10,26 @@ const ORDINARY_LOCAL_ENGINE_LOOPS = Object.freeze([
   "engineV4",
 ]);
 
+function isOrdinaryLocalEngine(name) {
+  return ORDINARY_LOCAL_ENGINE_LOOPS.includes(name);
+}
+
 export class FreeRoamAudio extends BaseFreeRoamAudio {
+  constructor() {
+    super();
+    this.ordinaryLocalEngineAllowed = false;
+  }
+
   stopOrdinaryLocalEngine() {
     for (const name of ORDINARY_LOCAL_ENGINE_LOOPS) this.stopLoop?.(name);
+  }
+
+  ensureLoop(name, options) {
+    if (isOrdinaryLocalEngine(name) && !this.ordinaryLocalEngineAllowed) {
+      this.stopLoop?.(name);
+      return null;
+    }
+    return super.ensureLoop(name, options);
   }
 
   updateWorld(world, playerIndex) {
@@ -20,10 +37,15 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
     const localBoat = player && ["boat", "roof"].includes(player.mode)
       ? world?.boats?.[player.activeBoat]
       : null;
-    const ordinaryBoatAboard = Boolean(localBoat && localBoat.audioProfile !== "dual-turret");
-    if (!ordinaryBoatAboard) this.stopOrdinaryLocalEngine();
+    this.ordinaryLocalEngineAllowed = Boolean(
+      localBoat
+      && !localBoat.sunk
+      && localBoat.audioProfile !== "dual-turret",
+    );
+
+    if (!this.ordinaryLocalEngineAllowed) this.stopOrdinaryLocalEngine();
     super.updateWorld(world, playerIndex);
-    if (!ordinaryBoatAboard) this.stopOrdinaryLocalEngine();
+    if (!this.ordinaryLocalEngineAllowed) this.stopOrdinaryLocalEngine();
   }
 
   handleFreeEvent(event, playerIndex) {
