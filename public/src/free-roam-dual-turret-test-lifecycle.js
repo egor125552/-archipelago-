@@ -6,7 +6,7 @@ import {
   DUAL_TURRET_RECOVERY_SECONDS,
   DUAL_TURRET_START_AMMO,
 } from "./free-roam-dual-turret-config.js?v=3";
-import {dualTurretBoat, prepareDualTurretBoatRoom} from "./free-roam-dual-turret-boat.js?v=3";
+import {dualTurretBoat, prepareDualTurretBoatRoom} from "./free-roam-dual-turret-boat.js?v=4";
 import {ensureDualTurretPurchaseState} from "./free-roam-dual-turret-purchase.js?v=2";
 
 const DOCK_CANDIDATES = Object.freeze([
@@ -139,8 +139,6 @@ export function prepareDualTurretPrototypeStep(world) {
     for (const turret of boat.turrets || []) turret.ammo = Math.max(Number(turret.ammo) || 0, DUAL_TURRET_START_AMMO);
   }
 
-  // An empty boat is stopped, not repeatedly marked as a failed engine. The
-  // old idle-stall loop caused a new "Мотор запущен" event every few seconds.
   const occupied = (boat.crew || []).some(Number.isInteger);
   if (!boat.sunk && !occupied) {
     boat.throttle = 0;
