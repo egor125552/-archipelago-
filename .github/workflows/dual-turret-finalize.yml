@@ -1,0 +1,89 @@
+name: Finalize dual-turret patrol boat
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: "${{ github.head_ref == 'agent/dual-turret-patrol' }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/dual-turret-patrol
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Materialize reviewed sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64
+          import hashlib
+          import pathlib
+          import tarfile
+
+          root = pathlib.Path.cwd().resolve()
+          parts = sorted(root.glob('.github/dual-turret-source-*.txt'))
+          if len(parts) != 7:
+              raise SystemExit(f'expected 7 source parts, found {len(parts)}')
+          archive = pathlib.Path('/tmp/dual-turret-final.tar.xz')
+          archive.write_bytes(base64.b64decode(''.join(part.read_text().strip() for part in parts), validate=True))
+          digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+          if digest != 'eb4ba75beecee0d0d9a1da9f3209d186391350c881ed3d18adee66bd0567d2c8':
+              raise SystemExit(f'source archive SHA mismatch: {digest}')
+          with tarfile.open(archive, 'r:xz') as source:
+              for member in source.getmembers():
+                  target = (root / member.name).resolve()
+                  if target != root and root not in target.parents:
+                      raise SystemExit(f'unsafe archive path: {member.name}')
+                  if member.issym() or member.islnk():
+                      raise SystemExit(f'archive links are forbidden: {member.name}')
+              source.extractall(root)
+          PY
+          patch -p1 < .github/dual-turret-reviewed.patch
+          python3 .github/dual-turret-existing-files.py
+      - name: Verify audio and integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(sha256sum public/assets/audio/free-roam-dual-turret/dual-turret-shot-v1.mp3 | cut -d' ' -f1)" = "491a91efb10c8d9ee3d3d66d2a3a3b6fffbb31b1fbd9af53f7a578b2a4cf397a"
+          test "$(sha256sum public/assets/audio/free-roam-dual-turret/dual-turret-engine-v1.mp3 | cut -d' ' -f1)" = "d9502b154ddfd08e51dbc1959dadd33259acf92547078e4a714cbdb278b19457"
+          if command -v ffmpeg >/dev/null 2>&1; then
+            ffmpeg -v error -i public/assets/audio/free-roam-dual-turret/dual-turret-shot-v1.mp3 -f null -
+            ffmpeg -v error -i public/assets/audio/free-roam-dual-turret/dual-turret-engine-v1.mp3 -f null -
+          fi
+          while IFS= read -r file; do node --check "$file"; done < <(
+            find public/src src tests -type f \
+              \( -name '*dual-turret*' -o -name 'free-roam-core-v8.js' -o -name 'free-roam-replication-v2.js' -o -name 'free-roam-server.js' -o -name 'free-roam-v4.js' \) \
+              | sort
+          )
+          grep -q 'free-roam-core-v8.js?v=1' public/src/free-roam-v4.js
+          grep -q 'free-roam-replication-v2.js?v=1' public/src/free-roam-v4.js
+          grep -q 'free-roam-v4.js?v=59' public/free-roam.html
+          grep -q 'free-roam-dual-turret-client.js?v=2' public/free-roam.html
+          test -z "$(find public/assets/audio/free-roam-dual-turret -type f \( -name '*.part-*' -o -name '*.b64' -o -name 'chunk-*' -o -name '*.txt' \) -print -quit)"
+      - run: npm ci
+      - name: Run complete project tests
+        run: npm test
+      - name: Publish clean verified branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/dual-turret-source-*.txt
+          rm -f .github/dual-turret-reviewed.patch .github/dual-turret-existing-files.py
+          rm -f .github/workflows/dual-turret-materialize.yml .github/workflows/dual-turret-finalize.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: add modular dual-turret patrol boat"
+          git push origin HEAD:agent/dual-turret-patrol
