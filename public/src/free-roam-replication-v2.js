@@ -1,7 +1,7 @@
 "use strict";
 
 import * as base from "./free-roam-replication.js";
-import {isDualTurretBoat} from "./free-roam-dual-turret-boat.js?v=3";
+import {isDualTurretBoat} from "./free-roam-dual-turret-boat.js?v=4";
 
 export * from "./free-roam-replication.js";
 
@@ -23,7 +23,11 @@ export function replicatedFreeWorld(world) {
     target.collisionRadius = rounded(source.collisionRadius || 6);
     target.boardingRange = rounded(source.boardingRange || 12);
     target.cargoCapacity = Math.max(1, Math.floor(Number(source.cargoCapacity) || 5));
+    target.controlProfile = source.controlProfile || "player-boat";
+    target.speechProfile = source.speechProfile || "standard";
     target.audioProfile = source.audioProfile || "standard";
+    target.engineSound = source.engineSound || "motorboatReal";
+    target.mountedWeaponId = source.mountedWeaponId || null;
     if (!isDualTurretBoat(source)) continue;
     target.structuralHull = rounded(source.structuralHull);
     target.maxStructuralHull = rounded(source.maxStructuralHull);
@@ -51,8 +55,6 @@ export function replicatedFreeWorld(world) {
     };
   }
   if (world?.freeDualTurretProjectiles) {
-    // Mounted shots are immediate server events. No moving projectile list or
-    // repeated end-event history is copied into every network snapshot.
     snapshot.freeDualTurretProjectiles = {mode: "instant"};
   }
   return snapshot;
