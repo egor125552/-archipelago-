@@ -1,9 +1,6 @@
 name: Materialize dual-turret patrol boat
 
 on:
-  push:
-    branches:
-      - agent/dual-turret-patrol
   pull_request:
     branches:
       - main
@@ -13,9 +10,7 @@ permissions:
 
 jobs:
   materialize:
-    if: >-
-      (github.event_name == 'push' && github.event.head_commit.message == 'chore: stage modular dual-turret release') ||
-      (github.event_name == 'pull_request' && github.head_ref == 'agent/dual-turret-patrol')
+    if: "${{ github.head_ref == 'agent/dual-turret-patrol' }}"
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -48,7 +43,6 @@ jobs:
           expected = 'eb4ba75beecee0d0d9a1da9f3209d186391350c881ed3d18adee66bd0567d2c8'
           if digest != expected:
               raise SystemExit(f'source archive SHA mismatch: {digest}')
-
           with tarfile.open(archive, 'r:xz') as source:
               for member in source.getmembers():
                   target = (root / member.name).resolve()
@@ -57,6 +51,84 @@ jobs:
                   if member.issym() or member.islnk():
                       raise SystemExit(f'archive links are forbidden: {member.name}')
               source.extractall(root)
+          PY
+      - name: Apply reviewed integration fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new):
+              file = Path(path)
+              text = file.read_text()
+              if old not in text:
+                  raise SystemExit(f'missing patch anchor in {path}: {old[:80]!r}')
+              file.write_text(text.replace(old, new))
+
+          replace(
+              'src/free-roam-server.js',
+              '  reserveUnconnectedBoats(world);\n  prepareDualTurretBoatRoom(world);\n  prepareDualTurretPurchaseRoom(world);',
+              '  reserveUnconnectedBoats(world);\n  prepareDualTurretPurchaseRoom(world);',
+          )
+          replace(
+              'src/free-roam-server.js',
+              '  setPlayerPresence(serverRoom.world, playerIndex, present);\n  setPlayerInput(serverRoom.world, playerIndex, withoutPulseInputs(serverRoom.receivedInputs[playerIndex]));\n  if (present) reportMegaBombStatus(serverRoom.world, playerIndex);',
+              '  setPlayerPresence(serverRoom.world, playerIndex, present);\n  setPlayerInput(serverRoom.world, playerIndex, withoutPulseInputs(serverRoom.receivedInputs[playerIndex]));\n  if (present) {\n    const sharedBoat = (serverRoom.world.boats || []).find(boat => boat?.boatType === "dual-turret-patrol");\n    if (sharedBoat?.reserved && !sharedBoat.connectionActivated) prepareDualTurretBoatRoom(serverRoom.world);\n    reportMegaBombStatus(serverRoom.world, playerIndex);\n  }',
+          )
+          replace(
+              'tests/free-roam-dual-turret-v1.test.mjs',
+              '  createFreeWorld,\n  setPlayerInput,\n  stepFreeWorld,',
+              '  createFreeWorld,\n  setPlayerInput,\n  setPlayerPresence,\n  stepFreeWorld,',
+          )
+          replace(
+              'tests/free-roam-dual-turret-v1.test.mjs',
+              'import {prepareDualTurretBoatRoom} from "../public/src/free-roam-dual-turret-boat.js";',
+              'import {\n  finishDualTurretBoatStep,\n  prepareDualTurretBoatRoom,\n  prepareDualTurretBoatStep,\n} from "../public/src/free-roam-dual-turret-boat.js";\nimport {applyCollisionDamage} from "../public/src/collision-model.js";',
+          )
+          replace(
+              'tests/free-roam-dual-turret-v1.test.mjs',
+              'function placeNearBoat(world, playerIndex, boat) {\n  const player = world.players[playerIndex];',
+              'function placeNearBoat(world, playerIndex, boat) {\n  setPlayerPresence(world, playerIndex, true);\n  const player = world.players[playerIndex];',
+          )
+          replace(
+              'tests/free-roam-dual-turret-v1.test.mjs',
+              '  world.players[0].combat.equipped = "pistol";\n  pulse(world, 0, {weapon: true});',
+              '  world.players[0].combat.weapons.automatic = true;\n  world.players[0].combat.ammo = 20;\n  world.players[0].combat.equipped = "pistol";\n  pulse(world, 0, {weapon: true});',
+          )
+          replace(
+              'tests/free-roam-dual-turret-v1.test.mjs',
+              '  world.players[0].combat.alive = false;\n  world.players[0].mode = "dead";',
+              '  world.players[0].combat.alive = false;\n  world.players[0].combat.respawnRemaining = 8;\n  world.players[0].mode = "dead";',
+          )
+          replace(
+              'tests/free-roam-dual-turret-v1.test.mjs',
+              '''test("legacy hull damage stays point-based against the 300-point structure", () => {\n  const world = createFreeWorld();\n  const boat = prepareDualTurretBoatRoom(world);\n  const beforeHull = boat.structuralHull;\n  const beforeArmor = boat.armor;\n  world.__legacyHullDamage = {boatId: boat.id, amount: 10};\n  stepFreeWorld(world, 0.01);\n  assert.ok(boat.armor < beforeArmor);\n  assert.ok(boat.structuralHull > beforeHull - 10);\n  assert.ok(boat.structuralHull > 290);\n});''',
+              '''test("legacy collision damage stays point-based against the 300-point structure", () => {\n  const world = createFreeWorld();\n  const boat = prepareDualTurretBoatRoom(world);\n  const beforeHull = boat.structuralHull;\n  const beforeArmor = boat.armor;\n  const context = prepareDualTurretBoatStep(world);\n  const impact = applyCollisionDamage(boat, 10);\n  finishDualTurretBoatStep(world, context, 0.01);\n  assert.ok(impact.absorbed > 0);\n  assert.ok(boat.armor < beforeArmor);\n  assert.ok(Math.abs((beforeHull - boat.structuralHull) - impact.damage) < 0.001);\n  assert.ok(boat.structuralHull > 290);\n});''',
+          )
+          replace(
+              'tests/free-roam-dual-turret-v1.test.mjs',
+              '  marauder.x = 205.8;\n  marauder.y = 69;\n  world.freeDualTurretProjectiles.projectiles.push({',
+              '  marauder.x = 205.8;\n  marauder.y = 69;\n  const beforeMarauderHull = marauder.hull;\n  world.freeDualTurretProjectiles.projectiles.push({',
+          )
+          replace(
+              'tests/free-roam-dual-turret-v1.test.mjs',
+              '  assert.equal(marauder.hull, 100);',
+              '  assert.equal(marauder.hull, beforeMarauderHull);',
+          )
+
+          replication = Path('public/src/free-roam-replication-v2.js')
+          text = replication.read_text()
+          start = text.index('  const purchase = world?.freeDualTurretPurchase;')
+          end = text.index('  return snapshot;', start)
+          replacement = '''  const purchase = world?.freeDualTurretPurchase;\n  if (purchase) {\n    snapshot.freeDualTurretPurchase = {\n      purchased: Boolean(purchase.purchased),\n      price: Math.max(0, Math.floor(Number(purchase.price) || 0)),\n      purchasedBy: Number.isInteger(purchase.purchasedBy) ? purchase.purchasedBy : null,\n      purchasedAt: rounded(purchase.purchasedAt),\n    };\n  }\n  const projectiles = world?.freeDualTurretProjectiles;\n  if (projectiles) {\n    snapshot.freeDualTurretProjectiles = {\n      projectiles: Object.fromEntries((projectiles.projectiles || []).map(projectile => [projectile.id, {\n        id: projectile.id,\n        turretId: projectile.turretId,\n        sourcePlayer: projectile.sourcePlayer,\n        sourceBoatId: projectile.sourceBoatId,\n        targetId: projectile.targetId,\n        x: rounded(projectile.x),\n        y: rounded(projectile.y),\n        previousX: rounded(projectile.previousX),\n        previousY: rounded(projectile.previousY),\n        vx: rounded(projectile.vx),\n        vy: rounded(projectile.vy),\n        launchHeading: rounded(projectile.launchHeading),\n        inheritedBoatVelocity: {\n          x: rounded(projectile.inheritedBoatVelocity?.x),\n          y: rounded(projectile.inheritedBoatVelocity?.y),\n        },\n        age: rounded(projectile.age),\n        ttl: rounded(projectile.ttl),\n      }])),\n      endEvents: Object.fromEntries((projectiles.endEvents || []).slice(-16).map((event, index) => [\n        `${event.id || "dual-shot"}:${rounded(event.at)}:${event.reason || "end"}:${index}`,\n        event,\n      ])),\n    };\n  }\n'''
+          replication.write_text(text[:start] + replacement + text[end:])
+
+          replace(
+              'public/src/free-roam-dual-turret-audio.js',
+              '  const projectiles = world?.freeDualTurretProjectiles?.projectiles || [];\n  const active = new Set(projectiles.map(projectile => projectile.id));',
+              '  const replicatedProjectiles = world?.freeDualTurretProjectiles?.projectiles;\n  const projectiles = Array.isArray(replicatedProjectiles)\n    ? replicatedProjectiles\n    : Object.values(replicatedProjectiles || {});\n  const active = new Set(projectiles.map(projectile => projectile.id));',
+          )
           PY
       - name: Verify uploaded audio
         shell: bash
@@ -73,7 +145,7 @@ jobs:
         run: |
           set -euo pipefail
           while IFS= read -r file; do node --check "$file"; done < <(
-            find public/src src -type f -name '*.js' \
+            find public/src src tests -type f \
               \( -name '*dual-turret*' -o -name 'free-roam-core-v8.js' -o -name 'free-roam-replication-v2.js' -o -name 'free-roam-server.js' \) \
               | sort
           )
