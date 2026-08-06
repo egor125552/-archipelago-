@@ -45,9 +45,9 @@ export function replicatedFreeWorld(world) {
     snapshot.freeDualTurretBoat = {
       version: controller.version,
       boatId: controller.boatId,
+      weaponMode: controller.weaponMode || "instant",
       recoveryRemaining: controller.recoveryRemaining == null ? null : rounded(controller.recoveryRemaining),
     };
   }
-  if (world?.freeDualTurretProjectiles) snapshot.freeDualTurretProjectiles = {mode: "instant"};
   return snapshot;
 }
