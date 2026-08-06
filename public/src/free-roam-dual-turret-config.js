@@ -11,10 +11,12 @@ export const DUAL_TURRET_TURN_FACTOR = 1.28;
 export const DUAL_TURRET_BOARDING_RANGE = 22;
 export const DUAL_TURRET_COLLISION_RADIUS = 7.5;
 export const DUAL_TURRET_WEAPON_ID = "dual-turret";
-export const DUAL_TURRET_SHOT_DAMAGE = 18;
-export const DUAL_TURRET_SHOT_INTERVAL = 0.72;
-export const DUAL_TURRET_PROJECTILE_SPEED = 96;
-export const DUAL_TURRET_PROJECTILE_TTL = 3.2;
+export const DUAL_TURRET_SHOT_DAMAGE = 14;
+export const DUAL_TURRET_SHOT_INTERVAL = 0.18;
+// Retained for saved-state compatibility. New mounted shots are immediate and
+// are never replicated as moving projectile objects.
+export const DUAL_TURRET_PROJECTILE_SPEED = 0;
+export const DUAL_TURRET_PROJECTILE_TTL = 0;
 export const DUAL_TURRET_START_AMMO = 1000;
 export const DUAL_TURRET_PRICE = 0;
 export const DUAL_TURRET_RECOVERY_SECONDS = 60;
