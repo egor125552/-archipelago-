@@ -3,6 +3,7 @@
 import {DUAL_TURRET_AUDIO_ROOT} from "./free-roam-dual-turret-config.js?v=3";
 
 export const DUAL_TURRET_AUDIO = Object.freeze({
+  engine: `${DUAL_TURRET_AUDIO_ROOT}dual-turret-engine-v1.mp3?v=2`,
   shot: `${DUAL_TURRET_AUDIO_ROOT}dual-turret-shot-v1.mp3?v=2`,
 });
 
@@ -17,11 +18,9 @@ export async function preloadDualTurretAudio(audio) {
   await audio.dualTurretPreloadPromise;
 }
 
-// Engine audio is intentionally not implemented here. The armored patrol uses
-// the same single common engine loop as every other player boat.
+// Compatibility exports only. The shared player-boat audio controller selects
+// the one active engine through boat.engineSound.
 export function updateDualTurretEngine() {}
-
-// Hits are immediate, so there is no moving projectile object or fly-by loop.
 export function updateDualTurretProjectileAudio() {}
 
 export function handleDualTurretAudioEvent(audio, event, playerIndex) {
