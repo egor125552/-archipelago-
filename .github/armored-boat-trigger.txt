@@ -1,3 +1,4 @@
 Trigger the one-time focused armored-boat integration workflow.
 Run after pull request creation.
 Run after the main runner is installed.
+Run after pull request is ready.
