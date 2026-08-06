@@ -51,6 +51,7 @@ jobs:
               source.extractall(root)
           PY
           patch -p1 < .github/dual-turret-reviewed.patch
+          find public src tests -type f -name '*.orig' -delete
           python3 .github/dual-turret-existing-files.py
       - name: Verify audio and integration
         shell: bash
