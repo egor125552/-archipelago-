@@ -31,11 +31,20 @@ export class Lobby extends PersistentLobby {
   }
 
   offerFreeState(socket, state) {
+    const client = this.clients.get(socket);
     const retryEvents = this.expireStalledFreeState(socket);
-    const offeredState = retryEvents.length
-      ? {...state, events: [...retryEvents, ...(state?.events || [])]}
-      : state;
-    return super.offerFreeState(socket, offeredState);
+    if (!retryEvents.length) return super.offerFreeState(socket, state);
+
+    const queuedEvents = Array.isArray(client?.freePending?.events)
+      ? client.freePending.events
+      : [];
+    // Preserve audible chronology: unacknowledged events first, then events
+    // accumulated while waiting, and only then events from the newest tick.
+    if (client) client.freePending = null;
+    return super.offerFreeState(socket, {
+      ...state,
+      events: [...retryEvents, ...queuedEvents, ...(state?.events || [])],
+    });
   }
 
   flushFreeState(socket) {
