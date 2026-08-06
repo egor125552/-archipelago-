@@ -1,10 +1,10 @@
 import persistentWorker, {Lobby as PersistentLobby} from "./worker-persistent.js";
 
 export const FREE_STATE_ACK_TIMEOUT_MS = 1800;
-export const ARCHIPELAGO_BUILD_ID = "2026-08-07-armored-hard-fix-4";
+export const ARCHIPELAGO_BUILD_ID = "2026-08-07-armored-spatial-audio-6";
 
 const FREE_ROAM_HTML_REPLACEMENTS = Object.freeze([
-  ["free-roam-v4.js?v=62", "free-roam-v4.js?v=64"],
+  ["free-roam-v4.js?v=62", "free-roam-v4.js?v=66"],
   ["/src/free-roam-core-v8.js?v=4", "/src/free-roam-core-v8.js?v=5"],
   ["/src/free-roam-client-prediction.js?v=43", "/src/free-roam-client-prediction.js?v=44"],
   ["/src/free-roam-dual-turret-projectiles.js?v=4", "/src/free-roam-dual-turret-projectiles.js?v=5"],
@@ -33,7 +33,8 @@ function injectFreeRoamBuild(html) {
   for (const [from, to] of FREE_ROAM_HTML_REPLACEMENTS) result = result.replaceAll(from, to);
   const extraMappings = [
     '        "/src/free-roam-audio-v5.js?v=45": "/src/free-roam-audio-v5.js?v=46",',
-    '        "/src/free-roam-audio-v4.js?v=38": "/src/free-roam-audio-v4.js?v=39",',
+    '        "/src/free-roam-audio-v4.js?v=38": "/src/free-roam-audio-v4.js?v=41",',
+    '        "/src/free-roam-audio-v4.js?v=39": "/src/free-roam-audio-v4.js?v=41",',
     '        "/src/free-roam-audio-v3.js?v=38": "/src/free-roam-audio-v3.js?v=39",',
     '        "/src/free-roam-audio-v2.js?v=38": "/src/free-roam-audio-v2.js?v=40",',
     '        "/src/free-roam-audio-v2.js?v=39": "/src/free-roam-audio-v2.js?v=40",',
