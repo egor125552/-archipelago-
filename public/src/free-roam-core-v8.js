@@ -48,6 +48,23 @@ export function setPlayerInput(world, playerIndex, nextInput) {
   base.setPlayerInput(world, playerIndex, sanitized);
 }
 
+function translateLegacyBoatDamage(world, context) {
+  for (let index = 0; index < (world.boats || []).length; index += 1) {
+    const boat = world.boats[index];
+    const before = context?.before?.[index];
+    const maximum = Number(boat?.maxStructuralHull);
+    if (!boat || !before || !Number.isFinite(maximum) || maximum <= 0) continue;
+    const armorAlreadyChanged = Number(boat.armor) < Number(before.armor) - 0.0001;
+    const compatibilityLoss = Number(before.hull) - Number(boat.hull);
+    const structureUnchanged = Math.abs(Number(boat.structuralHull) - Number(before.structuralHull)) < 0.0001;
+    if (!armorAlreadyChanged || compatibilityLoss <= 0.0001 || !structureUnchanged) continue;
+    // applyCollisionDamage has already consumed armor and leaves the remaining
+    // point damage in the old 0..100 hull field. Move only that remaining
+    // damage into the extended structure before the compatibility layer runs.
+    boat.structuralHull = Math.max(0, Number(before.structuralHull) - compatibilityLoss);
+  }
+}
+
 export function stepFreeWorld(world, dt) {
   const safeDt = Math.max(0, Math.min(0.1, Number(dt) || 0));
   ensureDualTurretBoat(world, {activate: false});
@@ -59,6 +76,7 @@ export function stepFreeWorld(world, dt) {
   const playerBoatContext = preparePlayerBoatStep(world);
   const weaponContext = prepareDualTurretWeaponStep(world);
   const result = base.stepFreeWorld(world, safeDt);
+  translateLegacyBoatDamage(world, playerBoatContext);
   finishPlayerBoatStep(world, playerBoatContext, safeDt, eventStart);
   finishDualTurretPurchaseStep(purchaseContext);
   finishDualTurretWeaponStep(world, weaponContext, safeDt);
