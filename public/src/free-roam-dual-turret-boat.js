@@ -16,6 +16,7 @@ import {
   DUAL_TURRET_DEFINITIONS,
   DUAL_TURRET_HULL_POINTS,
   DUAL_TURRET_START_AMMO,
+  DUAL_TURRET_WEAPON_ID,
 } from "./free-roam-dual-turret-config.js?v=3";
 
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value));
@@ -44,11 +45,15 @@ function createBoat() {
     driver: null,
     boatType: DUAL_TURRET_BOAT_TYPE,
     label: "двухместный бронекатер",
+    controlProfile: "player-boat",
+    speechProfile: "armored-patrol",
+    audioProfile: "armored-patrol",
+    engineSound: "dualTurretEngine",
+    mountedWeaponId: DUAL_TURRET_WEAPON_ID,
     crewCapacity: 2,
     collisionRadius: DUAL_TURRET_COLLISION_RADIUS,
     boardingRange: DUAL_TURRET_BOARDING_RANGE,
     cargoCapacity: 5,
-    audioProfile: "standard",
     x: 210,
     y: 102,
     heading: 0,
@@ -134,11 +139,15 @@ export function ensureDualTurretBoat(world, {activate = true} = {}) {
   boat.id = DUAL_TURRET_BOAT_ID;
   boat.boatType = DUAL_TURRET_BOAT_TYPE;
   boat.label = "двухместный бронекатер";
+  boat.controlProfile = "player-boat";
+  boat.speechProfile = "armored-patrol";
+  boat.audioProfile = "armored-patrol";
+  boat.engineSound = "dualTurretEngine";
+  boat.mountedWeaponId = DUAL_TURRET_WEAPON_ID;
   boat.crewCapacity = 2;
   boat.collisionRadius = DUAL_TURRET_COLLISION_RADIUS;
   boat.boardingRange = DUAL_TURRET_BOARDING_RANGE;
   boat.cargoCapacity = 5;
-  boat.audioProfile = "standard";
   boat.maxStructuralHull = Math.max(1, Number(boat.maxStructuralHull) || DUAL_TURRET_HULL_POINTS);
   if (!Number.isFinite(Number(boat.structuralHull))) boat.structuralHull = boat.maxStructuralHull;
   boat.structuralHull = clamp(Number(boat.structuralHull), 0, boat.maxStructuralHull);
