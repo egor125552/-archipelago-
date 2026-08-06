@@ -15,6 +15,11 @@ import {
   assignPlayerToBoat,
   ensurePlayerBoat,
 } from "../public/src/free-roam-player-boats.js";
+import {
+  applyPlayerBoatSpeechProfiles,
+  reconcilePlayerBoatTransitions,
+} from "../public/src/free-roam-player-boat-profiles.js";
+import {reconcileLocalPrediction} from "../public/src/free-roam-client-prediction.js";
 import {replicatedFreeWorld} from "../public/src/free-roam-replication-v2.js";
 import {
   DUAL_TURRET_SHOT_DAMAGE,
@@ -55,13 +60,17 @@ function isolateBoat(world, selected) {
   }
 }
 
-test("the armored patrol is a normal player boat with two seats and shared metadata", () => {
+test("the armored patrol is a separate profiled boat under the shared player-boat controller", () => {
   const world = createFreeWorld();
   const boat = prepareDualTurretBoatRoom(world);
   assert.equal(boat.boatType, "dual-turret-patrol");
+  assert.equal(boat.controlProfile, "player-boat");
+  assert.equal(boat.speechProfile, "armored-patrol");
+  assert.equal(boat.audioProfile, "armored-patrol");
+  assert.equal(boat.engineSound, "dualTurretEngine");
+  assert.equal(boat.mountedWeaponId, "dual-turret");
   assert.equal(boat.crewCapacity, 2);
   assert.equal(boat.cargoCapacity, 5);
-  assert.equal(boat.audioProfile, "standard");
   assert.equal(boat.structuralHull, 300);
   assert.equal(boat.armor, 200);
   assert.equal(boat.turrets.length, 2);
@@ -123,6 +132,28 @@ test("action exits the armored patrol into open water after a full stop", () => 
   assert.equal(world.players[0].activeBoat, null);
   assert.equal(boat.driver, null);
   assert.deepEqual(boat.crew, [null, null]);
+});
+
+test("a legacy external exit cannot silently put the player back into the armored boat", () => {
+  const world = createFreeWorld();
+  const boat = prepareDualTurretBoatRoom(world);
+  isolateBoat(world, boat);
+  board(world, 0, boat);
+  const player = world.players[0];
+  player.mode = "swim";
+  player.activeBoat = null;
+  player.x = boat.x;
+  player.y = boat.y + 8;
+  boat.driver = null;
+
+  reconcilePlayerBoatTransitions(world);
+  stepFreeWorld(world, 0.05);
+
+  assert.equal(player.mode, "swim");
+  assert.equal(player.activeBoat, null);
+  assert.equal(boat.driver, null);
+  assert.deepEqual(boat.crew, [null, null]);
+  assert.equal(boat.turrets[0].assignedPlayer, null);
 });
 
 test("a nearby crate is stowed instead of forcing the crew member out", () => {
@@ -213,6 +244,36 @@ test("common repair restores extended structure, armor and leak", () => {
   assert.ok(boat.armor > 120);
   assert.ok(boat.structuralHull > 240);
   assert.ok(boat.leak < 5);
+});
+
+test("armored boat events use armor, hull and plate speech instead of standard boat wording", () => {
+  const world = createFreeWorld();
+  const boat = prepareDualTurretBoatRoom(world);
+  boat.crew = [0, null];
+  boat.driver = 0;
+  world.players[0].mode = "boat";
+  world.players[0].activeBoat = boat.id;
+  world.events.push({
+    type: "player-boat-damaged",
+    text: "boat damaged",
+    targets: [0],
+    boatId: boat.id,
+    at: world.time,
+  });
+  world.events.push({
+    type: "hull-repair-complete",
+    text: "repair complete",
+    targets: [0],
+    boatId: boat.id,
+    at: world.time,
+  });
+
+  applyPlayerBoatSpeechProfiles(world, 0);
+
+  assert.match(world.events[0].text, /Бронекатер/);
+  assert.match(world.events[0].text, /Броня/);
+  assert.match(world.events[0].text, /корпус/);
+  assert.match(world.events[1].text, /Пластина установлена/);
 });
 
 test("a healthy empty patrol boat does not repeatedly restart its engine", () => {
@@ -321,7 +382,22 @@ test("damage uses the common player-boat damage entry point", () => {
   assert.equal(boat.structuralHull, structure - impact.damage);
 });
 
-test("replication contains generic boat metadata but no moving mounted shots", () => {
+test("an authoritative sonar snap is not blended back toward the old client heading", () => {
+  const previousWorld = {
+    players: [{mode: "boat", activeBoat: 2, x: 100, y: 100, heading: 0}],
+    boats: [null, null, {id: 2, x: 100, y: 100, heading: 0, speed: 0, throttle: 0, collisionRadius: 7.5}],
+  };
+  const nextWorld = {
+    players: [{mode: "boat", activeBoat: 2, x: 100, y: 100, heading: 90}],
+    boats: [null, null, {id: 2, x: 100, y: 100, heading: 90, speed: 0, throttle: 0, collisionRadius: 7.5}],
+  };
+
+  const result = reconcileLocalPrediction(previousWorld, nextWorld, 0);
+  assert.equal(result.boats[2].heading, 90);
+  assert.equal(result.players[0].heading, 90);
+});
+
+test("replication contains generic laws and the armored boat profiles without moving mounted shots", () => {
   const world = createFreeWorld();
   const boat = prepareDualTurretBoatRoom(world);
   boat.crew = [0, 1];
@@ -329,33 +405,54 @@ test("replication contains generic boat metadata but no moving mounted shots", (
   const snapshot = replicatedFreeWorld(world);
   const replicated = snapshot.boats.find(candidate => candidate.boatType === "dual-turret-patrol");
   assert.equal(replicated.crewCapacity, 2);
-  assert.equal(replicated.audioProfile, "standard");
+  assert.equal(replicated.controlProfile, "player-boat");
+  assert.equal(replicated.speechProfile, "armored-patrol");
+  assert.equal(replicated.audioProfile, "armored-patrol");
+  assert.equal(replicated.engineSound, "dualTurretEngine");
   assert.equal(replicated.structuralHull, 300);
   assert.deepEqual(replicated.crew, [0, 1]);
   assert.equal(replicated.turrets.length, 2);
   assert.deepEqual(snapshot.freeDualTurretProjectiles, {mode: "instant"});
 });
 
-test("the release contains one engine path, instant shots and fresh client entry points", async () => {
+test("the release has one profiled engine path, instant shots and no second movement controller", async () => {
   const {readFile} = await import("node:fs/promises");
-  const [core, client, audio, projectiles, replication, activities, html, wrangler] = await Promise.all([
+  const [core, profiles, boat, client, audio, commonAudio, prediction, projectiles, replication, activities, html, entry, wrangler, engine] = await Promise.all([
     readFile(new URL("../public/src/free-roam-core-v8.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/src/free-roam-player-boat-profiles.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/src/free-roam-dual-turret-boat.js", import.meta.url), "utf8"),
     readFile(new URL("../public/src/free-roam-dual-turret-client.js", import.meta.url), "utf8"),
     readFile(new URL("../public/src/free-roam-dual-turret-audio.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/src/free-roam-audio.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/src/free-roam-client-prediction.js", import.meta.url), "utf8"),
     readFile(new URL("../public/src/free-roam-dual-turret-projectiles.js", import.meta.url), "utf8"),
     readFile(new URL("../public/src/free-roam-replication-v2.js", import.meta.url), "utf8"),
     readFile(new URL("../public/src/free-roam-activities.js", import.meta.url), "utf8"),
     readFile(new URL("../public/free-roam.html", import.meta.url), "utf8"),
+    readFile(new URL("../public/src/free-roam-v4.js", import.meta.url), "utf8"),
     readFile(new URL("../wrangler.jsonc", import.meta.url), "utf8"),
+    readFile(new URL("../public/assets/audio/free-roam-dual-turret/dual-turret-engine-v1.mp3", import.meta.url)),
   ]);
   assert.match(core, /preparePlayerBoatStep/);
+  assert.match(core, /reconcilePlayerBoatTransitions/);
   assert.doesNotMatch(core, /applyMotionProfile/);
+  assert.match(profiles, /controlProfile/);
+  assert.match(profiles, /speechProfile/);
+  assert.match(boat, /engineSound: "dualTurretEngine"/);
   assert.doesNotMatch(client, /ensureLoopWithoutStandardDualEngine/);
-  assert.doesNotMatch(audio, /dual-turret-engine/);
+  assert.doesNotMatch(client, /updateDualTurretEngine/);
+  assert.match(audio, /dual-turret-engine-v1\.mp3\?v=2/);
+  assert.match(commonAudio, /otherBoat\.engineSound/);
+  assert.match(commonAudio, /sameBoat/);
+  assert.doesNotMatch(prediction, /DUAL_TURRET_MAX_SPEED|DUAL_TURRET_TURN_FACTOR|DUAL_TURRET_ACCELERATION_FACTOR/);
   assert.match(projectiles, /mode: "instant"/);
   assert.doesNotMatch(replication, /previousX/);
   assert.match(activities, /boat\.cargoCapacity/);
-  assert.match(html, /free-roam-dual-turret-client\.js\?v=4/);
-  assert.match(html, /free-roam-v4\.js\?v=61/);
+  assert.match(html, /free-roam-dual-turret-client\.js\?v=5/);
+  assert.match(html, /free-roam-v4\.js\?v=62/);
+  assert.match(entry, /free-roam-core-v8\.js\?v=4/);
+  assert.match(entry, /free-roam-client-prediction\.js\?v=43/);
   assert.match(wrangler, /src\/worker-resilient\.js/);
+  assert.ok(engine.length > 0);
+  assert.equal(engine.subarray(0, 3).toString("ascii"), "ID3");
 });
