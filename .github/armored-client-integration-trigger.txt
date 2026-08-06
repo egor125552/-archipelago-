@@ -1,1 +1,2 @@
 Trigger the focused armored patrol client integration run.
+Synchronize after the runner was registered on main.
