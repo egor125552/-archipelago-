@@ -61,15 +61,28 @@ function boatNeedsContextMaintenance(world, playerIndex) {
   );
 }
 
+function attachPreviousBoatToExitEvent(world, eventStart, playerIndex, previousBoatId) {
+  if (!Number.isInteger(previousBoatId)) return;
+  const fresh = (world.events || []).slice(eventStart);
+  for (let index = fresh.length - 1; index >= 0; index -= 1) {
+    const event = fresh[index];
+    if (event?.type !== "exit" || !event.targets?.includes(playerIndex) || Number.isInteger(event.boatId)) continue;
+    event.boatId = previousBoatId;
+    return;
+  }
+}
+
 export function setPlayerInput(world, playerIndex, nextInput) {
   ensureDualTurretBoat(world, {activate: false});
   ensurePlayerBoatProfiles(world);
   const eventStart = world.events?.length || 0;
+  const previousBoatId = world.players?.[playerIndex]?.activeBoat;
   const sanitized = {...(nextInput || {})};
   if (!boatNeedsContextMaintenance(world, playerIndex) && capturePlayerBoatInput(world, playerIndex, sanitized)) {
     sanitized.action = false;
   }
   base.setPlayerInput(world, playerIndex, sanitized);
+  attachPreviousBoatToExitEvent(world, eventStart, playerIndex, previousBoatId);
   reconcilePlayerBoatTransitions(world);
   applyPlayerBoatSpeechProfiles(world, eventStart);
 }
@@ -84,9 +97,6 @@ function translateLegacyBoatDamage(world, context) {
     const compatibilityLoss = Number(before.hull) - Number(boat.hull);
     const structureUnchanged = Math.abs(Number(boat.structuralHull) - Number(before.structuralHull)) < 0.0001;
     if (!armorAlreadyChanged || compatibilityLoss <= 0.0001 || !structureUnchanged) continue;
-    // applyCollisionDamage has already consumed armor and leaves the remaining
-    // point damage in the old 0..100 hull field. Move only that remaining
-    // damage into the extended structure before the compatibility layer runs.
     boat.structuralHull = Math.max(0, Number(before.structuralHull) - compatibilityLoss);
   }
 }
