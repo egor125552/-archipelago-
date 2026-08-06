@@ -13,21 +13,32 @@ test("merchant action has priority over nearby armored boarding", async () => {
   assert.match(core, /merchantOwnsAction\(world, playerIndex, nextInput\)/);
 });
 
-test("ordinary local engine is stopped on foot, in water, and aboard armored boat", async () => {
-  const [audioV2, audioV3] = await Promise.all([
+test("ordinary motor cannot start on shore, in water, or for the armored boat", async () => {
+  const [audioV2, audioV3, audioV4] = await Promise.all([
     readFile(new URL("../public/src/free-roam-audio-v2.js", import.meta.url), "utf8"),
     readFile(new URL("../public/src/free-roam-audio-v3.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/src/free-roam-audio-v4.js", import.meta.url), "utf8"),
   ]);
+
   assert.match(audioV2, /ORDINARY_LOCAL_ENGINE_LOOPS/);
-  assert.match(audioV2, /!ordinaryBoatAboard/);
+  assert.match(audioV2, /ordinaryLocalEngineAllowed/);
+  assert.match(audioV2, /ensureLoop\(name, options\)/);
+  assert.match(audioV2, /isOrdinaryLocalEngine\(name\) && !this\.ordinaryLocalEngineAllowed/);
+  assert.match(audioV2, /localBoat\.audioProfile !== "dual-turret"/);
   assert.match(audioV2, /stopOrdinaryLocalEngine\(\)/);
   assert.match(audioV3, /free-roam-audio-v2\.js\?v=39/);
+
+  assert.match(audioV4, /const customEngine = otherBoat\?\.audioProfile === "dual-turret"/);
+  assert.match(audioV4, /if \(!customEngine\) this\.startRemoteLoop\("remote", "motorboatReal"\)/);
+  assert.match(audioV4, /customEngine \? 0 : engineGain/);
 });
 
-test("turret sector mechanics are removed and empty fire has a real heading", async () => {
+test("mounted turret always fires on attack and does not require a target", async () => {
   const weapons = await readFile(new URL("../public/src/free-roam-dual-turret-weapons.js", import.meta.url), "utf8");
   assert.doesNotMatch(weapons, /Цель вне сектора|поверни бронекатер|relative\s*[<>]=?\s*turret\./);
   assert.doesNotMatch(weapons, /Сначала выбери боевую цель/);
+  assert.doesNotMatch(weapons, /combat\?\.equipped === DUAL_TURRET_WEAPON_ID && input\.attack/);
+  assert.match(weapons, /const firing = Boolean\(mounted && input\.attack\)/);
   assert.match(weapons, /automaticHostileTarget/);
   assert.match(weapons, /target-auto-locked/);
   assert.ok(DUAL_TURRET_DEFINITIONS.every(definition => !("minimumRelativeHeading" in definition) && !("maximumRelativeHeading" in definition)));
