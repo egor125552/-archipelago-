@@ -27,8 +27,10 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
 
   updateRemote(world, playerIndex) {
     const me = world?.players?.[playerIndex];
-    const other = world?.players?.[1 - playerIndex];
+    const otherIndex = 1 - playerIndex;
+    const other = world?.players?.[otherIndex];
     const otherBoat = other && ["boat", "roof"].includes(other.mode) ? world.boats?.[other.activeBoat] : null;
+    const present = world?.freeActivities?.presence?.[otherIndex] !== false;
     const metres = me && otherBoat ? distance(me, otherBoat) : Infinity;
     const pan = me && otherBoat ? relativeMovementPan(me, otherBoat) : 0;
     const proximity = clamp(1 - metres / 175, 0, 1);
@@ -36,7 +38,10 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
     const speed = Math.abs(Number(otherBoat?.speed) || 0);
     const throttle = Math.abs(Number(otherBoat?.throttle) || 0);
     const lowpass = 900 + shaped * 5200 + clamp(speed / 18, 0, 1) * 900;
-    const engineGain = otherBoat?.engineStalled ? 0 : shaped * (0.025 + throttle * 0.15);
+    const customEngine = otherBoat?.audioProfile === "dual-turret";
+    const engineGain = customEngine || otherBoat?.engineStalled
+      ? 0
+      : shaped * (0.025 + throttle * 0.15);
     const wakeGain = speed < 0.35 ? 0 : shaped * (0.018 + speed / 135);
 
     Object.assign(this.spatialDiagnostics, {
@@ -45,20 +50,24 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
       remoteLowpass: lowpass,
     });
 
-    if (!this.ctx || !me || !otherBoat || otherBoat.sunk || metres >= 175) {
+    if (!this.ctx || !me || !otherBoat || !present || otherBoat.sunk || metres >= 175) {
       if (this.ctx && this.remote) this.remote.gain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.16);
       if (this.ctx && this.remoteWake) this.remoteWake.gain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.16);
       return;
     }
 
-    this.startRemoteLoop("remote", "motorboatReal");
+    // The armored patrol owns a separate spatial engine loop. Never layer the
+    // ordinary motorboat recording on top of it, whether the listener is aboard
+    // or standing on shore beside the boat.
+    if (!customEngine) this.startRemoteLoop("remote", "motorboatReal");
+    else if (this.remote) this.remote.gain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.12);
     this.startRemoteLoop("remoteWake", this.buffers.has("riverWake") ? "riverWake" : "seaReal");
     const now = this.ctx.currentTime;
     if (this.remote) {
       this.remote.source.playbackRate.setTargetAtTime(0.9 + throttle * 0.17, now, 0.1);
       this.remote.filter.frequency.setTargetAtTime(lowpass, now, 0.14);
       this.remote.panner.pan.setTargetAtTime(pan, now, 0.1);
-      this.remote.gain.gain.setTargetAtTime(engineGain, now, 0.15);
+      this.remote.gain.gain.setTargetAtTime(customEngine ? 0 : engineGain, now, 0.15);
     }
     if (this.remoteWake) {
       this.remoteWake.source.playbackRate.setTargetAtTime(0.84 + clamp(speed / 18, 0, 1) * 0.19, now, 0.12);
