@@ -6,7 +6,7 @@ import {
   setPlayerInput,
   setPlayerPresence,
   stepFreeWorld,
-} from "../public/src/free-roam-core-v6.js";
+} from "../public/src/free-roam-core-v7.js";
 import {applyCombatDamage} from "../public/src/free-roam-combat-v2.js?v=6";
 import {applyCombatAiHotfixV163} from "../public/src/free-roam-combat-ai-hotfix-v163.js?v=1";
 import {replicatedFreeWorld} from "../public/src/free-roam-replication.js";
