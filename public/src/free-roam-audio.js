@@ -84,7 +84,9 @@ export class FreeRoamAudio extends AudioEngine {
   }
 
   startRemoteLoop(name, bufferName) {
-    if (this[name] || !this.ctx || !this.master || !this.buffers.has(bufferName)) return;
+    if (this[name]?.bufferName === bufferName) return;
+    if (this[name]) this.stopRemoteLoop(name);
+    if (!this.ctx || !this.master || !this.buffers.has(bufferName)) return;
     const source = this.ctx.createBufferSource();
     const filter = this.ctx.createBiquadFilter();
     const panner = this.ctx.createStereoPanner();
@@ -96,7 +98,7 @@ export class FreeRoamAudio extends AudioEngine {
     gain.gain.value = 0;
     source.connect(filter).connect(panner).connect(gain).connect(this.master);
     source.start();
-    this[name] = {source, filter, panner, gain};
+    this[name] = {source, filter, panner, gain, bufferName};
   }
 
   stopRemoteLoop(name) {
@@ -111,16 +113,19 @@ export class FreeRoamAudio extends AudioEngine {
     const me = world.players?.[playerIndex];
     const otherIndex = 1 - playerIndex;
     const other = world.players?.[otherIndex];
+    const myBoat = me && ["boat", "roof"].includes(me.mode) ? world.boats?.[me.activeBoat] : null;
     const otherBoat = other && ["boat", "roof"].includes(other.mode) ? world.boats?.[other.activeBoat] : null;
     const present = world.freeActivities?.presence?.[otherIndex] !== false;
-    const audible = Boolean(present && me && otherBoat && !otherBoat.sunk && distance(me, otherBoat) < 150);
+    const sameBoat = Boolean(myBoat && otherBoat && myBoat.id === otherBoat.id);
+    const audible = Boolean(present && me && otherBoat && !sameBoat && !otherBoat.sunk && distance(me, otherBoat) < 150);
     if (!audible) {
       if (this.remote) this.remote.gain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.12);
       if (this.remoteWake) this.remoteWake.gain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.12);
       return;
     }
 
-    this.startRemoteLoop("remote", "motorboatReal");
+    const engineSound = otherBoat.engineSound || "motorboatReal";
+    this.startRemoteLoop("remote", engineSound);
     this.startRemoteLoop("remoteWake", this.buffers.has("riverWake") ? "riverWake" : "seaReal");
     const metres = distance(me, otherBoat);
     const proximity = clamp(1 - metres / 150, 0, 1);
@@ -130,10 +135,12 @@ export class FreeRoamAudio extends AudioEngine {
     const now = this.ctx.currentTime;
 
     if (this.remote) {
-      this.remote.source.playbackRate.setTargetAtTime(0.9 + throttle * 0.17, now, 0.1);
-      this.remote.filter.frequency.setTargetAtTime(1200 + throttle * 2300, now, 0.12);
+      const armored = otherBoat.audioProfile === "armored-patrol";
+      const speedLoad = clamp(speed / 18, 0, 1);
+      this.remote.source.playbackRate.setTargetAtTime(armored ? 0.82 + speedLoad * 0.36 : 0.9 + throttle * 0.17, now, 0.1);
+      this.remote.filter.frequency.setTargetAtTime(armored ? 950 + speedLoad * 2950 : 1200 + throttle * 2300, now, 0.12);
       this.remote.panner.pan.setTargetAtTime(pan, now, 0.1);
-      this.remote.gain.gain.setTargetAtTime(otherBoat.engineStalled ? 0 : proximity * (0.035 + throttle * 0.13), now, 0.12);
+      this.remote.gain.gain.setTargetAtTime(otherBoat.engineStalled ? 0 : proximity * (armored ? 0.12 : 0.035 + throttle * 0.13), now, 0.12);
     }
     if (this.remoteWake) {
       this.remoteWake.source.playbackRate.setTargetAtTime(0.84 + clamp(speed / 18, 0, 1) * 0.19, now, 0.12);
@@ -154,6 +161,8 @@ export class FreeRoamAudio extends AudioEngine {
       leak: 0,
       engineStalled: true,
       pumpActive: false,
+      audioProfile: "standard",
+      engineSound: "motorboatReal",
       modelId: "strizh",
     };
     const activeBoat = boat || silentBoat;
@@ -166,6 +175,8 @@ export class FreeRoamAudio extends AudioEngine {
         leak: Number(activeBoat.leak) || 0,
         engineStalled: Boolean(activeBoat.engineStalled || activeBoat.sunk || !boat),
         pumpActive: Boolean(activeBoat.pumpActive),
+        audioProfile: activeBoat.audioProfile || "standard",
+        engineSound: activeBoat.engineSound || "motorboatReal",
         modelId: "strizh",
       },
       damageControl: {
