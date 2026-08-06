@@ -14,14 +14,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: agent/dual-turret-integration-fix
-          fetch-depth: 0
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
+      - name: Checkout without marketplace actions
+        shell: bash
+        env:
+          GH_TOKEN: "${{ github.token }}"
+        run: |
+          set -euo pipefail
+          git init .
+          git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --no-tags origin refs/heads/agent/dual-turret-integration-fix:refs/remotes/origin/agent/dual-turret-integration-fix
+          git checkout -B agent/dual-turret-integration-fix refs/remotes/origin/agent/dual-turret-integration-fix
+          node --version
 
       - name: Materialize reviewed integration fix
         shell: bash
