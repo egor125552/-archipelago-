@@ -8,13 +8,18 @@ import {
   stepFreeWorld,
 } from "../public/src/free-roam-core-v8.js";
 import {
-  finishDualTurretBoatStep,
+  applyDualTurretBoatDamage,
   prepareDualTurretBoatRoom,
-  prepareDualTurretBoatStep,
 } from "../public/src/free-roam-dual-turret-boat.js";
-import {applyCollisionDamage} from "../public/src/collision-model.js";
-import {stepDualTurretProjectiles} from "../public/src/free-roam-dual-turret-projectiles.js";
+import {
+  assignPlayerToBoat,
+  ensurePlayerBoat,
+} from "../public/src/free-roam-player-boats.js";
 import {replicatedFreeWorld} from "../public/src/free-roam-replication-v2.js";
+import {
+  DUAL_TURRET_SHOT_DAMAGE,
+  DUAL_TURRET_SHOT_INTERVAL,
+} from "../public/src/free-roam-dual-turret-config.js";
 
 function pulse(world, playerIndex, input) {
   setPlayerInput(world, playerIndex, input);
@@ -29,294 +34,294 @@ function placeNearBoat(world, playerIndex, boat) {
   player.mode = "foot";
   player.activeBoat = null;
   player.x = boat.x + (playerIndex ? 5 : -5);
-  player.y = boat.y - 8;
+  player.y = boat.y - 6;
   player.combat.alive = true;
 }
 
-test("the dual-turret patrol boat is one physical shared object with two crew seats", () => {
+function board(world, playerIndex, boat) {
+  placeNearBoat(world, playerIndex, boat);
+  pulse(world, playerIndex, {action: true});
+  assert.equal(world.players[playerIndex].mode, "boat");
+  assert.equal(world.players[playerIndex].activeBoat, boat.id);
+}
+
+function isolateBoat(world, selected) {
+  for (const boat of world.boats) {
+    if (!boat || boat.id === selected.id) continue;
+    boat.sunk = true;
+    boat.reserved = true;
+    boat.x = 20 + boat.id * 20;
+    boat.y = 290;
+  }
+}
+
+test("the armored patrol is a normal player boat with two seats and shared metadata", () => {
   const world = createFreeWorld();
   const boat = prepareDualTurretBoatRoom(world);
-  world.freeActivities.credits = 500;
   assert.equal(boat.boatType, "dual-turret-patrol");
+  assert.equal(boat.crewCapacity, 2);
+  assert.equal(boat.cargoCapacity, 5);
+  assert.equal(boat.audioProfile, "standard");
   assert.equal(boat.structuralHull, 300);
   assert.equal(boat.armor, 200);
   assert.equal(boat.turrets.length, 2);
-  assert.equal(boat.turrets[0].ammo, 1000);
-  assert.equal(boat.turrets[1].ammo, 1000);
 
-  placeNearBoat(world, 0, boat);
-  placeNearBoat(world, 1, boat);
-  pulse(world, 0, {action: true});
-  assert.equal(world.freeDualTurretPurchase.purchased, true);
-  assert.equal(world.freeDualTurretPurchase.price, 0);
-  assert.equal(world.freeActivities.credits, 500);
-  pulse(world, 1, {action: true});
-
-  assert.equal(world.players[0].activeBoat, boat.id);
-  assert.equal(world.players[1].activeBoat, boat.id);
+  board(world, 0, boat);
+  board(world, 1, boat);
   assert.deepEqual(boat.crew, [0, 1]);
   assert.equal(boat.driver, 0);
   assert.equal(boat.turrets[0].assignedPlayer, 0);
   assert.equal(boat.turrets[1].assignedPlayer, 1);
 });
 
-test("existing weapon gesture cycles to a player's mounted installation without a new input", () => {
-  const world = createFreeWorld();
-  const boat = prepareDualTurretBoatRoom(world);
-  world.freeDualTurretPurchase.purchased = true;
-  placeNearBoat(world, 0, boat);
-  pulse(world, 0, {action: true});
-  world.players[0].combat.weapons.automatic = true;
-  world.players[0].combat.ammo = 20;
-  world.players[0].combat.equipped = "pistol";
-  pulse(world, 0, {weapon: true});
-  assert.equal(world.players[0].combat.equipped, "automatic");
-  pulse(world, 0, {weapon: true});
-  assert.equal(world.players[0].combat.equipped, "dual-turret");
+test("the armored patrol uses the same movement step as a light boat", () => {
+  const ordinaryWorld = createFreeWorld();
+  const ordinary = ensurePlayerBoat(ordinaryWorld.boats[0]);
+  isolateBoat(ordinaryWorld, ordinary);
+  setPlayerPresence(ordinaryWorld, 0, true);
+  ordinaryWorld.players[0].mode = "boat";
+  ordinaryWorld.players[0].activeBoat = ordinary.id;
+  ordinary.driver = 0;
+  ordinary.crew = [0];
+  Object.assign(ordinary, {x: 200, y: 220, heading: 0, speed: 0, throttle: 0, rudder: 0, engineStalled: false});
+
+  const armoredWorld = createFreeWorld();
+  const armored = prepareDualTurretBoatRoom(armoredWorld);
+  isolateBoat(armoredWorld, armored);
+  setPlayerPresence(armoredWorld, 0, true);
+  assignPlayerToBoat(armoredWorld, 0, armored);
+  Object.assign(armored, {x: 200, y: 220, heading: 0, speed: 0, throttle: 0, rudder: 0, engineStalled: false});
+
+  setPlayerInput(ordinaryWorld, 0, {up: true, right: true});
+  setPlayerInput(armoredWorld, 0, {up: true, right: true});
+  for (let index = 0; index < 12; index += 1) {
+    stepFreeWorld(ordinaryWorld, 0.05);
+    stepFreeWorld(armoredWorld, 0.05);
+  }
+
+  assert.ok(Math.abs(ordinary.speed - armored.speed) < 0.001, `${ordinary.speed} versus ${armored.speed}`);
+  assert.ok(Math.abs(ordinary.heading - armored.heading) < 0.001, `${ordinary.heading} versus ${armored.heading}`);
+  assert.ok(Math.abs(ordinary.x - armored.x) < 0.001, `${ordinary.x} versus ${armored.x}`);
+  assert.ok(Math.abs(ordinary.y - armored.y) < 0.001, `${ordinary.y} versus ${armored.y}`);
 });
 
-test("a mounted shot becomes a server projectile and inherits boat movement", () => {
+test("action exits the armored patrol into open water after a full stop", () => {
   const world = createFreeWorld();
   const boat = prepareDualTurretBoatRoom(world);
-  world.freeDualTurretPurchase.purchased = true;
-  placeNearBoat(world, 0, boat);
+  isolateBoat(world, boat);
+  board(world, 0, boat);
+  boat.x = 210;
+  boat.y = 210;
+  boat.speed = 0;
+  for (const crate of world.freeActivities.crates) {
+    crate.x = 20;
+    crate.y = 20;
+  }
+
   pulse(world, 0, {action: true});
-  world.players[0].combat.equipped = "dual-turret";
-  boat.speed = 7;
-  const target = world.freeActivities.marauder;
-  target.active = true;
-  target.destroyed = false;
-  target.x = boat.x - 40;
-  target.y = boat.y + 20;
-  world.boats[0].sunk = true;
-  world.boats[1].sunk = true;
-  world.players[0].combat.lockedTargetId = target.id;
-  setPlayerInput(world, 0, {attack: true});
-  stepFreeWorld(world, 0.05);
-  const projectile = world.freeDualTurretProjectiles.projectiles[0];
-  assert.ok(projectile);
-  assert.ok(Math.hypot(projectile.inheritedBoatVelocity.x, projectile.inheritedBoatVelocity.y) > 0);
-  assert.equal(projectile.sourceBoatId, boat.id);
-});
-
-test("replication includes real hull points, crew, turrets and physical projectiles", () => {
-  const world = createFreeWorld();
-  const boat = prepareDualTurretBoatRoom(world);
-  boat.crew = [0, 1];
-  boat.turrets[0].assignedPlayer = 0;
-  world.freeDualTurretPurchase.purchased = true;
-  const snapshot = replicatedFreeWorld(world);
-  const replicatedBoat = snapshot.boats.find(candidate => candidate.boatType === "dual-turret-patrol");
-  assert.equal(replicatedBoat.structuralHull, 300);
-  assert.deepEqual(replicatedBoat.crew, [0, 1]);
-  assert.equal(replicatedBoat.turrets.length, 2);
-  assert.ok(snapshot.freeDualTurretProjectiles);
-  assert.equal(snapshot.freeDualTurretPurchase.purchased, true);
-});
-
-
-test("the prototype patrol boat boards immediately without spending credits", () => {
-  const world = createFreeWorld();
-  const boat = prepareDualTurretBoatRoom(world);
-  world.freeActivities.credits = 17;
-  placeNearBoat(world, 0, boat);
-  pulse(world, 0, {action: true});
-  assert.equal(world.freeDualTurretPurchase.purchased, true);
-  assert.equal(world.freeDualTurretPurchase.price, 0);
-  assert.equal(world.players[0].activeBoat, boat.id);
-  assert.equal(world.freeActivities.credits, 17);
-});
-
-test("a sunk prototype removes its crew and fully returns after sixty seconds", () => {
-  const world = createFreeWorld();
-  const boat = prepareDualTurretBoatRoom(world);
-  placeNearBoat(world, 0, boat);
-  placeNearBoat(world, 1, boat);
-  pulse(world, 0, {action: true});
-  pulse(world, 1, {action: true});
-  boat.sunk = true;
-  stepFreeWorld(world, 0.05);
-  assert.equal(boat.sunk, true);
-  assert.deepEqual(boat.crew, [null, null]);
+  assert.equal(world.players[0].mode, "swim");
   assert.equal(world.players[0].activeBoat, null);
-  assert.equal(world.players[1].activeBoat, null);
-  for (let index = 0; index < 601; index += 1) stepFreeWorld(world, 0.1);
-  assert.equal(boat.sunk, false);
-  assert.equal(boat.structuralHull, 300);
-  assert.equal(boat.armor, 200);
-  assert.equal(boat.water, 0);
-  assert.equal(boat.leak, 0);
-  assert.equal(boat.turrets[0].ammo, 1000);
-  assert.equal(boat.turrets[1].ammo, 1000);
+  assert.equal(boat.driver, null);
+  assert.deepEqual(boat.crew, [null, null]);
 });
 
-test("the second crew position cannot steer the shared physical boat", () => {
+test("a nearby crate is stowed instead of forcing the crew member out", () => {
   const world = createFreeWorld();
   const boat = prepareDualTurretBoatRoom(world);
-  world.freeDualTurretPurchase.purchased = true;
-  placeNearBoat(world, 0, boat);
-  placeNearBoat(world, 1, boat);
+  isolateBoat(world, boat);
+  board(world, 0, boat);
+  boat.x = 210;
+  boat.y = 190;
+  world.players[0].x = boat.x;
+  world.players[0].y = boat.y;
+  const crate = world.freeActivities.crates.find(candidate => candidate.kind === "fuel");
+  crate.state = "world";
+  crate.x = boat.x + 2;
+  crate.y = boat.y;
+
   pulse(world, 0, {action: true});
-  pulse(world, 1, {action: true});
+  assert.equal(world.players[0].mode, "boat");
+  assert.equal(crate.state, "stowed");
+  assert.equal(crate.stowedBoat, boat.id);
+  assert.ok(boat.cargo.includes(crate.id));
+});
+
+test("the second seat cannot steer but can run the common pump", () => {
+  const world = createFreeWorld();
+  const boat = prepareDualTurretBoatRoom(world);
+  isolateBoat(world, boat);
+  board(world, 0, boat);
+  board(world, 1, boat);
   const heading = boat.heading;
-  setPlayerInput(world, 1, {right: true, up: true});
-  stepFreeWorld(world, 0.1);
+  boat.water = 60;
+  boat.leak = 0;
+  const beforeWater = boat.water;
+
+  setPlayerInput(world, 1, {right: true, up: true, pump: true});
+  for (let index = 0; index < 10; index += 1) stepFreeWorld(world, 0.1);
   assert.equal(boat.driver, 0);
   assert.equal(boat.heading, heading);
   assert.equal(boat.speed, 0);
-});
-
-
-test("pump input reaches the shared boat and lowers flooding", () => {
-  const world = createFreeWorld();
-  const boat = prepareDualTurretBoatRoom(world);
-  placeNearBoat(world, 0, boat);
-  pulse(world, 0, {action: true});
-  boat.water = 60;
-  boat.leak = 2;
-  const before = boat.water;
-  setPlayerInput(world, 0, {pump: true});
-  for (let index = 0; index < 10; index += 1) stepFreeWorld(world, 0.1);
   assert.equal(boat.pumpActive, true);
-  assert.ok(boat.water < before - 5, `${boat.water} should be below ${before}`);
+  assert.ok(boat.water < beforeWater - 5);
 });
 
-test("repair plates restore armor, structural hull and leak", () => {
+test("common repair restores extended structure, armor and leak", () => {
   const world = createFreeWorld();
   const boat = prepareDualTurretBoatRoom(world);
-  placeNearBoat(world, 0, boat);
-  pulse(world, 0, {action: true});
+  isolateBoat(world, boat);
+  board(world, 0, boat);
   boat.armor = 120;
   boat.structuralHull = 240;
   boat.hull = 80;
   boat.leak = 5;
   const patches = boat.repairPatches;
+
   setPlayerInput(world, 0, {repair: true});
-  for (let index = 0; index < 32; index += 1) stepFreeWorld(world, 0.1);
+  for (let index = 0; index < 34; index += 1) stepFreeWorld(world, 0.1);
   assert.equal(boat.repairPatches, patches - 1);
   assert.ok(boat.armor > 120);
   assert.ok(boat.structuralHull > 240);
   assert.ok(boat.leak < 5);
 });
 
-test("target confirmation preserves the mounted installation instead of forcing the automatic", () => {
+test("a healthy empty patrol boat does not repeatedly restart its engine", () => {
   const world = createFreeWorld();
   const boat = prepareDualTurretBoatRoom(world);
-  world.freeDualTurretPurchase.purchased = true;
-  placeNearBoat(world, 0, boat);
-  pulse(world, 0, {action: true});
+  boat.engineStalled = false;
+  boat.fuel = 100;
+  boat.water = 0;
+  world.events.length = 0;
+  for (let index = 0; index < 120; index += 1) stepFreeWorld(world, 0.05);
+  const restarts = world.events.filter(event => event.type === "engine-water-restart");
+  assert.equal(restarts.length, 0);
+  assert.equal(boat.engineStalled, false);
+});
+
+test("the mounted installation applies damage immediately without a replicated projectile", () => {
+  const world = createFreeWorld();
+  const boat = prepareDualTurretBoatRoom(world);
+  isolateBoat(world, boat);
+  board(world, 0, boat);
   const combat = world.players[0].combat;
-  combat.weapons.automatic = true;
-  combat.ammo = 20;
   combat.equipped = "dual-turret";
   const target = world.freeActivities.marauder;
   target.active = true;
   target.destroyed = false;
-  target.x = boat.x - 25;
-  target.y = boat.y - 35;
-  setPlayerInput(world, 0, {targetId: target.id});
-  stepFreeWorld(world, 0.05);
-  assert.equal(combat.equipped, "dual-turret");
-});
+  target.hull = 100;
+  target.x = boat.x;
+  target.y = boat.y - 40;
+  combat.lockedTargetId = target.id;
+  const ammo = boat.turrets[0].ammo;
 
-test("the installation refuses its own shared boat and crew without consuming ammunition", () => {
-  const world = createFreeWorld();
-  const boat = prepareDualTurretBoatRoom(world);
-  world.freeDualTurretPurchase.purchased = true;
-  placeNearBoat(world, 0, boat);
-  placeNearBoat(world, 1, boat);
-  pulse(world, 0, {action: true});
-  pulse(world, 1, {action: true});
-  const turret = boat.turrets[0];
-  const beforeAmmo = turret.ammo;
-  world.players[0].combat.equipped = "dual-turret";
-  world.players[0].combat.lockedTargetId = "player-1";
   setPlayerInput(world, 0, {attack: true});
   stepFreeWorld(world, 0.05);
-  assert.equal(turret.ammo, beforeAmmo);
+  assert.equal(target.hull, 100 - DUAL_TURRET_SHOT_DAMAGE);
+  assert.equal(boat.turrets[0].ammo, ammo - 1);
+  assert.equal(world.freeDualTurretProjectiles.projectiles.length, 0);
+  assert.ok(world.events.some(event => event.type === "dual-turret-hit" && event.instant));
+});
+
+test("the installation is fast but remains rate-limited by the server", () => {
+  assert.equal(DUAL_TURRET_SHOT_INTERVAL, 0.18);
+  const world = createFreeWorld();
+  const boat = prepareDualTurretBoatRoom(world);
+  isolateBoat(world, boat);
+  board(world, 0, boat);
+  world.players[0].combat.equipped = "dual-turret";
+  const target = world.freeActivities.marauder;
+  target.active = true;
+  target.destroyed = false;
+  target.hull = 1000;
+  target.x = boat.x;
+  target.y = boat.y - 40;
+  world.players[0].combat.lockedTargetId = target.id;
+  const ammo = boat.turrets[0].ammo;
+
+  setPlayerInput(world, 0, {attack: true});
+  for (let index = 0; index < 20; index += 1) stepFreeWorld(world, 0.05);
+  const spent = ammo - boat.turrets[0].ammo;
+  assert.ok(spent >= 4 && spent <= 6, `spent ${spent}`);
   assert.equal(world.freeDualTurretProjectiles.projectiles.length, 0);
 });
 
-test("when the driver dies the living second crew member becomes the driver", () => {
+test("the installation refuses its own crew without spending ammunition", () => {
   const world = createFreeWorld();
   const boat = prepareDualTurretBoatRoom(world);
-  world.freeDualTurretPurchase.purchased = true;
-  placeNearBoat(world, 0, boat);
-  placeNearBoat(world, 1, boat);
-  pulse(world, 0, {action: true});
-  pulse(world, 1, {action: true});
+  isolateBoat(world, boat);
+  board(world, 0, boat);
+  board(world, 1, boat);
+  world.players[0].combat.equipped = "dual-turret";
+  world.players[0].combat.lockedTargetId = "player-1";
+  const ammo = boat.turrets[0].ammo;
+
+  setPlayerInput(world, 0, {attack: true});
+  stepFreeWorld(world, 0.05);
+  assert.equal(boat.turrets[0].ammo, ammo);
+  assert.equal(world.freeDualTurretProjectiles.projectiles.length, 0);
+});
+
+test("the living passenger becomes driver when the first driver dies", () => {
+  const world = createFreeWorld();
+  const boat = prepareDualTurretBoatRoom(world);
+  isolateBoat(world, boat);
+  board(world, 0, boat);
+  board(world, 1, boat);
   world.players[0].combat.alive = false;
   world.players[0].combat.respawnRemaining = 8;
   world.players[0].mode = "dead";
   world.players[0].activeBoat = null;
+
   stepFreeWorld(world, 0.05);
   assert.deepEqual(boat.crew, [null, 1]);
   assert.equal(boat.driver, 1);
   assert.equal(world.players[1].activeBoat, boat.id);
 });
 
-
-test("legacy collision damage stays point-based against the 300-point structure", () => {
+test("damage uses the common player-boat damage entry point", () => {
   const world = createFreeWorld();
   const boat = prepareDualTurretBoatRoom(world);
-  const beforeHull = boat.structuralHull;
-  const beforeArmor = boat.armor;
-  const context = prepareDualTurretBoatStep(world);
-  const impact = applyCollisionDamage(boat, 10);
-  finishDualTurretBoatStep(world, context, 0.01);
+  const armor = boat.armor;
+  const structure = boat.structuralHull;
+  const impact = applyDualTurretBoatDamage(world, boat, 20, {emit: false});
   assert.ok(impact.absorbed > 0);
-  assert.ok(boat.armor < beforeArmor);
-  assert.ok(Math.abs((beforeHull - boat.structuralHull) - impact.damage) < 0.001);
-  assert.ok(boat.structuralHull > 290);
+  assert.equal(boat.armor, armor - impact.absorbed);
+  assert.equal(boat.structuralHull, structure - impact.damage);
 });
 
-test("a fast physical projectile hits the first actor on its path", () => {
+test("replication contains generic boat metadata but no moving mounted shots", () => {
   const world = createFreeWorld();
   const boat = prepareDualTurretBoatRoom(world);
-  world.players[1].mode = "foot";
-  world.players[1].activeBoat = null;
-  world.players[1].x = 205.8;
-  world.players[1].y = 80;
-  world.players[1].combat.health = 100;
-  const marauder = world.freeActivities.marauder;
-  marauder.active = true;
-  marauder.destroyed = false;
-  marauder.x = 205.8;
-  marauder.y = 69;
-  const beforeMarauderHull = marauder.hull;
-  world.freeDualTurretProjectiles.projectiles.push({
-    id: "ordered-hit", turretId: "dual-turret-port", sourcePlayer: 0, sourceBoatId: boat.id,
-    targetId: marauder.id, x: 205.8, y: 90, previousX: 205.8, previousY: 90,
-    vx: 0, vy: -300, launchHeading: 0, inheritedBoatVelocity: {x: 0, y: 0},
-    speed: 300, age: 0.3, ttl: 1, damage: 18, endReason: null,
-  });
-  stepDualTurretProjectiles(world, 0.1);
-  assert.equal(world.players[1].combat.health, 82);
-  assert.equal(marauder.hull, beforeMarauderHull);
-  const ended = world.freeDualTurretProjectiles.endEvents.at(-1);
-  assert.equal(ended.reason, "player-impact");
-  assert.equal(ended.targetId, "player-1");
+  boat.crew = [0, 1];
+  boat.turrets[0].assignedPlayer = 0;
+  const snapshot = replicatedFreeWorld(world);
+  const replicated = snapshot.boats.find(candidate => candidate.boatType === "dual-turret-patrol");
+  assert.equal(replicated.crewCapacity, 2);
+  assert.equal(replicated.audioProfile, "standard");
+  assert.equal(replicated.structuralHull, 300);
+  assert.deepEqual(replicated.crew, [0, 1]);
+  assert.equal(replicated.turrets.length, 2);
+  assert.deepEqual(snapshot.freeDualTurretProjectiles, {mode: "instant"});
 });
 
-test("the release wiring stays modular and Safari receives a new cache version", async () => {
+test("the release contains one engine path, instant shots and fresh Safari modules", async () => {
   const {readFile} = await import("node:fs/promises");
-  const [server, entry, client, audio, replication, html] = await Promise.all([
-    readFile(new URL("../src/free-roam-server.js", import.meta.url), "utf8"),
-    readFile(new URL("../public/src/free-roam-developer-log-v1.js", import.meta.url), "utf8"),
+  const [core, client, audio, projectiles, replication, html, entry] = await Promise.all([
+    readFile(new URL("../public/src/free-roam-core-v8.js", import.meta.url), "utf8"),
     readFile(new URL("../public/src/free-roam-dual-turret-client.js", import.meta.url), "utf8"),
     readFile(new URL("../public/src/free-roam-dual-turret-audio.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/src/free-roam-dual-turret-projectiles.js", import.meta.url), "utf8"),
     readFile(new URL("../public/src/free-roam-replication-v2.js", import.meta.url), "utf8"),
     readFile(new URL("../public/free-roam.html", import.meta.url), "utf8"),
+    readFile(new URL("../public/src/free-roam-v4.js", import.meta.url), "utf8"),
   ]);
-  assert.match(server, /free-roam-core-v8\.js/);
-  assert.match(server, /free-roam-replication-v2\.js/);
-  assert.doesNotMatch(entry, /dual-turret/);
-  assert.match(client, /updateDualTurretProjectileAudio/);
-  assert.match(audio, /dual-turret-engine-v1\.mp3\?v=1/);
-  assert.match(audio, /dual-turret-shot-v1\.mp3\?v=1/);
-  assert.match(replication, /freeDualTurretProjectiles/);
-  assert.match(html, /free-roam-dual-turret-client\.js\?v=3/);
-  assert.match(html, /free-roam-developer-log-v1\.js\?v=2/);
-  assert.match(html, /бесплатно стоит тестовый двухместный бронекатер/);
-  assert.match(client, /ensureLoopWithoutStandardDualEngine/);
+  assert.match(core, /preparePlayerBoatStep/);
+  assert.doesNotMatch(core, /applyMotionProfile/);
+  assert.doesNotMatch(client, /ensureLoopWithoutStandardDualEngine/);
+  assert.doesNotMatch(audio, /dual-turret-engine/);
+  assert.match(projectiles, /mode: "instant"/);
+  assert.doesNotMatch(replication, /previousX/);
+  assert.match(html, /free-roam-dual-turret-client\.js\?v=4/);
+  assert.match(html, /free-roam-v4\.js\?v=61/);
+  assert.match(entry, /free-roam-core-v8\.js\?v=3/);
 });
