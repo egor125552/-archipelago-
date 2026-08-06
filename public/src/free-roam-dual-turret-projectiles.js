@@ -1,5 +1,6 @@
 "use strict";
 
+import {applyBoatDamage} from "./collision-model.js";
 import {applyCombatDamage} from "./free-roam-combat-v2.js?v=6";
 import {damageEnemyBoat} from "./free-roam-enemy-boats.js?v=3";
 import {damageEscort} from "./free-roam-pursuer-squad.js?v=33";
@@ -9,7 +10,6 @@ import {damageHeavyPursuer} from "./free-roam-heavy-pursuer.js?v=4";
 import {damageEliteBoatBoss} from "./free-roam-elite-boat.js?v=2";
 import {releaseStolenCargo} from "./free-roam-marauder.js?v=33";
 import {DUAL_TURRET_SHOT_DAMAGE} from "./free-roam-dual-turret-config.js?v=3";
-import {applyPlayerBoatDamage} from "./free-roam-player-boats.js?v=1";
 
 const rad = value => Number(value) * Math.PI / 180;
 
@@ -87,7 +87,7 @@ function applyTargetDamage(world, target, shot) {
       sourcePoint: shot,
     }, {});
   }
-  if (target.kind === "boat") return applyPlayerBoatDamage(world, target.point, amount, {sourcePlayer}).damage > 0;
+  if (target.kind === "boat") return applyBoatDamage(target.point, amount, {armorShare: 0.72, leakShare: 0.045}).damage > 0;
   if (target.kind === "gunner") return damageHostileGunner(world, target.gunnerId, amount, sourcePlayer);
   if (["hostileActor", "elite"].includes(target.kind)) return damageHostileActor(world, target.actorId, amount, sourcePlayer, {weapon: "dual-turret"});
   if (target.kind === "escort") return damageEscort(world, target.pursuerId, amount, sourcePlayer, {});
@@ -144,7 +144,6 @@ export function fireDualTurretHitscan(world, {boat, turret, sourcePlayer, headin
   return shot;
 }
 
-// Kept for old imports. New shots never enter the replicated per-tick list.
 export function spawnDualTurretProjectile(world, options) {
   return fireDualTurretHitscan(world, {...options, target: options?.target || null});
 }
