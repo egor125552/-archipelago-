@@ -14,29 +14,37 @@ import {
   finishDualTurretWeaponStep,
   prepareDualTurretWeaponStep,
 } from "./free-roam-dual-turret-weapons.js?v=4";
-import {ensureDualTurretProjectileState} from "./free-roam-dual-turret-projectiles.js?v=4";
 
 export * from "./free-roam-core-v7.js?v=1";
 export {prepareDualTurretBoatRoom};
 export const WORLD = base.WORLD;
 
+function ensureController(world, options) {
+  const state = ensureDualTurretBoatState(world, options);
+  if (!world) return state;
+  delete world.freePlayerBoats;
+  delete world.freeDualTurretPurchase;
+  delete world.freeDualTurretPrototype;
+  delete world.freeDualTurretWeapons;
+  delete world.freeDualTurretProjectiles;
+  return state;
+}
+
 export function createFreeWorld() {
   const world = base.createFreeWorld();
-  ensureDualTurretBoatState(world, {activate: true});
+  ensureController(world, {activate: true});
   prepareDualTurretBoatRoom(world);
-  ensureDualTurretProjectileState(world);
   return world;
 }
 
 export function setPlayerInput(world, playerIndex, nextInput) {
-  ensureDualTurretBoatState(world, {activate: false});
+  ensureController(world, {activate: false});
   base.setPlayerInput(world, playerIndex, prepareDualTurretInput(world, playerIndex, nextInput));
 }
 
 export function stepFreeWorld(world, dt) {
   const safeDt = Math.max(0, Math.min(0.1, Number(dt) || 0));
-  ensureDualTurretBoatState(world, {activate: false});
-  ensureDualTurretProjectileState(world);
+  ensureController(world, {activate: false});
   const boatContext = prepareDualTurretBoatStep(world);
   const weaponContext = prepareDualTurretWeaponStep(world);
   const result = base.stepFreeWorld(world, safeDt);
