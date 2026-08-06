@@ -1,7 +1,7 @@
 "use strict";
 
 import * as base from "./free-roam-replication.js";
-import {isDualTurretBoat} from "./free-roam-dual-turret-boat.js?v=3";
+import {isDualTurretBoat} from "./free-roam-dual-turret-boat.js?v=4";
 
 export * from "./free-roam-replication.js";
 
@@ -24,9 +24,8 @@ export function replicatedFreeWorld(world) {
     target.boardingRange = rounded(source.boardingRange || 12);
     target.cargoCapacity = Math.max(1, Math.floor(Number(source.cargoCapacity) || 5));
     target.audioProfile = source.audioProfile || "standard";
+    target.hullMax = rounded(source.hullMax || 100);
     if (!isDualTurretBoat(source)) continue;
-    target.structuralHull = rounded(source.structuralHull);
-    target.maxStructuralHull = rounded(source.maxStructuralHull);
     target.turrets = (source.turrets || []).map(turret => ({
       id: turret.id,
       label: turret.label,
@@ -41,19 +40,14 @@ export function replicatedFreeWorld(world) {
       maximumRelativeHeading: turret.maximumRelativeHeading,
     }));
   }
-  const purchase = world?.freeDualTurretPurchase;
-  if (purchase) {
-    snapshot.freeDualTurretPurchase = {
-      purchased: Boolean(purchase.purchased),
-      price: Math.max(0, Math.floor(Number(purchase.price) || 0)),
-      purchasedBy: Number.isInteger(purchase.purchasedBy) ? purchase.purchasedBy : null,
-      purchasedAt: rounded(purchase.purchasedAt),
+  const controller = world?.freeDualTurretBoat;
+  if (controller) {
+    snapshot.freeDualTurretBoat = {
+      version: controller.version,
+      boatId: controller.boatId,
+      weaponMode: controller.weaponMode || "instant",
+      recoveryRemaining: controller.recoveryRemaining == null ? null : rounded(controller.recoveryRemaining),
     };
-  }
-  if (world?.freeDualTurretProjectiles) {
-    // Mounted shots are immediate server events. No moving projectile list or
-    // repeated end-event history is copied into every network snapshot.
-    snapshot.freeDualTurretProjectiles = {mode: "instant"};
   }
   return snapshot;
 }

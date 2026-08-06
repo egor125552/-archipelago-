@@ -1,5 +1,6 @@
 "use strict";
 
+import {applyBoatDamage} from "./collision-model.js";
 import {applyCombatDamage} from "./free-roam-combat-v2.js?v=6";
 import {damageEnemyBoat} from "./free-roam-enemy-boats.js?v=3";
 import {damageEscort} from "./free-roam-pursuer-squad.js?v=33";
@@ -9,7 +10,6 @@ import {damageHeavyPursuer} from "./free-roam-heavy-pursuer.js?v=4";
 import {damageEliteBoatBoss} from "./free-roam-elite-boat.js?v=2";
 import {releaseStolenCargo} from "./free-roam-marauder.js?v=33";
 import {DUAL_TURRET_SHOT_DAMAGE} from "./free-roam-dual-turret-config.js?v=3";
-import {applyPlayerBoatDamage} from "./free-roam-player-boats.js?v=1";
 
 const rad = value => Number(value) * Math.PI / 180;
 
@@ -19,13 +19,11 @@ function emit(world, type, text, targets = [0, 1], extra = {}) {
   if (world.events.length > 240) world.events.splice(0, world.events.length - 240);
 }
 
-function stateFor(world) {
-  world.freeDualTurretProjectiles ||= {nextId: 1, projectiles: [], endEvents: [], mode: "instant"};
-  const state = world.freeDualTurretProjectiles;
-  if (!Array.isArray(state.projectiles)) state.projectiles = [];
-  if (!Array.isArray(state.endEvents)) state.endEvents = [];
-  if (!Number.isInteger(state.nextId)) state.nextId = 1;
-  state.mode = "instant";
+function controllerState(world) {
+  world.freeDualTurretBoat ||= {};
+  const state = world.freeDualTurretBoat;
+  if (!Number.isInteger(state.nextShotId)) state.nextShotId = 1;
+  state.weaponMode = "instant";
   return state;
 }
 
@@ -41,7 +39,6 @@ function muzzlePoint(boat, turret) {
 }
 
 function finishShot(world, shot, reason, target = null) {
-  const state = stateFor(world);
   const end = {
     id: shot.id,
     reason,
@@ -53,8 +50,6 @@ function finishShot(world, shot, reason, target = null) {
     instant: true,
     at: world.time,
   };
-  state.endEvents.push(end);
-  if (state.endEvents.length > 24) state.endEvents.splice(0, state.endEvents.length - 24);
   emit(world, "dual-turret-projectile-end", "", [0, 1], end);
   return end;
 }
@@ -87,7 +82,7 @@ function applyTargetDamage(world, target, shot) {
       sourcePoint: shot,
     }, {});
   }
-  if (target.kind === "boat") return applyPlayerBoatDamage(world, target.point, amount, {sourcePlayer}).damage > 0;
+  if (target.kind === "boat") return applyBoatDamage(target.point, amount, {armorShare: 0.72, leakShare: 0.045}).damage > 0;
   if (target.kind === "gunner") return damageHostileGunner(world, target.gunnerId, amount, sourcePlayer);
   if (["hostileActor", "elite"].includes(target.kind)) return damageHostileActor(world, target.actorId, amount, sourcePlayer, {weapon: "dual-turret"});
   if (target.kind === "escort") return damageEscort(world, target.pursuerId, amount, sourcePlayer, {});
@@ -107,12 +102,12 @@ function applyTargetDamage(world, target, shot) {
 }
 
 export function fireDualTurretHitscan(world, {boat, turret, sourcePlayer, heading, target}) {
-  const state = stateFor(world);
+  const state = controllerState(world);
   const muzzle = muzzlePoint(boat, turret);
   const impactX = Number(target?.point?.x) || muzzle.x;
   const impactY = Number(target?.point?.y) || muzzle.y;
   const shot = {
-    id: `dual-shot-${state.nextId++}`,
+    id: `dual-shot-${state.nextShotId++}`,
     turretId: turret.id,
     sourcePlayer,
     sourceBoatId: boat.id,
@@ -144,29 +139,18 @@ export function fireDualTurretHitscan(world, {boat, turret, sourcePlayer, headin
   return shot;
 }
 
-// Kept for old imports. New shots never enter the replicated per-tick list.
 export function spawnDualTurretProjectile(world, options) {
   return fireDualTurretHitscan(world, {...options, target: options?.target || null});
 }
 
 export function stepDualTurretProjectiles(world) {
-  const state = stateFor(world);
-  if (state.projectiles.length) {
-    for (const legacy of state.projectiles) {
-      finishShot(world, {
-        id: legacy.id || `legacy-dual-shot-${state.nextId++}`,
-        sourcePlayer: legacy.sourcePlayer,
-        x: legacy.x,
-        y: legacy.y,
-      }, "legacy-cleared");
-    }
-    state.projectiles = [];
-  }
-  return state.projectiles;
+  controllerState(world);
+  delete world.freeDualTurretProjectiles;
+  return [];
 }
 
 export function ensureDualTurretProjectileState(world) {
-  const state = stateFor(world);
-  if (state.projectiles.length) stepDualTurretProjectiles(world);
+  const state = controllerState(world);
+  delete world.freeDualTurretProjectiles;
   return state;
 }

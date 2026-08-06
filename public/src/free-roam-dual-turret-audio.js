@@ -3,8 +3,19 @@
 import {DUAL_TURRET_AUDIO_ROOT} from "./free-roam-dual-turret-config.js?v=3";
 
 export const DUAL_TURRET_AUDIO = Object.freeze({
+  engine: `${DUAL_TURRET_AUDIO_ROOT}dual-turret-engine-v1.mp3?v=2`,
   shot: `${DUAL_TURRET_AUDIO_ROOT}dual-turret-shot-v1.mp3?v=2`,
 });
+
+const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, Number(value) || 0));
+const distance = (a, b) => Math.hypot((Number(a?.x) || 0) - (Number(b?.x) || 0), (Number(a?.y) || 0) - (Number(b?.y) || 0));
+const wrapDeg = value => ((Number(value) + 180) % 360 + 360) % 360 - 180;
+
+function relativePan(listener, source) {
+  if (!listener || !source) return 0;
+  const bearing = Math.atan2((Number(source.x) || 0) - (Number(listener.x) || 0), -((Number(source.y) || 0) - (Number(listener.y) || 0))) * 180 / Math.PI;
+  return clamp(Math.sin(wrapDeg(bearing - (Number(listener.heading) || 0)) * Math.PI / 180), -1, 1);
+}
 
 export async function preloadDualTurretAudio(audio) {
   if (!audio?.ctx || !audio?.buffers) return;
@@ -17,18 +28,69 @@ export async function preloadDualTurretAudio(audio) {
   await audio.dualTurretPreloadPromise;
 }
 
-// Engine audio is intentionally not implemented here. The armored patrol uses
-// the same single common engine loop as every other player boat.
-export function updateDualTurretEngine() {}
+function stopEngine(audio) {
+  const engine = audio?.dualTurretEngine;
+  if (!engine) return;
+  try { engine.source.stop(); } catch (_) {}
+  try { engine.source.disconnect(); } catch (_) {}
+  try { engine.filter.disconnect(); } catch (_) {}
+  try { engine.panner.disconnect(); } catch (_) {}
+  try { engine.gain.disconnect(); } catch (_) {}
+  audio.dualTurretEngine = null;
+}
 
-// Hits are immediate, so there is no moving projectile object or fly-by loop.
+function startEngine(audio) {
+  if (audio.dualTurretEngine || !audio.ctx || !audio.master || !audio.buffers?.has("dualTurretEngine")) return;
+  const source = audio.ctx.createBufferSource();
+  const filter = audio.ctx.createBiquadFilter();
+  const panner = audio.ctx.createStereoPanner();
+  const gain = audio.ctx.createGain();
+  source.buffer = audio.buffers.get("dualTurretEngine");
+  source.loop = true;
+  source.loopStart = 0;
+  source.loopEnd = source.buffer.duration;
+  filter.type = "lowpass";
+  filter.frequency.value = 1600;
+  panner.pan.value = 0;
+  gain.gain.value = 0;
+  source.connect(filter).connect(panner).connect(gain).connect(audio.master);
+  source.start();
+  audio.dualTurretEngine = {source, filter, panner, gain};
+}
+
+export function updateDualTurretEngine(audio, world, playerIndex) {
+  if (!audio?.ctx) return;
+  const boat = (world?.boats || []).find(candidate => candidate?.boatType === "dual-turret-patrol");
+  const occupied = (boat?.crew || []).some(Number.isInteger);
+  if (!boat || boat.sunk || boat.reserved || boat.engineStalled || (!occupied && Math.abs(Number(boat.speed) || 0) < 0.15)) {
+    if (audio.dualTurretEngine) audio.dualTurretEngine.gain.gain.setTargetAtTime(0, audio.ctx.currentTime, 0.12);
+    return;
+  }
+
+  startEngine(audio);
+  const engine = audio.dualTurretEngine;
+  if (!engine) return;
+  const listener = audio.listenerPoint || world?.players?.[playerIndex];
+  const metres = distance(listener, boat);
+  const localAboard = world?.players?.[playerIndex]?.activeBoat === boat.id
+    && world?.players?.[playerIndex]?.mode === "boat";
+  const speed = clamp(Math.abs(Number(boat.speed) || 0) / 21, 0, 1);
+  const throttle = clamp(Math.abs(Number(boat.throttle) || 0), 0, 1);
+  const proximity = localAboard ? 1 : clamp(1 - metres / 230, 0, 1);
+  const now = audio.ctx.currentTime;
+  engine.source.playbackRate.setTargetAtTime(0.78 + speed * 0.82 + throttle * 0.08, now, 0.11);
+  engine.filter.frequency.setTargetAtTime(900 + speed * 4300 + proximity * 700, now, 0.14);
+  engine.panner.pan.setTargetAtTime(localAboard ? 0 : relativePan(listener, boat), now, 0.1);
+  engine.gain.gain.setTargetAtTime(localAboard ? 0.16 : proximity * 0.13, now, 0.13);
+}
+
 export function updateDualTurretProjectileAudio() {}
 
 export function handleDualTurretAudioEvent(audio, event, playerIndex) {
   if (!event?.targets?.includes(playerIndex)) return false;
   if (event.type === "dual-turret-shot") {
     const spatial = audio.eventPanAndGain?.(event, 260) || {pan: Number(event.pan) || 0, gain: 1};
-    audio.play?.("dualTurretShot", {pan: spatial.pan, gain: 0.34 * spatial.gain, rate: 0.99, lowpass: 9800});
+    audio.play?.("dualTurretShot", {pan: spatial.pan, gain: 0.34 * spatial.gain, rate: 0.98 + Math.random() * 0.035, lowpass: 9800});
     return true;
   }
   if (event.type === "dual-turret-hit") {
@@ -40,4 +102,6 @@ export function handleDualTurretAudioEvent(audio, event, playerIndex) {
   return event.type === "dual-turret-projectile-end";
 }
 
-export function stopDualTurretAudio() {}
+export function stopDualTurretAudio(audio) {
+  stopEngine(audio);
+}

@@ -21,6 +21,7 @@ function placePlayersTogether(world) {
   ];
   for (let index = 0; index < Math.min(world.boats.length, positions.length); index += 1) {
     const boat = world.boats[index];
+    if (!boat) continue;
     const position = positions[index];
     boat.x = position.x;
     boat.y = position.y;
@@ -61,7 +62,7 @@ function applyOperationSteering(world, safeDt) {
     const player = world.players[playerIndex];
     if (player?.mode !== "boat") continue;
     const boat = world.boats[player.activeBoat];
-    if (!boat || boat.sunk) continue;
+    if (!boat || boat.sunk || boat.driver !== playerIndex) continue;
     const input = world.operationInputs?.[playerIndex] || world.inputs?.[playerIndex] || {};
     const manualSteer = Number(Boolean(input.right)) - Number(Boolean(input.left));
     const guideSteer = manualSteer ? 0 : clamp(Number(boat.sonarGuideSteer) || 0, -0.28, 0.28);
