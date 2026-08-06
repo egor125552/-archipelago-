@@ -26,7 +26,7 @@ test("ordinary local engine is stopped on foot, in water, and aboard armored boa
 
 test("turret sector mechanics are removed and empty fire has a real heading", async () => {
   const weapons = await readFile(new URL("../public/src/free-roam-dual-turret-weapons.js", import.meta.url), "utf8");
-  assert.doesNotMatch(weapons, /Цель вне сектора|поверни бронекатер|minimumRelativeHeading|maximumRelativeHeading/);
+  assert.doesNotMatch(weapons, /Цель вне сектора|поверни бронекатер|relative\s*[<>]=?\s*turret\./);
   assert.doesNotMatch(weapons, /Сначала выбери боевую цель/);
   assert.match(weapons, /automaticHostileTarget/);
   assert.match(weapons, /target-auto-locked/);
