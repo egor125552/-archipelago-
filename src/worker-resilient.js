@@ -11,55 +11,72 @@ function stalledFreeState(client, now = Date.now()) {
   );
 }
 
+function openSocket(socket) {
+  return Boolean(socket && socket.readyState === 1 && typeof socket.send === "function");
+}
+
 export class Lobby extends PersistentLobby {
-  expireStalledFreeState(socket, now = Date.now()) {
+  resendStalledFreeState(socket, now = Date.now()) {
     const client = this.clients.get(socket);
-    if (!stalledFreeState(client, now)) return [];
-    const retryEvents = Array.isArray(client.freeInFlightEvents)
-      ? client.freeInFlightEvents
-      : [];
-    // The previous ACK may have been lost after the client applied the state.
-    // A delta would then have an uncertain base, so the retry is deliberately
-    // a fresh full snapshot rather than another patch against stale state.
-    client.freeStateInFlight = 0;
-    client.freeInFlightWorld = null;
-    client.freeAckedWorld = null;
-    client.freeStateSentAt = 0;
-    client.freeInFlightEvents = [];
+    if (!stalledFreeState(client, now)) return false;
+    const inFlight = client.freeInFlightState;
+    if (!inFlight || !openSocket(socket)) {
+      // Compatibility fallback for a connection created by an older worker
+      // version that did not remember the exact in-flight payload.
+      client.freeStateInFlight = 0;
+      client.freeInFlightWorld = null;
+      client.freeAckedWorld = null;
+      client.freeStateSentAt = 0;
+      client.freeInFlightState = null;
+      client.freeStateResends = (Number(client.freeStateResends) || 0) + 1;
+      return this.flushFreeState(socket);
+    }
+
+    const roleIndex = client.role === "captain" ? 0 : 1;
+    try {
+      socket.send(JSON.stringify({
+        type: "free-state",
+        sequence: inFlight.sequence,
+        serverAt: now,
+        ackInput: inFlight.ackInput?.[roleIndex] || 0,
+        full: true,
+        world: inFlight.world,
+        delta: null,
+        events: inFlight.events || [],
+      }));
+    } catch (_) {
+      return false;
+    }
+    // The sequence deliberately stays unchanged. A client that already
+    // applied this packet will ignore its events and only repeat the ACK.
+    client.freeStateSentAt = now;
     client.freeStateResends = (Number(client.freeStateResends) || 0) + 1;
-    return retryEvents;
+    return true;
   }
 
   offerFreeState(socket, state) {
-    const client = this.clients.get(socket);
-    const retryEvents = this.expireStalledFreeState(socket);
-    if (!retryEvents.length) return super.offerFreeState(socket, state);
-
-    const queuedEvents = Array.isArray(client?.freePending?.events)
-      ? client.freePending.events
-      : [];
-    // Preserve audible chronology: unacknowledged events first, then events
-    // accumulated while waiting, and only then events from the newest tick.
-    if (client) client.freePending = null;
-    return super.offerFreeState(socket, {
-      ...state,
-      events: [...retryEvents, ...queuedEvents, ...(state?.events || [])],
-    });
+    const offered = super.offerFreeState(socket, state);
+    return this.resendStalledFreeState(socket) || offered;
   }
 
   flushFreeState(socket) {
     const client = this.clients.get(socket);
-    const pendingEvents = Array.isArray(client?.freePending?.events)
-      ? [...client.freePending.events]
-      : [];
+    const pendingState = client?.freePending
+      ? {
+          ...client.freePending,
+          events: Array.isArray(client.freePending.events)
+            ? [...client.freePending.events]
+            : [],
+        }
+      : null;
     const sent = super.flushFreeState(socket);
     const refreshed = this.clients.get(socket);
     if (sent && refreshed?.freeStateInFlight) {
       refreshed.freeStateSentAt = Date.now();
-      refreshed.freeInFlightEvents = pendingEvents;
+      refreshed.freeInFlightState = pendingState;
     } else if (refreshed && !refreshed.freeStateInFlight) {
       refreshed.freeStateSentAt = 0;
-      refreshed.freeInFlightEvents = [];
+      refreshed.freeInFlightState = null;
     }
     return sent;
   }
