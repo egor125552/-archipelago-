@@ -23,6 +23,7 @@ export class AudioEngine extends V8AudioEngine {
     this.floodFilter = null;
     this.nextFloodAlarmAt = 0;
     this.localPreloadPromise = null;
+    this.playerEngineLoop = null;
   }
 
   async init() {
@@ -84,8 +85,6 @@ export class AudioEngine extends V8AudioEngine {
       offset: 0.1,
       duration: urgent ? 1.18 : 2.12,
     });
-    // The synthesized pair remains audible if the recorded siren could not be
-    // downloaded, and makes the repeating alarm distinct from sonar cues.
     this.playSynthPip({frequency: urgent ? 225 : 310, gain: urgent ? 0.14 : 0.1, duration: 0.18});
     this.playSynthPip({frequency: urgent ? 185 : 265, gain: urgent ? 0.13 : 0.09, duration: 0.2, delay: 0.28});
     this.nextFloodAlarmAt = this.ctx.currentTime + (urgent ? 1.28 : 2.34);
@@ -129,14 +128,22 @@ export class AudioEngine extends V8AudioEngine {
         this.stopLoop("riverWake");
       }
 
-      if (!view.boat.engineStalled) {
-        this.ensureLoop("motorboatReal", {
-          gain: 0.06 + load * 0.22,
-          rate: 0.9 + load * 0.17,
-          lowpass: 1500 + load * 2100,
+      const engineName = view.boat.engineSound || "motorboatReal";
+      if (this.playerEngineLoop && this.playerEngineLoop !== engineName) this.stopLoop(this.playerEngineLoop);
+      if (!view.boat.engineStalled && this.buffers.has(engineName)) {
+        const armored = view.boat.audioProfile === "armored-patrol";
+        const speedLoad = clamp(speed / 18, 0, 1);
+        this.ensureLoop(engineName, {
+          gain: armored ? 0.14 : 0.06 + load * 0.22,
+          rate: armored ? 0.82 + speedLoad * 0.36 : 0.9 + load * 0.17,
+          lowpass: armored ? 950 + speedLoad * 2950 : 1500 + load * 2100,
           pan: 0,
         });
-      } else this.stopLoop("motorboatReal");
+        this.playerEngineLoop = engineName;
+      } else {
+        if (this.playerEngineLoop) this.stopLoop(this.playerEngineLoop);
+        this.playerEngineLoop = null;
+      }
 
       if (water > 0.7 || leak > 0.05) {
         const flooding = clamp(water / 100, 0, 1);
@@ -156,12 +163,20 @@ export class AudioEngine extends V8AudioEngine {
       } else this.stopLoop("pumpReal");
     } else {
       for (const name of ["riverIdle", "riverWake", "bilgeWater", "seaReal", "motorboatReal", "pumpReal"]) this.stopLoop(name);
+      if (this.playerEngineLoop) this.stopLoop(this.playerEngineLoop);
+      this.playerEngineLoop = null;
     }
 
     if (playing) {
       this.playGuide(view);
       this.playHazardGuide(view);
     }
+  }
+
+  stopAll() {
+    if (this.playerEngineLoop) this.stopLoop(this.playerEngineLoop);
+    this.playerEngineLoop = null;
+    super.stopAll();
   }
 
   handle(events) {
