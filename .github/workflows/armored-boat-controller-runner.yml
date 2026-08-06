@@ -1,0 +1,61 @@
+name: Run focused armored boat integration
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-test:
+    if: "${{ github.head_ref == 'agent/armored-boat-controller' }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout implementation branch
+        uses: actions/checkout@v4
+        with:
+          ref: "${{ github.event.pull_request.head.sha }}"
+          fetch-depth: 0
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Extract and apply integrated patch
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64, gzip, re
+          source = Path('.github/workflows/armored-boat-controller-once.yml').read_text()
+          match = re.search(r"echo '([^']+)' \| base64", source)
+          if not match:
+              raise SystemExit('Embedded armored patch was not found')
+          Path('/tmp/armored_patch.py').write_bytes(gzip.decompress(base64.b64decode(match.group(1))))
+          PY
+          python3 /tmp/armored_patch.py
+      - name: Check changed JavaScript syntax
+        run: |
+          node --check public/src/free-roam-player-boats.js
+          node --check public/src/free-roam-dual-turret-boat.js
+          node --check public/src/free-roam-dual-turret-audio.js
+          node --check public/src/free-roam-dual-turret-client.js
+          node --check public/src/free-roam-audio.js
+          node --check public/src/audio-engine-v9.js
+          node --check public/src/free-roam-client-prediction.js
+          node --check public/src/free-roam-replication-v2.js
+      - name: Verify the published armored engine exists
+        run: test -s public/assets/audio/free-roam-dual-turret/dual-turret-engine-v1.mp3
+      - name: Run only armored boat tests
+        run: node --test tests/free-roam-dual-turret-v1.test.mjs
+      - name: Commit finished implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/armored-boat-controller-once.yml
+          git rm .github/workflows/armored-boat-controller-pr.yml
+          git rm .github/armored-boat-trigger.txt
+          git add public tests
+          git commit -m "fix: make armored patrol a profiled player boat [armored-final]"
+          git push origin HEAD:agent/armored-boat-controller
