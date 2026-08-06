@@ -53,6 +53,27 @@ jobs:
           patch -p1 < .github/dual-turret-reviewed.patch
           find public src tests -type f -name '*.orig' -delete
           python3 .github/dual-turret-existing-files.py
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('public/src/free-roam-dual-turret-boat.js')
+          text = path.read_text()
+          old = '''export function finishDualTurretBoatStep(world, context, dt) {
+            const {boat, state, originals, saved, before} = context;
+            restoreSaved(saved);
+            syncStructuralHull(world, boat, before);'''
+          new = '''export function finishDualTurretBoatStep(world, context, dt) {
+            const {boat, state, originals, saved, before} = context;
+            restoreSaved(saved);
+            const driverInput = Number.isInteger(boat.driver) ? (originals[boat.driver] || {}) : {};
+            if (!driverInput.left && !driverInput.right) {
+              boat.heading = before.heading;
+              boat.rudder = 0;
+            }
+            syncStructuralHull(world, boat, before);'''
+          if old not in text:
+              raise SystemExit('missing finishDualTurretBoatStep patch anchor')
+          path.write_text(text.replace(old, new))
+          PY
       - name: Verify the two complete MP3 files
         shell: bash
         run: |
