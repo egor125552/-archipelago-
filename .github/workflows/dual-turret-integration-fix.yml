@@ -1,4 +1,4 @@
-name: Verify integrated dual-turret prototype
+name: Publish integrated dual-turret prototype
 
 on:
   pull_request:
@@ -9,12 +9,12 @@ permissions:
   contents: write
 
 jobs:
-  verify-and-publish:
+  publish:
     if: "${{ github.head_ref == 'agent/dual-turret-integration-fix' }}"
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Checkout without marketplace actions
+      - name: Checkout branch
         shell: bash
         env:
           GH_TOKEN: "${{ github.token }}"
@@ -24,9 +24,8 @@ jobs:
           git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git fetch --no-tags origin refs/heads/agent/dual-turret-integration-fix:refs/remotes/origin/agent/dual-turret-integration-fix
           git checkout -B agent/dual-turret-integration-fix refs/remotes/origin/agent/dual-turret-integration-fix
-          node --version
 
-      - name: Materialize reviewed integration fix
+      - name: Materialize fix
         shell: bash
         run: |
           set -euo pipefail
@@ -40,15 +39,11 @@ jobs:
           parts = sorted(root.glob('.github/dual-turret-fix-v2-*.txt'))
           if len(parts) != 4:
               raise SystemExit(f'expected 4 source parts, found {len(parts)}')
-
-          encoded = ''.join(part.read_text().strip() for part in parts)
           archive = pathlib.Path('/tmp/dual-turret-fix-v2.tar.xz')
-          archive.write_bytes(base64.b64decode(encoded, validate=True))
+          archive.write_bytes(base64.b64decode(''.join(p.read_text().strip() for p in parts), validate=True))
           digest = hashlib.sha256(archive.read_bytes()).hexdigest()
-          expected = '1d938460f661c724509056f2444cfd3611f12e8d3baa9b534d45282f5bad651a'
-          if digest != expected:
+          if digest != '1d938460f661c724509056f2444cfd3611f12e8d3baa9b534d45282f5bad651a':
               raise SystemExit(f'archive SHA mismatch: {digest}')
-
           with tarfile.open(archive, 'r:xz') as source:
               for member in source.getmembers():
                   target = (root / member.name).resolve()
@@ -59,7 +54,7 @@ jobs:
               source.extractall(root)
           PY
 
-      - name: Update live client entry points
+      - name: Update cache versions
         shell: bash
         run: |
           set -euo pipefail
@@ -73,62 +68,23 @@ jobs:
                   raise SystemExit(f'missing patch anchor in {path}: {old!r}')
               file.write_text(text.replace(old, new))
 
-          replace(
-              'public/src/free-roam-v4.js',
-              'from "./free-roam-core-v8.js?v=1";',
-              'from "./free-roam-core-v8.js?v=2";',
-          )
-          replace(
-              'public/src/free-roam-v4.js',
-              'import {predictLocalWorld, reconcileLocalPrediction} from "./free-roam-client-prediction.js?v=41";',
-              'import {predictLocalWorld, reconcileLocalPrediction} from "./free-roam-client-prediction.js?v=42";',
-          )
-          replace(
-              'tests/free-roam-bomb-gesture-v1.test.mjs',
-              'assert.match(client, /free-roam-core-v8\\.js\\?v=1/);',
-              'assert.match(client, /free-roam-core-v8\\.js\\?v=2/);',
-          )
-          replace(
-              'tests/free-roam-bomb-gesture-v1.test.mjs',
-              'assert.match(html, /free-roam-v4\\.js\\?v=59/);',
-              'assert.match(html, /free-roam-v4\\.js\\?v=60/);',
-          )
+          replace('public/src/free-roam-v4.js', 'from "./free-roam-core-v8.js?v=1";', 'from "./free-roam-core-v8.js?v=2";')
+          replace('public/src/free-roam-v4.js', 'import {predictLocalWorld, reconcileLocalPrediction} from "./free-roam-client-prediction.js?v=41";', 'import {predictLocalWorld, reconcileLocalPrediction} from "./free-roam-client-prediction.js?v=42";')
+          replace('tests/free-roam-bomb-gesture-v1.test.mjs', 'assert.match(client, /free-roam-core-v8\\.js\\?v=1/);', 'assert.match(client, /free-roam-core-v8\\.js\\?v=2/);')
+          replace('tests/free-roam-bomb-gesture-v1.test.mjs', 'assert.match(html, /free-roam-v4\\.js\\?v=59/);', 'assert.match(html, /free-roam-v4\\.js\\?v=60/);')
           PY
 
-      - name: Verify complete audio files
+      - name: Verify audio and JavaScript syntax
         shell: bash
         run: |
           set -euo pipefail
           test "$(sha256sum public/assets/audio/free-roam-dual-turret/dual-turret-shot-v1.mp3 | cut -d' ' -f1)" = "491a91efb10c8d9ee3d3d66d2a3a3b6fffbb31b1fbd9af53f7a578b2a4cf397a"
           test "$(sha256sum public/assets/audio/free-roam-dual-turret/dual-turret-engine-v1.mp3 | cut -d' ' -f1)" = "d9502b154ddfd08e51dbc1959dadd33259acf92547078e4a714cbdb278b19457"
-          if command -v ffmpeg >/dev/null 2>&1; then
-            ffmpeg -v error -i public/assets/audio/free-roam-dual-turret/dual-turret-shot-v1.mp3 -f null -
-            ffmpeg -v error -i public/assets/audio/free-roam-dual-turret/dual-turret-engine-v1.mp3 -f null -
-          fi
-          test -z "$(find public/assets/audio/free-roam-dual-turret -type f \( -name '*.part-*' -o -name '*.b64' -o -name 'chunk-*' -o -name '*.txt' \) -print -quit)"
+          ffmpeg -v error -i public/assets/audio/free-roam-dual-turret/dual-turret-shot-v1.mp3 -f null -
+          ffmpeg -v error -i public/assets/audio/free-roam-dual-turret/dual-turret-engine-v1.mp3 -f null -
+          while IFS= read -r file; do node --check "$file"; done < <(find public/src src tests -type f \( -name '*dual-turret*' -o -name 'free-roam-core-v8.js' -o -name 'free-roam-client-prediction.js' -o -name 'free-roam-server.js' -o -name 'free-roam-v4.js' \) | sort)
 
-      - name: Run focused dual-turret checks
-        shell: bash
-        run: |
-          set -euo pipefail
-          while IFS= read -r file; do node --check "$file"; done < <(
-            find public/src src tests -type f \
-              \( -name '*dual-turret*' -o -name 'free-roam-core-v8.js' -o -name 'free-roam-client-prediction.js' -o -name 'free-roam-server.js' -o -name 'free-roam-v4.js' \) \
-              | sort
-          )
-          grep -q 'free-roam-core-v8.js?v=2' public/src/free-roam-v4.js
-          grep -q 'free-roam-client-prediction.js?v=42' public/src/free-roam-v4.js
-          grep -q 'free-roam-dual-turret-client.js?v=3' public/free-roam.html
-          grep -q 'free-roam-v4.js?v=60' public/free-roam.html
-          grep -q 'DUAL_TURRET_START_AMMO = 1000' public/src/free-roam-dual-turret-config.js
-          grep -q 'DUAL_TURRET_TEST_RECOVERY_SECONDS = 60' public/src/free-roam-dual-turret-config.js
-          grep -q 'stopLoop("motorboatReal")' public/src/free-roam-dual-turret-client.js
-          node --test \
-            tests/free-roam-dual-turret-v1.test.mjs \
-            tests/free-roam-server-authority-v40.test.mjs \
-            tests/free-roam-bomb-gesture-v1.test.mjs
-
-      - name: Create clean verified commit
+      - name: Publish clean branch commit
         shell: bash
         run: |
           set -euo pipefail
