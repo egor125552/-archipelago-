@@ -1,0 +1,300 @@
+name: Render realistic engine comparison
+
+on:
+  push:
+    branches: [engine-real-recordings]
+    paths: [.github/workflows/render-real-engine-comparison.yml]
+  workflow_dispatch:
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install audio tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg curl
+          python3 -m pip install --user numpy soundfile
+          curl -L --fail --retry 3 \
+            https://github.com/vgmstream/vgmstream-releases/releases/download/nightly/vgmstream-linux-cli.tar.gz \
+            -o /tmp/vgmstream-linux-cli.tar.gz
+          mkdir -p /tmp/vgmstream
+          tar -xzf /tmp/vgmstream-linux-cli.tar.gz -C /tmp/vgmstream
+          VGM="$(find /tmp/vgmstream -type f -name vgmstream-cli | head -1)"
+          chmod +x "$VGM"
+          echo "VGM=$VGM" >> "$GITHUB_ENV"
+          "$VGM" -h >/dev/null || true
+
+      - name: Download and decode real recorded engine banks
+        shell: bash
+        run: |
+          set -u
+          mkdir -p work/source work/decoded
+          cat > work/engines.tsv <<'EOF'
+          01	V8 Charger	lgcy01chargerv8	lgcy01chargerv8
+          02	Diesel Duramax	chevydmaxeng	chevydmaxeng
+          03	Lamborghini V10	lambov10	lambov10
+          04	Porsche flat-six	gt3flat6	gt3flat6
+          05	Mazda rotary	rotary7	rotary7
+          06	Toyota 2JZ turbo	toysupmk4	toysupmk4
+          07	Two-stroke bike	2strkbeng	2strkbeng
+          08	Yamaha inline-three	mt09eng	mt09eng
+          09	Ferrari V12	f50gteng	f50gteng
+          10	Toyota 4A-GE	4age	4age
+          11	BMW motorcycle I4	bmws1krreng	bmws1krreng
+          12	Subaru flat-four	wrxrllyeng	wrxrllyeng
+          13	Nissan RB26	bnr34ffeng	bnr34ffeng
+          14	Mercedes V8	mbnzc63eng	mbnzc63eng
+          15	Lexus LFA V10	lg48lexlfa	lg48lexlfa
+          16	NASCAR V8	lg44nascarv8	lg44nascarv8
+          EOF
+
+          while IFS=$'\t' read -r order title folder file; do
+            url="https://raw.githubusercontent.com/SpiritsCreations/FiveM-Engine-Sound-Pack/main/Audio_Pack/sfx/dlc_${folder}/${file}.awc"
+            src="work/source/${order}_${file}.awc"
+            echo "Downloading $title"
+            if ! curl -L --fail --retry 2 "$url" -o "$src"; then
+              echo "SKIP download: $title" >&2
+              rm -f "$src"
+              continue
+            fi
+            count="$($VGM -m "$src" 2>&1 | sed -nE 's/.*stream count:[[:space:]]*([0-9]+).*/\1/ip' | tail -1)"
+            [[ "$count" =~ ^[0-9]+$ ]] || count=1
+            outdir="work/decoded/${order}_${file}"
+            mkdir -p "$outdir"
+            for index in $(seq 1 "$count"); do
+              "$VGM" -i -s "$index" -o "$outdir/${index}.wav" "$src" >/dev/null 2>&1 || true
+            done
+          done < work/engines.tsv
+
+          find work/decoded -type f -name '*.wav' -size +1k | sort > work/decoded-files.txt
+          echo "Decoded $(wc -l < work/decoded-files.txt) streams"
+          test -s work/decoded-files.txt
+
+      - name: Build identical acceleration and deceleration previews
+        run: |
+          cat > work/render.py <<'PY'
+          from __future__ import annotations
+          import math
+          import re
+          import subprocess
+          import wave
+          from pathlib import Path
+          import numpy as np
+          import soundfile as sf
+
+          ROOT = Path('work')
+          RATE = 48000
+          CLIP_SECONDS = 13.0
+          GAP_SECONDS = 1.5
+          MAX_ENGINES = 10
+
+          titles = {}
+          for raw in (ROOT / 'engines.tsv').read_text().splitlines():
+              if not raw.strip():
+                  continue
+              order, title, folder, file = raw.split('\t')
+              titles[f'{order}_{file}'] = (order, title)
+
+          def resample(data: np.ndarray, source_rate: int) -> np.ndarray:
+              if source_rate == RATE:
+                  return data.astype(np.float32, copy=False)
+              target = max(1, int(round(len(data) * RATE / source_rate)))
+              old = np.linspace(0.0, 1.0, len(data), endpoint=False)
+              new = np.linspace(0.0, 1.0, target, endpoint=False)
+              channels = [np.interp(new, old, data[:, ch]) for ch in range(data.shape[1])]
+              return np.stack(channels, axis=1).astype(np.float32)
+
+          def load(path: Path) -> np.ndarray | None:
+              try:
+                  data, rate = sf.read(path, always_2d=True, dtype='float32')
+              except Exception:
+                  return None
+              if not len(data):
+                  return None
+              data = resample(data, int(rate))
+              if data.shape[1] == 1:
+                  data = np.repeat(data, 2, axis=1)
+              elif data.shape[1] > 2:
+                  data = data[:, :2]
+              mono = np.mean(data, axis=1)
+              peak = float(np.max(np.abs(mono)))
+              if peak < 1e-4:
+                  return None
+              threshold = max(peak * 0.012, 2e-4)
+              active = np.flatnonzero(np.abs(mono) >= threshold)
+              if len(active):
+                  pad = int(0.03 * RATE)
+                  left = max(0, int(active[0]) - pad)
+                  right = min(len(data), int(active[-1]) + pad + 1)
+                  data = data[left:right]
+              return data
+
+          def metrics(data: np.ndarray) -> tuple[float, float, float, float]:
+              mono = np.mean(data, axis=1)
+              duration = len(mono) / RATE
+              rms = float(np.sqrt(np.mean(mono * mono) + 1e-12))
+              peak = float(np.max(np.abs(mono)) + 1e-9)
+              crest = peak / max(rms, 1e-8)
+              segment = mono[:min(len(mono), RATE * 2)]
+              if len(segment) < 512:
+                  return duration, rms, crest, 0.0
+              window = np.hanning(len(segment))
+              spectrum = np.abs(np.fft.rfft(segment * window))
+              freqs = np.fft.rfftfreq(len(segment), 1 / RATE)
+              centroid = float(np.sum(freqs * spectrum) / max(np.sum(spectrum), 1e-9))
+              return duration, rms, crest, centroid
+
+          def loop_to(data: np.ndarray, length: int) -> np.ndarray:
+              # Recorded loops only. Short overlap removes container-boundary clicks.
+              if len(data) >= length:
+                  start = max(0, (len(data) - length) // 2)
+                  return data[start:start + length].copy()
+              cross = min(int(0.045 * RATE), max(16, len(data) // 8))
+              output = data.copy()
+              while len(output) < length:
+                  remaining = length - len(output)
+                  if remaining <= cross:
+                      output = np.concatenate([output, data[:remaining]], axis=0)
+                      break
+                  take = min(len(data), remaining + cross)
+                  part = data[:take].copy()
+                  overlap = min(cross, len(output), len(part))
+                  if overlap:
+                      fade = np.linspace(0.0, 1.0, overlap, dtype=np.float32)[:, None]
+                      output[-overlap:] = output[-overlap:] * (1.0 - fade) + part[:overlap] * fade
+                      output = np.concatenate([output, part[overlap:]], axis=0)
+                  else:
+                      output = np.concatenate([output, part], axis=0)
+              return output[:length]
+
+          def smoothstep(value: np.ndarray) -> np.ndarray:
+              value = np.clip(value, 0.0, 1.0)
+              return value * value * (3.0 - 2.0 * value)
+
+          def build_clip(candidates: list[tuple[Path, np.ndarray, tuple[float, float, float, float]]]) -> tuple[np.ndarray, list[str]] | None:
+              # Prefer continuous loop-like recordings: enough duration, moderate crest factor.
+              useful = [c for c in candidates if c[2][0] >= 0.28 and c[2][1] >= 0.0025 and c[2][2] <= 14.0]
+              if len(useful) < 2:
+                  useful = [c for c in candidates if c[2][0] >= 0.12 and c[2][1] >= 0.001]
+              if not useful:
+                  return None
+              useful.sort(key=lambda item: item[2][3])
+              layer_count = min(5, len(useful))
+              positions = np.linspace(0, len(useful) - 1, layer_count)
+              selected = []
+              used = set()
+              for pos in positions:
+                  idx = int(round(float(pos)))
+                  if idx not in used:
+                      used.add(idx)
+                      selected.append(useful[idx])
+              if len(selected) == 1:
+                  selected.append(selected[0])
+
+              total = int(CLIP_SECONDS * RATE)
+              layers = []
+              source_names = []
+              for path, data, info in selected:
+                  layer = loop_to(data, total)
+                  rms = float(np.sqrt(np.mean(layer * layer) + 1e-12))
+                  layer *= min(3.0, 0.13 / max(rms, 1e-6))
+                  layers.append(layer)
+                  source_names.append(path.name)
+              stack = np.stack(layers, axis=0)
+
+              t = np.arange(total, dtype=np.float32) / RATE
+              rpm = np.zeros(total, dtype=np.float32)
+              accel = (t >= 1.5) & (t < 8.0)
+              rpm[accel] = smoothstep((t[accel] - 1.5) / 6.5)
+              rpm[(t >= 8.0) & (t < 10.0)] = 1.0
+              decel = t >= 10.0
+              rpm[decel] = 1.0 - smoothstep((t[decel] - 10.0) / 3.0)
+
+              scaled = rpm * (len(layers) - 1)
+              low = np.floor(scaled).astype(np.int32)
+              high = np.minimum(low + 1, len(layers) - 1)
+              frac = (scaled - low).astype(np.float32)
+              idx = np.arange(total)
+              output = stack[low, idx] * (1.0 - frac[:, None]) + stack[high, idx] * frac[:, None]
+
+              # Same load envelope for every engine; no synthetic sound is added.
+              load = 0.56 + 0.44 * smoothstep(rpm)
+              output *= load[:, None]
+              fade = int(0.06 * RATE)
+              output[:fade] *= np.linspace(0.0, 1.0, fade, dtype=np.float32)[:, None]
+              output[-fade:] *= np.linspace(1.0, 0.0, fade, dtype=np.float32)[:, None]
+              peak = float(np.max(np.abs(output)) + 1e-9)
+              output *= min(1.0, 0.92 / peak)
+              return output.astype(np.float32), source_names
+
+          clips = []
+          report = []
+          timestamp = 0.0
+          for engine_dir in sorted((ROOT / 'decoded').iterdir()):
+              if len(clips) >= MAX_ENGINES:
+                  break
+              key = engine_dir.name
+              if key not in titles:
+                  continue
+              candidates = []
+              for path in sorted(engine_dir.glob('*.wav')):
+                  data = load(path)
+                  if data is None:
+                      continue
+                  info = metrics(data)
+                  candidates.append((path, data, info))
+              built = build_clip(candidates)
+              if built is None:
+                  continue
+              clip, sources = built
+              order, title = titles[key]
+              clips.append((order, title, clip))
+              report.append(f'{len(clips):02d}\t{timestamp:07.2f}\t{title}\t{", ".join(sources)}')
+              timestamp += CLIP_SECONDS + GAP_SECONDS
+
+          if len(clips) < MAX_ENGINES:
+              raise SystemExit(f'Only {len(clips)} usable engines were rendered')
+
+          gap = np.zeros((int(GAP_SECONDS * RATE), 2), dtype=np.float32)
+          parts = []
+          for index, (_, _, clip) in enumerate(clips):
+              if index:
+                  parts.append(gap)
+              parts.append(clip)
+          final = np.concatenate(parts, axis=0)
+          sf.write(ROOT / 'real-engine-comparison.wav', final, RATE, subtype='PCM_16')
+          (ROOT / 'timestamps.txt').write_text('\n'.join(report) + '\n')
+          PY
+
+          python3 work/render.py
+          ffmpeg -hide_banner -loglevel error -y \
+            -i work/real-engine-comparison.wav \
+            -af "highpass=f=28,alimiter=limit=0.95" \
+            -ar 48000 -ac 2 -codec:a libmp3lame -b:a 192k \
+            work/real-engine-comparison-v2.mp3
+
+      - name: Verify final MP3
+        run: |
+          set -e
+          ffmpeg -v error -i work/real-engine-comparison-v2.mp3 -f null -
+          ffprobe -v error -show_entries format=format_name,duration,size,bit_rate \
+            -of default=noprint_wrappers=1 work/real-engine-comparison-v2.mp3 | tee work/ffprobe.txt
+          sha256sum work/real-engine-comparison-v2.mp3 | tee work/sha256.txt
+          test "$(stat -c%s work/real-engine-comparison-v2.mp3)" -gt 100000
+          ffmpeg -v error -sseof -0.25 -i work/real-engine-comparison-v2.mp3 -f null -
+
+      - name: Upload comparison
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-engine-comparison-v2
+          path: |
+            work/real-engine-comparison-v2.mp3
+            work/timestamps.txt
+            work/ffprobe.txt
+            work/sha256.txt
+          if-no-files-found: error
+          retention-days: 7
