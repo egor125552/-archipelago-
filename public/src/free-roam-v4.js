@@ -3,10 +3,10 @@
 import {
   WORLD,
   playerStatus,
-} from "./free-roam-core-v6.js?v=47";
+} from "./free-roam-core-v8.js?v=1";
 import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=45";
 import {predictLocalWorld, reconcileLocalPrediction} from "./free-roam-client-prediction.js?v=41";
-import {applyReplicatedWorldDelta} from "./free-roam-replication.js?v=47";
+import {applyReplicatedWorldDelta} from "./free-roam-replication-v2.js?v=1";
 import {createSpeechController} from "./free-roam-speech.js?v=41";
 import {directionFromDelta} from "./free-roam-gesture-model.js";
 import {classifyActionGesture, gestureMetrics} from "./free-roam-action-gestures.js?v=2";

@@ -7,7 +7,7 @@ import {
   applyReplicatedWorldDelta,
   diffReplicatedWorld,
   replicatedFreeWorld,
-} from "../public/src/free-roam-replication.js";
+} from "../public/src/free-roam-replication-v2.js";
 import {grantWeaponFromCrate} from "../public/src/free-roam-weapon-crates.js";
 import {activatePursuerSquad} from "../public/src/free-roam-pursuer-squad.js";
 import {
