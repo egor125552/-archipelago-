@@ -1,6 +1,7 @@
 "use strict";
 
 import * as base from "./free-roam-core-v7.js?v=1";
+import {CONFIG} from "./game-core-v18.js?free=boat-physics";
 import {
   dualTurretBoat,
   ensureDualTurretBoatState,
@@ -14,10 +15,16 @@ import {
   finishDualTurretWeaponStep,
   prepareDualTurretWeaponStep,
 } from "./free-roam-dual-turret-weapons.js?v=4";
+import {applyDualTurretSpeech} from "./free-roam-dual-turret-speech.js?v=1";
+import {ensureDualTurretPhysicsProfile} from "./free-roam-dual-turret-physics.js?v=1";
 import {
-  applyDualTurretSpeech,
-  attachPatrolExitBoatIds,
-} from "./free-roam-dual-turret-speech.js?v=1";
+  applyBoatPhysicsProfiles,
+  captureBoatPhysicsState,
+} from "./free-roam-boat-physics.js?v=1";
+import {
+  activeBoatIds,
+  attachBoatTransitionMetadata,
+} from "./free-roam-boat-events.js?v=1";
 
 export * from "./free-roam-core-v7.js?v=1";
 export {prepareDualTurretBoatRoom};
@@ -26,6 +33,7 @@ export const WORLD = base.WORLD;
 function ensureController(world, options) {
   const state = ensureDualTurretBoatState(world, options);
   if (!world) return state;
+  ensureDualTurretPhysicsProfile(world);
   delete world.freePlayerBoats;
   delete world.freeDualTurretPurchase;
   delete world.freeDualTurretPrototype;
@@ -34,14 +42,11 @@ function ensureController(world, options) {
   return state;
 }
 
-function activeBoatIds(world) {
-  return (world?.players || []).map(player => Number.isInteger(player?.activeBoat) ? player.activeBoat : null);
-}
-
 export function createFreeWorld() {
   const world = base.createFreeWorld();
   ensureController(world, {activate: true});
   prepareDualTurretBoatRoom(world);
+  ensureDualTurretPhysicsProfile(world);
   return world;
 }
 
@@ -50,7 +55,7 @@ export function setPlayerInput(world, playerIndex, nextInput) {
   const eventStart = world.events?.length || 0;
   const previousBoatIds = activeBoatIds(world);
   base.setPlayerInput(world, playerIndex, prepareDualTurretInput(world, playerIndex, nextInput));
-  attachPatrolExitBoatIds(world, eventStart, previousBoatIds);
+  attachBoatTransitionMetadata(world, eventStart, previousBoatIds);
   applyDualTurretSpeech(world, eventStart);
 }
 
@@ -59,12 +64,14 @@ export function stepFreeWorld(world, dt) {
   ensureController(world, {activate: false});
   const eventStart = world.events?.length || 0;
   const previousBoatIds = activeBoatIds(world);
+  const previousPhysics = captureBoatPhysicsState(world);
   const boatContext = prepareDualTurretBoatStep(world);
   const weaponContext = prepareDualTurretWeaponStep(world);
   const result = base.stepFreeWorld(world, safeDt);
+  applyBoatPhysicsProfiles(world, previousPhysics, safeDt, {tuning: CONFIG, eventStart});
   finishDualTurretBoatStep(world, boatContext, safeDt);
   finishDualTurretWeaponStep(world, weaponContext, safeDt);
-  attachPatrolExitBoatIds(world, eventStart, previousBoatIds);
+  attachBoatTransitionMetadata(world, eventStart, previousBoatIds);
   applyDualTurretSpeech(world, eventStart);
   return result;
 }

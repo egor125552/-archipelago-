@@ -3,6 +3,7 @@
 import {CONFIG} from "./game-core-v18.js?free=prediction";
 import {WORLD} from "./free-roam-core-v8.js?v=2";
 import {operationSteeringDelta} from "./free-roam-steering-model.js";
+import {resolveBoatPhysicsProfile} from "./free-roam-boat-physics.js?v=1";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const wrapDeg = value => ((value + 180) % 360 + 360) % 360 - 180;
@@ -13,8 +14,8 @@ function blendAngle(authoritative, predicted, keep) {
   return wrapDeg((Number(authoritative) || 0) + difference * keep);
 }
 
-function clampBoatState(boat) {
-  boat.speed = clamp(Number(boat.speed) || 0, -Math.abs(CONFIG.reverseSpeed), CONFIG.maxSpeed);
+function clampBoatState(boat, physics = resolveBoatPhysicsProfile(boat, CONFIG)) {
+  boat.speed = clamp(Number(boat.speed) || 0, -physics.maxReverseSpeed, physics.maxForwardSpeed);
   boat.throttle = clamp(Number(boat.throttle) || 0, -1, 1);
   return boat;
 }
@@ -58,27 +59,28 @@ function predictBoat(world, playerIndex, input, dt) {
   const player = world.players?.[playerIndex];
   const boat = player?.mode === "boat" ? world.boats?.[player.activeBoat] : null;
   if (!boat || boat.sunk || boat.driver !== playerIndex) return;
+  const physics = resolveBoatPhysicsProfile(boat, CONFIG);
   const steer = Number(Boolean(input.right)) - Number(Boolean(input.left));
   const thrust = Number(Boolean(input.up)) - Number(Boolean(input.down));
   if (thrust) {
     boat.throttle += (thrust - (Number(boat.throttle) || 0)) * Math.min(1, dt * 4.5);
   } else {
-    // All player boats use the same coasting prediction. Boat type affects
-    // capabilities and presentation, never a second client physics model.
     boat.throttle = 0;
   }
   if (boat.engineStalled || boat.emergencyActive) boat.throttle = 0;
   if (!thrust && !boat.engineStalled && !boat.emergencyActive) {
-    boat.speed *= Math.exp(-0.028 * dt);
+    boat.speed *= Math.exp(-0.028 * physics.dragFactor * dt);
   } else {
     const targetSpeed = boat.throttle >= 0
-      ? boat.throttle * CONFIG.maxSpeed
-      : boat.throttle * Math.abs(CONFIG.reverseSpeed);
-    boat.speed += clamp(targetSpeed - boat.speed, -CONFIG.acceleration * dt, CONFIG.acceleration * dt);
-    boat.speed *= Math.max(0, 1 - CONFIG.drag * dt * (0.12 + Math.abs(boat.speed) / CONFIG.maxSpeed * 0.16));
+      ? boat.throttle * physics.maxForwardSpeed
+      : boat.throttle * physics.maxReverseSpeed;
+    boat.speed += clamp(targetSpeed - boat.speed, -physics.acceleration * dt, physics.acceleration * dt);
+    boat.speed *= Math.max(0, 1 - physics.drag * dt * (0.12 + Math.abs(boat.speed) / physics.maxForwardSpeed * 0.16));
   }
-  clampBoatState(boat);
-  if (steer) boat.heading = wrapDeg(boat.heading + operationSteeringDelta(boat.speed, steer, dt));
+  clampBoatState(boat, physics);
+  if (steer) {
+    boat.heading = wrapDeg(boat.heading + operationSteeringDelta(boat.speed, steer, dt) * physics.turnFactor);
+  }
   const radius = Math.max(1, Number(boat.collisionRadius) || WORLD.boatRadius);
   boat.x = clamp(boat.x + Math.sin(rad(boat.heading)) * boat.speed * dt, radius, WORLD.width - radius);
   boat.y = clamp(boat.y - Math.cos(rad(boat.heading)) * boat.speed * dt, WORLD.shoreY + 4, WORLD.height - radius);

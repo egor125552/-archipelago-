@@ -1,7 +1,7 @@
 "use strict";
 
 import {FreeRoamAudio as BaseFreeRoamAudio} from "./free-roam-audio.js?v=39";
-import {handleDualTurretAudioEvent} from "./free-roam-dual-turret-audio.js?v=5";
+import {handleDualTurretAudioEvent} from "./free-roam-dual-turret-audio.js?v=6";
 
 export class FreeRoamAudio extends BaseFreeRoamAudio {
   handleFreeEvent(event, playerIndex) {

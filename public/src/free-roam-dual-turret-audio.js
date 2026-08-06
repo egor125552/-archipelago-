@@ -1,10 +1,14 @@
 "use strict";
 
-import {DUAL_TURRET_AUDIO_ROOT} from "./free-roam-dual-turret-config.js?v=3";
+import {
+  DUAL_TURRET_AUDIO_ROOT,
+  DUAL_TURRET_BOAT_TYPE,
+} from "./free-roam-dual-turret-config.js?v=4";
 
 export const DUAL_TURRET_AUDIO = Object.freeze({
   engine: `${DUAL_TURRET_AUDIO_ROOT}dual-turret-engine-v1.mp3?v=2`,
   shot: `${DUAL_TURRET_AUDIO_ROOT}dual-turret-shot-v1.mp3?v=2`,
+  boarding: `${DUAL_TURRET_AUDIO_ROOT}dual-turret-boarding-v1.mp3?v=1`,
 });
 
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, Number(value) || 0));
@@ -60,7 +64,7 @@ function startEngine(audio) {
 
 export function updateDualTurretEngine(audio, world, playerIndex) {
   if (!audio?.ctx) return;
-  const boat = (world?.boats || []).find(candidate => candidate?.boatType === "dual-turret-patrol");
+  const boat = (world?.boats || []).find(candidate => candidate?.boatType === DUAL_TURRET_BOAT_TYPE);
   const occupied = (boat?.crew || []).some(Number.isInteger);
   if (!boat || boat.sunk || boat.reserved || boat.engineStalled || (!occupied && Math.abs(Number(boat.speed) || 0) < 0.15)) {
     if (audio.dualTurretEngine) audio.dualTurretEngine.gain.gain.setTargetAtTime(0, audio.ctx.currentTime, 0.12);
@@ -74,7 +78,7 @@ export function updateDualTurretEngine(audio, world, playerIndex) {
   const metres = distance(listener, boat);
   const localAboard = world?.players?.[playerIndex]?.activeBoat === boat.id
     && world?.players?.[playerIndex]?.mode === "boat";
-  const speed = clamp(Math.abs(Number(boat.speed) || 0) / 21, 0, 1);
+  const speed = clamp(Math.abs(Number(boat.speed) || 0) / 13.5, 0, 1);
   const throttle = clamp(Math.abs(Number(boat.throttle) || 0), 0, 1);
   const proximity = localAboard ? 1 : clamp(1 - metres / 230, 0, 1);
   const now = audio.ctx.currentTime;
@@ -86,8 +90,23 @@ export function updateDualTurretEngine(audio, world, playerIndex) {
 
 export function updateDualTurretProjectileAudio() {}
 
+function isArmoredTransition(event) {
+  return ["enter", "exit"].includes(event?.type)
+    && (event.audioProfile === "dual-turret" || event.boatType === DUAL_TURRET_BOAT_TYPE);
+}
+
 export function handleDualTurretAudioEvent(audio, event, playerIndex) {
   if (!event?.targets?.includes(playerIndex)) return false;
+  if (isArmoredTransition(event)) {
+    const spatial = audio.eventPanAndGain?.(event, 120) || {pan: Number(event.pan) || 0, gain: 1};
+    audio.play?.("dualTurretBoarding", {
+      pan: spatial.pan,
+      gain: (event.type === "exit" ? 0.42 : 0.36) * spatial.gain,
+      rate: event.type === "exit" ? 0.86 : 1.02,
+      lowpass: 7200,
+    });
+    return true;
+  }
   if (event.type === "dual-turret-shot") {
     const spatial = audio.eventPanAndGain?.(event, 260) || {pan: Number(event.pan) || 0, gain: 1};
     audio.play?.("dualTurretShot", {pan: spatial.pan, gain: 0.34 * spatial.gain, rate: 0.98 + Math.random() * 0.035, lowpass: 9800});
