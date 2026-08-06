@@ -34,44 +34,54 @@ function freeState(sequence, events = []) {
   };
 }
 
-test("a lost free-state ACK is replaced by a full snapshot with chronological events", () => {
+test("a lost ACK resends the same full state sequence and keeps newer state queued", () => {
   const oldEvent = {type: "engine-stall", text: "Мотор заглох."};
   const queuedEvent = {type: "pump-start", text: "Насос включён."};
-  const newEvent = {type: "cargo-stowed", text: "Ящик погружён."};
+  const inFlight = freeState(40, [oldEvent]);
   const client = {
     mode: "free",
     role: "captain",
     freeStateInFlight: 40,
     freeStateSentAt: Date.now() - FREE_STATE_ACK_TIMEOUT_MS - 25,
-    freeInFlightWorld: freeState(40).world,
+    freeInFlightWorld: inFlight.world,
+    freeInFlightState: inFlight,
     freeAckedWorld: freeState(39).world,
-    freeInFlightEvents: [oldEvent],
     freePending: freeState(40.5, [queuedEvent]),
   };
   const {lobby, socket, sent} = testLobby(client);
 
-  lobby.offerFreeState(socket, freeState(41, [newEvent]));
+  lobby.offerFreeState(socket, freeState(41));
 
   assert.equal(sent.length, 1);
   assert.equal(sent[0].type, "free-state");
-  assert.equal(sent[0].sequence, 41);
+  assert.equal(sent[0].sequence, 40);
   assert.equal(sent[0].full, true);
-  assert.deepEqual(sent[0].events, [oldEvent, queuedEvent, newEvent]);
-  assert.equal(client.freeStateInFlight, 41);
-  assert.equal(client.freeAckedWorld, null);
+  assert.deepEqual(sent[0].events, [oldEvent]);
+  assert.equal(client.freeStateInFlight, 40);
+  assert.equal(client.freePending.sequence, 41);
+  assert.deepEqual(client.freePending.events, [queuedEvent]);
   assert.equal(client.freeStateResends, 1);
-  assert.ok(client.freeStateSentAt > 0);
+
+  // Simulate the repeated ACK. The pending newest state is sent only after it.
+  client.freeAckedWorld = client.freeInFlightWorld;
+  client.freeStateInFlight = 0;
+  client.freeInFlightWorld = null;
+  lobby.flushFreeState(socket);
+  assert.equal(sent.length, 2);
+  assert.equal(sent[1].sequence, 41);
+  assert.deepEqual(sent[1].events, [queuedEvent]);
 });
 
 test("a recent in-flight state remains stop-and-wait and keeps only the newest pending world", () => {
+  const inFlight = freeState(50);
   const client = {
     mode: "free",
     role: "captain",
     freeStateInFlight: 50,
     freeStateSentAt: Date.now() - 50,
-    freeInFlightWorld: freeState(50).world,
+    freeInFlightWorld: inFlight.world,
+    freeInFlightState: inFlight,
     freeAckedWorld: freeState(49).world,
-    freeInFlightEvents: [],
     freePending: null,
   };
   const {lobby, socket, sent} = testLobby(client);
