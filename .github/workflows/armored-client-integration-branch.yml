@@ -1,0 +1,60 @@
+name: Focused armored client integration branch
+
+on:
+  push:
+    branches:
+      - agent/armored-client-integration-v2
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout implementation branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/armored-client-integration-v2
+          fetch-depth: 0
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply clean client integration patch
+        shell: bash
+        run: |
+          base64 -d .github/armored-client-patch.py.gz.b64 | gzip -d > /tmp/finish_armored_client.py
+          echo '0e628d7adf0b85b42702438a9bbd3279029ccbd8ce22f913f48b8cde4c2f53cf  /tmp/finish_armored_client.py' | sha256sum -c -
+          python3 /tmp/finish_armored_client.py
+      - name: Check changed JavaScript syntax
+        run: |
+          node --check public/src/free-roam-client-prediction.js
+          node --check public/src/free-roam-audio.js
+          node --check public/src/free-roam-audio-v2.js
+          node --check public/src/free-roam-dual-turret-client.js
+      - name: Run focused boat integration tests
+        run: |
+          node --test tests/free-roam-dual-turret-v1.test.mjs tests/free-roam-dual-turret-lifecycle.test.mjs tests/free-roam-dual-turret-two-guns.test.mjs tests/free-roam-boat-controller-cache.test.mjs tests/free-roam-armored-client-integration.test.mjs
+      - name: Validate armored engine binary
+        shell: bash
+        run: |
+          AUDIO=public/assets/audio/free-roam-dual-turret/dual-turret-engine-v1.mp3
+          test -s "$AUDIO"
+          command -v ffprobe
+          command -v ffmpeg
+          ffprobe -v error -show_entries format=format_name,duration,size -of json "$AUDIO"
+          ffmpeg -v error -i "$AUDIO" -f null -
+          sha256sum "$AUDIO"
+      - name: Commit verified implementation
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .github/workflows/armored-client-integration-branch.yml
+          git rm .github/armored-client-patch.py.gz.b64
+          git rm --ignore-unmatch .github/armored-client-integration-trigger.txt
+          git add -A
+          git commit -m 'fix: unify armored client physics and audio [armored-client-final]'
+          git push origin HEAD:agent/armored-client-integration-v2
