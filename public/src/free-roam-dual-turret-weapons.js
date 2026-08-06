@@ -4,9 +4,9 @@ import {resolveCombatTarget} from "./free-roam-targeting.js?v=39";
 import {
   DUAL_TURRET_SHOT_INTERVAL,
   DUAL_TURRET_WEAPON_ID,
-} from "./free-roam-dual-turret-config.js?v=2";
-import {dualTurretBoat, playerDualTurret} from "./free-roam-dual-turret-boat.js";
-import {spawnDualTurretProjectile} from "./free-roam-dual-turret-projectiles.js";
+} from "./free-roam-dual-turret-config.js?v=3";
+import {dualTurretBoat, playerDualTurret} from "./free-roam-dual-turret-boat.js?v=3";
+import {fireDualTurretHitscan} from "./free-roam-dual-turret-projectiles.js?v=3";
 
 const wrapDeg = value => ((Number(value) + 180) % 360 + 360) % 360 - 180;
 
@@ -32,10 +32,11 @@ function setInputField(world, playerIndex, key, value, saved) {
 }
 
 function currentInput(world, playerIndex) {
-  return world?.freeActivities?.inputs?.[playerIndex]
-    || world?.operationInputs?.[playerIndex]
-    || world?.inputs?.[playerIndex]
-    || {};
+  return {
+    ...(world?.freeActivities?.inputs?.[playerIndex] || {}),
+    ...(world?.operationInputs?.[playerIndex] || {}),
+    ...(world?.inputs?.[playerIndex] || {}),
+  };
 }
 
 function availableWeapons(combat, mounted) {
@@ -85,7 +86,7 @@ function targetBearing(from, target) {
   return Math.atan2((Number(target?.x) || 0) - (Number(from?.x) || 0), -((Number(target?.y) || 0) - (Number(from?.y) || 0))) * 180 / Math.PI;
 }
 
-function targetAllowedForBoat(world, playerIndex, boat, target) {
+function targetAllowedForBoat(world, boat, target) {
   if (!target) return false;
   if (target.kind === "boat" && target.boatId === boat.id) return false;
   if (target.kind === "player" && world.players?.[target.playerIndex]?.activeBoat === boat.id) return false;
@@ -114,7 +115,7 @@ function tryFire(world, playerIndex, turret, boat) {
     deny(world, playerIndex, turret, "Сначала выбери боевую цель для бортовой установки.");
     return false;
   }
-  if (!targetAllowedForBoat(world, playerIndex, boat, target)) {
+  if (!targetAllowedForBoat(world, boat, target)) {
     deny(world, playerIndex, turret, "Нельзя навести установку на свой бронекатер или его экипаж.");
     return false;
   }
@@ -127,23 +128,27 @@ function tryFire(world, playerIndex, turret, boat) {
   turret.heading = heading;
   turret.cooldown = DUAL_TURRET_SHOT_INTERVAL;
   turret.ammo -= 1;
-  const projectile = spawnDualTurretProjectile(world, {
+  const shot = fireDualTurretHitscan(world, {
     boat,
     turret,
     sourcePlayer: playerIndex,
     heading,
-    targetId: target.id,
+    target,
   });
   emit(world, "dual-turret-shot", "", [0, 1], {
     sourcePlayer: playerIndex,
     boatId: boat.id,
     turretId: turret.id,
-    projectileId: projectile.id,
+    projectileId: shot.id,
     weapon: DUAL_TURRET_WEAPON_ID,
     ammo: turret.ammo,
     heading,
-    x: projectile.x,
-    y: projectile.y,
+    instant: true,
+    x: shot.x,
+    y: shot.y,
+    impactX: shot.impactX,
+    impactY: shot.impactY,
+    targetId: target.id,
   });
   return true;
 }
@@ -156,7 +161,7 @@ export function prepareDualTurretWeaponStep(world) {
   const saved = [];
   const players = [];
   for (let playerIndex = 0; playerIndex < world.players.length; playerIndex += 1) {
-    const input = {...currentInput(world, playerIndex)};
+    const input = currentInput(world, playerIndex);
     const combat = world.players[playerIndex]?.combat;
     const turret = playerDualTurret(world, playerIndex);
     const mounted = Boolean(turret);
@@ -166,14 +171,7 @@ export function prepareDualTurretWeaponStep(world) {
     if (mounted || combat?.equipped === DUAL_TURRET_WEAPON_ID) setInputField(world, playerIndex, "weapon", false, saved);
     const firing = Boolean(mounted && combat?.equipped === DUAL_TURRET_WEAPON_ID && input.attack);
     if (firing) setInputField(world, playerIndex, "attack", false, saved);
-    players.push({
-      playerIndex,
-      input,
-      turret,
-      mounted,
-      firing,
-      equippedBefore: combat?.equipped,
-    });
+    players.push({playerIndex, input, turret, mounted, firing, equippedBefore: combat?.equipped});
   }
   return {state, saved, players};
 }

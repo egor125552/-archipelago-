@@ -1,7 +1,7 @@
 "use strict";
 
 import * as base from "./free-roam-replication.js";
-import {isDualTurretBoat} from "./free-roam-dual-turret-boat.js";
+import {isDualTurretBoat} from "./free-roam-dual-turret-boat.js?v=3";
 
 export * from "./free-roam-replication.js";
 
@@ -15,16 +15,23 @@ export function replicatedFreeWorld(world) {
   for (let index = 0; index < (world?.boats || []).length; index += 1) {
     const source = world.boats[index];
     const target = snapshot.boats?.[index];
-    if (!source || !target || !isDualTurretBoat(source)) continue;
-    target.boatType = source.boatType;
-    target.label = source.label;
+    if (!source || !target) continue;
+    target.boatType = source.boatType || "standard";
+    target.label = source.label || "лодка";
+    target.crewCapacity = Math.max(1, Math.floor(Number(source.crewCapacity) || 1));
+    target.crew = [...(source.crew || [])];
+    target.collisionRadius = rounded(source.collisionRadius || 6);
+    target.boardingRange = rounded(source.boardingRange || 12);
+    target.cargoCapacity = Math.max(1, Math.floor(Number(source.cargoCapacity) || 5));
+    target.audioProfile = source.audioProfile || "standard";
+    if (!isDualTurretBoat(source)) continue;
     target.structuralHull = rounded(source.structuralHull);
     target.maxStructuralHull = rounded(source.maxStructuralHull);
-    target.crew = [...(source.crew || [])];
     target.turrets = (source.turrets || []).map(turret => ({
       id: turret.id,
       label: turret.label,
       playerIndex: turret.playerIndex,
+      seatIndex: turret.seatIndex,
       assignedPlayer: turret.assignedPlayer,
       side: turret.side,
       heading: rounded(turret.heading),
@@ -43,37 +50,10 @@ export function replicatedFreeWorld(world) {
       purchasedAt: rounded(purchase.purchasedAt),
     };
   }
-  const projectiles = world?.freeDualTurretProjectiles;
-  if (projectiles) {
-    snapshot.freeDualTurretProjectiles = {
-      // Stable-ID maps remain delta-compatible even when this field first
-      // appears in a world previously rendered by the older client. Empty
-      // arrays would be reconstructed as objects by the legacy delta reader.
-      projectiles: Object.fromEntries((projectiles.projectiles || []).map(projectile => [projectile.id, {
-        id: projectile.id,
-        turretId: projectile.turretId,
-        sourcePlayer: projectile.sourcePlayer,
-        sourceBoatId: projectile.sourceBoatId,
-        targetId: projectile.targetId,
-        x: rounded(projectile.x),
-        y: rounded(projectile.y),
-        previousX: rounded(projectile.previousX),
-        previousY: rounded(projectile.previousY),
-        vx: rounded(projectile.vx),
-        vy: rounded(projectile.vy),
-        launchHeading: rounded(projectile.launchHeading),
-        inheritedBoatVelocity: {
-          x: rounded(projectile.inheritedBoatVelocity?.x),
-          y: rounded(projectile.inheritedBoatVelocity?.y),
-        },
-        age: rounded(projectile.age),
-        ttl: rounded(projectile.ttl),
-      }])),
-      endEvents: Object.fromEntries((projectiles.endEvents || []).slice(-16).map((event, index) => [
-        `${event.id || "dual-shot"}:${rounded(event.at)}:${event.reason || "end"}:${index}`,
-        event,
-      ])),
-    };
+  if (world?.freeDualTurretProjectiles) {
+    // Mounted shots are immediate server events. No moving projectile list or
+    // repeated end-event history is copied into every network snapshot.
+    snapshot.freeDualTurretProjectiles = {mode: "instant"};
   }
   return snapshot;
 }

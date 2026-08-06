@@ -3,34 +3,30 @@
 import * as base from "./free-roam-core-v7.js?v=1";
 import {
   ensureDualTurretBoat,
-  finishDualTurretBoatStep,
   playerDualTurret,
   prepareDualTurretBoatRoom,
-  prepareDualTurretBoatStep,
-} from "./free-roam-dual-turret-boat.js?v=2";
+} from "./free-roam-dual-turret-boat.js?v=3";
 import {
   finishDualTurretWeaponStep,
   prepareDualTurretWeaponStep,
-} from "./free-roam-dual-turret-weapons.js?v=2";
-import {
-  ensureDualTurretProjectileState,
-  stepDualTurretProjectiles,
-} from "./free-roam-dual-turret-projectiles.js?v=2";
-import {
-  finishDualTurretDamageControlStep,
-  prepareDualTurretDamageControlStep,
-} from "./free-roam-dual-turret-damage-control.js?v=1";
+} from "./free-roam-dual-turret-weapons.js?v=3";
+import {ensureDualTurretProjectileState} from "./free-roam-dual-turret-projectiles.js?v=3";
 import {
   finishDualTurretPrototypeStep,
   prepareDualTurretPrototypeRoom,
   prepareDualTurretPrototypeStep,
-} from "./free-roam-dual-turret-test-lifecycle.js?v=1";
+} from "./free-roam-dual-turret-test-lifecycle.js?v=2";
 import {
   ensureDualTurretPurchaseState,
   finishDualTurretPurchaseStep,
   prepareDualTurretPurchaseRoom,
   prepareDualTurretPurchaseStep,
 } from "./free-roam-dual-turret-purchase.js?v=2";
+import {
+  capturePlayerBoatInput,
+  finishPlayerBoatStep,
+  preparePlayerBoatStep,
+} from "./free-roam-player-boats.js?v=1";
 
 export * from "./free-roam-core-v7.js?v=1";
 export {prepareDualTurretBoatRoom, prepareDualTurretPurchaseRoom, prepareDualTurretPrototypeRoom};
@@ -45,22 +41,60 @@ export function createFreeWorld() {
   return world;
 }
 
+function boatNeedsContextMaintenance(world, playerIndex) {
+  const player = world?.players?.[playerIndex];
+  if (player?.mode !== "boat") return false;
+  const boat = world.boats?.[player.activeBoat];
+  if (!boat) return false;
+  return Boolean(
+    boat.refuelActive
+    || boat.engineServiceActive
+    || Number(boat.fuel) <= 0.01
+    || (boat.engineStalled && Number(boat.engineTemp) >= 92)
+  );
+}
+
+export function setPlayerInput(world, playerIndex, nextInput) {
+  ensureDualTurretBoat(world, {activate: false});
+  const sanitized = {...(nextInput || {})};
+  if (!boatNeedsContextMaintenance(world, playerIndex) && capturePlayerBoatInput(world, playerIndex, sanitized)) {
+    sanitized.action = false;
+  }
+  base.setPlayerInput(world, playerIndex, sanitized);
+}
+
+function translateLegacyBoatDamage(world, context) {
+  for (let index = 0; index < (world.boats || []).length; index += 1) {
+    const boat = world.boats[index];
+    const before = context?.before?.[index];
+    const maximum = Number(boat?.maxStructuralHull);
+    if (!boat || !before || !Number.isFinite(maximum) || maximum <= 0) continue;
+    const armorAlreadyChanged = Number(boat.armor) < Number(before.armor) - 0.0001;
+    const compatibilityLoss = Number(before.hull) - Number(boat.hull);
+    const structureUnchanged = Math.abs(Number(boat.structuralHull) - Number(before.structuralHull)) < 0.0001;
+    if (!armorAlreadyChanged || compatibilityLoss <= 0.0001 || !structureUnchanged) continue;
+    // applyCollisionDamage has already consumed armor and leaves the remaining
+    // point damage in the old 0..100 hull field. Move only that remaining
+    // damage into the extended structure before the compatibility layer runs.
+    boat.structuralHull = Math.max(0, Number(before.structuralHull) - compatibilityLoss);
+  }
+}
+
 export function stepFreeWorld(world, dt) {
   const safeDt = Math.max(0, Math.min(0.1, Number(dt) || 0));
   ensureDualTurretBoat(world, {activate: false});
   ensureDualTurretPurchaseState(world);
   ensureDualTurretProjectileState(world);
+  const eventStart = world.events?.length || 0;
   const prototypeContext = prepareDualTurretPrototypeStep(world);
   const purchaseContext = prepareDualTurretPurchaseStep(world);
-  const boatContext = prepareDualTurretBoatStep(world);
-  const damageControlContext = prepareDualTurretDamageControlStep(world, boatContext);
+  const playerBoatContext = preparePlayerBoatStep(world);
   const weaponContext = prepareDualTurretWeaponStep(world);
   const result = base.stepFreeWorld(world, safeDt);
-  finishDualTurretBoatStep(world, boatContext, safeDt);
-  finishDualTurretDamageControlStep(world, damageControlContext, safeDt);
+  translateLegacyBoatDamage(world, playerBoatContext);
+  finishPlayerBoatStep(world, playerBoatContext, safeDt, eventStart);
   finishDualTurretPurchaseStep(purchaseContext);
   finishDualTurretWeaponStep(world, weaponContext, safeDt);
-  stepDualTurretProjectiles(world, safeDt);
   finishDualTurretPrototypeStep(world, prototypeContext, safeDt);
   return result;
 }

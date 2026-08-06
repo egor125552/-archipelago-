@@ -118,6 +118,7 @@ export function ensureActivities(world) {
     boat.cargo ||= [];
     if (!Number.isFinite(boat.cargoWeight)) boat.cargoWeight = 0;
     if (!Number.isFinite(boat.cargoPumpBonus)) boat.cargoPumpBonus = 0;
+    if (!Number.isInteger(boat.cargoCapacity)) boat.cargoCapacity = 5;
   }
   return state;
 }
@@ -152,7 +153,7 @@ export function storeActivityInput(world, playerIndex, input) {
     action: Boolean(input?.action),
     sonar: Boolean(input?.sonar),
     guide: Boolean(input?.guide),
-    targetId: typeof input?.targetId === "string" ? input.targetId : null,
+    targetId: typeof input?.targetId === "string" ? input.targetId.slice(0, 80) : null,
     navigationTargetId: ["objective", "merchant"].includes(input?.navigationTargetId) ? input.navigationTargetId : "objective",
     shopPrevious: Boolean(input?.shopPrevious),
     shopNext: Boolean(input?.shopNext),
@@ -240,11 +241,24 @@ function stealStowedCargo(world, playerIndex) {
 }
 
 function stow(world, crate, boat, playerIndex) {
-  const occupiedSlots = (boat?.cargo || []).reduce((sum, id) => {
+  if (!crate || !boat) return false;
+  const occupiedSlots = (boat.cargo || []).reduce((sum, id) => {
     const existing = world.freeActivities.crates.find(candidate => candidate.id === id);
     return sum + cargoSlotCost(existing);
   }, 0);
-  if (!crate || !boat || occupiedSlots + cargoSlotCost(crate) > 5) return false;
+  const capacity = Math.max(1, Math.floor(Number(boat.cargoCapacity) || 5));
+  if (occupiedSlots + cargoSlotCost(crate) > capacity) {
+    emit(world, "cargo-full", `На ${boat.label || "лодке"} нет свободного места для этого груза.`, [playerIndex], {
+      sourcePlayer: playerIndex,
+      boatId: boat.id,
+      crateId: crate.id,
+      capacity,
+      occupiedSlots,
+      x: boat.x,
+      y: boat.y,
+    });
+    return true;
+  }
   crate.state = "stowed";
   crate.carriedBy = null;
   crate.stowedBoat = boat.id;
