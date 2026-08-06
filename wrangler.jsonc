@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "archipelago",
-  "main": "src/worker-persistent.js",
+  "main": "src/worker-resilient.js",
   "compatibility_date": "2026-07-13",
   "assets": {
     "directory": "./public",
