@@ -41,10 +41,25 @@ export function createFreeWorld() {
   return world;
 }
 
+function boatNeedsContextMaintenance(world, playerIndex) {
+  const player = world?.players?.[playerIndex];
+  if (player?.mode !== "boat") return false;
+  const boat = world.boats?.[player.activeBoat];
+  if (!boat) return false;
+  return Boolean(
+    boat.refuelActive
+    || boat.engineServiceActive
+    || Number(boat.fuel) <= 0.01
+    || (boat.engineStalled && Number(boat.engineTemp) >= 92)
+  );
+}
+
 export function setPlayerInput(world, playerIndex, nextInput) {
   ensureDualTurretBoat(world, {activate: false});
   const sanitized = {...(nextInput || {})};
-  if (capturePlayerBoatInput(world, playerIndex, sanitized)) sanitized.action = false;
+  if (!boatNeedsContextMaintenance(world, playerIndex) && capturePlayerBoatInput(world, playerIndex, sanitized)) {
+    sanitized.action = false;
+  }
   base.setPlayerInput(world, playerIndex, sanitized);
 }
 
