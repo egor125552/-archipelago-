@@ -19,13 +19,11 @@ function emit(world, type, text, targets = [0, 1], extra = {}) {
   if (world.events.length > 240) world.events.splice(0, world.events.length - 240);
 }
 
-function stateFor(world) {
-  world.freeDualTurretProjectiles ||= {nextId: 1, projectiles: [], endEvents: [], mode: "instant"};
-  const state = world.freeDualTurretProjectiles;
-  if (!Array.isArray(state.projectiles)) state.projectiles = [];
-  if (!Array.isArray(state.endEvents)) state.endEvents = [];
-  if (!Number.isInteger(state.nextId)) state.nextId = 1;
-  state.mode = "instant";
+function controllerState(world) {
+  world.freeDualTurretBoat ||= {};
+  const state = world.freeDualTurretBoat;
+  if (!Number.isInteger(state.nextShotId)) state.nextShotId = 1;
+  state.weaponMode = "instant";
   return state;
 }
 
@@ -41,7 +39,6 @@ function muzzlePoint(boat, turret) {
 }
 
 function finishShot(world, shot, reason, target = null) {
-  const state = stateFor(world);
   const end = {
     id: shot.id,
     reason,
@@ -53,8 +50,6 @@ function finishShot(world, shot, reason, target = null) {
     instant: true,
     at: world.time,
   };
-  state.endEvents.push(end);
-  if (state.endEvents.length > 24) state.endEvents.splice(0, state.endEvents.length - 24);
   emit(world, "dual-turret-projectile-end", "", [0, 1], end);
   return end;
 }
@@ -107,12 +102,12 @@ function applyTargetDamage(world, target, shot) {
 }
 
 export function fireDualTurretHitscan(world, {boat, turret, sourcePlayer, heading, target}) {
-  const state = stateFor(world);
+  const state = controllerState(world);
   const muzzle = muzzlePoint(boat, turret);
   const impactX = Number(target?.point?.x) || muzzle.x;
   const impactY = Number(target?.point?.y) || muzzle.y;
   const shot = {
-    id: `dual-shot-${state.nextId++}`,
+    id: `dual-shot-${state.nextShotId++}`,
     turretId: turret.id,
     sourcePlayer,
     sourceBoatId: boat.id,
@@ -149,23 +144,13 @@ export function spawnDualTurretProjectile(world, options) {
 }
 
 export function stepDualTurretProjectiles(world) {
-  const state = stateFor(world);
-  if (state.projectiles.length) {
-    for (const legacy of state.projectiles) {
-      finishShot(world, {
-        id: legacy.id || `legacy-dual-shot-${state.nextId++}`,
-        sourcePlayer: legacy.sourcePlayer,
-        x: legacy.x,
-        y: legacy.y,
-      }, "legacy-cleared");
-    }
-    state.projectiles = [];
-  }
-  return state.projectiles;
+  controllerState(world);
+  delete world.freeDualTurretProjectiles;
+  return [];
 }
 
 export function ensureDualTurretProjectileState(world) {
-  const state = stateFor(world);
-  if (state.projectiles.length) stepDualTurretProjectiles(world);
+  const state = controllerState(world);
+  delete world.freeDualTurretProjectiles;
   return state;
 }
