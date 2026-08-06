@@ -1,4 +1,4 @@
-name: Agent PR source snapshot
+name: Finalize unified player boats
 
 on:
   pull_request:
@@ -6,26 +6,46 @@ on:
       - main
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  snapshot:
-    if: "${{ github.head_ref == 'agent/boat-unification-source-snapshot' }}"
+  finalize-and-test:
+    if: "${{ github.head_ref == 'agent/unified-player-boats' }}"
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
-      - name: Checkout pull request head
+      - name: Checkout implementation branch
         uses: actions/checkout@v4
         with:
           ref: "${{ github.event.pull_request.head.sha }}"
-          fetch-depth: 1
-      - name: Remove Git metadata
-        run: rm -rf .git
-      - name: Upload source snapshot
-        uses: actions/upload-artifact@v4
+          fetch-depth: 0
+      - name: Use current Node.js
+        uses: actions/setup-node@v4
         with:
-          name: archipelago-source-snapshot
-          path: .
-          include-hidden-files: true
-          if-no-files-found: error
-          retention-days: 1
+          node-version: 22
+      - name: Refresh the core module cache key
+        run: |
+          node --input-type=module <<'NODE'
+          import {readFile, writeFile} from 'node:fs/promises';
+          const path = 'public/src/free-roam-v4.js';
+          const source = await readFile(path, 'utf8');
+          const updated = source.replace('./free-roam-core-v8.js?v=2', './free-roam-core-v8.js?v=3');
+          if (updated === source && !source.includes('./free-roam-core-v8.js?v=3')) {
+            throw new Error('Expected free-roam core import was not found');
+          }
+          await writeFile(path, updated);
+          NODE
+      - name: Commit cache-key correction when needed
+        run: |
+          if git diff --quiet -- public/src/free-roam-v4.js; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/src/free-roam-v4.js
+          git commit -m "chore: refresh unified boat client cache key"
+          git push origin HEAD:${{ github.head_ref }}
+      - name: Install dependencies
+        run: npm install --ignore-scripts
+      - name: Run complete test suite
+        run: npm test
