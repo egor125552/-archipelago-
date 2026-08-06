@@ -36,12 +36,16 @@ test("one emergency canister fills the active boat to exactly 100 percent", () =
   pulse(world, 0, {action: true});
   assert.equal(boat.refuelActive, true);
 
-  for (let index = 0; index < 60; index += 1) stepFreeWorld(world, 0.1);
+  let completed = null;
+  for (let index = 0; index < 60 && !completed; index += 1) {
+    stepFreeWorld(world, 0.1);
+    completed = world.events.find(event => event.type === "fuel-refuel-complete") || null;
+  }
 
+  assert.ok(completed, "refuel completion event was not emitted");
   assert.equal(boat.refuelActive, false);
   assert.equal(boat.refuelCanisters, 0);
   assert.equal(boat.fuel, 100);
-  const completed = drainEvents(world).find(event => event.type === "fuel-refuel-complete");
-  assert.equal(completed?.fuel, 100);
-  assert.match(completed?.text || "", /Топливо 100%/);
+  assert.equal(completed.fuel, 100);
+  assert.match(completed.text || "", /Топливо 100%/);
 });
