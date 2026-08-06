@@ -4,7 +4,7 @@ import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=45";
 import {
   handleDualTurretAudioEvent,
   preloadDualTurretAudio,
-} from "./free-roam-dual-turret-audio.js?v=3";
+} from "./free-roam-dual-turret-audio.js?v=4";
 import {updateDualTurretUi} from "./free-roam-dual-turret-ui.js?v=1";
 
 const prototype = FreeRoamAudio?.prototype;
