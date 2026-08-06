@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {readdir, readFile} from "node:fs/promises";
 import {extname, join} from "node:path";
+import {fileURLToPath} from "node:url";
 
 import {
   createFreeWorld,
@@ -73,11 +74,11 @@ test("both mounted guns fire from the same controller objects in one server tick
   assert.equal(world.events.filter(event => event.type === "dual-turret-shot").length, 2);
 });
 
-async function JavaScriptFiles(directory) {
+async function javascriptFiles(directory) {
   const found = [];
   for (const entry of await readdir(directory, {withFileTypes: true})) {
     const path = join(directory, entry.name);
-    if (entry.isDirectory()) found.push(...await JavaScriptFiles(path));
+    if (entry.isDirectory()) found.push(...await javascriptFiles(path));
     else if ([".js", ".mjs"].includes(extname(entry.name))) found.push(path);
   }
   return found;
@@ -85,8 +86,8 @@ async function JavaScriptFiles(directory) {
 
 test("production source has no imports of removed parallel patrol runtimes", async () => {
   const roots = [
-    new URL("../public/src/", import.meta.url),
-    new URL("../src/", import.meta.url),
+    fileURLToPath(new URL("../public/src/", import.meta.url)),
+    fileURLToPath(new URL("../src/", import.meta.url)),
   ];
   const forbidden = [
     "free-roam-player-boats.js",
@@ -94,7 +95,7 @@ test("production source has no imports of removed parallel patrol runtimes", asy
     "free-roam-dual-turret-purchase.js",
   ];
   for (const root of roots) {
-    for (const file of await JavaScriptFiles(root)) {
+    for (const file of await javascriptFiles(root)) {
       const source = await readFile(file, "utf8");
       for (const name of forbidden) {
         assert.equal(source.includes(name), false, `${file} still references ${name}`);
