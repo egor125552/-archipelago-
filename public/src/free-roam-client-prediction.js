@@ -1,7 +1,7 @@
 "use strict";
 
 import {CONFIG} from "./game-core-v18.js?free=prediction";
-import {WORLD} from "./free-roam-core-v8.js?v=4";
+import {WORLD} from "./free-roam-core-v8.js?v=2";
 import {operationSteeringDelta} from "./free-roam-steering-model.js";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -13,14 +13,7 @@ function blendAngle(authoritative, predicted, keep) {
   return wrapDeg((Number(authoritative) || 0) + difference * keep);
 }
 
-function reconciledHeading(authoritative, predicted, keep) {
-  const difference = Math.abs(wrapDeg((Number(predicted) || 0) - (Number(authoritative) || 0)));
-  return difference >= 18
-    ? wrapDeg(Number(authoritative) || 0)
-    : blendAngle(authoritative, predicted, keep);
-}
-
-function clampBoat(boat) {
+function clampBoatState(boat) {
   boat.speed = clamp(Number(boat.speed) || 0, -Math.abs(CONFIG.reverseSpeed), CONFIG.maxSpeed);
   boat.throttle = clamp(Number(boat.throttle) || 0, -1, 1);
   return boat;
@@ -40,10 +33,10 @@ export function reconcileLocalPrediction(previousWorld, nextWorld, playerIndex) 
     const keep = 0.72;
     nextBoat.x += (previousBoat.x - nextBoat.x) * keep;
     nextBoat.y += (previousBoat.y - nextBoat.y) * keep;
-    nextBoat.heading = reconciledHeading(nextBoat.heading, previousBoat.heading, keep);
+    nextBoat.heading = blendAngle(nextBoat.heading, previousBoat.heading, keep);
     nextBoat.speed += (previousBoat.speed - nextBoat.speed) * keep;
     nextBoat.throttle += (previousBoat.throttle - nextBoat.throttle) * keep;
-    clampBoat(nextBoat);
+    clampBoatState(nextBoat);
     nextPlayer.x = nextBoat.x;
     nextPlayer.y = nextBoat.y;
     nextPlayer.heading = nextBoat.heading;
@@ -65,14 +58,13 @@ function predictBoat(world, playerIndex, input, dt) {
   const player = world.players?.[playerIndex];
   const boat = player?.mode === "boat" ? world.boats?.[player.activeBoat] : null;
   if (!boat || boat.sunk || boat.driver !== playerIndex) return;
-  const maximumSpeed = CONFIG.maxSpeed;
-  const reverseSpeed = Math.abs(CONFIG.reverseSpeed);
-  const acceleration = CONFIG.acceleration;
   const steer = Number(Boolean(input.right)) - Number(Boolean(input.left));
   const thrust = Number(Boolean(input.up)) - Number(Boolean(input.down));
   if (thrust) {
     boat.throttle += (thrust - (Number(boat.throttle) || 0)) * Math.min(1, dt * 4.5);
   } else {
+    // All player boats use the same coasting prediction. Boat type affects
+    // capabilities and presentation, never a second client physics model.
     boat.throttle = 0;
   }
   if (boat.engineStalled || boat.emergencyActive) boat.throttle = 0;
@@ -80,15 +72,13 @@ function predictBoat(world, playerIndex, input, dt) {
     boat.speed *= Math.exp(-0.028 * dt);
   } else {
     const targetSpeed = boat.throttle >= 0
-      ? boat.throttle * maximumSpeed
-      : boat.throttle * reverseSpeed;
-    boat.speed += clamp(targetSpeed - boat.speed, -acceleration * dt, acceleration * dt);
-    boat.speed *= Math.max(0, 1 - CONFIG.drag * dt * (0.12 + Math.abs(boat.speed) / maximumSpeed * 0.16));
+      ? boat.throttle * CONFIG.maxSpeed
+      : boat.throttle * Math.abs(CONFIG.reverseSpeed);
+    boat.speed += clamp(targetSpeed - boat.speed, -CONFIG.acceleration * dt, CONFIG.acceleration * dt);
+    boat.speed *= Math.max(0, 1 - CONFIG.drag * dt * (0.12 + Math.abs(boat.speed) / CONFIG.maxSpeed * 0.16));
   }
-  clampBoat(boat);
-  if (steer) {
-    boat.heading = wrapDeg(boat.heading + operationSteeringDelta(boat.speed, steer, dt));
-  }
+  clampBoatState(boat);
+  if (steer) boat.heading = wrapDeg(boat.heading + operationSteeringDelta(boat.speed, steer, dt));
   const radius = Math.max(1, Number(boat.collisionRadius) || WORLD.boatRadius);
   boat.x = clamp(boat.x + Math.sin(rad(boat.heading)) * boat.speed * dt, radius, WORLD.width - radius);
   boat.y = clamp(boat.y - Math.cos(rad(boat.heading)) * boat.speed * dt, WORLD.shoreY + 4, WORLD.height - radius);

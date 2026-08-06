@@ -1,6 +1,11 @@
 "use strict";
 
 import {AudioEngine} from "./audio-engine-v13.js?free=2";
+import {
+  preloadDualTurretAudio,
+  stopDualTurretAudio,
+  updateDualTurretEngine,
+} from "./free-roam-dual-turret-audio.js?v=5";
 
 const FOOTSTEPS = Object.freeze({
   footstepFree1: "/api/sound/footstep-1.ogg",
@@ -61,12 +66,13 @@ export class FreeRoamAudio extends AudioEngine {
   async preload() {
     const inherited = super.preload();
     if (!this.ctx) return inherited;
+    const armored = preloadDualTurretAudio(this);
     this.footstepPreloadPromise = Promise.allSettled(Object.entries(FOOTSTEPS).map(async ([name, url]) => {
       const response = await fetch(url, {cache: "force-cache"});
       if (!response.ok) throw new Error(`${name}: ${response.status}`);
       this.buffers.set(name, await this.ctx.decodeAudioData(await response.arrayBuffer()));
     }));
-    await Promise.allSettled([inherited, this.footstepPreloadPromise]);
+    await Promise.allSettled([inherited, armored, this.footstepPreloadPromise]);
   }
 
   nextFootstep() {
@@ -120,7 +126,9 @@ export class FreeRoamAudio extends AudioEngine {
       return;
     }
 
-    this.startRemoteLoop("remote", "motorboatReal");
+    const customEngine = otherBoat.audioProfile === "dual-turret";
+    if (!customEngine) this.startRemoteLoop("remote", "motorboatReal");
+    else if (this.remote) this.remote.gain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.12);
     this.startRemoteLoop("remoteWake", this.buffers.has("riverWake") ? "riverWake" : "seaReal");
     const metres = distance(me, otherBoat);
     const proximity = clamp(1 - metres / 150, 0, 1);
@@ -133,7 +141,7 @@ export class FreeRoamAudio extends AudioEngine {
       this.remote.source.playbackRate.setTargetAtTime(0.9 + throttle * 0.17, now, 0.1);
       this.remote.filter.frequency.setTargetAtTime(1200 + throttle * 2300, now, 0.12);
       this.remote.panner.pan.setTargetAtTime(pan, now, 0.1);
-      this.remote.gain.gain.setTargetAtTime(otherBoat.engineStalled ? 0 : proximity * (0.035 + throttle * 0.13), now, 0.12);
+      this.remote.gain.gain.setTargetAtTime(customEngine || otherBoat.engineStalled ? 0 : proximity * (0.035 + throttle * 0.13), now, 0.12);
     }
     if (this.remoteWake) {
       this.remoteWake.source.playbackRate.setTargetAtTime(0.84 + clamp(speed / 18, 0, 1) * 0.19, now, 0.12);
@@ -157,6 +165,7 @@ export class FreeRoamAudio extends AudioEngine {
       modelId: "strizh",
     };
     const activeBoat = boat || silentBoat;
+    const customEngine = activeBoat.audioProfile === "dual-turret";
     super.update({
       phase: "playing",
       boat: {
@@ -164,9 +173,9 @@ export class FreeRoamAudio extends AudioEngine {
         throttle: Number(activeBoat.throttle) || 0,
         water: Number(activeBoat.water) || 0,
         leak: Number(activeBoat.leak) || 0,
-        engineStalled: Boolean(activeBoat.engineStalled || activeBoat.sunk || !boat),
+        engineStalled: Boolean(activeBoat.engineStalled || activeBoat.sunk || !boat || customEngine),
         pumpActive: Boolean(activeBoat.pumpActive),
-        modelId: "strizh",
+        modelId: customEngine ? "dual-turret" : (activeBoat.modelId || "strizh"),
       },
       damageControl: {
         floodEmergency: Boolean(activeBoat.emergencyActive),
@@ -175,6 +184,7 @@ export class FreeRoamAudio extends AudioEngine {
       navigation: {assistEnabled: false},
     });
     this.updateRemote(world, playerIndex);
+    updateDualTurretEngine(this, world, playerIndex);
   }
 
   handleFreeEvent(event, playerIndex) {
@@ -213,6 +223,7 @@ export class FreeRoamAudio extends AudioEngine {
   stopAll() {
     this.stopRemoteLoop("remote");
     this.stopRemoteLoop("remoteWake");
+    stopDualTurretAudio(this);
     super.stopAll();
   }
 }
