@@ -126,10 +126,14 @@ test("shop descriptions announce both upgrade currencies and full canister refil
   world.freeActivities.credits = 500;
 
   selectItem(world, 0, "hull-upgrade");
-  let event = drainEvents(world).find(candidate => candidate.type === "shop-selection");
+  let event = drainEvents(world).find(candidate => (
+    candidate.type === "shop-selection" && candidate.itemId === "hull-upgrade"
+  ));
   assert.match(event?.text || "", /8 металлолома или 160 кредитов/);
 
   selectItem(world, 0, "fuel-canister");
-  event = drainEvents(world).find(candidate => candidate.type === "shop-selection");
+  event = drainEvents(world).find(candidate => (
+    candidate.type === "shop-selection" && candidate.itemId === "fuel-canister"
+  ));
   assert.match(event?.text || "", /заполняет бак до 100 процентов/);
 });
