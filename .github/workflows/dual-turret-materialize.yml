@@ -4,18 +4,24 @@ on:
   push:
     branches:
       - agent/dual-turret-patrol
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
 
 jobs:
   materialize:
-    if: "${{ github.event.head_commit.message == 'chore: stage modular dual-turret release' }}"
+    if: >-
+      (github.event_name == 'push' && github.event.head_commit.message == 'chore: stage modular dual-turret release') ||
+      (github.event_name == 'pull_request' && github.head_ref == 'agent/dual-turret-patrol')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: agent/dual-turret-patrol
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
