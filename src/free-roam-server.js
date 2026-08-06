@@ -3,13 +3,15 @@
 import {
   createFreeWorld,
   drainEvents,
+  prepareDualTurretBoatRoom,
+  prepareDualTurretPurchaseRoom,
   setPlayerInput,
   setPlayerPresence,
   stepFreeWorld,
-} from "../public/src/free-roam-core-v7.js";
+} from "../public/src/free-roam-core-v8.js";
 import {applyCombatDamage} from "../public/src/free-roam-combat-v2.js?v=6";
 import {applyCombatAiHotfixV163} from "../public/src/free-roam-combat-ai-hotfix-v163.js?v=1";
-import {replicatedFreeWorld} from "../public/src/free-roam-replication.js";
+import {replicatedFreeWorld} from "../public/src/free-roam-replication-v2.js";
 import {reserveUnconnectedBoats} from "../public/src/free-roam-reserve-boats.js";
 import {enforceHostileRespawnGrace} from "../public/src/free-roam-hostile-respawn-grace.js?v=1";
 import {
@@ -108,6 +110,7 @@ export function createServerFreeRoom(now = Date.now()) {
   setPlayerPresence(world, 0, false);
   setPlayerPresence(world, 1, false);
   reserveUnconnectedBoats(world);
+  prepareDualTurretPurchaseRoom(world);
   drainEvents(world);
   const playerCount = world.players.length;
   return {
@@ -130,7 +133,11 @@ export function setServerFreePresence(serverRoom, role, present) {
   serverRoom.pendingPulses[playerIndex] = {};
   setPlayerPresence(serverRoom.world, playerIndex, present);
   setPlayerInput(serverRoom.world, playerIndex, withoutPulseInputs(serverRoom.receivedInputs[playerIndex]));
-  if (present) reportMegaBombStatus(serverRoom.world, playerIndex);
+  if (present) {
+    const sharedBoat = (serverRoom.world.boats || []).find(boat => boat?.boatType === "dual-turret-patrol");
+    if (sharedBoat?.reserved && !sharedBoat.connectionActivated) prepareDualTurretBoatRoom(serverRoom.world);
+    reportMegaBombStatus(serverRoom.world, playerIndex);
+  }
   return true;
 }
 
