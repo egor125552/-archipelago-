@@ -146,6 +146,36 @@ test("a nearby crate is stowed instead of forcing the crew member out", () => {
   assert.ok(boat.cargo.includes(crate.id));
 });
 
+test("a full configurable hold is announced and never ejects the player", () => {
+  const world = createFreeWorld();
+  const boat = prepareDualTurretBoatRoom(world);
+  isolateBoat(world, boat);
+  board(world, 0, boat);
+  boat.x = 210;
+  boat.y = 190;
+  boat.cargoCapacity = 1;
+  world.players[0].x = boat.x;
+  world.players[0].y = boat.y;
+  const [first, second] = world.freeActivities.crates;
+  for (const crate of world.freeActivities.crates) {
+    crate.x = 20;
+    crate.y = 20;
+  }
+  first.state = "world";
+  first.x = boat.x + 1;
+  first.y = boat.y;
+  pulse(world, 0, {action: true});
+  assert.equal(first.state, "stowed");
+
+  second.state = "world";
+  second.x = boat.x + 1;
+  second.y = boat.y;
+  pulse(world, 0, {action: true});
+  assert.equal(second.state, "world");
+  assert.equal(world.players[0].mode, "boat");
+  assert.ok(world.events.some(event => event.type === "cargo-full"));
+});
+
 test("the second seat cannot steer but can run the common pump", () => {
   const world = createFreeWorld();
   const boat = prepareDualTurretBoatRoom(world);
@@ -206,6 +236,7 @@ test("the mounted installation applies damage immediately without a replicated p
   const combat = world.players[0].combat;
   combat.equipped = "dual-turret";
   const target = world.freeActivities.marauder;
+  assert.ok(target, "marauder target must exist in the free-roam world");
   target.active = true;
   target.destroyed = false;
   target.hull = 100;
@@ -230,6 +261,7 @@ test("the installation is fast but remains rate-limited by the server", () => {
   board(world, 0, boat);
   world.players[0].combat.equipped = "dual-turret";
   const target = world.freeActivities.marauder;
+  assert.ok(target);
   target.active = true;
   target.destroyed = false;
   target.hull = 1000;
@@ -304,16 +336,17 @@ test("replication contains generic boat metadata but no moving mounted shots", (
   assert.deepEqual(snapshot.freeDualTurretProjectiles, {mode: "instant"});
 });
 
-test("the release contains one engine path, instant shots and fresh Safari modules", async () => {
+test("the release contains one engine path, instant shots and fresh client entry points", async () => {
   const {readFile} = await import("node:fs/promises");
-  const [core, client, audio, projectiles, replication, html, entry] = await Promise.all([
+  const [core, client, audio, projectiles, replication, activities, html, wrangler] = await Promise.all([
     readFile(new URL("../public/src/free-roam-core-v8.js", import.meta.url), "utf8"),
     readFile(new URL("../public/src/free-roam-dual-turret-client.js", import.meta.url), "utf8"),
     readFile(new URL("../public/src/free-roam-dual-turret-audio.js", import.meta.url), "utf8"),
     readFile(new URL("../public/src/free-roam-dual-turret-projectiles.js", import.meta.url), "utf8"),
     readFile(new URL("../public/src/free-roam-replication-v2.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/src/free-roam-activities.js", import.meta.url), "utf8"),
     readFile(new URL("../public/free-roam.html", import.meta.url), "utf8"),
-    readFile(new URL("../public/src/free-roam-v4.js", import.meta.url), "utf8"),
+    readFile(new URL("../wrangler.jsonc", import.meta.url), "utf8"),
   ]);
   assert.match(core, /preparePlayerBoatStep/);
   assert.doesNotMatch(core, /applyMotionProfile/);
@@ -321,7 +354,8 @@ test("the release contains one engine path, instant shots and fresh Safari modul
   assert.doesNotMatch(audio, /dual-turret-engine/);
   assert.match(projectiles, /mode: "instant"/);
   assert.doesNotMatch(replication, /previousX/);
+  assert.match(activities, /boat\.cargoCapacity/);
   assert.match(html, /free-roam-dual-turret-client\.js\?v=4/);
   assert.match(html, /free-roam-v4\.js\?v=61/);
-  assert.match(entry, /free-roam-core-v8\.js\?v=3/);
+  assert.match(wrangler, /src\/worker-resilient\.js/);
 });
