@@ -41,14 +41,15 @@ test("the dual-turret patrol boat is one physical shared object with two crew se
   assert.equal(boat.structuralHull, 300);
   assert.equal(boat.armor, 200);
   assert.equal(boat.turrets.length, 2);
+  assert.equal(boat.turrets[0].ammo, 1000);
+  assert.equal(boat.turrets[1].ammo, 1000);
 
   placeNearBoat(world, 0, boat);
   placeNearBoat(world, 1, boat);
   pulse(world, 0, {action: true});
   assert.equal(world.freeDualTurretPurchase.purchased, true);
-  assert.equal(world.freeActivities.credits, 100);
-  assert.equal(world.players[0].activeBoat, null);
-  pulse(world, 0, {action: true});
+  assert.equal(world.freeDualTurretPurchase.price, 0);
+  assert.equal(world.freeActivities.credits, 500);
   pulse(world, 1, {action: true});
 
   assert.equal(world.players[0].activeBoat, boat.id);
@@ -114,21 +115,21 @@ test("replication includes real hull points, crew, turrets and physical projecti
 });
 
 
-test("the locked patrol boat cannot be boarded without the team purchase", () => {
+test("the prototype patrol boat boards immediately without spending credits", () => {
   const world = createFreeWorld();
   const boat = prepareDualTurretBoatRoom(world);
-  world.freeActivities.credits = 399;
+  world.freeActivities.credits = 17;
   placeNearBoat(world, 0, boat);
   pulse(world, 0, {action: true});
-  assert.equal(world.freeDualTurretPurchase.purchased, false);
-  assert.equal(world.players[0].activeBoat, null);
-  assert.equal(world.freeActivities.credits, 399);
+  assert.equal(world.freeDualTurretPurchase.purchased, true);
+  assert.equal(world.freeDualTurretPurchase.price, 0);
+  assert.equal(world.players[0].activeBoat, boat.id);
+  assert.equal(world.freeActivities.credits, 17);
 });
 
-test("a sunk shared boat stays sunk and removes both crew members", () => {
+test("a sunk prototype removes its crew and fully returns after sixty seconds", () => {
   const world = createFreeWorld();
   const boat = prepareDualTurretBoatRoom(world);
-  world.freeDualTurretPurchase.purchased = true;
   placeNearBoat(world, 0, boat);
   placeNearBoat(world, 1, boat);
   pulse(world, 0, {action: true});
@@ -139,6 +140,14 @@ test("a sunk shared boat stays sunk and removes both crew members", () => {
   assert.deepEqual(boat.crew, [null, null]);
   assert.equal(world.players[0].activeBoat, null);
   assert.equal(world.players[1].activeBoat, null);
+  for (let index = 0; index < 601; index += 1) stepFreeWorld(world, 0.1);
+  assert.equal(boat.sunk, false);
+  assert.equal(boat.structuralHull, 300);
+  assert.equal(boat.armor, 200);
+  assert.equal(boat.water, 0);
+  assert.equal(boat.leak, 0);
+  assert.equal(boat.turrets[0].ammo, 1000);
+  assert.equal(boat.turrets[1].ammo, 1000);
 });
 
 test("the second crew position cannot steer the shared physical boat", () => {
@@ -155,6 +164,39 @@ test("the second crew position cannot steer the shared physical boat", () => {
   assert.equal(boat.driver, 0);
   assert.equal(boat.heading, heading);
   assert.equal(boat.speed, 0);
+});
+
+
+test("pump input reaches the shared boat and lowers flooding", () => {
+  const world = createFreeWorld();
+  const boat = prepareDualTurretBoatRoom(world);
+  placeNearBoat(world, 0, boat);
+  pulse(world, 0, {action: true});
+  boat.water = 60;
+  boat.leak = 2;
+  const before = boat.water;
+  setPlayerInput(world, 0, {pump: true});
+  for (let index = 0; index < 10; index += 1) stepFreeWorld(world, 0.1);
+  assert.equal(boat.pumpActive, true);
+  assert.ok(boat.water < before - 5, `${boat.water} should be below ${before}`);
+});
+
+test("repair plates restore armor, structural hull and leak", () => {
+  const world = createFreeWorld();
+  const boat = prepareDualTurretBoatRoom(world);
+  placeNearBoat(world, 0, boat);
+  pulse(world, 0, {action: true});
+  boat.armor = 120;
+  boat.structuralHull = 240;
+  boat.hull = 80;
+  boat.leak = 5;
+  const patches = boat.repairPatches;
+  setPlayerInput(world, 0, {repair: true});
+  for (let index = 0; index < 32; index += 1) stepFreeWorld(world, 0.1);
+  assert.equal(boat.repairPatches, patches - 1);
+  assert.ok(boat.armor > 120);
+  assert.ok(boat.structuralHull > 240);
+  assert.ok(boat.leak < 5);
 });
 
 test("target confirmation preserves the mounted installation instead of forcing the automatic", () => {
@@ -273,7 +315,8 @@ test("the release wiring stays modular and Safari receives a new cache version",
   assert.match(audio, /dual-turret-engine-v1\.mp3\?v=1/);
   assert.match(audio, /dual-turret-shot-v1\.mp3\?v=1/);
   assert.match(replication, /freeDualTurretProjectiles/);
-  assert.match(html, /free-roam-dual-turret-client\.js\?v=2/);
+  assert.match(html, /free-roam-dual-turret-client\.js\?v=3/);
   assert.match(html, /free-roam-developer-log-v1\.js\?v=2/);
-  assert.match(html, /400 командных кредитов/);
+  assert.match(html, /бесплатно стоит тестовый двухместный бронекатер/);
+  assert.match(client, /ensureLoopWithoutStandardDualEngine/);
 });

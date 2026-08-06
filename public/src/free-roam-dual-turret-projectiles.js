@@ -14,7 +14,7 @@ import {
   DUAL_TURRET_PROJECTILE_SPEED,
   DUAL_TURRET_PROJECTILE_TTL,
   DUAL_TURRET_SHOT_DAMAGE,
-} from "./free-roam-dual-turret-config.js";
+} from "./free-roam-dual-turret-config.js?v=2";
 import {applyDualTurretBoatDamage, isDualTurretBoat} from "./free-roam-dual-turret-boat.js";
 
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value));

@@ -15,7 +15,7 @@ import {
   DUAL_TURRET_START_AMMO,
   DUAL_TURRET_TURN_FACTOR,
   DUAL_TURRET_WEAPON_ID,
-} from "./free-roam-dual-turret-config.js";
+} from "./free-roam-dual-turret-config.js?v=2";
 
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value));
 const distance = (a, b) => Math.hypot((Number(a?.x) || 0) - (Number(b?.x) || 0), (Number(a?.y) || 0) - (Number(b?.y) || 0));
@@ -66,7 +66,8 @@ function createBoat() {
     leak: 0,
     fuel: 100,
     engineTemp: 24,
-    engineStalled: false,
+    engineStalled: true,
+    prototypeIdleStall: true,
     pumpActive: false,
     repairPatches: 5,
     hullRepairProgress: 0,
@@ -174,7 +175,9 @@ export function prepareDualTurretBoatRoom(world) {
   boat.armor = boat.armorMax;
   boat.water = 0;
   boat.leak = 0;
-  boat.engineStalled = false;
+  boat.engineStalled = true;
+  boat.prototypeIdleStall = true;
+  boat.dualCollisionGraceUntil = (Number(world.time) || 0) + 2.5;
   boat.emergencyActive = false;
   for (const turret of boat.turrets) {
     turret.assignedPlayer = null;
@@ -200,10 +203,14 @@ function setInputField(world, playerIndex, key, value, saved) {
 }
 
 function originalInput(world, playerIndex) {
-  return world?.freeActivities?.inputs?.[playerIndex]
-    || world?.operationInputs?.[playerIndex]
-    || world?.inputs?.[playerIndex]
-    || {};
+  // Activity input intentionally contains only combat/shop commands. Merge it
+  // with the canonical movement input instead of letting it hide pump, repair
+  // and steering fields from the shared boat.
+  return {
+    ...(world?.freeActivities?.inputs?.[playerIndex] || {}),
+    ...(world?.operationInputs?.[playerIndex] || {}),
+    ...(world?.inputs?.[playerIndex] || {}),
+  };
 }
 
 function present(world, playerIndex) {
@@ -224,7 +231,6 @@ export function playerDualTurret(world, playerIndex) {
 
 function assignCrew(world, playerIndex, boat) {
   const player = world.players?.[playerIndex];
-  if (!world.freeDualTurretPurchase?.purchased) return false;
   if (!player || !boat || boat.sunk || !player.combat?.alive) return false;
   const seat = playerIndex;
   boat.crew[seat] = playerIndex;
@@ -236,6 +242,16 @@ function assignCrew(world, playerIndex, boat) {
   player.x = boat.x;
   player.y = boat.y;
   player.heading = boat.heading;
+  boat.dualCollisionGraceUntil = Math.max(Number(boat.dualCollisionGraceUntil) || 0, (Number(world.time) || 0) + 2.5);
+  const safeToStart = (Number(boat.fuel) || 0) > 0.01
+    && (Number(boat.water) || 0) <= 35
+    && (Number(boat.structuralHull) || 0) >= 5
+    && (Number(boat.engineTemp) || 0) < 92
+    && !boat.emergencyActive;
+  if (safeToStart) {
+    boat.engineStalled = false;
+    boat.prototypeIdleStall = false;
+  }
   emit(world, "dual-turret-board", `${playerIndex === boat.driver ? "Ты занял место рулевого" : "Ты занял второе место"}. Твоя ${turret?.label || "установка"} доступна в переключении оружия.`, [playerIndex], {
     sourcePlayer: playerIndex,
     boatId: boat.id,
@@ -360,9 +376,10 @@ export function prepareDualTurretBoatStep(world) {
     .map(playerIndex => originals[playerIndex] || {});
   if (boat.driver != null) {
     const pump = crewInputs.some(input => Boolean(input.pump));
-    const repair = crewInputs.some(input => Boolean(input.repair));
     setInputField(world, boat.driver, "pump", pump, saved);
-    setInputField(world, boat.driver, "repair", repair, saved);
+    // Repair is owned by free-roam-dual-turret-damage-control.js because this
+    // boat has point-based structure plus a separate armor pool. The legacy
+    // percentage repair is suppressed by that module before the base step.
 
     // The legacy steering model keeps a small rudder value after a turn and
     // can rotate a stationary boat even when nobody is steering. For the
@@ -495,6 +512,7 @@ function resolveDualBoatCollisions(world, boat, dt) {
     const impactSpeed = Math.abs((Number(boat.speed) || 0) - (Number(other.speed) || 0))
       + Math.abs(Number(boat.speed) || 0) * 0.25
       + Math.abs(Number(other.speed) || 0) * 0.25;
+    if ((Number(world.time) || 0) < (Number(boat.dualCollisionGraceUntil) || 0)) continue;
     if (impactSpeed <= 2 || boat.dualCollisionCooldown > 0 || Number(other.collisionCooldown) > 0) continue;
     const severity = collisionSeverity(impactSpeed);
     const dualImpact = applyDualTurretBoatDamage(world, boat, 15 * severity, {emit: false});
@@ -503,7 +521,11 @@ function resolveDualBoatCollisions(world, boat, dt) {
     other.speed *= -0.24;
     boat.dualCollisionCooldown = 1.25;
     other.collisionCooldown = 1.25;
-    emit(world, "ram", `Столкновение с бронекатером. Его корпус потерял ${Math.round(dualImpact.damage)}, другая лодка — ${Math.round(otherImpact.damage)}.`, [0, 1], {
+    const collisionTargets = [...new Set([
+      ...(boat.crew || []).filter(Number.isInteger),
+      Number.isInteger(other.driver) ? other.driver : other.owner,
+    ].filter(Number.isInteger))];
+    emit(world, "ram", `Бронекатер столкнулся с другой лодкой. Его корпус потерял ${Math.round(dualImpact.damage)}, другая лодка — ${Math.round(otherImpact.damage)}.`, collisionTargets.length ? collisionTargets : [0, 1], {
       boatId: boat.id,
       otherBoatId: other.id,
       x: (boat.x + other.x) / 2,

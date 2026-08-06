@@ -4,7 +4,7 @@ import {resolveCombatTarget} from "./free-roam-targeting.js?v=39";
 import {
   DUAL_TURRET_SHOT_INTERVAL,
   DUAL_TURRET_WEAPON_ID,
-} from "./free-roam-dual-turret-config.js";
+} from "./free-roam-dual-turret-config.js?v=2";
 import {dualTurretBoat, playerDualTurret} from "./free-roam-dual-turret-boat.js";
 import {spawnDualTurretProjectile} from "./free-roam-dual-turret-projectiles.js";
 

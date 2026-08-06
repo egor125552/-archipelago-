@@ -3,9 +3,9 @@
 import {
   WORLD,
   playerStatus,
-} from "./free-roam-core-v8.js?v=1";
+} from "./free-roam-core-v8.js?v=2";
 import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=45";
-import {predictLocalWorld, reconcileLocalPrediction} from "./free-roam-client-prediction.js?v=41";
+import {predictLocalWorld, reconcileLocalPrediction} from "./free-roam-client-prediction.js?v=42";
 import {applyReplicatedWorldDelta} from "./free-roam-replication-v2.js?v=1";
 import {createSpeechController} from "./free-roam-speech.js?v=41";
 import {directionFromDelta} from "./free-roam-gesture-model.js";

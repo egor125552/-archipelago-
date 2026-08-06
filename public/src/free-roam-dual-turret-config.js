@@ -15,8 +15,9 @@ export const DUAL_TURRET_SHOT_DAMAGE = 18;
 export const DUAL_TURRET_SHOT_INTERVAL = 0.72;
 export const DUAL_TURRET_PROJECTILE_SPEED = 96;
 export const DUAL_TURRET_PROJECTILE_TTL = 3.2;
-export const DUAL_TURRET_START_AMMO = 80;
-export const DUAL_TURRET_PRICE = 400;
+export const DUAL_TURRET_START_AMMO = 1000;
+export const DUAL_TURRET_PRICE = 0;
+export const DUAL_TURRET_RECOVERY_SECONDS = 60;
 export const DUAL_TURRET_AUDIO_ROOT = "/assets/audio/free-roam-dual-turret/";
 
 export const DUAL_TURRET_DEFINITIONS = Object.freeze([

@@ -1,16 +1,30 @@
 "use strict";
 
 import {CONFIG} from "./game-core-v18.js?free=prediction";
-import {WORLD} from "./free-roam-core-v6.js?v=46";
+import {WORLD} from "./free-roam-core-v8.js?v=2";
+import {
+  DUAL_TURRET_ACCELERATION_FACTOR,
+  DUAL_TURRET_MAX_SPEED,
+  DUAL_TURRET_REVERSE_SPEED,
+  DUAL_TURRET_TURN_FACTOR,
+} from "./free-roam-dual-turret-config.js?v=2";
 import {operationSteeringDelta} from "./free-roam-steering-model.js";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const wrapDeg = value => ((value + 180) % 360 + 360) % 360 - 180;
 const rad = degrees => degrees * Math.PI / 180;
+const isDualTurretBoat = boat => boat?.boatType === "dual-turret-patrol";
 
 function blendAngle(authoritative, predicted, keep) {
   const difference = wrapDeg((Number(predicted) || 0) - (Number(authoritative) || 0));
   return wrapDeg((Number(authoritative) || 0) + difference * keep);
+}
+
+function clampBoatProfile(boat) {
+  if (!isDualTurretBoat(boat)) return boat;
+  boat.speed = clamp(Number(boat.speed) || 0, -DUAL_TURRET_REVERSE_SPEED, DUAL_TURRET_MAX_SPEED);
+  boat.throttle = clamp(Number(boat.throttle) || 0, -1, 1);
+  return boat;
 }
 
 export function reconcileLocalPrediction(previousWorld, nextWorld, playerIndex) {
@@ -30,6 +44,7 @@ export function reconcileLocalPrediction(previousWorld, nextWorld, playerIndex) 
     nextBoat.heading = blendAngle(nextBoat.heading, previousBoat.heading, keep);
     nextBoat.speed += (previousBoat.speed - nextBoat.speed) * keep;
     nextBoat.throttle += (previousBoat.throttle - nextBoat.throttle) * keep;
+    clampBoatProfile(nextBoat);
     nextPlayer.x = nextBoat.x;
     nextPlayer.y = nextBoat.y;
     nextPlayer.heading = nextBoat.heading;
@@ -51,14 +66,18 @@ function predictBoat(world, playerIndex, input, dt) {
   const player = world.players?.[playerIndex];
   const boat = player?.mode === "boat" ? world.boats?.[player.activeBoat] : null;
   if (!boat || boat.sunk || boat.driver !== playerIndex) return;
+  const dual = isDualTurretBoat(boat);
+  const maximumSpeed = dual ? DUAL_TURRET_MAX_SPEED : CONFIG.maxSpeed;
+  const reverseSpeed = dual ? DUAL_TURRET_REVERSE_SPEED : Math.abs(CONFIG.reverseSpeed);
+  const acceleration = CONFIG.acceleration * (dual ? DUAL_TURRET_ACCELERATION_FACTOR : 1);
   const steer = Number(Boolean(input.right)) - Number(Boolean(input.left));
   const thrust = Number(Boolean(input.up)) - Number(Boolean(input.down));
   if (thrust) {
     boat.throttle += (thrust - (Number(boat.throttle) || 0)) * Math.min(1, dt * 4.5);
   } else {
-    // The authoritative free-roam model deliberately preserves physical
-    // coast after releasing the engine. Predict the same behaviour so a
-    // local release never looks like an invented brake.
+    // The authoritative free-roam model deliberately preserves physical coast
+    // after releasing the engine. Predict the same behaviour so release never
+    // looks like an invented brake.
     boat.throttle = 0;
   }
   if (boat.engineStalled || boat.emergencyActive) boat.throttle = 0;
@@ -66,14 +85,19 @@ function predictBoat(world, playerIndex, input, dt) {
     boat.speed *= Math.exp(-0.028 * dt);
   } else {
     const targetSpeed = boat.throttle >= 0
-      ? boat.throttle * CONFIG.maxSpeed
-      : boat.throttle * Math.abs(CONFIG.reverseSpeed);
-    boat.speed += clamp(targetSpeed - boat.speed, -CONFIG.acceleration * dt, CONFIG.acceleration * dt);
-    boat.speed *= Math.max(0, 1 - CONFIG.drag * dt * (0.12 + Math.abs(boat.speed) / CONFIG.maxSpeed * 0.16));
+      ? boat.throttle * maximumSpeed
+      : boat.throttle * reverseSpeed;
+    boat.speed += clamp(targetSpeed - boat.speed, -acceleration * dt, acceleration * dt);
+    boat.speed *= Math.max(0, 1 - CONFIG.drag * dt * (0.12 + Math.abs(boat.speed) / maximumSpeed * 0.16));
   }
-  if (steer) boat.heading = wrapDeg(boat.heading + operationSteeringDelta(boat.speed, steer, dt));
-  boat.x = clamp(boat.x + Math.sin(rad(boat.heading)) * boat.speed * dt, WORLD.boatRadius, WORLD.width - WORLD.boatRadius);
-  boat.y = clamp(boat.y - Math.cos(rad(boat.heading)) * boat.speed * dt, WORLD.shoreY + 4, WORLD.height - WORLD.boatRadius);
+  clampBoatProfile(boat);
+  if (steer) {
+    const turn = operationSteeringDelta(boat.speed, steer, dt) * (dual ? DUAL_TURRET_TURN_FACTOR : 1);
+    boat.heading = wrapDeg(boat.heading + turn);
+  }
+  const radius = dual ? 7.5 : WORLD.boatRadius;
+  boat.x = clamp(boat.x + Math.sin(rad(boat.heading)) * boat.speed * dt, radius, WORLD.width - radius);
+  boat.y = clamp(boat.y - Math.cos(rad(boat.heading)) * boat.speed * dt, WORLD.shoreY + 4, WORLD.height - radius);
   player.x = boat.x;
   player.y = boat.y;
   player.heading = boat.heading;

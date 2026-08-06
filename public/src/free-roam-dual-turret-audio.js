@@ -1,6 +1,6 @@
 "use strict";
 
-import {DUAL_TURRET_AUDIO_ROOT} from "./free-roam-dual-turret-config.js";
+import {DUAL_TURRET_AUDIO_ROOT} from "./free-roam-dual-turret-config.js?v=2";
 
 export const DUAL_TURRET_AUDIO = Object.freeze({
   engine: `${DUAL_TURRET_AUDIO_ROOT}dual-turret-engine-v1.mp3?v=1`,
@@ -86,13 +86,14 @@ export function updateDualTurretEngine(audio, world, playerIndex) {
   const metres = distance(listener, boat);
   const localAboard = world?.players?.[playerIndex]?.activeBoat === boat.id;
   const speed = clamp(Math.abs(Number(boat.speed) || 0) / 13.5, 0, 1);
-  const throttle = clamp(Math.abs(Number(boat.throttle) || 0), 0, 1);
   const proximity = localAboard ? 1 : clamp(1 - metres / 230, 0, 1);
   const now = audio.ctx.currentTime;
-  engine.source.playbackRate.setTargetAtTime(0.78 + speed * 0.82 + throttle * 0.08, now, 0.11);
-  engine.filter.frequency.setTargetAtTime(900 + speed * 4300 + proximity * 700, now, 0.14);
+  // Pitch follows the physical server speed only. Throttle no longer creates a
+  // second, faster-sounding acceleration that disagrees with boat movement.
+  engine.source.playbackRate.setTargetAtTime(0.82 + speed * 0.36, now, 0.14);
+  engine.filter.frequency.setTargetAtTime(950 + speed * 2950 + proximity * 500, now, 0.16);
   engine.panner.pan.setTargetAtTime(localAboard ? 0 : relativePan(listener, boat), now, 0.1);
-  engine.gain.gain.setTargetAtTime(localAboard ? 0.16 : proximity * 0.13, now, 0.13);
+  engine.gain.gain.setTargetAtTime(localAboard ? 0.14 : proximity * 0.12, now, 0.13);
 }
 
 
