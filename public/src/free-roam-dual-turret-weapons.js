@@ -18,8 +18,6 @@ function emit(world, type, text, targets = [0, 1], extra = {}) {
 function controllerState(world) {
   world.freeDualTurretBoat ||= {};
   const state = world.freeDualTurretBoat;
-  state.previousWeapon ||= Array.from({length: world.players?.length || 2}, () => false);
-  while (state.previousWeapon.length < world.players.length) state.previousWeapon.push(false);
   for (const turret of state.turrets || []) {
     delete turret.minimumRelativeHeading;
     delete turret.maximumRelativeHeading;
@@ -59,47 +57,19 @@ function currentInput(world, playerIndex) {
   };
 }
 
-function availableWeapons(combat, mounted) {
-  const result = ["fists"];
-  if (combat?.weapons?.knife) result.push("knife");
-  if (combat?.weapons?.pistol && Number(combat.pistolAmmo) > 0) result.push("pistol");
-  if (combat?.weapons?.automatic && Number(combat.ammo) > 0) result.push("automatic");
-  if (mounted) result.push(DUAL_TURRET_WEAPON_ID);
-  return result;
-}
-
-const LABELS = Object.freeze({
-  fists: "кулаки",
-  knife: "нож",
-  pistol: "пистолет",
-  automatic: "автомат",
-  [DUAL_TURRET_WEAPON_ID]: "бортовая установка",
-});
-
 function fallbackWeapon(combat) {
+  if (combat?.lastPersonalWeapon && combat.lastPersonalWeapon !== DUAL_TURRET_WEAPON_ID) {
+    return combat.lastPersonalWeapon;
+  }
   if (combat?.weapons?.automatic && combat.ammo > 0) return "automatic";
   if (combat?.weapons?.pistol && combat.pistolAmmo > 0) return "pistol";
   if (combat?.weapons?.knife) return "knife";
   return "fists";
 }
 
-function cycleWeapon(world, playerIndex, mounted) {
-  const combat = world.players?.[playerIndex]?.combat;
-  if (!combat) return;
-  const available = availableWeapons(combat, mounted);
-  const current = available.indexOf(combat.equipped);
-  if (combat.equipped !== DUAL_TURRET_WEAPON_ID) combat.lastPersonalWeapon = combat.equipped;
-  combat.equipped = available[current >= 0 ? (current + 1) % available.length : 0];
-  if (combat.equipped !== DUAL_TURRET_WEAPON_ID) combat.lastPersonalWeapon = combat.equipped;
-  const turret = mountedTurret(world, playerIndex);
-  const suffix = combat.equipped === DUAL_TURRET_WEAPON_ID && turret
-    ? ` ${turret.label}, патронов ${turret.ammo}.`
-    : ".";
-  emit(world, "weapon-switch", `Выбрано оружие: ${LABELS[combat.equipped] || combat.equipped}.${suffix}`.replace("..", "."), [playerIndex], {
-    sourcePlayer: playerIndex,
-    weapon: combat.equipped,
-    turretId: turret?.id,
-  });
+function keepPersonalWeaponSelected(combat) {
+  if (!combat || combat.equipped !== DUAL_TURRET_WEAPON_ID) return;
+  combat.equipped = fallbackWeapon(combat);
 }
 
 function targetBearing(from, target) {
@@ -230,13 +200,14 @@ export function prepareDualTurretWeaponStep(world) {
     const combat = world.players[playerIndex]?.combat;
     const turret = mountedTurret(world, playerIndex);
     const mounted = Boolean(turret);
-    if (!mounted && combat?.equipped === DUAL_TURRET_WEAPON_ID) combat.equipped = fallbackWeapon(combat);
-    const rising = Boolean(input.weapon && !state.previousWeapon[playerIndex]);
-    if (rising && (mounted || combat?.equipped === DUAL_TURRET_WEAPON_ID)) cycleWeapon(world, playerIndex, mounted);
-    if (mounted || combat?.equipped === DUAL_TURRET_WEAPON_ID) setInputField(world, playerIndex, "weapon", false, saved);
-    const firing = Boolean(mounted && combat?.equipped === DUAL_TURRET_WEAPON_ID && input.attack);
+    keepPersonalWeaponSelected(combat);
+
+    // While seated in the armored patrol, attack always belongs to the mounted
+    // installation. No weapon selection, target lock, aiming sector or turn
+    // delay is required. With no target the shot simply travels into empty space.
+    const firing = Boolean(mounted && input.attack);
     if (firing) setInputField(world, playerIndex, "attack", false, saved);
-    players.push({playerIndex, input, turret, mounted, firing, equippedBefore: combat?.equipped});
+    players.push({playerIndex, turret, mounted, firing});
   }
   return {state, saved, players};
 }
@@ -254,10 +225,9 @@ export function finishDualTurretWeaponStep(world, context, dt) {
   for (const turret of boat?.turrets || []) turret.cooldown = Math.max(0, Number(turret.cooldown) - dt);
   for (const entry of context.players) {
     const combat = world.players?.[entry.playerIndex]?.combat;
-    if (entry.equippedBefore === DUAL_TURRET_WEAPON_ID && entry.mounted && combat) combat.equipped = DUAL_TURRET_WEAPON_ID;
-    if (entry.firing && combat?.alive && combat.equipped === DUAL_TURRET_WEAPON_ID && entry.turret?.assignedPlayer === entry.playerIndex) {
+    keepPersonalWeaponSelected(combat);
+    if (entry.firing && combat?.alive && entry.turret?.assignedPlayer === entry.playerIndex) {
       tryFire(world, entry.playerIndex, entry.turret, boat);
     }
-    context.state.previousWeapon[entry.playerIndex] = Boolean(entry.input.weapon);
   }
 }
