@@ -20,7 +20,7 @@ jobs:
           fetch-depth: 1
       - name: Remove Git metadata
         run: rm -rf .git
-      - name: Upload repository snapshot
+      - name: Upload complete repository snapshot
         uses: actions/upload-artifact@v4
         with:
           name: archipelago-source-snapshot
