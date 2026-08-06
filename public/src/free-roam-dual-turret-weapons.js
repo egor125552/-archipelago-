@@ -5,8 +5,8 @@ import {
   DUAL_TURRET_SHOT_INTERVAL,
   DUAL_TURRET_WEAPON_ID,
 } from "./free-roam-dual-turret-config.js?v=3";
-import {dualTurretBoat, playerDualTurret} from "./free-roam-dual-turret-boat.js?v=3";
-import {fireDualTurretHitscan} from "./free-roam-dual-turret-projectiles.js?v=3";
+import {dualTurretBoat, playerDualTurret} from "./free-roam-dual-turret-boat.js?v=4";
+import {fireDualTurretHitscan} from "./free-roam-dual-turret-projectiles.js?v=4";
 
 const wrapDeg = value => ((Number(value) + 180) % 360 + 360) % 360 - 180;
 
@@ -14,6 +14,14 @@ function emit(world, type, text, targets = [0, 1], extra = {}) {
   world.events ||= [];
   world.events.push({type, text, targets, at: world.time, operationEvent: true, ...extra});
   if (world.events.length > 240) world.events.splice(0, world.events.length - 240);
+}
+
+function controllerState(world) {
+  world.freeDualTurretBoat ||= {};
+  const state = world.freeDualTurretBoat;
+  state.previousWeapon ||= Array.from({length: world.players?.length || 2}, () => false);
+  while (state.previousWeapon.length < world.players.length) state.previousWeapon.push(false);
+  return state;
 }
 
 function inputObjects(world, playerIndex) {
@@ -154,10 +162,7 @@ function tryFire(world, playerIndex, turret, boat) {
 }
 
 export function prepareDualTurretWeaponStep(world) {
-  const state = world.freeDualTurretWeapons ||= {
-    previousWeapon: Array.from({length: world.players?.length || 2}, () => false),
-  };
-  while (state.previousWeapon.length < world.players.length) state.previousWeapon.push(false);
+  const state = controllerState(world);
   const saved = [];
   const players = [];
   for (let playerIndex = 0; playerIndex < world.players.length; playerIndex += 1) {
