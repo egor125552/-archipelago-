@@ -23,7 +23,7 @@ jobs:
       - name: Upload complete repository snapshot
         uses: actions/upload-artifact@v4
         with:
-          name: archipelago-source-snapshot
+          name: archipelago-source-snapshot-head
           path: .
           include-hidden-files: true
           if-no-files-found: error
