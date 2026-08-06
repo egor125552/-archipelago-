@@ -34,8 +34,9 @@ function freeState(sequence, events = []) {
   };
 }
 
-test("a lost free-state ACK is replaced by a fresh full snapshot", () => {
+test("a lost free-state ACK is replaced by a full snapshot with chronological events", () => {
   const oldEvent = {type: "engine-stall", text: "Мотор заглох."};
+  const queuedEvent = {type: "pump-start", text: "Насос включён."};
   const newEvent = {type: "cargo-stowed", text: "Ящик погружён."};
   const client = {
     mode: "free",
@@ -45,7 +46,7 @@ test("a lost free-state ACK is replaced by a fresh full snapshot", () => {
     freeInFlightWorld: freeState(40).world,
     freeAckedWorld: freeState(39).world,
     freeInFlightEvents: [oldEvent],
-    freePending: null,
+    freePending: freeState(40.5, [queuedEvent]),
   };
   const {lobby, socket, sent} = testLobby(client);
 
@@ -55,7 +56,7 @@ test("a lost free-state ACK is replaced by a fresh full snapshot", () => {
   assert.equal(sent[0].type, "free-state");
   assert.equal(sent[0].sequence, 41);
   assert.equal(sent[0].full, true);
-  assert.deepEqual(sent[0].events, [oldEvent, newEvent]);
+  assert.deepEqual(sent[0].events, [oldEvent, queuedEvent, newEvent]);
   assert.equal(client.freeStateInFlight, 41);
   assert.equal(client.freeAckedWorld, null);
   assert.equal(client.freeStateResends, 1);
