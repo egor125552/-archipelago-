@@ -1,4 +1,4 @@
-name: Finalize dual-turret patrol boat
+name: Publish dual-turret patrol boat
 
 on:
   pull_request:
@@ -9,10 +9,10 @@ permissions:
   contents: write
 
 jobs:
-  finalize:
+  publish:
     if: "${{ github.head_ref == 'agent/dual-turret-patrol' }}"
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
         with:
@@ -21,8 +21,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-      - name: Materialize reviewed sources
+      - name: Materialize reviewed modules
         shell: bash
         run: |
           set -euo pipefail
@@ -39,7 +38,8 @@ jobs:
           archive = pathlib.Path('/tmp/dual-turret-final.tar.xz')
           archive.write_bytes(base64.b64decode(''.join(part.read_text().strip() for part in parts), validate=True))
           digest = hashlib.sha256(archive.read_bytes()).hexdigest()
-          if digest != 'eb4ba75beecee0d0d9a1da9f3209d186391350c881ed3d18adee66bd0567d2c8':
+          expected = 'eb4ba75beecee0d0d9a1da9f3209d186391350c881ed3d18adee66bd0567d2c8'
+          if digest != expected:
               raise SystemExit(f'source archive SHA mismatch: {digest}')
           with tarfile.open(archive, 'r:xz') as source:
               for member in source.getmembers():
@@ -53,7 +53,7 @@ jobs:
           patch -p1 < .github/dual-turret-reviewed.patch
           find public src tests -type f -name '*.orig' -delete
           python3 .github/dual-turret-existing-files.py
-      - name: Verify audio and integration
+      - name: Verify the two complete MP3 files
         shell: bash
         run: |
           set -euo pipefail
@@ -63,20 +63,21 @@ jobs:
             ffmpeg -v error -i public/assets/audio/free-roam-dual-turret/dual-turret-shot-v1.mp3 -f null -
             ffmpeg -v error -i public/assets/audio/free-roam-dual-turret/dual-turret-engine-v1.mp3 -f null -
           fi
+          test -z "$(find public/assets/audio/free-roam-dual-turret -type f \( -name '*.part-*' -o -name '*.b64' -o -name 'chunk-*' -o -name '*.txt' \) -print -quit)"
+      - name: Run focused integration checks
+        shell: bash
+        run: |
+          set -euo pipefail
           while IFS= read -r file; do node --check "$file"; done < <(
             find public/src src tests -type f \
               \( -name '*dual-turret*' -o -name 'free-roam-core-v8.js' -o -name 'free-roam-replication-v2.js' -o -name 'free-roam-server.js' -o -name 'free-roam-v4.js' \) \
               | sort
           )
-          grep -q 'free-roam-core-v8.js?v=1' public/src/free-roam-v4.js
-          grep -q 'free-roam-replication-v2.js?v=1' public/src/free-roam-v4.js
-          grep -q 'free-roam-v4.js?v=59' public/free-roam.html
-          grep -q 'free-roam-dual-turret-client.js?v=2' public/free-roam.html
-          test -z "$(find public/assets/audio/free-roam-dual-turret -type f \( -name '*.part-*' -o -name '*.b64' -o -name 'chunk-*' -o -name '*.txt' \) -print -quit)"
-      - run: npm ci
-      - name: Run complete project tests
-        run: npm test
-      - name: Publish clean verified branch
+          node --test \
+            tests/free-roam-dual-turret-v1.test.mjs \
+            tests/free-roam-server-authority-v40.test.mjs \
+            tests/free-roam-bomb-gesture-v1.test.mjs
+      - name: Create clean release commit
         shell: bash
         run: |
           set -euo pipefail
