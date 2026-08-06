@@ -1,10 +1,10 @@
 import persistentWorker, {Lobby as PersistentLobby} from "./worker-persistent.js";
 
 export const FREE_STATE_ACK_TIMEOUT_MS = 1800;
-export const ARCHIPELAGO_BUILD_ID = "2026-08-06-armored-hotfix-3";
+export const ARCHIPELAGO_BUILD_ID = "2026-08-07-armored-hard-fix-4";
 
 const FREE_ROAM_HTML_REPLACEMENTS = Object.freeze([
-  ["free-roam-v4.js?v=62", "free-roam-v4.js?v=63"],
+  ["free-roam-v4.js?v=62", "free-roam-v4.js?v=64"],
   ["/src/free-roam-core-v8.js?v=4", "/src/free-roam-core-v8.js?v=5"],
   ["/src/free-roam-client-prediction.js?v=43", "/src/free-roam-client-prediction.js?v=44"],
   ["/src/free-roam-dual-turret-projectiles.js?v=4", "/src/free-roam-dual-turret-projectiles.js?v=5"],
@@ -35,6 +35,10 @@ function injectFreeRoamBuild(html) {
     '        "/src/free-roam-audio-v5.js?v=45": "/src/free-roam-audio-v5.js?v=46",',
     '        "/src/free-roam-audio-v4.js?v=38": "/src/free-roam-audio-v4.js?v=39",',
     '        "/src/free-roam-audio-v3.js?v=38": "/src/free-roam-audio-v3.js?v=39",',
+    '        "/src/free-roam-audio-v2.js?v=38": "/src/free-roam-audio-v2.js?v=40",',
+    '        "/src/free-roam-audio-v2.js?v=39": "/src/free-roam-audio-v2.js?v=40",',
+    '        "/src/free-roam-dual-turret-weapons.js?v=4": "/src/free-roam-dual-turret-weapons.js?v=6",',
+    '        "/src/free-roam-dual-turret-weapons.js?v=5": "/src/free-roam-dual-turret-weapons.js?v=6",',
     '        "/src/free-roam-shop.js?v=4": "/src/free-roam-shop.js?v=5",',
     '        "/src/free-roam-shop.js?v=3": "/src/free-roam-shop.js?v=5",',
   ].join("\n");
