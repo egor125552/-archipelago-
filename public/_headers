@@ -1,5 +1,10 @@
-/src/*
-  Cache-Control: no-cache, must-revalidate
-
+/
+  Cache-Control: no-cache
+/index.html
+  Cache-Control: no-cache
 /free-roam.html
+  Cache-Control: no-cache, must-revalidate
+/free-roam.css
+  Cache-Control: no-cache
+/src/*
   Cache-Control: no-cache, must-revalidate
