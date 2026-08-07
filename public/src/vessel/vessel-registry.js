@@ -8,7 +8,11 @@ import {
   cloneData,
   isPlainObject,
   normalizeCapabilities,
+  normalizeDeck,
   normalizeModuleType,
+  normalizeMount,
+  normalizePhysics,
+  normalizePhysicsModule,
   normalizePreset,
   normalizeSystemPlugin,
 } from "./vessel-contract.js";
@@ -27,7 +31,18 @@ function mergeDefinition(base, overrides) {
     physics: mergeObjects(base?.physics, overrides?.physics),
     presentation: mergeObjects(base?.presentation, overrides?.presentation),
     modules: overrides?.modules == null ? cloneData(base?.modules || []) : cloneData(overrides.modules),
+    mounts: overrides?.mounts == null ? cloneData(base?.mounts || []) : cloneData(overrides.mounts),
+    decks: overrides?.decks == null ? cloneData(base?.decks || []) : cloneData(overrides.decks),
+    stations: overrides?.stations == null ? cloneData(base?.stations || []) : cloneData(overrides.stations),
   };
+}
+
+function uniqueIds(items, field) {
+  const seen = new Set();
+  for (const item of items) {
+    if (seen.has(item.id)) throw new VesselContractError(`${field} contains duplicate id ${item.id}`);
+    seen.add(item.id);
+  }
 }
 
 export function createVesselRegistry() {
@@ -35,6 +50,7 @@ export function createVesselRegistry() {
   const moduleTypes = new Map();
   const vesselTypes = new Map();
   const systems = new Map();
+  const physicsModules = new Map();
 
   function registerUnique(map, kind, definition, normalizer) {
     const normalized = normalizer(definition);
@@ -55,7 +71,11 @@ export function createVesselRegistry() {
     return registerUnique(systems, "vessel system", plugin, normalizeSystemPlugin);
   }
 
-  function normalizeModuleInstance(instance, vesselTypeId) {
+  function registerPhysicsModule(module) {
+    return registerUnique(physicsModules, "vessel physics module", module, normalizePhysicsModule);
+  }
+
+  function normalizeModuleInstance(instance, vesselTypeId, mountById, occupiedMounts) {
     const source = assertPlainObject(instance, `module instance in ${vesselTypeId}`);
     const instanceId = assertId(source.id, `module instance id in ${vesselTypeId}`);
     const type = assertId(source.type, `module type for ${instanceId}`);
@@ -63,7 +83,29 @@ export function createVesselRegistry() {
     if (!moduleType) throw new VesselContractError(`vessel ${vesselTypeId} references unregistered module type ${type}`);
     const config = cloneData(source.config || {});
     moduleType.validateConfig?.(config, {vesselTypeId, moduleInstanceId: instanceId});
-    return Object.freeze({...cloneData(source), id: instanceId, type, config: Object.freeze(config)});
+    const mounts = Object.freeze([...(source.mounts || [])].map(mountId => assertId(mountId, `module ${instanceId} mount`)));
+    if (mounts.length !== moduleType.installation.mountCount) {
+      throw new VesselContractError(`module ${instanceId} needs exactly ${moduleType.installation.mountCount} mounts`, {
+        moduleInstanceId: instanceId,
+        required: moduleType.installation.mountCount,
+        received: mounts.length,
+      });
+    }
+    if (new Set(mounts).size !== mounts.length) throw new VesselContractError(`module ${instanceId} cannot occupy the same mount twice`);
+    for (const mountId of mounts) {
+      const mount = mountById.get(mountId);
+      if (!mount) throw new VesselContractError(`module ${instanceId} references missing mount ${mountId}`);
+      const compatibleKind = moduleType.installation.mountKinds.includes(mount.kind);
+      const explicitCompatibility = mount.accepts.includes(type);
+      if (!compatibleKind && !explicitCompatibility) {
+        throw new VesselContractError(`module ${instanceId} is incompatible with mount ${mountId}`, {moduleType: type, mountKind: mount.kind});
+      }
+      if (occupiedMounts.has(mountId)) {
+        throw new VesselContractError(`mount ${mountId} is already occupied by ${occupiedMounts.get(mountId)}`);
+      }
+      occupiedMounts.set(mountId, instanceId);
+    }
+    return Object.freeze({...cloneData(source), id: instanceId, type, config: Object.freeze(config), mounts});
   }
 
   function normalizeVesselType(definition) {
@@ -77,7 +119,35 @@ export function createVesselRegistry() {
       expanded = mergeDefinition(preset, original);
     }
     const capabilities = normalizeCapabilities(expanded.capabilities || {});
-    const modules = Object.freeze((expanded.modules || []).map(module => normalizeModuleInstance(module, typeId)));
+    const physics = normalizePhysics(expanded.physics || {mode: "profile", profile: "standard"});
+    if (physics.mode === "module" && !physicsModules.has(physics.module)) {
+      throw new VesselContractError(`vessel ${typeId} references unregistered physics module ${physics.module}`);
+    }
+    const mounts = Object.freeze((expanded.mounts || []).map(mount => normalizeMount(mount, typeId)));
+    uniqueIds(mounts, `vessel ${typeId} mounts`);
+    const mountById = new Map(mounts.map(mount => [mount.id, mount]));
+    const occupiedMounts = new Map();
+    const modules = Object.freeze((expanded.modules || []).map(module => normalizeModuleInstance(module, typeId, mountById, occupiedMounts)));
+    uniqueIds(modules, `vessel ${typeId} modules`);
+    const decks = Object.freeze((expanded.decks || []).map(deck => normalizeDeck(deck, typeId)));
+    uniqueIds(decks, `vessel ${typeId} decks`);
+    const deckIds = new Set(decks.map(deck => deck.id));
+    for (const mount of mounts) {
+      if (mount.deckId && !deckIds.has(mount.deckId)) throw new VesselContractError(`mount ${mount.id} references missing deck ${mount.deckId}`);
+    }
+    for (const deck of decks) {
+      const zoneIds = new Set(deck.zones.map(zone => zone.id));
+      for (const landmark of deck.landmarks) {
+        if (landmark.zoneId && !zoneIds.has(landmark.zoneId)) {
+          throw new VesselContractError(`landmark ${landmark.id} references missing zone ${landmark.zoneId}`);
+        }
+      }
+      for (const connection of deck.connections) {
+        if (!deckIds.has(connection.toDeckId)) {
+          throw new VesselContractError(`connection ${connection.id} references missing deck ${connection.toDeckId}`);
+        }
+      }
+    }
     const presentation = isPlainObject(expanded.presentation) ? Object.freeze(cloneData(expanded.presentation)) : Object.freeze({});
     const label = String(presentation.label || expanded.label || "").trim();
     if (!label) throw new VesselContractError(`vessel ${typeId} needs a user-facing label`);
@@ -86,7 +156,10 @@ export function createVesselRegistry() {
       id: typeId,
       contractVersion: VESSEL_CONTRACT_VERSION,
       capabilities,
+      physics,
+      mounts,
       modules,
+      decks,
       presentation: Object.freeze({...presentation, label}),
     });
   }
@@ -107,10 +180,12 @@ export function createVesselRegistry() {
     if (!definition) throw new VesselContractError(`unregistered vessel type ${typeId}`);
     const id = assertId(instanceId || `${DEFAULT_INSTANCE_PREFIX}:${typeId}`, "vessel instance id");
     const modules = {};
+    const mountOccupancy = {};
     for (const module of definition.modules) {
       const moduleType = moduleTypes.get(module.type);
       const initial = moduleType?.createState ? moduleType.createState(module.config, {vesselType: definition, module}) : {};
       modules[module.id] = {...cloneData(initial), ...cloneData(moduleState[module.id] || {})};
+      for (const mountId of module.mounts) mountOccupancy[mountId] = module.id;
     }
     return {
       instanceId: id,
@@ -118,6 +193,10 @@ export function createVesselRegistry() {
       legacyBoatId: Number.isInteger(legacyBoatId) ? legacyBoatId : null,
       state: cloneData(state),
       modules,
+      mountOccupancy,
+      installations: Object.fromEntries(definition.modules.map(module => [module.id, {type: module.type, mounts: [...module.mounts]}])),
+      occupants: {},
+      zones: {},
     };
   }
 
@@ -133,13 +212,16 @@ export function createVesselRegistry() {
     registerModuleType,
     registerVesselType,
     registerSystem,
+    registerPhysicsModule,
     resolveVesselType,
     resolveModuleType: id => moduleTypes.get(assertId(id, "module type id")) || null,
+    resolvePhysicsModule: id => physicsModules.get(assertId(id, "physics module id")) || null,
     createInstance,
     runSystems,
     listPresets: () => [...presets.values()],
     listModuleTypes: () => [...moduleTypes.values()],
     listVesselTypes: () => [...vesselTypes.values()],
     listSystems: () => [...systems.values()],
+    listPhysicsModules: () => [...physicsModules.values()],
   });
 }
