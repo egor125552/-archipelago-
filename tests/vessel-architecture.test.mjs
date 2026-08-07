@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import {execFileSync} from "node:child_process";
 import {readFile} from "node:fs/promises";
 import {createVesselRegistry} from "../public/src/vessel/vessel-registry.js";
 import {STANDARD_BOAT_PRESET} from "../public/src/vessel/vessel-defaults.js";
@@ -22,6 +23,16 @@ function moduleDefinition() {
       },
     },
   };
+}
+
+function git(args) {
+  return execFileSync("git", args, {encoding: "utf8"});
+}
+
+function addedLines(diff) {
+  return diff.split("\n")
+    .filter(line => line.startsWith("+") && !line.startsWith("+++"))
+    .map(line => line.slice(1));
 }
 
 test("preset and explicit definitions normalize through one strict registry", () => {
@@ -106,3 +117,52 @@ test("legacy core cannot grow direct concrete vessel type comparisons", async ()
   assert.match(core, /runVesselSystems\("before-step"/);
   assert.match(core, /runVesselSystems\("after-step"/);
 });
+
+if (process.env.VESSEL_ARCH_STRICT_GIT === "1") {
+  test("new code cannot bypass the vessel extension points", async () => {
+    const baseline = JSON.parse(await readFile(new URL("./vessel-architecture-baseline.json", import.meta.url), "utf8"));
+    assert.match(baseline.baseSha, /^[0-9a-f]{40}$/);
+    git(["cat-file", "-e", `${baseline.baseSha}^{commit}`]);
+
+    const changed = git(["diff", "--name-status", `${baseline.baseSha}..HEAD`, "--", "public/src", "src"])
+      .trim().split("\n").filter(Boolean)
+      .map(line => {
+        const [status, ...parts] = line.split("\t");
+        return {status, path: parts.at(-1)};
+      });
+
+    for (const {status, path} of changed) {
+      if (!path) continue;
+      const diff = git(["diff", "--unified=0", `${baseline.baseSha}..HEAD`, "--", path]);
+      const additions = addedLines(diff);
+      const inVesselArchitecture = path.startsWith("public/src/vessel/");
+      const isAdapter = path.startsWith("public/src/vessel/adapters/") || path.endsWith("vessel-legacy-adapter.js");
+      const isRuntimeFactory = path.endsWith("public/src/vessel/vessel-runtime.js") || path.endsWith("public/src/vessel/vessel-registry.js");
+      const isPluginManifest = path.endsWith("public/src/vessel/vessel-plugin-manifest.js");
+
+      if (status.startsWith("A") && path.startsWith("public/src/") && !inVesselArchitecture) {
+        assert.doesNotMatch(path, /(?:boat|ship|vessel|turret|engine|weapon|bomb)[^/]*\.js$/i,
+          `new vessel-related source ${path} must live under public/src/vessel/`);
+      }
+
+      for (const line of additions) {
+        if (!isAdapter) {
+          assert.doesNotMatch(line, /\b(?:boatType|vesselType)\b\s*(?:===|!==)\s*["']/,
+            `${path}: concrete vessel type branching is forbidden in new code`);
+        }
+        if (!isRuntimeFactory) {
+          assert.doesNotMatch(line, /world\.boats(?:\s*\[[^\]]+\]\s*=|\.push\s*\(|\.splice\s*\()/,
+            `${path}: direct world.boats creation/mutation must go through the vessel runtime/factory`);
+        }
+        if (!isPluginManifest) {
+          assert.doesNotMatch(line, /from\s+["'][^"']*\/vessel\/(?:definitions|modules|systems)\//,
+            `${path}: generic code cannot import concrete vessel definitions/modules/systems`);
+        }
+        if (/public\/src\/free-roam-core.*\.js$/.test(path)) {
+          assert.doesNotMatch(line, /from\s+["'][^"']*(?:dual-turret|\/vessel\/(?:definitions|modules|systems)\/)/,
+            `${path}: core may depend on vessel-runtime, not concrete vessel implementations`);
+        }
+      }
+    }
+  });
+}
