@@ -20,7 +20,7 @@ import {ensureDualTurretPhysicsProfile} from "./free-roam-dual-turret-physics.js
 import {
   applyBoatPhysicsProfiles,
   captureBoatPhysicsState,
-} from "./free-roam-boat-physics.js?v=1";
+} from "./free-roam-boat-physics.js?v=2";
 import {
   activeBoatIds,
   attachBoatTransitionMetadata,
@@ -41,6 +41,28 @@ function ensureController(world, options) {
   delete world.freeDualTurretWeapons;
   delete world.freeDualTurretProjectiles;
   return state;
+}
+
+function normalizeDualTurretOwnership(world, playerIndex, eventStart = 0) {
+  const boat = dualTurretBoat(world);
+  const player = world?.players?.[playerIndex];
+  if (!boat || !player || player.mode !== "boat" || player.activeBoat !== boat.id) return boat;
+
+  // The first armored boarding can still pass through the legacy single-seat
+  // enterBoat path. That path assigns driver/crew immediately but used to leave
+  // owner=null, which made the same patrol boat look stolen to older systems.
+  if (!Number.isInteger(boat.driver)) boat.driver = playerIndex;
+  if (!Number.isInteger(boat.owner)) boat.owner = Number.isInteger(boat.driver) ? boat.driver : playerIndex;
+
+  for (const event of (world?.events || []).slice(eventStart)) {
+    if (event?.type !== "enter" || !event?.targets?.includes(playerIndex)) continue;
+    if (typeof event.text === "string" && event.text.includes("угнал чужую лодку")) {
+      event.text = "Ты занял место рулевого на своём двухместном бронекатере.";
+    }
+    event.boatId = boat.id;
+    event.ownedBoat = true;
+  }
+  return boat;
 }
 
 export function merchantOwnsAction(world, playerIndex, nextInput) {
@@ -69,6 +91,7 @@ export function setPlayerInput(world, playerIndex, nextInput) {
   const eventStart = world.events?.length || 0;
   const previousBoatIds = activeBoatIds(world);
   base.setPlayerInput(world, playerIndex, prepareFreeRoamPlayerInput(world, playerIndex, nextInput));
+  normalizeDualTurretOwnership(world, playerIndex, eventStart);
   attachBoatTransitionMetadata(world, eventStart, previousBoatIds);
   applyDualTurretSpeech(world, eventStart);
 }
