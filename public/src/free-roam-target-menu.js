@@ -2,6 +2,7 @@
 
 import {describeCombatTarget, listCombatTargets} from "./free-roam-targeting.js?v=35";
 import {combatMenuActive} from "./free-roam-combat-context.js?v=1";
+import {listVesselNavigationTargets} from "./vessel/vessel-navigation.js?v=1";
 
 const NAVIGATION_ENTRIES = Object.freeze([
   Object.freeze({id: "navigation-objective", menuKind: "navigation", navigationTargetId: "objective", label: "текущая задача"}),
@@ -43,7 +44,13 @@ export function createTargetMenu({
         .map(target => ({...target, menuKind: "combat"}))
       : [];
     if (fighting) return combatTargets;
-    return [...NAVIGATION_ENTRIES.map(entry => ({...entry})), ...combatTargets];
+    const vesselTargets = listVesselNavigationTargets(world, playerIndex).map(target => ({
+      ...target,
+      id: `navigation-${target.id}`,
+      menuKind: "navigation",
+      navigationTargetId: target.id,
+    }));
+    return [...NAVIGATION_ENTRIES.map(entry => ({...entry})), ...vesselTargets, ...combatTargets];
   }
 
   function refresh() {
