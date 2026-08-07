@@ -125,7 +125,7 @@ test("second crew member uses only the small patrol controller", () => {
   assert.equal(boat.turrets[1].assignedPlayer, 1);
 });
 
-test("armored patrol movement exactly follows ordinary boat physics", () => {
+test("armored patrol uses the common physics engine with a heavier profile", () => {
   const ordinaryWorld = createFreeWorld();
   const ordinary = ordinaryWorld.boats[0];
   clearNearbyCargo(ordinaryWorld);
@@ -151,10 +151,9 @@ test("armored patrol movement exactly follows ordinary boat physics", () => {
     stepFreeWorld(patrolWorld, 0.05);
   }
 
-  assert.ok(Math.abs(ordinary.speed - patrol.speed) < 0.001, `${ordinary.speed} versus ${patrol.speed}`);
-  assert.ok(Math.abs(ordinary.heading - patrol.heading) < 0.001, `${ordinary.heading} versus ${patrol.heading}`);
-  assert.ok(Math.abs(ordinary.x - patrol.x) < 0.001, `${ordinary.x} versus ${patrol.x}`);
-  assert.ok(Math.abs(ordinary.y - patrol.y) < 0.001, `${ordinary.y} versus ${patrol.y}`);
+  assert.ok(patrol.speed < ordinary.speed, `${ordinary.speed} versus ${patrol.speed}`);
+  assert.ok(Math.abs(patrol.heading) < Math.abs(ordinary.heading), `${ordinary.heading} versus ${patrol.heading}`);
+  assert.ok(Math.hypot(patrol.x - 210, patrol.y - 210) < Math.hypot(ordinary.x - 210, ordinary.y - 210));
 });
 
 test("driver really exits into open water and is not pulled back aboard", () => {
@@ -336,7 +335,8 @@ test("source contains one controller, one custom engine and no second physics ru
   assert.doesNotMatch(weapons, /freeDualTurretWeapons/);
   assert.doesNotMatch(projectiles, /freeDualTurretProjectiles\s*\|\|=/);
   assert.match(audio, /dual-turret-engine-v1\.mp3/);
-  assert.match(client, /customBoat\.engineStalled = true/);
+  assert.doesNotMatch(client, /customBoat\.engineStalled\s*=/);
+  assert.match(audio, /updateDualTurretEngine/);
   assert.match(steering, /boat\.driver !== playerIndex/);
   assert.match(replication, /freeDualTurretBoat/);
 });
