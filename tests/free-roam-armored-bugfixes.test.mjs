@@ -94,7 +94,7 @@ test("a player seated inside a boat collapses to the vehicle target", async () =
   const targeting = await readFile(new URL("../public/src/free-roam-targeting.js", import.meta.url), "utf8");
   assert.match(targeting, /const protectedByBoat = player\?\.mode === "boat" && boat/);
   assert.match(targeting, /&& !protectedByBoat/);
-  assert.match(targeting, /bronекатер игрока/);
+  assert.match(targeting, /бронекатер игрока/);
   assert.match(targeting, /seenBoatIds/);
   assert.match(targeting, /броня \$\{Math\.round\(target\.point\?\.armor/);
 });
