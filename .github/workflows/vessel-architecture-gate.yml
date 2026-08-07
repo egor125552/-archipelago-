@@ -1,0 +1,33 @@
+name: Vessel architecture gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  vessel-architecture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check vessel architecture syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check public/src/free-roam-core-v8.js
+          while IFS= read -r file; do node --check "$file"; done < <(find public/src/vessel -type f -name '*.js' | sort)
+          node --check tests/vessel-architecture.test.mjs
+
+      - name: Run strict vessel architecture gate
+        run: node --test tests/vessel-architecture.test.mjs
