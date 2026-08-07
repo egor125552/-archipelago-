@@ -2,6 +2,7 @@
 
 import * as base from "./free-roam-replication.js";
 import {isDualTurretBoat} from "./free-roam-dual-turret-boat.js?v=4";
+import {replicatedVesselArchitecture} from "./vessel/vessel-runtime.js";
 
 export * from "./free-roam-replication.js";
 
@@ -12,11 +13,14 @@ function rounded(value) {
 
 export function replicatedFreeWorld(world) {
   const snapshot = base.replicatedFreeWorld(world);
+  snapshot.vesselArchitecture = replicatedVesselArchitecture(world);
   for (let index = 0; index < (world?.boats || []).length; index += 1) {
     const source = world.boats[index];
     const target = snapshot.boats?.[index];
     if (!source || !target) continue;
     target.boatType = source.boatType || "standard";
+    target.vesselType = source.vesselType || source.boatType || "standard";
+    target.vesselInstanceId = source.vesselInstanceId || null;
     target.label = source.label || "лодка";
     target.crewCapacity = Math.max(1, Math.floor(Number(source.crewCapacity) || 1));
     target.crew = [...(source.crew || [])];
