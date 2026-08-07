@@ -39,7 +39,7 @@ jobs:
           node --check tests/vessel-architecture.test.mjs
 
       - name: Run vessel runtime smoke
-        run: node tests/vessel-release-smoke.mjs
+        run: timeout 20s node tests/vessel-release-smoke.mjs
 
       - name: Run strict vessel architecture gate
         env:
