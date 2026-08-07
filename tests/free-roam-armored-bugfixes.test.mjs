@@ -54,3 +54,14 @@ test("mounted turret always fires on attack and does not require a target", asyn
   assert.ok(Math.hypot(shot.impactX - shot.x, shot.impactY - shot.y) > 600);
   assert.equal(world.events.at(-1)?.reason, "no-target");
 });
+
+test("worker server uses only the unified armored boat room API", async () => {
+  const [server, core] = await Promise.all([
+    readFile(new URL("../src/free-roam-server.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/src/free-roam-core-v8.js", import.meta.url), "utf8"),
+  ]);
+
+  assert.doesNotMatch(server, /prepareDualTurretPrototypeRoom|prepareDualTurretPurchaseRoom/);
+  assert.match(server, /prepareDualTurretBoatRoom/);
+  assert.match(core, /export \{prepareDualTurretBoatRoom\}/);
+});
