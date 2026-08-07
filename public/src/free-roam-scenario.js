@@ -13,6 +13,7 @@ import {merchantNavigationTarget} from "./free-roam-shop.js?v=3";
 import {contractNavigationTarget, encounterActive, ensureContracts} from "./free-roam-contracts.js?v=3";
 import {activeEnemyBoats} from "./free-roam-enemy-boats.js?v=3";
 import {activeHostileActors} from "./free-roam-hostile-actors.js?v=2";
+import {vesselNavigationTargetFromId} from "./vessel/vessel-navigation.js?v=1";
 
 const TARGET_LABELS = Object.freeze({
   plates: "ящик с пластинами",
@@ -94,7 +95,10 @@ function syncNavigationModes(world) {
   const inputs = world.freeActivities?.inputs || [];
   for (let index = 0; index < world.players.length; index += 1) {
     const requested = inputs[index]?.navigationTargetId;
-    if (["objective", "merchant", "board"].includes(requested)) scenario.navigationModes[index] = requested;
+    const vesselTarget = vesselNavigationTargetFromId(world, index, requested);
+    if (["objective", "merchant", "board"].includes(requested) || vesselTarget) {
+      scenario.navigationModes[index] = requested;
+    }
   }
 }
 
@@ -192,6 +196,10 @@ export function scenarioTarget(world, playerIndex) {
   }
   if (!encounterActive(world) && scenario.navigationModes?.[playerIndex] === "merchant") return merchantNavigationTarget();
   if (!encounterActive(world) && scenario.navigationModes?.[playerIndex] === "board") return contractNavigationTarget(world, playerIndex);
+  const vesselTarget = !encounterActive(world)
+    ? vesselNavigationTargetFromId(world, playerIndex, scenario.navigationModes?.[playerIndex])
+    : null;
+  if (vesselTarget) return vesselTarget;
   if (!encounterActive(world) && world.freeContracts?.activeContract) return contractNavigationTarget(world, playerIndex);
   if (scenario.phase === "arm") return armTarget(world, playerIndex);
   if (scenario.phase === "salvage") {
