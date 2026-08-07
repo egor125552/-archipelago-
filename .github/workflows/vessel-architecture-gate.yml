@@ -28,6 +28,9 @@ jobs:
         run: |
           set -euo pipefail
           node --check public/src/free-roam-core-v8.js
+          node --check public/src/free-roam-target-menu.js
+          node --check public/src/free-roam-scenario.js
+          node --check public/src/free-roam-dual-turret-audio.js
           while IFS= read -r file; do node --check "$file"; done < <(find public/src/vessel -type f -name '*.js' | sort)
           node --check tests/vessel-architecture.test.mjs
 
