@@ -1,0 +1,1 @@
+export const FREE_STATE_ACK_TIMEOUT_MS = 1800;
