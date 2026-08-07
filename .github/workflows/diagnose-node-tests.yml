@@ -17,17 +17,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Find first failing Node test file
+      - name: Show armored integration failures
         shell: bash
         run: |
-          set -u
-          for f in tests/*.test.mjs; do
-            echo "RUN $f"
-            if ! node --test "$f" >/tmp/node-test.log 2>&1; then
-              echo "FAILED_FILE=$f"
-              echo "--- failure tail ---"
-              tail -n 120 /tmp/node-test.log
-              exit 1
-            fi
-          done
-          echo "ALL_TEST_FILES_PASS"
+          set +e
+          node --test tests/free-roam-armored-client-integration.test.mjs >/tmp/node-test.log 2>&1
+          rc=$?
+          cat /tmp/node-test.log
+          exit $rc
