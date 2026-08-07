@@ -65,3 +65,20 @@ test("worker server uses only the unified armored boat room API", async () => {
   assert.match(server, /prepareDualTurretBoatRoom/);
   assert.match(core, /export \{prepareDualTurretBoatRoom\}/);
 });
+
+test("armored boat is normalized as owned after legacy first boarding", async () => {
+  const core = await readFile(new URL("../public/src/free-roam-core-v8.js", import.meta.url), "utf8");
+  assert.match(core, /normalizeDualTurretOwnership/);
+  assert.match(core, /if \(!Number\.isInteger\(boat\.owner\)\) boat\.owner = Number\.isInteger\(boat\.driver\) \? boat\.driver : playerIndex/);
+  assert.match(core, /угнал чужую лодку/);
+  assert.match(core, /на своём двухместном бронекатере/);
+  assert.match(core, /event\.ownedBoat = true/);
+});
+
+test("heavy boat physics never scales down a sonar heading snap", async () => {
+  const physics = await readFile(new URL("../public/src/free-roam-boat-physics.js", import.meta.url), "utf8");
+  const core = await readFile(new URL("../public/src/free-roam-core-v8.js", import.meta.url), "utf8");
+  assert.match(physics, /"sonar-guide-snap"/);
+  assert.match(physics, /if \(disruptiveForBoat\(world, boat, eventStart\)\)/);
+  assert.match(core, /free-roam-boat-physics\.js\?v=2/);
+});
