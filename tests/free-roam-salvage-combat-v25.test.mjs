@@ -243,7 +243,7 @@ test("the release UI exposes accessible combat controls and local MP3 assets", a
   assert.match(html, /aria-keyshortcuts="Z"/);
   assert.match(html, /id="sonarButton"/);
   assert.match(html, /aria-keyshortcuts="Q"/);
-  assert.match(client, /free-roam-core-v6\.js/);
+  assert.match(client, /free-roam-core-v8\.js/);
   assert.match(client, /bindHold\(\$\("attackButton"\), "attack", 90\)/);
   assert.match(audio, /heartbeat-fast\.mp3/);
   assert.match(audio, /death-full\.mp3/);
