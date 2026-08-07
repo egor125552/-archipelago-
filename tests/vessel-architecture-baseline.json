@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
-  "baseSha": "d964e2eb4567e83dd0c67cd0c801e96304ed5229",
-  "note": "Architecture prototype baseline. Legacy code before this commit is grandfathered; new vessel integrations must use the vessel extension points."
+  "schemaVersion": 2,
+  "baseSha": "62eb2700279c1911dee956e27bee6f904b362991",
+  "note": "Completed-interview release baseline. Existing legacy debt at this exact pre-release main commit is grandfathered; every vessel-related change after it must use the vessel architecture extension points."
 }

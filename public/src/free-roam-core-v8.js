@@ -26,7 +26,7 @@ import {
   attachBoatTransitionMetadata,
 } from "./free-roam-boat-events.js?v=1";
 import {isPlayerNearMerchant} from "./free-roam-shop.js?v=5";
-import {attachVesselArchitecture, runVesselSystems} from "./vessel/vessel-runtime.js?v=1";
+import {attachVesselArchitecture, runVesselPhysics, runVesselSystems} from "./vessel/vessel-runtime.js?v=2";
 
 export * from "./free-roam-core-v7.js?v=1";
 export {prepareDualTurretBoatRoom};
@@ -146,6 +146,7 @@ export function createFreeWorld() {
 
 export function setPlayerInput(world, playerIndex, nextInput) {
   ensureController(world, {activate: false});
+  attachVesselArchitecture(world);
   const eventStart = world.events?.length || 0;
   const previousBoatIds = activeBoatIds(world);
   runVesselSystems("before-input", {world, playerIndex, input: nextInput, eventStart});
@@ -159,6 +160,7 @@ export function setPlayerInput(world, playerIndex, nextInput) {
 export function stepFreeWorld(world, dt) {
   const safeDt = Math.max(0, Math.min(0.1, Number(dt) || 0));
   ensureController(world, {activate: false});
+  attachVesselArchitecture(world);
   const eventStart = world.events?.length || 0;
   const previousBoatIds = activeBoatIds(world);
   const previousPhysics = captureBoatPhysicsState(world);
@@ -169,6 +171,7 @@ export function stepFreeWorld(world, dt) {
   const result = base.stepFreeWorld(world, safeDt);
   rebalanceDualTurretGunHits(world, eventStart, previousDurability);
   applyBoatPhysicsProfiles(world, previousPhysics, safeDt, {tuning: CONFIG, eventStart});
+  runVesselPhysics({world, dt: safeDt, eventStart, previousStates: previousPhysics, tuning: CONFIG});
   finishDualTurretBoatStep(world, boatContext, safeDt);
   finishDualTurretWeaponStep(world, weaponContext, safeDt);
   attachBoatTransitionMetadata(world, eventStart, previousBoatIds);

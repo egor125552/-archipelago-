@@ -1,5 +1,7 @@
 "use strict";
 
+import {migratePersistedVesselWorld} from "../public/src/vessel/vessel-save.js";
+
 function numericObjectValues(value) {
   if (!value || typeof value !== "object") return null;
   if (value instanceof Map) return [...value.values()];
@@ -54,5 +56,8 @@ export function normalizePersistedFreeWorld(input) {
   for (const [owner, key] of paths) {
     if (owner && typeof owner === "object") owner[key] = storedList(owner[key]);
   }
-  return world;
+  // Vessel migration is transactional: migratePersistedVesselWorld clones this
+  // normalized candidate and returns only after the complete migration validates.
+  // The Durable Object keeps its previously stored value untouched on failure.
+  return migratePersistedVesselWorld(world);
 }

@@ -30,11 +30,18 @@ jobs:
           node --check public/src/free-roam-core-v8.js
           node --check public/src/free-roam-target-menu.js
           node --check public/src/free-roam-scenario.js
+          node --check public/src/free-roam-replication-v2.js
           node --check public/src/free-roam-dual-turret-audio.js
+          node --check src/world-storage-normalization.js
+          node --check src/worker-persistent.js
           while IFS= read -r file; do node --check "$file"; done < <(find public/src/vessel -type f -name '*.js' | sort)
+          node --check tests/vessel-release-smoke.mjs
           node --check tests/vessel-architecture.test.mjs
+
+      - name: Run vessel runtime smoke
+        run: timeout 20s node tests/vessel-release-smoke.mjs
 
       - name: Run strict vessel architecture gate
         env:
           VESSEL_ARCH_STRICT_GIT: "1"
-        run: node --test tests/vessel-architecture.test.mjs
+        run: timeout 90s node --test tests/vessel-architecture.test.mjs
