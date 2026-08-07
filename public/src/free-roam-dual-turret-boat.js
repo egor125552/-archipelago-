@@ -220,6 +220,7 @@ function syncCrew(world, state, boat) {
     const playerIndex = boat.crew[seat];
     if (Number.isInteger(playerIndex) && !validCrewMember(world, playerIndex, boat)) boat.crew[seat] = null;
   }
+  if (Number.isInteger(boat.driver) && !validCrewMember(world, boat.driver, boat)) boat.driver = null;
   if (Number.isInteger(boat.driver) && !boat.crew.includes(boat.driver)) {
     const free = boat.crew.findIndex(value => !Number.isInteger(value));
     boat.crew[free >= 0 ? free : 0] = boat.driver;
