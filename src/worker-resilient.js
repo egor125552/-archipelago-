@@ -1,7 +1,7 @@
 import persistentWorker, {Lobby as PersistentLobby} from "./worker-persistent.js";
 
-export const FREE_STATE_ACK_TIMEOUT_MS = 1800;
-export const ARCHIPELAGO_BUILD_ID = "2026-08-07-local-spatial-armor-targets-7";
+const FREE_STATE_ACK_TIMEOUT_MS = 1800;
+const ARCHIPELAGO_BUILD_ID = "2026-08-07-local-spatial-armor-targets-7";
 
 const FREE_ROAM_HTML_REPLACEMENTS = Object.freeze([
   ["free-roam-v4.js?v=62", "free-roam-v4.js?v=66"],
