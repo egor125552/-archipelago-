@@ -1,10 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import {
-  FREE_STATE_ACK_TIMEOUT_MS,
-  Lobby,
-} from "../src/worker-resilient.js";
+import {FREE_STATE_ACK_TIMEOUT_MS} from "../src/worker-resilient-config.js";
+import {Lobby} from "../src/worker-resilient.js";
 
 function testLobby(client) {
   const lobby = Object.create(Lobby.prototype);

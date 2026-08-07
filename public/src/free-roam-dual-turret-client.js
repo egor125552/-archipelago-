@@ -3,9 +3,8 @@
 import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=45";
 import {updateDualTurretUi} from "./free-roam-dual-turret-ui.js?v=2";
 
-// Legacy runtime mutation removed: customBoat.engineStalled = true
-// The armored patrol has no second audio or physics runtime. This hook only
-// paints its extra hull, armor and mounted-weapon fields after the common
+// The legacy armored runtime mutation is gone. This hook only paints the
+// patrol's extra hull, armor and mounted-weapon fields after the common
 // FreeRoamAudio update has consumed the same world snapshot as every boat.
 const prototype = FreeRoamAudio?.prototype;
 if (prototype && !prototype.__dualTurretUiPatchedV6) {

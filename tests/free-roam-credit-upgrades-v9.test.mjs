@@ -94,8 +94,8 @@ test("scrap remains the preferred payment when enough scrap is available", () =>
   assert.equal(contracts.scrap, 0);
   assert.equal(world.freeActivities.credits, 999);
   const event = drainEvents(world).find(candidate => candidate.type === "shop-upgrade-purchased");
-  assert.equal(event?.scrapPrice, item.scrapPrice);
-  assert.equal(event?.currency, undefined);
+  assert.equal(event?.price, item.scrapPrice);
+  assert.equal(event?.currency, "scrap");
 });
 
 test("credit prices rise with each permanent upgrade level", () => {
@@ -119,7 +119,7 @@ test("credit prices rise with each permanent upgrade level", () => {
   assert.equal(world.freeActivities.credits, 0);
 });
 
-test("shop descriptions announce both upgrade currencies and full canister refills", () => {
+test("shop descriptions announce both upgrade currencies and canister inventory limits", () => {
   const world = createFreeWorld();
   openShop(world);
   ensureContracts(world).scrap = 3;
@@ -135,5 +135,6 @@ test("shop descriptions announce both upgrade currencies and full canister refil
   event = drainEvents(world).find(candidate => (
     candidate.type === "shop-selection" && candidate.itemId === "fuel-canister"
   ));
-  assert.match(event?.text || "", /заполняет бак до 100 процентов/);
+  assert.match(event?.text || "", /аварийная канистра/i);
+  assert.match(event?.text || "", /Максимум 5/);
 });

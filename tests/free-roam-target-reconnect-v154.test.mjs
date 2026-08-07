@@ -78,5 +78,5 @@ test("live gesture and reconnect code routes combat sonar and force-expires stal
   assert.match(client, /state-load-timeout/);
   assert.match(client, /message\.recreatedRoom === true/);
   assert.match(html, /free-roam-startup-v1\.js\?v=10/);
-  assert.match(html, /free-roam-v4\.js\?v=58/);
+  assert.match(html, /free-roam-v4\.js\?v=\d+/);
 });

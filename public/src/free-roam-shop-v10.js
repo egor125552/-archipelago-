@@ -32,7 +32,7 @@ function candidateBoatIds(world, playerIndex) {
 
 export function merchantBoatForPlayer(world, playerIndex, {docked = false, sunk = null} = {}) {
   for (const boatId of candidateBoatIds(world, playerIndex)) {
-    const boat = world.boats?.[boatId];
+    const boat = (world.boats || []).find(candidate => candidate?.id === boatId);
     if (!boat || boat.shopEligible === false) continue;
     if (sunk === true && !boat.sunk) continue;
     if (sunk === false && boat.sunk) continue;
@@ -87,7 +87,11 @@ function boatItemDescription(world, playerIndex, item) {
   const label = boat?.label || "лодка";
 
   if (item.wreckService) {
-    return `${item.label}. Цена ${item.price} кредитов. ${boat ? `${label} затонул и доступен для подъёма.` : "Связанная с тобой лодка не затонула."} Баланс команды ${state?.credits || 0}.`;
+    const freeAvailable = !state?.freeWreckRecoveryUsed?.[playerIndex];
+    const condition = boat
+      ? `${label} затонул и доступен для подъёма из любой точки бухты.${freeAvailable ? " Если кредитов не хватает, один аварийный подъём будет бесплатным." : ""}`
+      : "Связанная с тобой лодка не затонула.";
+    return `${item.label}. Цена ${item.price} кредитов. ${condition} Баланс команды ${state?.credits || 0}.`;
   }
   if (item.service) {
     const condition = boat
@@ -101,6 +105,9 @@ function boatItemDescription(world, playerIndex, item) {
     const nextLevel = current + 1;
     const creditPrice = base.upgradeCreditPrice(item, nextLevel);
     return `${item.label}. Для ${label}. Следующий уровень ${nextLevel} из ${item.maximum}. Цена ${item.scrapPrice} металлолома или ${creditPrice} кредитов. Металлолом команды ${contracts.scrap}. Баланс команды ${state?.credits || 0}.`;
+  }
+  if (item.id === "fuel-canister") {
+    return `${item.label}. Для ${label}. Каждая канистра после завершения заправки заполняет бак до 100 процентов. За покупку: ${item.amount}. Цена ${item.price} кредитов. Сейчас ${itemCount(boat, item)}. Максимум ${item.maximum}. Баланс команды ${state?.credits || 0}.`;
   }
   return `${item.label}. Для ${label}. За покупку: ${item.amount}. Цена ${item.price} кредитов. Сейчас ${itemCount(boat, item)}. Максимум ${item.maximum}. Баланс команды ${state?.credits || 0}.`;
 }
@@ -125,11 +132,13 @@ function recoverWreck(world, playerIndex, boat, item, state) {
     emit(world, "shop-denied", "Связанная с тобой лодка не затонула. Подъём не требуется.", [playerIndex]);
     return;
   }
-  if (state.credits < item.price) {
-    emit(world, "shop-denied", `Недостаточно кредитов. Нужно ${item.price}, баланс команды ${state.credits}.`, [playerIndex]);
+  const freeRecovery = state.credits < item.price && !state.freeWreckRecoveryUsed?.[playerIndex];
+  if (state.credits < item.price && !freeRecovery) {
+    emit(world, "shop-denied", `Недостаточно кредитов. Нужно ${item.price}, а бесплатный аварийный подъём уже использован.`, [playerIndex]);
     return;
   }
-  state.credits -= item.price;
+  if (freeRecovery) state.freeWreckRecoveryUsed[playerIndex] = true;
+  else state.credits -= item.price;
   const hullMax = maximumHull(boat);
   boat.sunk = false;
   boat.x = Number.isFinite(Number(boat.homeX)) ? Number(boat.homeX) : (playerIndex === 0 ? 174 : 246);
@@ -150,11 +159,12 @@ function recoverWreck(world, playerIndex, boat, item, state) {
   boat.emergencyRemaining = 0;
   boat.restartProgress = 0;
   boat.fuel = Math.max(10, Number(boat.fuel) || 0);
-  emit(world, "wreck-recovery-complete", `Подъём завершён. ${boat.label || "Лодка"} находится у причала: корпус ${Math.round(boat.hull)} из ${Math.round(hullMax)}, вода 35, двигатель заглушён. Баланс команды ${state.credits}.`, [0, 1], {
+  emit(world, "wreck-recovery-complete", `${freeRecovery ? "Бесплатный аварийный" : "Аварийный"} подъём завершён. ${boat.label || "Лодка"} находится у причала: корпус ${Math.round(boat.hull)} из ${Math.round(hullMax)}, вода 35, двигатель заглушён. Груз и постоянные улучшения сохранены. Баланс команды ${state.credits}.`, [0, 1], {
     sourcePlayer: playerIndex,
     itemId: item.id,
     boatId: boat.id,
-    price: item.price,
+    freeRecovery,
+    price: freeRecovery ? 0 : item.price,
     credits: state.credits,
     x: boat.x,
     y: boat.y,

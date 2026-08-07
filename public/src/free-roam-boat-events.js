@@ -10,6 +10,12 @@ function playerIndexForEvent(event) {
   return Number.isInteger(target) ? target : null;
 }
 
+function boatForTransitionId(world, boatId) {
+  if (!Number.isInteger(boatId)) return null;
+  const boats = world?.boats || [];
+  return boats.find(candidate => candidate?.id === boatId) || boats[boatId] || null;
+}
+
 export function attachBoatTransitionMetadata(world, eventStart = 0, previousBoatIds = []) {
   for (const event of (world?.events || []).slice(eventStart)) {
     if (!event || !["enter", "exit"].includes(event.type)) continue;
@@ -20,7 +26,7 @@ export function attachBoatTransitionMetadata(world, eventStart = 0, previousBoat
       ? previousBoatIds?.[playerIndex]
       : player?.activeBoat;
     const boatId = Number.isInteger(event.boatId) ? event.boatId : inferredBoatId;
-    const boat = Number.isInteger(boatId) ? world.boats?.[boatId] : null;
+    const boat = boatForTransitionId(world, boatId);
     if (!boat) continue;
 
     event.boatId = boat.id;

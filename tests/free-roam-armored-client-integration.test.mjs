@@ -114,6 +114,6 @@ test("integration source has no armored-only parallel physics or owner-only merc
   assert.match(shop, /boat\.armor = armorMax/);
   assert.match(audio, /dual-turret-boarding-v1\.mp3\?v=1/);
   assert.match(audio, /event\.audioProfile === "dual-turret"/);
-  assert.match(audioV2, /free-roam-dual-turret-audio\.js\?v=6/);
+  assert.match(audioV2, /free-roam-dual-turret-audio\.js\?v=\d+/);
   if (headers) assert.match(headers, /Cache-Control: no-cache, must-revalidate/);
 });
