@@ -6,6 +6,7 @@ import {createVesselRegistry} from "../public/src/vessel/vessel-registry.js";
 import {STANDARD_BOAT_PRESET} from "../public/src/vessel/vessel-defaults.js";
 import {createVesselSemanticEvent, renderModuleSemanticEvent} from "../public/src/vessel/vessel-presentation.js";
 import {syncLegacyVesselWorld} from "../public/src/vessel/vessel-legacy-adapter.js";
+import {spawnVessel, vesselRegistry, nativeVesselForBoat} from "../public/src/vessel/vessel-runtime.js";
 import {VesselContractError} from "../public/src/vessel/vessel-contract.js";
 
 function moduleDefinition() {
@@ -84,6 +85,29 @@ test("legacy boats can be viewed through vessel architecture without rewriting r
   assert.equal(world.boats[2], boat);
 });
 
+test("native vessels materialize through the single runtime spawn path", () => {
+  const registry = vesselRegistry();
+  if (!registry.resolveVesselType("architecture-test-boat")) {
+    registry.registerVesselType({
+      id: "architecture-test-boat",
+      preset: "standard-boat",
+      label: "Архитектурный тестовый катер",
+      capabilities: {towable: false},
+    });
+  }
+  const world = {boats: []};
+  const {instance, boat} = spawnVessel(world, "architecture-test-boat", {owner: 0, x: 12, y: 34, heading: 90});
+  assert.equal(world.boats[0], boat);
+  assert.equal(boat.id, 0);
+  assert.equal(boat.boatType, "architecture-test-boat");
+  assert.equal(boat.vesselType, "architecture-test-boat");
+  assert.equal(boat.owner, 0);
+  assert.equal(boat.driver, 0);
+  assert.equal(boat.hull, 100);
+  assert.equal(instance.legacyBoatId, 0);
+  assert.equal(nativeVesselForBoat(world, 0)?.instance, instance);
+});
+
 test("new fundamental vessel systems are registered plugins, not hard-coded branches", () => {
   const registry = createVesselRegistry();
   const calls = [];
@@ -98,6 +122,7 @@ test("generic vessel architecture contains no concrete patrol type checks", asyn
     "vessel-registry.js",
     "vessel-defaults.js",
     "vessel-presentation.js",
+    "vessel-content-manifest.js",
     "vessel-plugin-manifest.js",
     "vessel-runtime.js",
   ];
@@ -138,7 +163,8 @@ if (process.env.VESSEL_ARCH_STRICT_GIT === "1") {
       const inVesselArchitecture = path.startsWith("public/src/vessel/");
       const isAdapter = path.startsWith("public/src/vessel/adapters/") || path.endsWith("vessel-legacy-adapter.js");
       const isRuntimeFactory = path.endsWith("public/src/vessel/vessel-runtime.js") || path.endsWith("public/src/vessel/vessel-registry.js");
-      const isPluginManifest = path.endsWith("public/src/vessel/vessel-plugin-manifest.js");
+      const isExtensionManifest = path.endsWith("public/src/vessel/vessel-plugin-manifest.js")
+        || path.endsWith("public/src/vessel/vessel-content-manifest.js");
 
       if (status.startsWith("A") && path.startsWith("public/src/") && !inVesselArchitecture) {
         assert.doesNotMatch(path, /(?:boat|ship|vessel|turret|engine|weapon|bomb)[^/]*\.js$/i,
@@ -154,7 +180,7 @@ if (process.env.VESSEL_ARCH_STRICT_GIT === "1") {
           assert.doesNotMatch(line, /world\.boats(?:\s*\[[^\]]+\]\s*=|\.push\s*\(|\.splice\s*\()/,
             `${path}: direct world.boats creation/mutation must go through the vessel runtime/factory`);
         }
-        if (!isPluginManifest) {
+        if (!isExtensionManifest) {
           assert.doesNotMatch(line, /from\s+["'][^"']*\/vessel\/(?:definitions|modules|systems)\//,
             `${path}: generic code cannot import concrete vessel definitions/modules/systems`);
         }
