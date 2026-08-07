@@ -19,12 +19,14 @@ function safeTypeId(boat) {
 }
 
 function ensureArchitecture(world) {
-  const current = world.vesselArchitecture && typeof world.vesselArchitecture === "object"
-    ? world.vesselArchitecture
-    : {};
-  const nextSequence = Math.max(1, Math.floor(Number(current.nextInstanceSequence) || 1));
-  world.vesselArchitecture = {...current, saveVersion: Math.max(0, Math.floor(Number(current.saveVersion) || 0)), nextInstanceSequence: nextSequence};
-  return world.vesselArchitecture;
+  let current = world.vesselArchitecture;
+  if (!current || typeof current !== "object" || Array.isArray(current)) {
+    current = {};
+    world.vesselArchitecture = current;
+  }
+  current.saveVersion = Math.max(0, Math.floor(Number(current.saveVersion) || 0));
+  current.nextInstanceSequence = Math.max(1, Math.floor(Number(current.nextInstanceSequence) || 1));
+  return current;
 }
 
 function allocateMigrationInstanceId(world, typeId) {
@@ -81,14 +83,19 @@ export function migratePersistedVesselWorld(input) {
   // Callers only replace their saved/runtime value after this function returns successfully.
   const working = cloneData(input);
   try {
-    const architecture = ensureArchitecture(working);
+    let architecture = ensureArchitecture(working);
     if (architecture.saveVersion > VESSEL_SAVE_VERSION) {
       throw new VesselMigrationError(`saved vessel version ${architecture.saveVersion} is newer than this build`);
     }
     while (architecture.saveVersion < VESSEL_SAVE_VERSION) {
-      const migration = MIGRATIONS.get(architecture.saveVersion);
-      if (!migration) throw new VesselMigrationError(`missing vessel migration from version ${architecture.saveVersion}`);
+      const fromVersion = architecture.saveVersion;
+      const migration = MIGRATIONS.get(fromVersion);
+      if (!migration) throw new VesselMigrationError(`missing vessel migration from version ${fromVersion}`);
       migration(working);
+      architecture = ensureArchitecture(working);
+      if (architecture.saveVersion <= fromVersion) {
+        throw new VesselMigrationError(`vessel migration from version ${fromVersion} did not advance the save version`);
+      }
     }
     return validatePersistedVesselWorld(working);
   } catch (error) {
