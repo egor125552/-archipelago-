@@ -9,7 +9,6 @@ import {eliteBossCombatTargets} from "./free-roam-elite-boat.js?v=2";
 
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));
 
-
 function playerModeLabel(player) {
   if (player?.mode === "boat") return "в лодке";
   if (player?.mode === "roof") return "на крыше лодки";
@@ -17,16 +16,42 @@ function playerModeLabel(player) {
   return "на берегу";
 }
 
+function playerBoat(world, player, playerIndex) {
+  if (Number.isInteger(player?.activeBoat) && ["boat", "roof"].includes(player.mode)) {
+    const active = world.boats?.find(candidate => candidate?.id === player.activeBoat)
+      || world.boats?.[player.activeBoat];
+    if (active && !active.sunk) return active;
+  }
+  return world.boats?.find(candidate => (
+    candidate
+    && !candidate.sunk
+    && (candidate.owner === playerIndex || candidate.driver === playerIndex)
+  )) || null;
+}
+
+function boatLabel(boat, playerIndex) {
+  if (boat?.boatType === "dual-turret-patrol") return `бронекатер игрока ${playerIndex + 1}`;
+  return `лодка игрока ${playerIndex + 1}`;
+}
+
 export function listCombatTargets(world, attackerIndex, maximumRange = Infinity) {
   const attacker = world.players?.[attackerIndex];
   if (!attacker) return [];
   const presence = world.freeActivities?.presence || [];
   const targets = [];
+  const seenBoatIds = new Set();
+  const attackerBoatId = ["boat", "roof"].includes(attacker.mode) ? attacker.activeBoat : null;
 
   for (let index = 0; index < (world.players || []).length; index += 1) {
     if (index === attackerIndex || !presence[index]) continue;
     const player = world.players[index];
-    if (player?.combat?.alive && ["foot", "swim", "roof", "boat"].includes(player.mode)) {
+    const boat = playerBoat(world, player, index);
+    const protectedByBoat = player?.mode === "boat" && boat;
+
+    // A seated player is physically inside the boat. Do not expose a duplicate
+    // player target that allows guns or bombs to bypass the hull/armor. The
+    // vehicle itself is the combat target until the player leaves it.
+    if (player?.combat?.alive && ["foot", "swim", "roof", "boat"].includes(player.mode) && !protectedByBoat) {
       targets.push({
         id: `player-${index}`,
         kind: "player",
@@ -36,18 +61,17 @@ export function listCombatTargets(world, attackerIndex, maximumRange = Infinity)
         label: `игрок ${index + 1}, ${playerModeLabel(player)}`,
       });
     }
-    const boat = world.boats?.find(candidate => (
-      !candidate.sunk
-      && (candidate.owner === index || candidate.driver === index)
-    ));
-    if (boat) {
+
+    if (boat && boat.id !== attackerBoatId && !seenBoatIds.has(boat.id)) {
+      seenBoatIds.add(boat.id);
       targets.push({
         id: `boat-${boat.id}`,
         kind: "boat",
         boatId: boat.id,
         playerIndex: index,
         point: boat,
-        label: `лодка игрока ${index + 1}`,
+        label: boatLabel(boat, index),
+        armored: (Number(boat.armorMax) || 0) > 0,
       });
     }
   }
@@ -123,8 +147,11 @@ export function describeCombatTarget(target, position = 0, total = 1) {
   const turretList = Array.isArray(target.point?.turrets)
     ? target.point.turrets
     : Object.values(target.point?.turrets || {});
+  const armor = target.kind === "boat" && (Number(target.point?.armorMax) || 0) > 0
+    ? `, броня ${Math.round(target.point?.armor || 0)} из ${Math.round(target.point?.armorMax || 0)}`
+    : "";
   const hull = ["boat", "marauder", "escort"].includes(target.kind)
-    ? `, корпус ${Math.round(target.point?.hull || 0)}`
+    ? `, корпус ${Math.round(target.point?.hull || 0)}${target.kind === "boat" && Number(target.point?.hullMax) > 100 ? ` из ${Math.round(target.point.hullMax)}` : ""}`
     : ["enemyBoat"].includes(target.kind)
       ? `, корпус ${Math.round(target.point?.hull || 0)}`
       : target.kind === "heavyHull" ? `, корпус ${Math.round(target.point?.hull || 0)}`
@@ -136,5 +163,5 @@ export function describeCombatTarget(target, position = 0, total = 1) {
                 : ["gunner", "hostileActor", "elite"].includes(target.kind)
               ? `, здоровье ${Math.round(target.point?.health || 0)}`
               : "";
-  return `Цель ${number} из ${Math.max(1, total)}: ${target.label}, ${metres} метров${hull}.`;
+  return `Цель ${number} из ${Math.max(1, total)}: ${target.label}, ${metres} метров${armor}${hull}.`;
 }
