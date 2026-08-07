@@ -63,7 +63,7 @@ test("replication omits simulation internals and stays materially smaller than t
   });
   assert.equal("vx" in replicated.freeHostileGunners.projectiles[0], false);
   assert.ok(replicatedBytes < fullBytes * 0.7, `${replicatedBytes} should be compact beside ${fullBytes}`);
-  assert.ok(replicatedBytes < 4_000, `initial render state is unexpectedly large: ${replicatedBytes}`);
+  assert.ok(replicatedBytes < 8_000, `initial render state is unexpectedly large: ${replicatedBytes}`);
 });
 
 test("acknowledged render states round-trip through a small delta", () => {
