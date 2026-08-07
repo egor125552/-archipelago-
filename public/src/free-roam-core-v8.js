@@ -26,6 +26,7 @@ import {
   attachBoatTransitionMetadata,
 } from "./free-roam-boat-events.js?v=1";
 import {isPlayerNearMerchant} from "./free-roam-shop.js?v=5";
+import {attachVesselArchitecture, runVesselSystems} from "./vessel/vessel-runtime.js?v=1";
 
 export * from "./free-roam-core-v7.js?v=1";
 export {prepareDualTurretBoatRoom};
@@ -139,6 +140,7 @@ export function createFreeWorld() {
   ensureController(world, {activate: true});
   prepareDualTurretBoatRoom(world);
   ensureDualTurretPhysicsProfile(world);
+  attachVesselArchitecture(world);
   return world;
 }
 
@@ -146,10 +148,12 @@ export function setPlayerInput(world, playerIndex, nextInput) {
   ensureController(world, {activate: false});
   const eventStart = world.events?.length || 0;
   const previousBoatIds = activeBoatIds(world);
+  runVesselSystems("before-input", {world, playerIndex, input: nextInput, eventStart});
   base.setPlayerInput(world, playerIndex, prepareFreeRoamPlayerInput(world, playerIndex, nextInput));
   normalizeDualTurretOwnership(world, playerIndex, eventStart);
   attachBoatTransitionMetadata(world, eventStart, previousBoatIds);
   applyDualTurretSpeech(world, eventStart);
+  runVesselSystems("after-input", {world, playerIndex, input: nextInput, eventStart});
 }
 
 export function stepFreeWorld(world, dt) {
@@ -161,6 +165,7 @@ export function stepFreeWorld(world, dt) {
   const previousDurability = captureDualTurretDurability(world);
   const boatContext = prepareDualTurretBoatStep(world);
   const weaponContext = prepareDualTurretWeaponStep(world);
+  runVesselSystems("before-step", {world, dt: safeDt, eventStart});
   const result = base.stepFreeWorld(world, safeDt);
   rebalanceDualTurretGunHits(world, eventStart, previousDurability);
   applyBoatPhysicsProfiles(world, previousPhysics, safeDt, {tuning: CONFIG, eventStart});
@@ -168,6 +173,7 @@ export function stepFreeWorld(world, dt) {
   finishDualTurretWeaponStep(world, weaponContext, safeDt);
   attachBoatTransitionMetadata(world, eventStart, previousBoatIds);
   applyDualTurretSpeech(world, eventStart);
+  runVesselSystems("after-step", {world, dt: safeDt, eventStart});
   return result;
 }
 
