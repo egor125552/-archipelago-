@@ -65,8 +65,7 @@ function startEngine(audio) {
 export function updateDualTurretEngine(audio, world, playerIndex) {
   if (!audio?.ctx) return;
   const boat = (world?.boats || []).find(candidate => candidate?.boatType === DUAL_TURRET_BOAT_TYPE);
-  const occupied = (boat?.crew || []).some(Number.isInteger);
-  if (!boat || boat.sunk || boat.reserved || boat.engineStalled || (!occupied && Math.abs(Number(boat.speed) || 0) < 0.15)) {
+  if (!boat || boat.sunk || boat.reserved || boat.engineStalled) {
     if (audio.dualTurretEngine) audio.dualTurretEngine.gain.gain.setTargetAtTime(0, audio.ctx.currentTime, 0.12);
     return;
   }
