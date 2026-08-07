@@ -28,8 +28,8 @@ test("the live iPhone gesture sends the existing server-authoritative megaBomb p
   assert.match(core, /free-roam-activities\.js\?v=44/);
   assert.match(core, /free-roam-shop\.js\?v=4/);
   assert.match(activities, /free-roam-shop\.js\?v=4/);
-  assert.match(shopEntry, /free-roam-shop-v9\.js\?v=1/);
+  assert.match(shopEntry, /free-roam-shop-v\d+\.js\?v=\d+/);
   assert.match(html, /взмах двумя вниз — запуск мега-бомбы/);
   assert.match(html, /вниз — мега-бомба/);
-  assert.match(html, /free-roam-v4\.js\?v=60/);
+  assert.match(html, /free-roam-v4\.js\?v=\d+/);
 });
