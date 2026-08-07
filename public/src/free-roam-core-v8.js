@@ -31,6 +31,8 @@ export * from "./free-roam-core-v7.js?v=1";
 export {prepareDualTurretBoatRoom};
 export const WORLD = base.WORLD;
 
+const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, Number(value) || 0));
+
 function ensureController(world, options) {
   const state = ensureDualTurretBoatState(world, options);
   if (!world) return state;
@@ -48,9 +50,6 @@ function normalizeDualTurretOwnership(world, playerIndex, eventStart = 0) {
   const player = world?.players?.[playerIndex];
   if (!boat || !player || player.mode !== "boat" || player.activeBoat !== boat.id) return boat;
 
-  // The first armored boarding can still pass through the legacy single-seat
-  // enterBoat path. That path assigns driver/crew immediately but used to leave
-  // owner=null, which made the same patrol boat look stolen to older systems.
   if (!Number.isInteger(boat.driver)) boat.driver = playerIndex;
   if (!Number.isInteger(boat.owner)) boat.owner = Number.isInteger(boat.driver) ? boat.driver : playerIndex;
 
@@ -63,6 +62,63 @@ function normalizeDualTurretOwnership(world, playerIndex, eventStart = 0) {
     event.ownedBoat = true;
   }
   return boat;
+}
+
+function captureDualTurretDurability(world) {
+  const boat = dualTurretBoat(world);
+  if (!boat) return null;
+  return {
+    boatId: boat.id,
+    hull: Math.max(0, Number(boat.hull) || 0),
+    hullMax: Math.max(1, Number(boat.hullMax) || 300),
+    armor: Math.max(0, Number(boat.armor) || 0),
+    armorMax: Math.max(0, Number(boat.armorMax) || 0),
+    leak: Math.max(0, Number(boat.leak) || 0),
+  };
+}
+
+function rebalanceDualTurretGunHits(world, eventStart, durability) {
+  const boat = dualTurretBoat(world);
+  if (!boat || !durability || boat.id !== durability.boatId) return;
+  const events = (world?.events || []).slice(eventStart);
+  const hits = events.filter(event => event?.type === "gun-boat-hit" && event.targetBoat === boat.id);
+  if (!hits.length) return;
+
+  const state = {...durability};
+  for (const event of hits) {
+    const pistol = event.weapon === "pistol";
+    const nominalHullDamage = pistol ? 2 : 5;
+    const nominalArmorDamage = nominalHullDamage * 1.45;
+    const armorDamage = state.armor > 0 ? Math.min(state.armor, nominalArmorDamage) : 0;
+    const armorCoverage = nominalArmorDamage > 0 ? clamp(armorDamage / nominalArmorDamage, 0, 1) : 0;
+    const hullDamage = nominalHullDamage * (1 - armorCoverage * 0.78);
+    const leakIncrease = (pistol ? 0.06 : 0.18) * (1 - armorCoverage * 0.72);
+
+    state.armor = Math.max(0, state.armor - armorDamage);
+    state.hull = clamp(state.hull - hullDamage, 0.05, state.hullMax);
+    state.leak = clamp(state.leak + leakIncrease, 0, 16);
+
+    event.damage = Math.round(hullDamage * 100) / 100;
+    event.armorDamage = Math.round(armorDamage * 100) / 100;
+    event.armor = state.armor;
+    event.armorMax = state.armorMax;
+    event.hull = state.hull;
+    event.hullMax = state.hullMax;
+    event.text = `Попадание по бронекатеру. Броня ${Math.round(state.armor)} из ${Math.round(state.armorMax)}, корпус ${Math.round(state.hull)} из ${Math.round(state.hullMax)}.`;
+  }
+
+  boat.armor = state.armor;
+  boat.hull = state.hull;
+  boat.leak = state.leak;
+
+  for (const event of events) {
+    if (event?.type !== "gun-boat-damaged" || event.targetBoat !== boat.id) continue;
+    event.armor = state.armor;
+    event.armorMax = state.armorMax;
+    event.hull = state.hull;
+    event.hullMax = state.hullMax;
+    event.text = `Твой бронекатер под огнём. Броня ${Math.round(state.armor)} из ${Math.round(state.armorMax)}, корпус ${Math.round(state.hull)} из ${Math.round(state.hullMax)}.`;
+  }
 }
 
 export function merchantOwnsAction(world, playerIndex, nextInput) {
@@ -102,9 +158,11 @@ export function stepFreeWorld(world, dt) {
   const eventStart = world.events?.length || 0;
   const previousBoatIds = activeBoatIds(world);
   const previousPhysics = captureBoatPhysicsState(world);
+  const previousDurability = captureDualTurretDurability(world);
   const boatContext = prepareDualTurretBoatStep(world);
   const weaponContext = prepareDualTurretWeaponStep(world);
   const result = base.stepFreeWorld(world, safeDt);
+  rebalanceDualTurretGunHits(world, eventStart, previousDurability);
   applyBoatPhysicsProfiles(world, previousPhysics, safeDt, {tuning: CONFIG, eventStart});
   finishDualTurretBoatStep(world, boatContext, safeDt);
   finishDualTurretWeaponStep(world, weaponContext, safeDt);
