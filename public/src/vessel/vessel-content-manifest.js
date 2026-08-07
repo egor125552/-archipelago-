@@ -1,8 +1,11 @@
 "use strict";
 
-// Single explicit content extension point. Future module types and vessel
-// definitions are imported/registered here; generic free-roam code never
-// imports concrete vessel content directly.
-export function installVesselContent(_registry) {
-  // Prototype intentionally registers no new gameplay content yet.
+import {installCoreVesselModuleTypes} from "./modules/core-module-types.js";
+import {installCurrentVesselTypes} from "./definitions/current-vessels.js";
+
+// Single explicit content extension point. Concrete module types and vessel
+// definitions are registered here; generic free-roam code never imports them.
+export function installVesselContent(registry) {
+  installCoreVesselModuleTypes(registry);
+  installCurrentVesselTypes(registry);
 }
