@@ -1,7 +1,7 @@
 import persistentWorker, {Lobby as PersistentLobby} from "./worker-persistent.js";
 
 export const FREE_STATE_ACK_TIMEOUT_MS = 1800;
-export const ARCHIPELAGO_BUILD_ID = "2026-08-07-armored-spatial-audio-6";
+export const ARCHIPELAGO_BUILD_ID = "2026-08-07-local-spatial-armor-targets-7";
 
 const FREE_ROAM_HTML_REPLACEMENTS = Object.freeze([
   ["free-roam-v4.js?v=62", "free-roam-v4.js?v=66"],
@@ -33,17 +33,21 @@ function injectFreeRoamBuild(html) {
   for (const [from, to] of FREE_ROAM_HTML_REPLACEMENTS) result = result.replaceAll(from, to);
   const extraMappings = [
     '        "/src/free-roam-audio-v5.js?v=45": "/src/free-roam-audio-v5.js?v=46",',
-    '        "/src/free-roam-audio-v4.js?v=38": "/src/free-roam-audio-v4.js?v=41",',
-    '        "/src/free-roam-audio-v4.js?v=39": "/src/free-roam-audio-v4.js?v=41",',
+    '        "/src/free-roam-audio-v4.js?v=38": "/src/free-roam-audio-v4.js?v=42",',
+    '        "/src/free-roam-audio-v4.js?v=39": "/src/free-roam-audio-v4.js?v=42",',
+    '        "/src/free-roam-audio-v4.js?v=41": "/src/free-roam-audio-v4.js?v=42",',
     '        "/src/free-roam-audio-v3.js?v=38": "/src/free-roam-audio-v3.js?v=39",',
     '        "/src/free-roam-audio-v2.js?v=38": "/src/free-roam-audio-v2.js?v=40",',
     '        "/src/free-roam-audio-v2.js?v=39": "/src/free-roam-audio-v2.js?v=40",',
+    '        "/src/free-roam-targeting.js?v=35": "/src/free-roam-targeting.js?v=40",',
+    '        "/src/free-roam-targeting.js?v=36": "/src/free-roam-targeting.js?v=40",',
+    '        "/src/free-roam-targeting.js?v=39": "/src/free-roam-targeting.js?v=40",',
     '        "/src/free-roam-dual-turret-weapons.js?v=4": "/src/free-roam-dual-turret-weapons.js?v=6",',
     '        "/src/free-roam-dual-turret-weapons.js?v=5": "/src/free-roam-dual-turret-weapons.js?v=6",',
     '        "/src/free-roam-shop.js?v=4": "/src/free-roam-shop.js?v=5",',
     '        "/src/free-roam-shop.js?v=3": "/src/free-roam-shop.js?v=5",',
   ].join("\n");
-  if (!result.includes("free-roam-audio-v5.js?v=46")) {
+  if (!result.includes("free-roam-audio-v4.js?v=42")) {
     result = result.replace(/"imports"\s*:\s*\{/, match => `${match}\n${extraMappings}`);
   }
   if (!result.includes("archipelago-build")) {
@@ -106,8 +110,6 @@ export class Lobby extends PersistentLobby {
     if (!stalledFreeState(client, now)) return false;
     const inFlight = client.freeInFlightState;
     if (!inFlight || !openSocket(socket)) {
-      // Compatibility fallback for a connection created by an older worker
-      // version that did not remember the exact in-flight payload.
       client.freeStateInFlight = 0;
       client.freeInFlightWorld = null;
       client.freeAckedWorld = null;
@@ -132,8 +134,6 @@ export class Lobby extends PersistentLobby {
     } catch (_) {
       return false;
     }
-    // The sequence deliberately stays unchanged. A client that already
-    // applied this packet will ignore its events and only repeat the ACK.
     client.freeStateSentAt = now;
     client.freeStateResends = (Number(client.freeStateResends) || 0) + 1;
     return true;
