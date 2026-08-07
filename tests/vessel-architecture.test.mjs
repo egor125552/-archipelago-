@@ -6,6 +6,7 @@ import {createVesselRegistry} from "../public/src/vessel/vessel-registry.js";
 import {STANDARD_BOAT_PRESET} from "../public/src/vessel/vessel-defaults.js";
 import {createVesselSemanticEvent, renderModuleSemanticEvent} from "../public/src/vessel/vessel-presentation.js";
 import {syncLegacyVesselWorld} from "../public/src/vessel/vessel-legacy-adapter.js";
+import {listVesselNavigationTargets, vesselNavigationTargetFromId} from "../public/src/vessel/vessel-navigation.js";
 import {spawnVessel, vesselRegistry, nativeVesselForBoat} from "../public/src/vessel/vessel-runtime.js";
 import {VesselContractError} from "../public/src/vessel/vessel-contract.js";
 
@@ -75,7 +76,7 @@ test("semantic event renders natural text from presentation metadata rather than
 });
 
 test("legacy boats can be viewed through vessel architecture without rewriting runtime objects", () => {
-  const boat = {id: 2, boatType: "dual-turret-patrol", x: 10, y: 20, heading: 30, speed: 4, physicsProfile: {id: "heavy"}};
+  const boat = {id: 2, boatType: "dual-turret-patrol", label: "двухместный бронекатер", x: 10, y: 20, heading: 30, speed: 4, physicsProfile: {id: "heavy"}};
   const world = {boats: [null, null, boat]};
   const [view] = syncLegacyVesselWorld(world);
   assert.equal(view.source, boat);
@@ -83,6 +84,19 @@ test("legacy boats can be viewed through vessel architecture without rewriting r
   boat.x = 99;
   assert.equal(view.x, 99);
   assert.equal(world.boats[2], boat);
+});
+
+test("navigable legacy vessel is offered remotely and excluded while aboard", () => {
+  const boat = {id: 2, boatType: "dual-turret-patrol", label: "двухместный бронекатер", x: 210, y: 102, sunk: false, reserved: false};
+  const world = {boats: [null, null, boat], players: [{activeBoat: 0}, {activeBoat: null}]};
+  const remoteTargets = listVesselNavigationTargets(world, 1);
+  assert.deepEqual(remoteTargets.map(target => target.id), ["vessel:2"]);
+  assert.equal(vesselNavigationTargetFromId(world, 1, "vessel:2")?.label, "двухместный бронекатер");
+  boat.x = 245;
+  assert.equal(vesselNavigationTargetFromId(world, 1, "vessel:2")?.x, 245, "moving vessel target must use live coordinates");
+  world.players[1].activeBoat = 2;
+  assert.deepEqual(listVesselNavigationTargets(world, 1), []);
+  assert.equal(vesselNavigationTargetFromId(world, 1, "vessel:2"), null);
 });
 
 test("native vessels materialize through the single runtime spawn path", () => {
@@ -116,6 +130,12 @@ test("new fundamental vessel systems are registered plugins, not hard-coded bran
   assert.deepEqual(calls, ["ok"]);
 });
 
+test("armored engine no longer mutes merely because the stopped boat is unattended", async () => {
+  const source = await readFile(new URL("../public/src/free-roam-dual-turret-audio.js", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /!occupied\s*&&/);
+  assert.match(source, /!boat\s*\|\|\s*boat\.sunk\s*\|\|\s*boat\.reserved\s*\|\|\s*boat\.engineStalled/);
+});
+
 test("generic vessel architecture contains no concrete patrol type checks", async () => {
   const files = [
     "vessel-contract.js",
@@ -124,6 +144,7 @@ test("generic vessel architecture contains no concrete patrol type checks", asyn
     "vessel-presentation.js",
     "vessel-content-manifest.js",
     "vessel-plugin-manifest.js",
+    "vessel-navigation.js",
     "vessel-runtime.js",
   ];
   for (const file of files) {
