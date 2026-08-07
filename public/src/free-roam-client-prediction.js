@@ -34,7 +34,11 @@ export function reconcileLocalPrediction(previousWorld, nextWorld, playerIndex) 
     const keep = 0.72;
     nextBoat.x += (previousBoat.x - nextBoat.x) * keep;
     nextBoat.y += (previousBoat.y - nextBoat.y) * keep;
-    nextBoat.heading = blendAngle(nextBoat.heading, previousBoat.heading, keep);
+    const authoritativeHeadingDelta = Math.abs(wrapDeg((Number(nextBoat.heading) || 0) - (Number(previousBoat.heading) || 0)));
+    const reconciledHeading = authoritativeHeadingDelta >= 45
+      ? wrapDeg(Number(nextBoat.heading) || 0)
+      : blendAngle(nextBoat.heading, previousBoat.heading, keep);
+    nextBoat.heading = reconciledHeading;
     nextBoat.speed += (previousBoat.speed - nextBoat.speed) * keep;
     nextBoat.throttle += (previousBoat.throttle - nextBoat.throttle) * keep;
     clampBoatState(nextBoat);
