@@ -3,8 +3,7 @@
 import {
   createFreeWorld,
   drainEvents,
-  prepareDualTurretPrototypeRoom,
-  prepareDualTurretPurchaseRoom,
+  prepareDualTurretBoatRoom,
   setPlayerInput,
   setPlayerPresence,
   stepFreeWorld,
@@ -110,7 +109,6 @@ export function createServerFreeRoom(now = Date.now()) {
   setPlayerPresence(world, 0, false);
   setPlayerPresence(world, 1, false);
   reserveUnconnectedBoats(world);
-  prepareDualTurretPurchaseRoom(world);
   drainEvents(world);
   const playerCount = world.players.length;
   return {
@@ -135,7 +133,7 @@ export function setServerFreePresence(serverRoom, role, present) {
   setPlayerInput(serverRoom.world, playerIndex, withoutPulseInputs(serverRoom.receivedInputs[playerIndex]));
   if (present) {
     const sharedBoat = (serverRoom.world.boats || []).find(boat => boat?.boatType === "dual-turret-patrol");
-    if (sharedBoat?.reserved && !sharedBoat.connectionActivated) prepareDualTurretPrototypeRoom(serverRoom.world);
+    if (sharedBoat?.reserved && !sharedBoat.connectionActivated) prepareDualTurretBoatRoom(serverRoom.world);
     reportMegaBombStatus(serverRoom.world, playerIndex);
   }
   return true;
