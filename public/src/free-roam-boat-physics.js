@@ -54,7 +54,14 @@ function disruptiveForBoat(world, boat, eventStart) {
   if (world?.tow && (world.tow.towerBoat === boat.id || world.tow.towedBoat === boat.id)) return true;
   const crew = new Set(crewForBoat(boat));
   return (world?.events || []).slice(eventStart).some(event => {
-    if (!event || !["collision", "ram", "water-boundary", "tow-attach", "tow-detach"].includes(event.type)) return false;
+    if (!event || ![
+      "collision",
+      "ram",
+      "water-boundary",
+      "tow-attach",
+      "tow-detach",
+      "sonar-guide-snap",
+    ].includes(event.type)) return false;
     if (Number.isInteger(event.boatId)) return event.boatId === boat.id;
     if (Number.isInteger(event.targetBoat)) return event.targetBoat === boat.id;
     return (event.targets || []).some(target => crew.has(target));
