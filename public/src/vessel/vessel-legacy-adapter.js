@@ -11,11 +11,22 @@ function legacyTypeId(boat) {
   return cleaned || "legacy-boat";
 }
 
+function legacyInstanceId(boat, typeId, legacyBoatId) {
+  const stored = String(boat?.vesselInstanceId || "").trim();
+  return assertId(stored || `legacy:${legacyBoatId ?? typeId}`, "legacy vessel instance id");
+}
+
+function viewKey(boat) {
+  const stable = String(boat?.vesselInstanceId || "").trim();
+  if (stable) return `instance:${stable}`;
+  return Number.isInteger(boat?.id) ? `boat:${boat.id}` : boat;
+}
+
 function createView(boat) {
   const legacyBoatId = Number.isInteger(boat?.id) ? boat.id : null;
   const typeId = legacyTypeId(boat);
   return Object.freeze({
-    instanceId: assertId(`legacy:${legacyBoatId ?? typeId}`, "legacy vessel instance id"),
+    instanceId: legacyInstanceId(boat, typeId, legacyBoatId),
     typeId,
     legacyBoatId,
     legacy: true,
@@ -40,10 +51,12 @@ export function syncLegacyVesselWorld(world) {
   const present = new Set();
   for (const boat of world.boats) {
     if (!boat) continue;
-    const key = Number.isInteger(boat.id) ? boat.id : boat;
+    const key = viewKey(boat);
     present.add(key);
     const previous = views.get(key);
-    if (!previous || previous.source !== boat) views.set(key, createView(boat));
+    if (!previous || previous.source !== boat || previous.instanceId !== legacyInstanceId(boat, legacyTypeId(boat), boat.id)) {
+      views.set(key, createView(boat));
+    }
   }
   for (const key of views.keys()) if (!present.has(key)) views.delete(key);
   return [...views.values()];
@@ -56,6 +69,5 @@ export function legacyVesselViews(world) {
 export function legacyVesselViewForBoat(world, boat) {
   if (!boat) return null;
   syncLegacyVesselWorld(world);
-  const key = Number.isInteger(boat.id) ? boat.id : boat;
-  return worldViews.get(world)?.get(key) || null;
+  return worldViews.get(world)?.get(viewKey(boat)) || null;
 }
