@@ -3,6 +3,7 @@
 import {assertId} from "./vessel-contract.js";
 
 const worldViews = new WeakMap();
+const LEGACY_NAVIGATION_TARGET_TYPES = new Set(["dual-turret-patrol"]);
 
 function legacyTypeId(boat) {
   const raw = String(boat?.boatType || boat?.vesselType || boat?.type || "legacy-boat").toLowerCase();
@@ -19,6 +20,8 @@ function createView(boat) {
     legacyBoatId,
     legacy: true,
     source: boat,
+    get label() { return String(boat?.label || "судно"); },
+    get navigationTarget() { return boat?.navigationTarget === true || LEGACY_NAVIGATION_TARGET_TYPES.has(typeId); },
     get x() { return Number(boat?.x) || 0; },
     get y() { return Number(boat?.y) || 0; },
     get heading() { return Number(boat?.heading) || 0; },
