@@ -56,9 +56,6 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
       return;
     }
 
-    // The armored patrol owns a separate spatial engine loop. Never layer the
-    // ordinary motorboat recording on top of it, whether the listener is aboard
-    // or standing on shore beside the boat.
     if (!customEngine) this.startRemoteLoop("remote", "motorboatReal");
     else if (this.remote) this.remote.gain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.12);
     this.startRemoteLoop("remoteWake", this.buffers.has("riverWake") ? "riverWake" : "seaReal");
@@ -83,9 +80,10 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
     let pan = 0;
     let gain = event.running ? 0.29 : 0.22;
     if (local) {
-      this.walkAlternation *= -1;
-      const side = Number(event.movementPan) || 0;
-      pan = clamp(side * 0.56 + this.walkAlternation * (side ? 0.08 : 0.17), -0.88, 0.88);
+      // A player's own footsteps and swimming sounds originate at the listener's
+      // coordinates. Walking left or right must not drag the local sound across
+      // the stereo field. Directional panning is reserved for remote movement.
+      pan = 0;
     } else {
       if (!listener) return;
       const metres = distance(listener, event);
@@ -132,8 +130,8 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
       const falloff = local ? 1 : spatialGainForDistance(metres, 82);
       const gain = (local ? 0.34 : 0.18) * falloff;
       if (gain <= 0.004) return;
-      this.playFootstep({gain, rate: 0.82, pan});
-      if (this.buffers.has("hullCreak")) this.play("hullCreak", {gain: (local ? 0.11 : 0.06) * falloff, rate: 1.1, pan, lowpass: 1800 + falloff * 2000});
+      this.playFootstep({gain, rate: 0.82, pan: local ? 0 : pan});
+      if (this.buffers.has("hullCreak")) this.play("hullCreak", {gain: (local ? 0.11 : 0.06) * falloff, rate: 1.1, pan: local ? 0 : pan, lowpass: 1800 + falloff * 2000});
       return;
     }
 
