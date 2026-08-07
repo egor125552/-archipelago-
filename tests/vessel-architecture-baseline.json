@@ -1,0 +1,5 @@
+{
+  "schemaVersion": 1,
+  "baseSha": "d964e2eb4567e83dd0c67cd0c801e96304ed5229",
+  "note": "Architecture prototype baseline. Legacy code before this commit is grandfathered; new vessel integrations must use the vessel extension points."
+}
