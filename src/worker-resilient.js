@@ -1,6 +1,6 @@
 import persistentWorker, {Lobby as PersistentLobby} from "./worker-persistent.js";
+import {FREE_STATE_ACK_TIMEOUT_MS} from "./worker-resilient-config.js";
 
-const FREE_STATE_ACK_TIMEOUT_MS = 1800;
 const ARCHIPELAGO_BUILD_ID = "2026-08-07-local-spatial-armor-targets-7";
 
 const FREE_ROAM_HTML_REPLACEMENTS = Object.freeze([
