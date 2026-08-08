@@ -23,6 +23,7 @@ function predictionProfile(source) {
     deceleration: Math.max(0, rounded(profile.deceleration)),
     releaseBehavior: String(profile.releaseBehavior || "coast"),
     applyDrag: profile.applyDrag !== false,
+    propulsionAvailable: profile.propulsionAvailable !== false,
   };
 }
 
