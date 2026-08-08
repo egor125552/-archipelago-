@@ -127,6 +127,13 @@ export function merchantOwnsAction(world, playerIndex, nextInput) {
 }
 
 export function prepareFreeRoamPlayerInput(world, playerIndex, nextInput) {
+  // A walkable vessel system has already validated, consumed and sanitized the
+  // input before this legacy compatibility layer. Do not run the old concrete
+  // seat controller again or it can reclaim the helm while the player is
+  // physically walking on deck.
+  if (world?.players?.[playerIndex]?.vesselDeckInputOwned === true) {
+    return {...(nextInput || {})};
+  }
   if (!merchantOwnsAction(world, playerIndex, nextInput)) {
     return prepareDualTurretInput(world, playerIndex, nextInput);
   }
