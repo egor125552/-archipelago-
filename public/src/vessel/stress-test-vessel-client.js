@@ -147,6 +147,8 @@ function updateStressUi(world, playerIndex) {
   const boat = player && ["boat", "roof"].includes(player.mode) ? world?.boats?.[player.activeBoat] : null;
   if (!isStressBoat(boat)) return;
   const network = stressNetworkVessel(world, boat);
+  const operator = network?.interior?.claims?.["stress-pistol-control"];
+  if (operator !== playerIndex) return;
   const ammo = Math.max(0, Math.floor(Number(
     network?.modules?.["stress-pistol"]?.ammo
       ?? network?.state?.testWeaponAmmo
@@ -176,8 +178,8 @@ function handleStressShot(audio, event, playerIndex) {
 }
 
 const prototype = FreeRoamAudio?.prototype;
-if (prototype && !prototype.__stress50VesselPatchedV2) {
-  prototype.__stress50VesselPatchedV2 = true;
+if (prototype && !prototype.__stress50VesselPatchedV3) {
+  prototype.__stress50VesselPatchedV3 = true;
   const inheritedPreload = prototype.preload;
   const inheritedUpdateWorld = prototype.updateWorld;
   const inheritedHandleEvent = prototype.handleFreeEvent;
