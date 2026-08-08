@@ -22,6 +22,25 @@ function activePropulsionCount(definition, instance) {
   }).length;
 }
 
+function engineResponseFactor(engineFraction) {
+  return 0.2 + clamp(engineFraction, 0, 1) * 0.8;
+}
+
+function exposePredictionProfile(boat, engineFraction) {
+  const response = engineResponseFactor(engineFraction);
+  const stalled = Boolean(boat.engineStalled) || engineFraction <= 0;
+  boat.predictionPhysicsProfile = {
+    id: STRESS_TEST_PHYSICS_ID,
+    source: "vessel-module",
+    maxForwardSpeed: stalled ? 0 : STRESS_TEST_MAX_SPEED * engineFraction,
+    maxReverseSpeed: stalled ? 0 : STRESS_TEST_REVERSE_SPEED * engineFraction,
+    acceleration: 92 * response,
+    deceleration: stalled ? 110 : 118 * response,
+    releaseBehavior: "target-zero",
+    applyDrag: false,
+  };
+}
+
 export const STRESS_TEST_PHYSICS_MODULE = Object.freeze({
   id: STRESS_TEST_PHYSICS_ID,
   step({boat, definition, instance, dt}) {
@@ -32,6 +51,7 @@ export const STRESS_TEST_PHYSICS_MODULE = Object.freeze({
     const engineFraction = clamp(active / installed, 0, 1);
     boat.stressEngineCount = installed;
     boat.stressActiveEngineCount = active;
+    exposePredictionProfile(boat, engineFraction);
 
     if (boat.engineStalled || engineFraction <= 0 || safeDt <= 0) {
       boat.speed += clamp(-boat.speed, -110 * safeDt, 110 * safeDt);
@@ -43,7 +63,7 @@ export const STRESS_TEST_PHYSICS_MODULE = Object.freeze({
     const reverseMaximum = STRESS_TEST_REVERSE_SPEED * engineFraction;
     const targetSpeed = throttle >= 0 ? throttle * forwardMaximum : throttle * reverseMaximum;
     const accelerating = Math.abs(targetSpeed) > Math.abs(Number(boat.speed) || 0);
-    const rate = (accelerating ? 92 : 118) * (0.2 + engineFraction * 0.8);
+    const rate = (accelerating ? 92 : 118) * engineResponseFactor(engineFraction);
     boat.speed += clamp(targetSpeed - boat.speed, -rate * safeDt, rate * safeDt);
     boat.speed = clamp(boat.speed, -reverseMaximum, forwardMaximum);
   },
