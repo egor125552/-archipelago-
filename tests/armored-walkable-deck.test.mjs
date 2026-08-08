@@ -54,7 +54,14 @@ test("player can board, walk, open the hatch, climb, take the helm, leave it and
   const boat = boardArmoredDeck(world, 0);
   const player = world.players[0];
   const entry = nativeVesselForBoat(world, boat.id);
-  assert.ok(entry?.instance?.occupants?.[0]);
+  const boardingDiagnostic = JSON.stringify({
+    player: {mode: player.mode, activeBoat: player.activeBoat, deckOwned: player.vesselDeckInputOwned},
+    boat: {id: boat.id, driver: boat.driver, crew: boat.crew, reserved: boat.reserved},
+    occupants: entry?.instance?.occupants || null,
+    occupantMemory: boat.vesselRuntimeState?.occupantMemory || null,
+    events: (world.events || []).slice(-12).map(event => ({type: event.type, text: event.text, sourcePlayer: event.sourcePlayer, boatId: event.boatId, targets: event.targets})),
+  });
+  assert.ok(entry?.instance?.occupants?.[0], `boarding must create a vessel-local occupant: ${boardingDiagnostic}`);
   assert.equal(entry.instance.occupants[0].deckId, "armored-main-deck");
   assert.equal(player.vesselDeckInputOwned, true);
   assert.equal(boat.driver, null, "boarding the deck must not magically claim the helm");
