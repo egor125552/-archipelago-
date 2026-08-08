@@ -14,6 +14,13 @@ function blendAngle(authoritative, predicted, keep) {
   return wrapDeg((Number(authoritative) || 0) + difference * keep);
 }
 
+function walkableOccupant(world, playerIndex) {
+  const player = world?.players?.[playerIndex];
+  if (!player || player.mode !== "boat" || !Number.isInteger(player.activeBoat)) return null;
+  const vessel = (world?.vesselArchitecture?.vessels || []).find(candidate => candidate?.legacyBoatId === player.activeBoat);
+  return vessel?.occupants?.[playerIndex] || vessel?.occupants?.[String(playerIndex)] || null;
+}
+
 function nonNegative(value, fallback) {
   const number = Number(value);
   return Number.isFinite(number) && number >= 0 ? number : fallback;
@@ -64,6 +71,7 @@ export function reconcileLocalPrediction(previousWorld, nextWorld, playerIndex) 
     const previousBoat = previousWorld.boats?.[previousPlayer.activeBoat];
     const nextBoat = nextWorld.boats?.[nextPlayer.activeBoat];
     if (!previousBoat || !nextBoat || nextBoat.sunk) return nextWorld;
+    const occupant = walkableOccupant(nextWorld, playerIndex);
     const error = Math.hypot(previousBoat.x - nextBoat.x, previousBoat.y - nextBoat.y);
     if (error > 10) return nextWorld;
     const keep = 0.72;
@@ -77,6 +85,21 @@ export function reconcileLocalPrediction(previousWorld, nextWorld, playerIndex) 
     nextBoat.speed += (previousBoat.speed - nextBoat.speed) * keep;
     nextBoat.throttle += (previousBoat.throttle - nextBoat.throttle) * keep;
     clampBoatState(nextBoat);
+
+    if (occupant) {
+      // A deck occupant has an independent vessel-local position and heading.
+      // Smooth that world position directly instead of snapping the person to
+      // the boat centre or forcing the person's heading to the hull heading.
+      const playerError = Math.hypot((Number(previousPlayer.x) || 0) - (Number(nextPlayer.x) || 0), (Number(previousPlayer.y) || 0) - (Number(nextPlayer.y) || 0));
+      if (playerError <= 7) {
+        const personKeep = 0.52;
+        nextPlayer.x += (previousPlayer.x - nextPlayer.x) * personKeep;
+        nextPlayer.y += (previousPlayer.y - nextPlayer.y) * personKeep;
+        nextPlayer.heading = blendAngle(nextPlayer.heading, previousPlayer.heading, personKeep);
+      }
+      return nextWorld;
+    }
+
     nextPlayer.x = nextBoat.x;
     nextPlayer.y = nextBoat.y;
     nextPlayer.heading = nextBoat.heading;
@@ -103,6 +126,10 @@ function predictBoat(world, playerIndex, input, dt) {
   const player = world.players?.[playerIndex];
   const boat = player?.mode === "boat" ? world.boats?.[player.activeBoat] : null;
   if (!boat || boat.sunk || boat.driver !== playerIndex) return;
+  const occupant = walkableOccupant(world, playerIndex);
+  const previousX = Number(boat.x) || 0;
+  const previousY = Number(boat.y) || 0;
+  const previousHeading = Number(boat.heading) || 0;
   const physics = predictionPhysics(boat);
   const steer = Number(Boolean(input.right)) - Number(Boolean(input.left));
   const thrust = Number(Boolean(input.up)) - Number(Boolean(input.down));
@@ -138,9 +165,15 @@ function predictBoat(world, playerIndex, input, dt) {
   const radius = Math.max(1, Number(boat.collisionRadius) || WORLD.boatRadius);
   boat.x = clamp(boat.x + Math.sin(rad(boat.heading)) * boat.speed * dt, radius, WORLD.width - radius);
   boat.y = clamp(boat.y - Math.cos(rad(boat.heading)) * boat.speed * dt, WORLD.shoreY + 4, WORLD.height - radius);
-  player.x = boat.x;
-  player.y = boat.y;
-  player.heading = boat.heading;
+  if (occupant) {
+    player.x = (Number(player.x) || 0) + (boat.x - previousX);
+    player.y = (Number(player.y) || 0) + (boat.y - previousY);
+    player.heading = wrapDeg((Number(player.heading) || 0) + wrapDeg(boat.heading - previousHeading));
+  } else {
+    player.x = boat.x;
+    player.y = boat.y;
+    player.heading = boat.heading;
+  }
 }
 
 function predictPerson(world, playerIndex, input, dt) {
