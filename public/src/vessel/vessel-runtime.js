@@ -146,13 +146,21 @@ function compactDynamicModules(definition, instance) {
 function persistNativeEntry(entry) {
   const {definition, instance, boat} = entry;
   const previousMemory = boat.vesselRuntimeState?.occupantMemory || {};
+  const occupantMemory = {...cloneData(previousMemory), ...cloneData(instance.occupants || {})};
   const dynamic = compactDynamicModules(definition, instance);
+  const deckEnabled = definition.deckArchitecture?.enabled === true;
+  const hasDynamic = Object.keys(dynamic.dynamicInstallations).length > 0;
+  const hasMemory = Object.keys(occupantMemory).length > 0;
+  if (!deckEnabled && !hasDynamic && !hasMemory) {
+    if (boat.vesselRuntimeState?.version === VESSEL_RUNTIME_STATE_VERSION) delete boat.vesselRuntimeState;
+    return;
+  }
   boat.vesselRuntimeState = {
     version: VESSEL_RUNTIME_STATE_VERSION,
     dynamicModules: dynamic.dynamicModules,
     dynamicInstallations: dynamic.dynamicInstallations,
-    deck: definition.deckArchitecture?.enabled ? vesselDeckPersistentState(registry, definition, instance) : null,
-    occupantMemory: {...cloneData(previousMemory), ...cloneData(instance.occupants || {})},
+    deck: deckEnabled ? vesselDeckPersistentState(registry, definition, instance) : null,
+    occupantMemory,
   };
 }
 
