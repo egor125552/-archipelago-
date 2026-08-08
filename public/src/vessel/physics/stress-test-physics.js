@@ -29,11 +29,12 @@ function engineResponseFactor(engineFraction) {
 function exposePredictionProfile(boat, engineFraction) {
   const response = engineResponseFactor(engineFraction);
   const propulsionAvailable = !boat.engineStalled && engineFraction > 0;
+  const predictionLimitFraction = engineFraction > 0 ? engineFraction : 1;
   boat.predictionPhysicsProfile = {
     id: STRESS_TEST_PHYSICS_ID,
     source: "vessel-module",
-    maxForwardSpeed: STRESS_TEST_MAX_SPEED * Math.max(engineFraction, 0.001),
-    maxReverseSpeed: STRESS_TEST_REVERSE_SPEED * Math.max(engineFraction, 0.001),
+    maxForwardSpeed: STRESS_TEST_MAX_SPEED * predictionLimitFraction,
+    maxReverseSpeed: STRESS_TEST_REVERSE_SPEED * predictionLimitFraction,
     acceleration: 92 * response,
     deceleration: propulsionAvailable ? 118 * response : 110,
     releaseBehavior: "target-zero",
