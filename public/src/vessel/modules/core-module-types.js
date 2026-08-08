@@ -63,6 +63,7 @@ export const CORE_VESSEL_MODULE_TYPES = Object.freeze([
     id: "mounted-weapon",
     capabilities: ["fire"],
     networkStateFields: ["enabled", "health", "ammo"],
+    networkAlwaysFields: ["ammo"],
     installation: {mountCount: 1, mountKinds: ["weapon-hardpoint"]},
     semanticEvents: ["station-entered", "fired", "disabled"],
     presentation: {
