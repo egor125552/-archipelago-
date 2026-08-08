@@ -1,6 +1,8 @@
 "use strict";
 
 const pendingByWorld = new WeakMap();
+const CARGO_ACTION_RANGE = 12;
+const distance = (a, b) => Math.hypot((Number(a?.x) || 0) - (Number(b?.x) || 0), (Number(a?.y) || 0) - (Number(b?.y) || 0));
 
 function pending(world) {
   let value = pendingByWorld.get(world);
@@ -19,26 +21,47 @@ function liveDeckEntry(world, nativeVessels, playerIndex) {
     && entry?.instance?.occupants?.[playerIndex]) || null;
 }
 
-function captureDeckCombatInput({world, nativeVessels, playerIndex, input} = {}) {
+function cargoActionAvailable(world, playerIndex) {
+  const player = world?.players?.[playerIndex];
+  if (!player) return false;
+  if (player.combat?.carriedCrate) return true;
+  return (world?.freeActivities?.crates || []).some(crate => crate?.state === "world" && distance(player, crate) <= CARGO_ACTION_RANGE);
+}
+
+function captureDeckSharedInput({world, nativeVessels, playerIndex, input} = {}) {
   if (!world || !Number.isInteger(playerIndex) || !input) return;
   const state = pending(world);
   if (!liveDeckEntry(world, nativeVessels, playerIndex)) {
     state.delete(playerIndex);
     return;
   }
-  state.set(playerIndex, {attack: Boolean(input.attack)});
+  state.set(playerIndex, {
+    attack: Boolean(input.attack),
+    pump: Boolean(input.pump),
+    repair: Boolean(input.repair),
+    guide: Boolean(input.guide),
+    cargoAction: Boolean(input.action && cargoActionAvailable(world, playerIndex)),
+  });
 }
 
-function restoreDeckCombatInput({world, nativeVessels, playerIndex} = {}) {
+function restoreField(world, playerIndex, key, value) {
+  if (world.inputs?.[playerIndex]) world.inputs[playerIndex][key] = value;
+  if (world.operationInputs?.[playerIndex]) world.operationInputs[playerIndex][key] = value;
+  if (world.freeActivities?.inputs?.[playerIndex]) world.freeActivities.inputs[playerIndex][key] = value;
+}
+
+function restoreDeckSharedInput({world, nativeVessels, playerIndex} = {}) {
   if (!world || !Number.isInteger(playerIndex)) return;
   const state = pending(world).get(playerIndex);
   if (!state || !liveDeckEntry(world, nativeVessels, playerIndex)) return;
-  if (world.inputs?.[playerIndex]) world.inputs[playerIndex].attack = state.attack;
-  if (world.operationInputs?.[playerIndex]) world.operationInputs[playerIndex].attack = state.attack;
-  if (world.freeActivities?.inputs?.[playerIndex]) world.freeActivities.inputs[playerIndex].attack = state.attack;
+  restoreField(world, playerIndex, "attack", state.attack);
+  restoreField(world, playerIndex, "pump", state.pump);
+  restoreField(world, playerIndex, "repair", state.repair);
+  restoreField(world, playerIndex, "guide", state.guide);
+  if (state.cargoAction) restoreField(world, playerIndex, "action", true);
 }
 
 export const VESSEL_DECK_INPUT_BRIDGE_SYSTEMS = Object.freeze([
-  Object.freeze({id: "vessel-deck-input-bridge-before-input-v1", phase: "before-input", order: 4, run: captureDeckCombatInput}),
-  Object.freeze({id: "vessel-deck-input-bridge-after-input-v1", phase: "after-input", order: 4, run: restoreDeckCombatInput}),
+  Object.freeze({id: "vessel-deck-input-bridge-before-input-v1", phase: "before-input", order: 4, run: captureDeckSharedInput}),
+  Object.freeze({id: "vessel-deck-input-bridge-after-input-v1", phase: "after-input", order: 4, run: restoreDeckSharedInput}),
 ]);
