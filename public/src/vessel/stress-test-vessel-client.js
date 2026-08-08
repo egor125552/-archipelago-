@@ -147,7 +147,11 @@ function updateStressUi(world, playerIndex) {
   const boat = player && ["boat", "roof"].includes(player.mode) ? world?.boats?.[player.activeBoat] : null;
   if (!isStressBoat(boat)) return;
   const network = stressNetworkVessel(world, boat);
-  const ammo = Math.max(0, Math.floor(Number(network?.modules?.["stress-pistol"]?.ammo ?? boat.testWeaponAmmo) || 0));
+  const ammo = Math.max(0, Math.floor(Number(
+    network?.modules?.["stress-pistol"]?.ammo
+      ?? network?.state?.testWeaponAmmo
+      ?? boat.testWeaponAmmo
+  ) || 0));
   const weaponValue = document.getElementById("weaponValue");
   const attackButton = document.getElementById("attackButton");
   if (weaponValue) weaponValue.textContent = `сверхскоростной пистолет, ${ammo}`;
