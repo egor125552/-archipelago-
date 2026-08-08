@@ -5,6 +5,8 @@ export const VESSEL_CONTRACT_VERSION = 2;
 const ID_RE = /^[a-z][A-Za-z0-9._:-]*$/;
 const SYSTEM_PHASES = new Set(["before-input", "after-input", "before-step", "after-step", "present"]);
 const PHYSICS_MODES = new Set(["profile", "module", "legacy-object"]);
+const CONNECTION_KINDS = new Set(["door", "hatch", "ladder", "gangway", "jump", "passage", "custom"]);
+const TRAVERSAL_MODES = new Set(["instant", "timed", "geometry"]);
 
 export class VesselContractError extends Error {
   constructor(message, details = {}) {
@@ -40,9 +42,7 @@ export function normalizeCapabilities(value = {}) {
   const result = {};
   for (const [key, enabled] of Object.entries(value)) {
     const id = assertId(key, `capability:${key}`);
-    if (typeof enabled !== "boolean") {
-      throw new VesselContractError(`capability ${id} must be boolean`, {capability: id, value: enabled});
-    }
+    if (typeof enabled !== "boolean") throw new VesselContractError(`capability ${id} must be boolean`, {capability: id, value: enabled});
     result[id] = enabled;
   }
   return Object.freeze(result);
@@ -63,29 +63,22 @@ export function normalizePresentation(value, {moduleId, userFacing = true, seman
   if (!label) throw new VesselContractError(`user-facing module ${moduleId} needs presentation.label`);
   const events = {};
   const sourceEvents = isPlainObject(presentation.events) ? presentation.events : {};
-  for (const [kind, eventPresentation] of Object.entries(sourceEvents)) {
-    events[assertId(kind, `module ${moduleId} presentation event`)] = normalizeEventPresentation(eventPresentation, moduleId);
-  }
-  for (const kind of semanticEvents) {
-    if (!events[kind]) {
-      throw new VesselContractError(`user-facing module ${moduleId} is missing speech metadata for ${kind}`, {moduleId, kind});
-    }
-  }
-  return Object.freeze({
-    ...cloneData(presentation),
-    label,
-    forms: Object.freeze({...cloneData(presentation.forms || {})}),
-    roles: Object.freeze({...cloneData(presentation.roles || {})}),
-    events: Object.freeze(events),
-  });
+  for (const [kind, eventPresentation] of Object.entries(sourceEvents)) events[assertId(kind, `module ${moduleId} presentation event`)] = normalizeEventPresentation(eventPresentation, moduleId);
+  for (const kind of semanticEvents) if (!events[kind]) throw new VesselContractError(`user-facing module ${moduleId} is missing speech metadata for ${kind}`, {moduleId, kind});
+  return Object.freeze({...cloneData(presentation), label, forms: Object.freeze({...cloneData(presentation.forms || {})}), roles: Object.freeze({...cloneData(presentation.roles || {})}), events: Object.freeze(events)});
+}
+
+export function normalizeNamedPresentation(value, fallbackLabel, field) {
+  const source = value == null ? {} : assertPlainObject(value, field);
+  const label = String(source.label || fallbackLabel || "").trim();
+  if (!label) throw new VesselContractError(`${field} needs a user-facing label`);
+  return Object.freeze({...cloneData(source), label, forms: Object.freeze({...cloneData(source.forms || {})}), roles: Object.freeze({...cloneData(source.roles || {})})});
 }
 
 function normalizeInstallation(value, moduleId) {
   const source = value == null ? {} : assertPlainObject(value, `module ${moduleId} installation`);
   const mountCount = source.mountCount == null ? 0 : Number(source.mountCount);
-  if (!Number.isInteger(mountCount) || mountCount < 0) {
-    throw new VesselContractError(`module ${moduleId} installation.mountCount must be a non-negative integer`);
-  }
+  if (!Number.isInteger(mountCount) || mountCount < 0) throw new VesselContractError(`module ${moduleId} installation.mountCount must be a non-negative integer`);
   const mountKinds = Object.freeze([...(source.mountKinds || [])].map(kind => assertId(kind, `module ${moduleId} mount kind`)));
   return Object.freeze({...cloneData(source), mountCount, mountKinds});
 }
@@ -98,13 +91,19 @@ export function normalizeModuleType(definition) {
   const capabilities = Object.freeze([...(source.capabilities || [])].map(capability => assertId(capability, `module ${id} capability`)));
   const presentation = normalizePresentation(source.presentation, {moduleId: id, userFacing, semanticEvents});
   const installation = normalizeInstallation(source.installation, id);
-  if (source.createState != null && typeof source.createState !== "function") {
-    throw new VesselContractError(`module ${id} createState must be a function`);
-  }
-  if (source.validateConfig != null && typeof source.validateConfig !== "function") {
-    throw new VesselContractError(`module ${id} validateConfig must be a function`);
-  }
+  if (source.createState != null && typeof source.createState !== "function") throw new VesselContractError(`module ${id} createState must be a function`);
+  if (source.validateConfig != null && typeof source.validateConfig !== "function") throw new VesselContractError(`module ${id} validateConfig must be a function`);
+  if (source.effectiveness != null && typeof source.effectiveness !== "function") throw new VesselContractError(`module ${id} effectiveness must be a function`);
   return Object.freeze({...source, id, semanticEvents, capabilities, userFacing, presentation, installation});
+}
+
+export function normalizeDeckRuleType(definition) {
+  const source = assertPlainObject(definition, "deck rule type");
+  const id = assertId(source.id, "deck rule type id");
+  for (const field of ["validateConfig", "createState", "actions", "performAction"]) if (source[field] != null && typeof source[field] !== "function") throw new VesselContractError(`deck rule ${id} ${field} must be a function`);
+  const persistentFields = source.persistentFields == null ? null : Object.freeze([...(source.persistentFields || [])].map(field => assertId(field, `deck rule ${id} persistent field`)));
+  const networkStateFields = source.networkStateFields == null ? null : Object.freeze([...(source.networkStateFields || [])].map(field => assertId(field, `deck rule ${id} network field`)));
+  return Object.freeze({...source, id, persistentFields, networkStateFields});
 }
 
 export function normalizeSystemPlugin(plugin) {
@@ -168,43 +167,79 @@ export function normalizeMount(value, vesselId) {
 function normalizeZone(value, deckId) {
   const source = assertPlainObject(value, `zone in deck ${deckId}`);
   const id = assertId(source.id, `zone id in deck ${deckId}`);
-  const label = String(source.label || "").trim();
+  const label = String(source.label || source.presentation?.label || "").trim();
   if (!label) throw new VesselContractError(`zone ${id} needs a user-facing label`);
   const shape = source.shape == null ? null : normalizePolygon(source.shape, `zone ${id} shape`);
-  return Object.freeze({...cloneData(source), id, label, damageable: source.damageable === true, shape});
+  const presentation = normalizeNamedPresentation(source.presentation, label, `zone ${id} presentation`);
+  return Object.freeze({...cloneData(source), id, label, presentation, damageable: source.damageable === true, shape});
 }
 
 function normalizeLandmark(value, deckId) {
   const source = assertPlainObject(value, `landmark in deck ${deckId}`);
   const id = assertId(source.id, `landmark id in deck ${deckId}`);
-  const label = String(source.label || "").trim();
+  const label = String(source.label || source.presentation?.label || "").trim();
   if (!label) throw new VesselContractError(`landmark ${id} needs a user-facing label`);
   const position = normalizePoint(source.position, `landmark ${id} position`);
   const zoneId = source.zoneId == null ? null : assertId(source.zoneId, `landmark ${id} zoneId`);
-  return Object.freeze({...cloneData(source), id, label, position, zoneId});
+  const presentation = normalizeNamedPresentation(source.presentation, label, `landmark ${id} presentation`);
+  return Object.freeze({...cloneData(source), id, label, presentation, position, zoneId, navigation: source.navigation !== false});
+}
+
+function normalizeTraversal(value, connectionId) {
+  const source = value == null ? {} : assertPlainObject(value, `connection ${connectionId} traversal`);
+  const mode = String(source.mode || "instant");
+  if (!TRAVERSAL_MODES.has(mode)) throw new VesselContractError(`connection ${connectionId} has invalid traversal mode ${mode}`);
+  const result = {...cloneData(source), mode};
+  if (source.duration != null && (!Number.isFinite(Number(source.duration)) || Number(source.duration) < 0)) throw new VesselContractError(`connection ${connectionId} traversal.duration must be non-negative`);
+  if (source.speed != null && (!Number.isFinite(Number(source.speed)) || Number(source.speed) <= 0)) throw new VesselContractError(`connection ${connectionId} traversal.speed must be greater than zero`);
+  return Object.freeze(result);
 }
 
 function normalizeConnection(value, deckId) {
   const source = assertPlainObject(value, `connection in deck ${deckId}`);
   const id = assertId(source.id, `connection id in deck ${deckId}`);
   const toDeckId = assertId(source.toDeckId, `connection ${id} toDeckId`);
-  const label = String(source.label || "переход").trim();
+  const label = String(source.label || source.presentation?.label || "переход").trim();
   const from = normalizePoint(source.from, `connection ${id} from`);
   const to = source.to == null ? null : normalizePoint(source.to, `connection ${id} to`);
-  return Object.freeze({...cloneData(source), id, toDeckId, label, from, to});
+  const kind = String(source.kind || "passage");
+  if (!CONNECTION_KINDS.has(kind)) throw new VesselContractError(`connection ${id} has invalid kind ${kind}`);
+  const states = Object.freeze([...(source.states || ["open", "closed", "locked", "jammed", "destroyed", "blocked"])].map(state => assertId(state, `connection ${id} state`)));
+  const initialState = assertId(source.initialState || ((kind === "ladder" || kind === "jump" || kind === "passage") ? "open" : "closed"), `connection ${id} initialState`);
+  if (!states.includes(initialState)) throw new VesselContractError(`connection ${id} initialState ${initialState} is not in states`);
+  const passableStates = Object.freeze([...(source.passableStates || ["open", "destroyed"])].map(state => assertId(state, `connection ${id} passable state`)));
+  for (const state of passableStates) if (!states.includes(state)) throw new VesselContractError(`connection ${id} passable state ${state} is not declared`);
+  const reverseId = source.reverseId == null ? null : assertId(source.reverseId, `connection ${id} reverseId`);
+  const traversal = normalizeTraversal(source.traversal, id);
+  const presentation = normalizeNamedPresentation(source.presentation, label, `connection ${id} presentation`);
+  return Object.freeze({...cloneData(source), id, toDeckId, label, presentation, kind, states, initialState, passableStates, reverseId, traversal, from, to});
+}
+
+function normalizeDeckObject(value, deckId) {
+  const source = assertPlainObject(value, `object in deck ${deckId}`);
+  const id = assertId(source.id, `object id in deck ${deckId}`);
+  const label = String(source.label || source.presentation?.label || "").trim();
+  if (!label) throw new VesselContractError(`object ${id} needs a user-facing label`);
+  const kind = assertId(source.kind || "object", `object ${id} kind`);
+  const position = normalizePoint(source.position, `object ${id} position`);
+  const zoneId = source.zoneId == null ? null : assertId(source.zoneId, `object ${id} zoneId`);
+  const presentation = normalizeNamedPresentation(source.presentation, label, `object ${id} presentation`);
+  return Object.freeze({...cloneData(source), id, label, presentation, kind, position, zoneId});
 }
 
 export function normalizeDeck(value, vesselId) {
   const source = assertPlainObject(value, `deck in ${vesselId}`);
   const id = assertId(source.id, `deck id in ${vesselId}`);
-  const label = String(source.label || "").trim();
+  const label = String(source.label || source.presentation?.label || "").trim();
   if (!label) throw new VesselContractError(`deck ${id} needs a user-facing label`);
   const level = Number.isFinite(Number(source.level)) ? Number(source.level) : 0;
   const shape = normalizePolygon(source.shape, `deck ${id} shape`);
   const zones = Object.freeze([...(source.zones || [])].map(zone => normalizeZone(zone, id)));
   const landmarks = Object.freeze([...(source.landmarks || [])].map(landmark => normalizeLandmark(landmark, id)));
   const connections = Object.freeze([...(source.connections || [])].map(connection => normalizeConnection(connection, id)));
-  return Object.freeze({...cloneData(source), id, label, level, shape, zones, landmarks, connections});
+  const objects = Object.freeze([...(source.objects || [])].map(object => normalizeDeckObject(object, id)));
+  const presentation = normalizeNamedPresentation(source.presentation, label, `deck ${id} presentation`);
+  return Object.freeze({...cloneData(source), id, label, presentation, level, shape, zones, landmarks, connections, objects});
 }
 
 export function normalizePhysics(value = {}) {
