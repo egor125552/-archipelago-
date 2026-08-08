@@ -51,13 +51,16 @@ function normalizeDualTurretOwnership(world, playerIndex, eventStart = 0) {
   const player = world?.players?.[playerIndex];
   if (!boat || !player || player.mode !== "boat" || player.activeBoat !== boat.id) return boat;
 
-  if (!Number.isInteger(boat.driver)) boat.driver = playerIndex;
+  // On a walkable vessel, being aboard is not the same thing as sitting at the
+  // helm. The vessel deck system is the only authority allowed to grant
+  // driver control after the physical helm station has actually been claimed.
+  if (!Number.isInteger(boat.driver) && player.vesselDeckInputOwned !== true) boat.driver = playerIndex;
   if (!Number.isInteger(boat.owner)) boat.owner = Number.isInteger(boat.driver) ? boat.driver : playerIndex;
 
   for (const event of (world?.events || []).slice(eventStart)) {
     if (event?.type !== "enter" || !event?.targets?.includes(playerIndex)) continue;
     if (typeof event.text === "string" && event.text.includes("угнал чужую лодку")) {
-      event.text = "Ты занял место рулевого на своём двухместном бронекатере.";
+      event.text = "Ты поднялся на свой двухместный бронекатер.";
     }
     event.boatId = boat.id;
     event.ownedBoat = true;
