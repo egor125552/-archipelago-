@@ -4,6 +4,8 @@ import {FreeRoamAudio as BaseFreeRoamAudio, relativeMovementPan} from "./free-ro
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));
+const aboardBoat = player => Boolean(player && ["boat", "roof"].includes(player.mode) && Number.isInteger(player.activeBoat));
+const customVesselEngine = boat => String(boat?.audioProfile || "").startsWith("dual-turret");
 
 export function spatialGainForDistance(metres, maximum = 120) {
   const proximity = clamp(1 - (Number(metres) || 0) / maximum, 0, 1);
@@ -29,8 +31,25 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
     const me = world?.players?.[playerIndex];
     const otherIndex = 1 - playerIndex;
     const other = world?.players?.[otherIndex];
-    const otherBoat = other && ["boat", "roof"].includes(other.mode) ? world.boats?.[other.activeBoat] : null;
+    const otherBoat = aboardBoat(other) ? world.boats?.[other.activeBoat] : null;
     const present = world?.freeActivities?.presence?.[otherIndex] !== false;
+    const samePhysicalBoat = Boolean(
+      aboardBoat(me)
+      && aboardBoat(other)
+      && me.activeBoat === other.activeBoat,
+    );
+
+    // A boat is one physical sound source, regardless of how many players are
+    // standing on it. In particular, two people aboard the armored patrol must
+    // not create a second "remote" wake that pans around the local listener as
+    // the hull turns. The local vessel audio already represents this hull.
+    if (samePhysicalBoat) {
+      Object.assign(this.spatialDiagnostics, {remotePan: 0, remoteGain: 0, remoteLowpass: 0});
+      if (this.ctx && this.remote) this.remote.gain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.16);
+      if (this.ctx && this.remoteWake) this.remoteWake.gain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.16);
+      return;
+    }
+
     const metres = me && otherBoat ? distance(me, otherBoat) : Infinity;
     const pan = me && otherBoat ? relativeMovementPan(me, otherBoat) : 0;
     const proximity = clamp(1 - metres / 175, 0, 1);
@@ -38,7 +57,7 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
     const speed = Math.abs(Number(otherBoat?.speed) || 0);
     const throttle = Math.abs(Number(otherBoat?.throttle) || 0);
     const lowpass = 900 + shaped * 5200 + clamp(speed / 18, 0, 1) * 900;
-    const customEngine = otherBoat?.audioProfile === "dual-turret";
+    const customEngine = customVesselEngine(otherBoat);
     const engineGain = customEngine || otherBoat?.engineStalled
       ? 0
       : shaped * (0.025 + throttle * 0.15);
