@@ -13,10 +13,16 @@ import {vesselNetworkSnapshot} from "./vessel-network.js";
 const registry = createVesselRegistry();
 const nativeWorldInstances = new WeakMap();
 const preparedWorlds = new WeakSet();
+let vesselPluginsInstalled = false;
 registry.registerPreset(STANDARD_BOAT_PRESET);
 registry.registerPreset(LEGACY_BOAT_PRESET);
 installVesselContent(registry);
-installVesselPlugins(registry);
+
+function ensureVesselPluginsInstalled() {
+  if (vesselPluginsInstalled) return;
+  installVesselPlugins(registry);
+  vesselPluginsInstalled = true;
+}
 
 function worldIndex(world) {
   let index = nativeWorldInstances.get(world);
@@ -162,6 +168,7 @@ function syncNativeWorld(world) {
 }
 
 export function vesselRegistry() {
+  ensureVesselPluginsInstalled();
   return registry;
 }
 
@@ -240,6 +247,7 @@ export function runVesselPhysics(context = {}) {
 }
 
 export function runVesselSystems(phase, context = {}) {
+  ensureVesselPluginsInstalled();
   const world = context.world;
   const nativeVessels = world ? syncNativeWorld(world) : [];
   if (world) syncLegacyVesselWorld(world);
