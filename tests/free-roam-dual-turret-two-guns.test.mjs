@@ -12,6 +12,9 @@ import {
 } from "../public/src/free-roam-core-v8.js";
 import {prepareDualTurretBoatRoom} from "../public/src/free-roam-dual-turret-boat.js";
 import {DUAL_TURRET_SHOT_DAMAGE} from "../public/src/free-roam-dual-turret-config.js";
+import {nativeVesselForBoat} from "../public/src/vessel/vessel-runtime.js?v=2";
+import {setVesselOccupantPosition} from "../public/src/vessel/vessel-interior.js";
+import {claimVesselDeckResource} from "../public/src/vessel/vessel-deck-runtime.js";
 
 function seat(world, playerIndex, boat) {
   setPlayerPresence(world, playerIndex, true);
@@ -44,11 +47,16 @@ test("both mounted guns fire from the same controller objects in one server tick
   boat.y = 210;
   boat.heading = 0;
   boat.speed = 0;
-  boat.driver = 0;
+  boat.driver = null;
   boat.crew = [0, 1];
   seat(world, 0, boat);
   seat(world, 1, boat);
+  const entry = nativeVesselForBoat(world, boat.id);
+  setVesselOccupantPosition(entry.definition, entry.instance, 0, {deckId: "armored-bridge-deck", x: 0, y: 1.4, heading: 0});
+  setVesselOccupantPosition(entry.definition, entry.instance, 1, {deckId: "armored-main-deck", x: 0, y: -4, heading: 0});
+  claimVesselDeckResource(entry.instance, 0, "armored-helm-control");
   stepFreeWorld(world, 0.01);
+  assert.equal(boat.driver, 0, "the driver is the player physically occupying the helm station");
 
   const target = world.freeActivities.marauder;
   assert.ok(target);
