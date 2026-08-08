@@ -132,6 +132,128 @@ const ARMORED_BRIDGE_DECK = Object.freeze({
   ],
 });
 
+const STRESS_AFT_DECK = Object.freeze({
+  id: "stress-aft-deck",
+  label: "задняя палуба",
+  level: 0,
+  presentation: {
+    label: "задняя палуба",
+    forms: {accusative: "заднюю палубу", prepositional: "задней палубе"},
+  },
+  shape: {outer: [[-2.4, -3.8], [2.4, -3.8], [2.4, 0.6], [-2.4, 0.6]]},
+  movement: {speed: 4.8, jumpDistance: 1.7, runJumpMultiplier: 1.6},
+  zones: [
+    {
+      id: "stress-aft-zone",
+      label: "задняя площадка",
+      presentation: {label: "задняя площадка", forms: {accusative: "заднюю площадку", prepositional: "задней площадке"}},
+      shape: {outer: [[-2.2, -3.6], [2.2, -3.6], [2.2, 0.4], [-2.2, 0.4]]},
+      announcement: "first-entry",
+    },
+  ],
+  landmarks: [
+    {id: "stress-step-landmark", label: "короткая лестница на рабочую палубу", position: [0, 0.15], zoneId: "stress-aft-zone"},
+  ],
+  connections: [
+    {
+      id: "stress-step-up",
+      kind: "ladder",
+      label: "короткая лестница",
+      presentation: {label: "короткая лестница", forms: {accusative: "короткую лестницу", instrumental: "короткой лестницей"}},
+      toDeckId: "stress-control-deck",
+      reverseId: "stress-step-down",
+      from: [0, 0.15],
+      to: [0, -1.85],
+      initialState: "open",
+      interactionRange: 1.7,
+      traversal: {mode: "geometry", speed: 2.8, levelHeight: 1.2},
+      actionLabel: "подняться на рабочую палубу",
+      traverseText: "Ты поднимаешься на рабочую палубу.",
+      arrivalText: "Ты поднялся на рабочую палубу. Слева кресло водителя, справа пистолетная установка.",
+      acoustics: {openTransmission: 1, closedTransmission: 1},
+    },
+  ],
+});
+
+const STRESS_CONTROL_DECK = Object.freeze({
+  id: "stress-control-deck",
+  label: "рабочая палуба",
+  level: 1,
+  presentation: {
+    label: "рабочая палуба",
+    forms: {accusative: "рабочую палубу", prepositional: "рабочей палубе"},
+  },
+  shape: {outer: [[-2.7, -2.2], [2.7, -2.2], [2.7, 2.9], [-2.7, 2.9]]},
+  movement: {speed: 4.5, jumpDistance: 1.6, runJumpMultiplier: 1.55},
+  zones: [
+    {
+      id: "stress-control-zone",
+      label: "посты управления",
+      presentation: {label: "посты управления", forms: {accusative: "посты управления", prepositional: "постах управления"}},
+      shape: {outer: [[-2.5, -2], [2.5, -2], [2.5, 2.7], [-2.5, 2.7]]},
+      announcement: "zone-change",
+    },
+  ],
+  objects: [
+    {
+      id: "stress-driver-seat",
+      kind: "station",
+      label: "кресло водителя",
+      presentation: {label: "кресло водителя", forms: {accusative: "кресло водителя", genitive: "кресла водителя", prepositional: "кресле водителя"}},
+      position: [-1.15, 1.15],
+      zoneId: "stress-control-zone",
+      resourceId: "stress-helm-control",
+      stationRole: "helm",
+      controlsVessel: true,
+      interactionRange: 1.45,
+      occupyLabel: "сесть в кресло водителя",
+      leaveLabel: "встать с кресла водителя",
+      occupyText: "Ты сел в кресло водителя. Теперь управляешь самым быстрым катером.",
+      leaveText: "Ты встал с кресла водителя и снова можешь ходить по палубе.",
+    },
+    {
+      id: "stress-pistol-station",
+      kind: "station",
+      label: "пистолетная установка",
+      presentation: {label: "пистолетная установка", forms: {accusative: "пистолетную установку", genitive: "пистолетной установки", prepositional: "пистолетной установке"}},
+      position: [1.15, 1.15],
+      zoneId: "stress-control-zone",
+      resourceId: "stress-pistol-control",
+      stationRole: "weapon",
+      controlsModule: "stress-pistol",
+      interactionRange: 1.45,
+      occupyLabel: "сесть за пистолетную установку",
+      leaveLabel: "встать от пистолетной установки",
+      occupyText: "Ты сел за сверхскоростную пистолетную установку. Удерживай огонь.",
+      leaveText: "Ты встал от пистолетной установки.",
+    },
+  ],
+  landmarks: [
+    {id: "stress-driver-landmark", label: "кресло водителя", position: [-1.15, 1.15], zoneId: "stress-control-zone"},
+    {id: "stress-pistol-landmark", label: "пистолетная установка", position: [1.15, 1.15], zoneId: "stress-control-zone"},
+    {id: "stress-step-down-landmark", label: "лестница на заднюю палубу", position: [0, -1.85], zoneId: "stress-control-zone"},
+  ],
+  connections: [
+    {
+      id: "stress-step-down",
+      kind: "ladder",
+      label: "короткая лестница",
+      presentation: {label: "короткая лестница", forms: {accusative: "короткую лестницу", instrumental: "короткой лестницей"}},
+      toDeckId: "stress-aft-deck",
+      reverseId: "stress-step-up",
+      from: [0, -1.85],
+      to: [0, 0.15],
+      initialState: "open",
+      interactionRange: 1.7,
+      traversal: {mode: "geometry", speed: 2.8, levelHeight: 1.2},
+      actionLabel: "спуститься на заднюю палубу",
+      traverseText: "Ты спускаешься на заднюю палубу.",
+      arrivalText: "Ты спустился на заднюю палубу.",
+      acoustics: {openTransmission: 1, closedTransmission: 1},
+    },
+  ],
+});
+
 export const CURRENT_VESSEL_TYPES = Object.freeze([
   Object.freeze({
     id: "standard",
@@ -203,7 +325,7 @@ export const CURRENT_VESSEL_TYPES = Object.freeze([
     id: STRESS_TEST_VESSEL_TYPE,
     preset: "standard-boat",
     label: "испытательный катер «Пятьдесят»",
-    capabilities: {towable: true, sonarTarget: true, zonalDamage: false},
+    capabilities: {towable: true, sonarTarget: true, zonalDamage: false, walkableInterior: true},
     physics: {mode: "module", module: "stress-50-engine-physics-v1"},
     lifecycle: {
       respawn: {
@@ -216,7 +338,7 @@ export const CURRENT_VESSEL_TYPES = Object.freeze([
     },
     runtimeDefaults: {
       ...STANDARD_BOAT_RUNTIME_DEFAULTS,
-      crewCapacity: 1,
+      crewCapacity: 2,
       crew: [],
       collisionRadius: 6.4,
       boardingRange: 18,
@@ -229,8 +351,23 @@ export const CURRENT_VESSEL_TYPES = Object.freeze([
       testWeaponAmmo: STRESS_TEST_START_AMMO,
     },
     runtimeStateFields: Object.freeze([...COMMON_RUNTIME_FIELDS, "boardingRange", "audioProfile", "testWeaponAmmo"]),
+    deckArchitecture: {
+      boarding: {
+        mode: "deck-entry",
+        points: [
+          {id: "stress-stern-entry", deckId: "stress-aft-deck", position: [0, -2.9], safe: true, enterText: "Ты поднялся на заднюю палубу самого быстрого катера."},
+        ],
+      },
+      control: {mode: "stations"},
+      reconnect: {mode: "last-valid-or-safe"},
+      sinking: {mode: "simple", geometryTilt: false},
+      playerInertia: {mode: "stable"},
+      cargoInertia: {mode: "stable"},
+      audio: {footsteps: "default", jump: "default"},
+    },
+    decks: [STRESS_AFT_DECK, STRESS_CONTROL_DECK],
     mounts: [
-      {id: "stress-pistol-hardpoint", kind: "weapon-hardpoint", accepts: ["mounted-weapon"]},
+      {id: "stress-pistol-hardpoint", kind: "weapon-hardpoint", accepts: ["mounted-weapon"], deckId: "stress-control-deck", position: [1.15, 1.45]},
     ],
     modules: [
       ...STRESS_ENGINE_MODULES,
@@ -245,7 +382,8 @@ export const CURRENT_VESSEL_TYPES = Object.freeze([
         type: "mounted-weapon",
         mounts: ["stress-pistol-hardpoint"],
         config: {
-          inputMode: "driver-attack",
+          inputMode: "station-attack",
+          stationResourceId: "stress-pistol-control",
           weaponId: "stress-pistol",
           label: "сверхскоростной пистолет",
           ammo: STRESS_TEST_START_AMMO,
