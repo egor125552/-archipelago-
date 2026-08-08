@@ -27,9 +27,28 @@ function predictionProfile(source) {
   };
 }
 
+function renderVesselArchitecture(world) {
+  const architecture = replicatedVesselArchitecture(world);
+  return {
+    contract: architecture.contract,
+    vessels: (architecture.vessels || []).map(vessel => ({
+      instanceId: vessel.instanceId,
+      typeId: vessel.typeId,
+      legacyBoatId: vessel.legacyBoatId,
+      // The ordinary boat projection below is the render source of truth for
+      // movement, hull, cargo and other runtime state. Duplicating that state
+      // inside vesselArchitecture made every delta pay for the same values
+      // twice. Architecture replication keeps only module/interior state here.
+      state: {},
+      modules: vessel.modules || {},
+      occupants: vessel.occupants || {},
+      zones: vessel.zones || {},
+    })),
+  };
+}
+
 export function replicatedFreeWorld(world) {
   const snapshot = base.replicatedFreeWorld(world);
-  snapshot.vesselArchitecture = replicatedVesselArchitecture(world);
   for (let index = 0; index < (world?.boats || []).length; index += 1) {
     const source = world.boats[index];
     const target = snapshot.boats?.[index];
@@ -62,6 +81,7 @@ export function replicatedFreeWorld(world) {
       maximumRelativeHeading: turret.maximumRelativeHeading,
     }));
   }
+  snapshot.vesselArchitecture = renderVesselArchitecture(world);
   const controller = world?.freeDualTurretBoat;
   if (controller) {
     snapshot.freeDualTurretBoat = {
