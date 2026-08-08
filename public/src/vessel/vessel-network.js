@@ -1,16 +1,14 @@
 "use strict";
 
 import {VesselContractError, cloneData} from "./vessel-contract.js";
+import {vesselDeckNetworkState} from "./vessel-deck-runtime.js";
 
-export const VESSEL_NETWORK_VERSION = 2;
+export const VESSEL_NETWORK_VERSION = 3;
 export const VESSEL_NETWORK_COMPATIBLE_FROM = 1;
 
 function compactState(definition, boat) {
   const result = {};
-  const fields = definition?.runtimeStateFields || [];
-  for (const field of fields) {
-    if (boat?.[field] !== undefined) result[field] = cloneData(boat[field]);
-  }
+  for (const field of definition?.runtimeStateFields || []) if (boat?.[field] !== undefined) result[field] = cloneData(boat[field]);
   return result;
 }
 
@@ -23,12 +21,8 @@ function sameValue(left, right) {
 function compactModuleState(registry, vesselDefinition, moduleDefinition, instance) {
   const moduleType = registry.resolveModuleType(moduleDefinition.type);
   const current = instance?.modules?.[moduleDefinition.id] || {};
-  const baseline = moduleType?.createState
-    ? moduleType.createState(moduleDefinition.config || {}, {vesselType: vesselDefinition, module: moduleDefinition}) || {}
-    : {};
-  const fields = Array.isArray(moduleType?.networkStateFields)
-    ? moduleType.networkStateFields
-    : Object.keys(current);
+  const baseline = moduleType?.createState ? moduleType.createState(moduleDefinition.config || {}, {vesselType: vesselDefinition, module: moduleDefinition}) || {} : {};
+  const fields = Array.isArray(moduleType?.networkStateFields) ? moduleType.networkStateFields : Object.keys(current);
   const always = new Set(Array.isArray(moduleType?.networkAlwaysFields) ? moduleType.networkAlwaysFields : []);
   const changed = {};
   for (const field of fields) {
@@ -44,6 +38,10 @@ function compactModules(registry, definition, instance) {
   for (const moduleDefinition of definition?.modules || []) {
     const changed = compactModuleState(registry, definition, moduleDefinition, instance);
     if (Object.keys(changed).length) result[moduleDefinition.id] = changed;
+  }
+  for (const [moduleId, installation] of Object.entries(instance?.installations || {})) {
+    if ((definition?.modules || []).some(module => module.id === moduleId)) continue;
+    result[moduleId] = {$installation: cloneData(installation), ...cloneData(instance?.modules?.[moduleId] || {})};
   }
   return result;
 }
@@ -75,24 +73,19 @@ export function vesselNetworkSnapshot(world, registry, nativeEntries = []) {
     if (!instance || !boat) continue;
     const definition = registry.resolveVesselType(instance.typeId);
     if (!definition?.capabilities?.replicates) continue;
-    vessels.push({
+    const vessel = {
       instanceId: instance.instanceId,
       typeId: instance.typeId,
       legacyBoatId: Number.isInteger(instance.legacyBoatId) ? instance.legacyBoatId : null,
       state: compactState(definition, boat),
-      // Module definitions are static content already present on both peers.
-      // Replicate only runtime fields that differ from each module type's
-      // initial state, except explicitly always-visible fields such as ammo.
-      // Fifty healthy propulsion modules therefore cost zero per snapshot.
       modules: compactModules(registry, definition, instance),
       occupants: cloneData(instance.occupants || {}),
       zones: cloneData(instance.zones || {}),
-    });
+    };
+    if (definition.deckArchitecture?.enabled) vessel.interior = vesselDeckNetworkState(registry, definition, instance);
+    vessels.push(vessel);
   }
-  return Object.freeze({
-    contract: vesselNetworkMetadata(),
-    vessels,
-  });
+  return Object.freeze({contract: vesselNetworkMetadata(), vessels});
 }
 
 export function diffVesselNetworkSnapshots(previous, next) {
