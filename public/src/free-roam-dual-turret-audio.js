@@ -21,6 +21,15 @@ function relativePan(listener, source) {
   return clamp(Math.sin(wrapDeg(bearing - (Number(listener.heading) || 0)) * Math.PI / 180), -1, 1);
 }
 
+function playerAboardBoat(player, boat) {
+  return Boolean(
+    player
+    && boat
+    && player.activeBoat === boat.id
+    && ["boat", "roof"].includes(player.mode),
+  );
+}
+
 export async function preloadDualTurretAudio(audio) {
   if (!audio?.ctx || !audio?.buffers) return;
   if (audio.dualTurretPreloadPromise) return audio.dualTurretPreloadPromise;
@@ -73,17 +82,21 @@ export function updateDualTurretEngine(audio, world, playerIndex) {
   startEngine(audio);
   const engine = audio.dualTurretEngine;
   if (!engine) return;
-  const listener = audio.listenerPoint || world?.players?.[playerIndex];
+  const player = world?.players?.[playerIndex] || null;
+  const listener = audio.listenerPoint || player;
   const metres = distance(listener, boat);
-  const localAboard = world?.players?.[playerIndex]?.activeBoat === boat.id
-    && world?.players?.[playerIndex]?.mode === "boat";
+  const localAboard = playerAboardBoat(player, boat);
   const speed = clamp(Math.abs(Number(boat.speed) || 0) / 13.5, 0, 1);
   const throttle = clamp(Math.abs(Number(boat.throttle) || 0), 0, 1);
   const proximity = localAboard ? 1 : clamp(1 - metres / 230, 0, 1);
   const now = audio.ctx.currentTime;
   engine.source.playbackRate.setTargetAtTime(0.78 + speed * 0.82 + throttle * 0.08, now, 0.11);
   engine.filter.frequency.setTargetAtTime(900 + speed * 4300 + proximity * 700, now, 0.14);
-  engine.panner.pan.setTargetAtTime(localAboard ? 0 : relativePan(listener, boat), now, 0.1);
+  // When the listener is aboard this exact hull, steering changes the hull's
+  // world heading but not the listener-to-engine vessel relationship. Keep the
+  // local motor centered, exactly like the ordinary local boat engine. Only a
+  // genuinely remote armored patrol is spatialized from world coordinates.
+  engine.panner.pan.setTargetAtTime(localAboard ? 0 : relativePan(listener, boat), now, localAboard ? 0.18 : 0.12);
   engine.gain.gain.setTargetAtTime(localAboard ? 0.16 : proximity * 0.13, now, 0.13);
 }
 
@@ -91,7 +104,7 @@ export function updateDualTurretProjectileAudio() {}
 
 function isArmoredTransition(event) {
   return ["enter", "exit"].includes(event?.type)
-    && (event.audioProfile === "dual-turret" || event.boatType === DUAL_TURRET_BOAT_TYPE);
+    && (String(event.audioProfile || "").startsWith("dual-turret") || event.boatType === DUAL_TURRET_BOAT_TYPE);
 }
 
 export function handleDualTurretAudioEvent(audio, event, playerIndex) {
