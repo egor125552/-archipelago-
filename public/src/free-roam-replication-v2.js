@@ -2,7 +2,7 @@
 
 import * as base from "./free-roam-replication.js";
 import {isDualTurretBoat} from "./free-roam-dual-turret-boat.js?v=4";
-import {replicatedVesselArchitecture} from "./vessel/vessel-runtime.js";
+import {replicatedVesselArchitecture} from "./vessel/vessel-runtime.js?v=2";
 
 export * from "./free-roam-replication.js";
 
