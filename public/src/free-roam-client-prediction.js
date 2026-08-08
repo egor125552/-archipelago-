@@ -14,7 +14,42 @@ function blendAngle(authoritative, predicted, keep) {
   return wrapDeg((Number(authoritative) || 0) + difference * keep);
 }
 
-function clampBoatState(boat, physics = resolveBoatPhysicsProfile(boat, CONFIG)) {
+function nonNegative(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : fallback;
+}
+
+function positive(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : fallback;
+}
+
+function predictionPhysics(boat) {
+  const inherited = resolveBoatPhysicsProfile(boat, CONFIG);
+  const profile = boat?.predictionPhysicsProfile;
+  if (!profile || typeof profile !== "object") {
+    return {
+      ...inherited,
+      deceleration: inherited.acceleration,
+      releaseBehavior: "coast",
+      applyDrag: true,
+      propulsionAvailable: true,
+    };
+  }
+  return {
+    ...inherited,
+    id: String(profile.id || inherited.id),
+    maxForwardSpeed: nonNegative(profile.maxForwardSpeed, inherited.maxForwardSpeed),
+    maxReverseSpeed: nonNegative(profile.maxReverseSpeed, inherited.maxReverseSpeed),
+    acceleration: positive(profile.acceleration, inherited.acceleration),
+    deceleration: positive(profile.deceleration, inherited.acceleration),
+    releaseBehavior: String(profile.releaseBehavior || "coast"),
+    applyDrag: profile.applyDrag !== false,
+    propulsionAvailable: profile.propulsionAvailable !== false,
+  };
+}
+
+function clampBoatState(boat, physics = predictionPhysics(boat)) {
   boat.speed = clamp(Number(boat.speed) || 0, -physics.maxReverseSpeed, physics.maxForwardSpeed);
   boat.throttle = clamp(Number(boat.throttle) || 0, -1, 1);
   return boat;
@@ -59,11 +94,16 @@ export function reconcileLocalPrediction(previousWorld, nextWorld, playerIndex) 
   return nextWorld;
 }
 
+function approachZero(value, maximumChange) {
+  const current = Number(value) || 0;
+  return current + clamp(-current, -maximumChange, maximumChange);
+}
+
 function predictBoat(world, playerIndex, input, dt) {
   const player = world.players?.[playerIndex];
   const boat = player?.mode === "boat" ? world.boats?.[player.activeBoat] : null;
   if (!boat || boat.sunk || boat.driver !== playerIndex) return;
-  const physics = resolveBoatPhysicsProfile(boat, CONFIG);
+  const physics = predictionPhysics(boat);
   const steer = Number(Boolean(input.right)) - Number(Boolean(input.left));
   const thrust = Number(Boolean(input.up)) - Number(Boolean(input.down));
   if (thrust) {
@@ -71,15 +111,25 @@ function predictBoat(world, playerIndex, input, dt) {
   } else {
     boat.throttle = 0;
   }
-  if (boat.engineStalled || boat.emergencyActive) boat.throttle = 0;
-  if (!thrust && !boat.engineStalled && !boat.emergencyActive) {
-    boat.speed *= Math.exp(-0.028 * physics.dragFactor * dt);
+  const propulsionUnavailable = boat.engineStalled || boat.emergencyActive || physics.propulsionAvailable === false;
+  if (propulsionUnavailable) boat.throttle = 0;
+
+  if (propulsionUnavailable || !thrust) {
+    if (physics.releaseBehavior === "target-zero") {
+      boat.speed = approachZero(boat.speed, physics.deceleration * dt);
+    } else if (!boat.engineStalled && !boat.emergencyActive) {
+      boat.speed *= Math.exp(-0.028 * physics.dragFactor * dt);
+    }
   } else {
     const targetSpeed = boat.throttle >= 0
       ? boat.throttle * physics.maxForwardSpeed
       : boat.throttle * physics.maxReverseSpeed;
-    boat.speed += clamp(targetSpeed - boat.speed, -physics.acceleration * dt, physics.acceleration * dt);
-    boat.speed *= Math.max(0, 1 - physics.drag * dt * (0.12 + Math.abs(boat.speed) / physics.maxForwardSpeed * 0.16));
+    const accelerating = Math.abs(targetSpeed) > Math.abs(Number(boat.speed) || 0);
+    const response = accelerating ? physics.acceleration : physics.deceleration;
+    boat.speed += clamp(targetSpeed - boat.speed, -response * dt, response * dt);
+    if (physics.applyDrag) {
+      boat.speed *= Math.max(0, 1 - physics.drag * dt * (0.12 + Math.abs(boat.speed) / Math.max(0.001, physics.maxForwardSpeed) * 0.16));
+    }
   }
   clampBoatState(boat, physics);
   if (steer) {
