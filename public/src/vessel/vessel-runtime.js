@@ -131,6 +131,17 @@ function restoreDynamicModules(definition, instance, persisted) {
   }
 }
 
+function restoreLiveOccupants(world, definition, instance, boatId, persisted) {
+  if (!definition?.capabilities?.walkableInterior) return;
+  for (const [rawIndex, previous] of Object.entries(persisted?.occupantMemory || {})) {
+    const playerIndex = Number(rawIndex);
+    if (!Number.isInteger(playerIndex) || world?.players?.[playerIndex]?.activeBoat !== boatId) continue;
+    const position = safeReconnectPosition(definition, instance, playerIndex, previous);
+    if (!position) continue;
+    try { setVesselOccupantPosition(definition, instance, playerIndex, position); } catch (_) {}
+  }
+}
+
 function compactDynamicModules(definition, instance) {
   const staticIds = new Set((definition.modules || []).map(module => module.id));
   const dynamicInstallations = {};
@@ -197,6 +208,7 @@ function adoptBoat(world, boat, fallbackBoatId = null) {
     deckState: persisted?.deck || null,
   });
   restoreDynamicModules(definition, instance, persisted);
+  restoreLiveOccupants(world, definition, instance, boatId, persisted);
   const entry = {instance, boat, definition, adoptedLegacy: true};
   index.byBoatId.set(boatId, entry);
   index.byInstanceId.set(instanceId, entry);
