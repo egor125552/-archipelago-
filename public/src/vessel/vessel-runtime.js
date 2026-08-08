@@ -117,7 +117,7 @@ function persistedRuntime(boat) {
 }
 
 function restoreDynamicModules(definition, instance, persisted) {
-  const installations = persisted?.installations || {};
+  const installations = persisted?.dynamicInstallations || {};
   for (const [id, installation] of Object.entries(installations)) {
     if (instance.installations[id]) continue;
     if (!registry.resolveModuleType(String(installation?.type || ""))) continue;
@@ -126,19 +126,33 @@ function restoreDynamicModules(definition, instance, persisted) {
       type: installation.type,
       mounts: installation.mounts || [],
       config: installation.config || {},
-      state: persisted?.modules?.[id] || {},
+      state: persisted?.dynamicModules?.[id] || {},
     });
   }
 }
 
+function compactDynamicModules(definition, instance) {
+  const staticIds = new Set((definition.modules || []).map(module => module.id));
+  const dynamicInstallations = {};
+  const dynamicModules = {};
+  for (const [id, installation] of Object.entries(instance.installations || {})) {
+    if (staticIds.has(id)) continue;
+    dynamicInstallations[id] = cloneData(installation);
+    if (instance.modules?.[id] !== undefined) dynamicModules[id] = cloneData(instance.modules[id]);
+  }
+  return {dynamicInstallations, dynamicModules};
+}
+
 function persistNativeEntry(entry) {
   const {definition, instance, boat} = entry;
+  const previousMemory = boat.vesselRuntimeState?.occupantMemory || {};
+  const dynamic = compactDynamicModules(definition, instance);
   boat.vesselRuntimeState = {
     version: VESSEL_RUNTIME_STATE_VERSION,
-    modules: cloneData(instance.modules || {}),
-    installations: cloneData(instance.installations || {}),
-    deck: vesselDeckPersistentState(registry, definition, instance),
-    occupantMemory: cloneData(instance.occupants || {}),
+    dynamicModules: dynamic.dynamicModules,
+    dynamicInstallations: dynamic.dynamicInstallations,
+    deck: definition.deckArchitecture?.enabled ? vesselDeckPersistentState(registry, definition, instance) : null,
+    occupantMemory: {...cloneData(previousMemory), ...cloneData(instance.occupants || {})},
   };
 }
 
@@ -172,7 +186,6 @@ function adoptBoat(world, boat, fallbackBoatId = null) {
     instanceId,
     legacyBoatId: boatId,
     state: runtimeState(definition, boat),
-    moduleState: persisted?.modules || {},
     deckState: persisted?.deck || null,
   });
   restoreDynamicModules(definition, instance, persisted);
