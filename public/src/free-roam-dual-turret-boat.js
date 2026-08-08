@@ -225,9 +225,9 @@ function syncCrew(world, state, boat) {
     const free = boat.crew.findIndex(value => !Number.isInteger(value));
     boat.crew[free >= 0 ? free : 0] = boat.driver;
   }
-  if (!Number.isInteger(boat.driver) || !boat.crew.includes(boat.driver)) {
-    boat.driver = boat.crew.find(Number.isInteger) ?? null;
-  }
+  // Do not promote an arbitrary crew member to driver. On this walkable boat,
+  // driver authority comes only from the physical helm station claim.
+  if (Number.isInteger(boat.driver) && !boat.crew.includes(boat.driver)) boat.driver = null;
   for (const playerIndex of boat.crew.filter(Number.isInteger)) {
     const player = world.players[playerIndex];
     player.mode = "boat";
