@@ -18,6 +18,9 @@ import {
   DUAL_TURRET_SHOT_DAMAGE,
   DUAL_TURRET_SHOT_INTERVAL,
 } from "../public/src/free-roam-dual-turret-config.js";
+import {nativeVesselForBoat} from "../public/src/vessel/vessel-runtime.js?v=2";
+import {setVesselOccupantPosition} from "../public/src/vessel/vessel-interior.js";
+import {claimVesselDeckResource, releaseVesselDeckResource} from "../public/src/vessel/vessel-deck-runtime.js";
 
 function clearNearbyCargo(world, x = 20, y = 20) {
   for (const crate of world.freeActivities?.crates || []) {
@@ -60,14 +63,22 @@ function pulse(world, playerIndex, input, dt = 0.05) {
 
 function seatCrew(world, boat, driver = 0, passenger = null) {
   setPlayerPresence(world, driver, true);
-  boat.driver = driver;
+  boat.driver = null;
   boat.crew = [driver, passenger];
   placePlayer(world, driver, {mode: "boat", boat});
   if (Number.isInteger(passenger)) {
     setPlayerPresence(world, passenger, true);
     placePlayer(world, passenger, {mode: "boat", boat});
   }
+  const entry = nativeVesselForBoat(world, boat.id);
+  setVesselOccupantPosition(entry.definition, entry.instance, driver, {deckId: "armored-bridge-deck", x: 0, y: 1.4, heading: 0});
+  claimVesselDeckResource(entry.instance, driver, "armored-helm-control");
+  if (Number.isInteger(passenger)) {
+    setVesselOccupantPosition(entry.definition, entry.instance, passenger, {deckId: "armored-main-deck", x: 0, y: -4, heading: 0});
+  }
   stepFreeWorld(world, 0.01);
+  assert.equal(boat.driver, driver);
+  return entry;
 }
 
 test("armored patrol is one registered boat with one controller state", () => {
@@ -90,7 +101,7 @@ test("armored patrol is one registered boat with one controller state", () => {
   assert.equal(world.freeDualTurretProjectiles, undefined);
 });
 
-test("first crew member boards through the ordinary free-boat law", () => {
+test("first crew member boards onto the physical deck without receiving the helm", () => {
   const world = createFreeWorld();
   const boat = prepareDualTurretBoatRoom(world);
   clearNearbyCargo(world);
@@ -101,19 +112,21 @@ test("first crew member boards through the ordinary free-boat law", () => {
 
   pulse(world, 0, {action: true});
 
+  const entry = nativeVesselForBoat(world, boat.id);
   assert.equal(world.players[0].mode, "boat");
   assert.equal(world.players[0].activeBoat, boat.id);
-  assert.equal(boat.driver, 0);
+  assert.equal(boat.driver, null);
   assert.equal(boat.crew[0], 0);
+  assert.equal(entry.instance.occupants[0].deckId, "armored-main-deck");
   assert.equal(boat.turrets[0].assignedPlayer, 0);
 });
 
-test("second crew member uses only the small patrol controller", () => {
+test("second crew member boards the same physical patrol deck", () => {
   const world = createFreeWorld();
   const boat = prepareDualTurretBoatRoom(world);
   clearNearbyCargo(world);
   isolateBoat(world, boat);
-  seatCrew(world, boat, 0, null);
+  const entry = seatCrew(world, boat, 0, null);
   placePlayer(world, 1, {x: boat.x + 4, y: boat.y});
 
   pulse(world, 1, {action: true});
@@ -122,6 +135,7 @@ test("second crew member uses only the small patrol controller", () => {
   assert.equal(world.players[1].activeBoat, boat.id);
   assert.deepEqual(boat.crew, [0, 1]);
   assert.equal(boat.driver, 0);
+  assert.equal(entry.instance.occupants[1].deckId, "armored-main-deck");
   assert.equal(boat.turrets[1].assignedPlayer, 1);
 });
 
@@ -156,34 +170,38 @@ test("armored patrol uses the common physics engine with a heavier profile", () 
   assert.ok(Math.hypot(patrol.x - 210, patrol.y - 210) < Math.hypot(ordinary.x - 210, ordinary.y - 210));
 });
 
-test("driver really exits into open water and is not pulled back aboard", () => {
+test("driver leaves the physical helm and jumps from the deck into open water", () => {
   const world = createFreeWorld();
   const boat = prepareDualTurretBoatRoom(world);
   clearNearbyCargo(world);
   isolateBoat(world, boat);
   boat.reserved = false;
   Object.assign(boat, {x: 210, y: 210, speed: 0, throttle: 0, rudder: 0});
-  seatCrew(world, boat, 0, null);
+  const entry = seatCrew(world, boat, 0, null);
+  releaseVesselDeckResource(entry.instance, 0, "armored-helm-control");
+  boat.driver = null;
+  setVesselOccupantPosition(entry.definition, entry.instance, 0, {deckId: "armored-main-deck", x: 0, y: 5.45, heading: 0});
 
-  pulse(world, 0, {action: true});
+  pulse(world, 0, {jump: true});
 
   assert.equal(world.players[0].mode, "swim");
   assert.equal(world.players[0].activeBoat, null);
   assert.equal(boat.driver, null);
   assert.deepEqual(boat.crew, [null, null]);
-  assert.ok(world.events.some(event => event.type === "exit" && event.targets.includes(0)));
+  assert.ok(world.events.some(event => event.type === "jump" && event.targets.includes(0)));
 });
 
-test("passenger can exit into open water without removing the driver", () => {
+test("passenger can jump into open water without removing the driver", () => {
   const world = createFreeWorld();
   const boat = prepareDualTurretBoatRoom(world);
   clearNearbyCargo(world);
   isolateBoat(world, boat);
   boat.reserved = false;
   Object.assign(boat, {x: 210, y: 210, speed: 0, throttle: 0, rudder: 0});
-  seatCrew(world, boat, 0, 1);
+  const entry = seatCrew(world, boat, 0, 1);
+  setVesselOccupantPosition(entry.definition, entry.instance, 1, {deckId: "armored-main-deck", x: 0, y: 5.45, heading: 0});
 
-  pulse(world, 1, {action: true});
+  pulse(world, 1, {jump: true});
 
   assert.equal(world.players[1].mode, "swim");
   assert.equal(world.players[1].activeBoat, null);
@@ -192,27 +210,29 @@ test("passenger can exit into open water without removing the driver", () => {
   assert.deepEqual(boat.crew, [0, null]);
 });
 
-test("nearby cargo is loaded instead of triggering an exit", () => {
+test("nearby cargo can still be loaded by crew walking on the deck", () => {
   const world = createFreeWorld();
   const boat = prepareDualTurretBoatRoom(world);
   clearNearbyCargo(world);
   isolateBoat(world, boat);
   boat.reserved = false;
   Object.assign(boat, {x: 210, y: 190, speed: 0});
-  seatCrew(world, boat, 0, null);
+  const entry = seatCrew(world, boat, 0, 1);
+  setVesselOccupantPosition(entry.definition, entry.instance, 1, {deckId: "armored-main-deck", x: 0, y: -1, heading: 0});
+  stepFreeWorld(world, 0.01);
   const crate = world.freeActivities.crates.find(candidate => candidate.kind === "fuel");
-  crate.x = boat.x + 2;
-  crate.y = boat.y;
+  crate.x = world.players[1].x + 2;
+  crate.y = world.players[1].y;
 
-  pulse(world, 0, {action: true});
+  pulse(world, 1, {action: true});
 
-  assert.equal(world.players[0].mode, "boat");
+  assert.equal(world.players[1].mode, "boat");
   assert.equal(crate.state, "stowed");
   assert.equal(crate.stowedBoat, boat.id);
   assert.ok(boat.cargo.includes(crate.id));
 });
 
-test("sonar steering is applied once by the driver even with two crew members", () => {
+test("sonar steering is applied once by the physical driver even with two crew members", () => {
   const oneCrewWorld = createFreeWorld();
   const oneCrewBoat = prepareDualTurretBoatRoom(oneCrewWorld);
   clearNearbyCargo(oneCrewWorld);
