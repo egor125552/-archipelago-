@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {createFreeWorld, setPlayerInput, stepFreeWorld} from "../public/src/free-roam-core-v8.js";
-import {nativeVesselForBoat} from "../public/src/vessel/vessel-runtime.js";
+import {nativeVesselForBoat} from "../public/src/vessel/vessel-runtime.js?v=2";
 import {setVesselOccupantPosition} from "../public/src/vessel/vessel-interior.js";
 
 test("walking input cannot accelerate or fire the armored patrol before the helm is claimed", () => {
