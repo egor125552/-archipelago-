@@ -7,9 +7,17 @@ import {syncLegacyVesselWorld, legacyVesselViews} from "./vessel-legacy-adapter.
 import {installVesselContent} from "./vessel-content-manifest.js";
 import {installVesselPlugins} from "./vessel-plugin-manifest.js";
 import {migratePersistedVesselWorld, VESSEL_SAVE_VERSION} from "./vessel-save.js";
-import {syncWalkableVesselOccupants} from "./vessel-interior.js";
+import {clearVesselOccupantPosition, setVesselOccupantPosition, syncWalkableVesselOccupants} from "./vessel-interior.js";
+import {
+  advanceVesselDeckRuntime,
+  releaseVesselOccupantResources,
+  safeReconnectPosition,
+  vesselDeckPersistentState,
+} from "./vessel-deck-runtime.js";
+import {installVesselModule} from "./vessel-modules.js";
 import {vesselNetworkSnapshot} from "./vessel-network.js";
 
+const VESSEL_RUNTIME_STATE_VERSION = 1;
 const registry = createVesselRegistry();
 const nativeWorldInstances = new WeakMap();
 const preparedWorlds = new WeakSet();
@@ -39,9 +47,7 @@ function nextBoatSlot(world) {
   return empty >= 0 ? empty : boats.length;
 }
 
-function integerOrNull(value) {
-  return Number.isInteger(value) ? value : null;
-}
+function integerOrNull(value) { return Number.isInteger(value) ? value : null; }
 
 function safeTypeId(boat) {
   const raw = String(boat?.vesselType || boat?.boatType || boat?.type || "standard").toLowerCase();
@@ -57,6 +63,7 @@ function copyMigratedIdentity(world, migrated) {
     if (!source || !target) continue;
     target.vesselInstanceId = source.vesselInstanceId;
     target.vesselType = source.vesselType;
+    if (source.vesselRuntimeState !== undefined) target.vesselRuntimeState = cloneData(source.vesselRuntimeState);
   }
 }
 
@@ -82,9 +89,7 @@ function allocateInstanceId(world, typeId) {
 
 function runtimeState(definition, boat) {
   const state = {};
-  for (const field of definition?.runtimeStateFields || []) {
-    if (boat?.[field] !== undefined) state[field] = cloneData(boat[field]);
-  }
+  for (const field of definition?.runtimeStateFields || []) if (boat?.[field] !== undefined) state[field] = cloneData(boat[field]);
   return state;
 }
 
@@ -106,10 +111,42 @@ function syncModuleState(entry) {
   }
 }
 
+function persistedRuntime(boat) {
+  const value = boat?.vesselRuntimeState;
+  return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+}
+
+function restoreDynamicModules(definition, instance, persisted) {
+  const installations = persisted?.installations || {};
+  for (const [id, installation] of Object.entries(installations)) {
+    if (instance.installations[id]) continue;
+    if (!registry.resolveModuleType(String(installation?.type || ""))) continue;
+    installVesselModule(registry, definition, instance, {
+      id,
+      type: installation.type,
+      mounts: installation.mounts || [],
+      config: installation.config || {},
+      state: persisted?.modules?.[id] || {},
+    });
+  }
+}
+
+function persistNativeEntry(entry) {
+  const {definition, instance, boat} = entry;
+  boat.vesselRuntimeState = {
+    version: VESSEL_RUNTIME_STATE_VERSION,
+    modules: cloneData(instance.modules || {}),
+    installations: cloneData(instance.installations || {}),
+    deck: vesselDeckPersistentState(registry, definition, instance),
+    occupantMemory: cloneData(instance.occupants || {}),
+  };
+}
+
 function syncNativeEntry(entry) {
   if (!entry) return null;
   entry.instance.state = runtimeState(entry.definition, entry.boat);
   syncModuleState(entry);
+  persistNativeEntry(entry);
   return entry;
 }
 
@@ -125,18 +162,20 @@ function adoptBoat(world, boat, fallbackBoatId = null) {
   const previous = index.byBoatId.get(boatId);
   if (previous?.boat === boat && previous.instance.typeId === definition.id) return syncNativeEntry(previous);
   const instanceId = String(boat.vesselInstanceId || "").trim() || allocateInstanceId(world, definition.id);
-  if (index.byInstanceId.has(instanceId) && index.byInstanceId.get(instanceId)?.boat !== boat) {
-    throw new VesselContractError(`duplicate live vessel instanceId ${instanceId}`);
-  }
+  if (index.byInstanceId.has(instanceId) && index.byInstanceId.get(instanceId)?.boat !== boat) throw new VesselContractError(`duplicate live vessel instanceId ${instanceId}`);
   boat.vesselInstanceId = instanceId;
   boat.vesselType = definition.id;
   boat.boatType ||= definition.id;
   boat.label ||= definition.presentation.label;
+  const persisted = persistedRuntime(boat);
   const instance = registry.createInstance(definition.id, {
     instanceId,
     legacyBoatId: boatId,
     state: runtimeState(definition, boat),
+    moduleState: persisted?.modules || {},
+    deckState: persisted?.deck || null,
   });
+  restoreDynamicModules(definition, instance, persisted);
   const entry = {instance, boat, definition, adoptedLegacy: true};
   index.byBoatId.set(boatId, entry);
   index.byInstanceId.set(instanceId, entry);
@@ -178,13 +217,12 @@ export function spawnVessel(world, typeId, options = {}) {
   prepareWorldMetadata(world);
   const definition = registry.resolveVesselType(typeId);
   if (!definition) throw new VesselContractError(`cannot spawn unregistered vessel type ${typeId}`);
-
   const legacyBoatId = Number.isInteger(options.legacyBoatId) ? options.legacyBoatId : nextBoatSlot(world);
   if (world.boats[legacyBoatId] != null) throw new VesselContractError(`world.boats[${legacyBoatId}] is already occupied`);
   const owner = integerOrNull(options.owner);
   const state = {...cloneData(definition.runtimeDefaults || {}), ...cloneData(options.state || {})};
   const instanceId = String(options.instanceId || "").trim() || allocateInstanceId(world, definition.id);
-  const instance = registry.createInstance(typeId, {instanceId, legacyBoatId, state, moduleState: options.moduleState || {}});
+  const instance = registry.createInstance(typeId, {instanceId, legacyBoatId, state, moduleState: options.moduleState || {}, deckState: options.deckState || null});
   const boat = {
     ...state,
     id: legacyBoatId,
@@ -200,15 +238,13 @@ export function spawnVessel(world, typeId, options = {}) {
     y: Number(options.y ?? state.y) || 0,
     heading: Number(options.heading ?? state.heading) || 0,
   };
-  if (definition.physics?.mode === "profile" && !boat.physicsProfile) {
-    boat.physicsProfile = {id: String(definition.physics.profile || "standard")};
-  }
-
+  if (definition.physics?.mode === "profile" && !boat.physicsProfile) boat.physicsProfile = {id: String(definition.physics.profile || "standard")};
   world.boats[legacyBoatId] = boat;
   const entry = {instance, boat, definition, adoptedLegacy: false};
   const index = worldIndex(world);
   index.byBoatId.set(legacyBoatId, entry);
   index.byInstanceId.set(instance.instanceId, entry);
+  persistNativeEntry(entry);
   syncLegacyVesselWorld(world);
   return {instance, boat, definition};
 }
@@ -223,14 +259,38 @@ export function nativeVesselByInstanceId(world, instanceId) {
   return worldIndex(world).byInstanceId.get(String(instanceId || "")) || null;
 }
 
-export function listNativeVessels(world) {
-  return syncNativeWorld(world);
-}
+export function listNativeVessels(world) { return syncNativeWorld(world); }
 
 export function attachVesselArchitecture(world) {
   syncNativeWorld(world);
   syncLegacyVesselWorld(world);
   return world;
+}
+
+export function detachVesselOccupant(world, playerIndex) {
+  const player = world?.players?.[playerIndex];
+  const boatId = Number.isInteger(player?.activeBoat) ? player.activeBoat : null;
+  if (boatId == null) return false;
+  const entry = nativeVesselForBoat(world, boatId);
+  if (!entry?.definition?.capabilities?.walkableInterior) return false;
+  const local = entry.instance.occupants?.[playerIndex] ? cloneData(entry.instance.occupants[playerIndex]) : null;
+  if (local) {
+    entry.boat.vesselRuntimeState ||= {version: VESSEL_RUNTIME_STATE_VERSION};
+    entry.boat.vesselRuntimeState.occupantMemory ||= {};
+    entry.boat.vesselRuntimeState.occupantMemory[playerIndex] = local;
+  }
+  releaseVesselOccupantResources(entry.instance, playerIndex);
+  return clearVesselOccupantPosition(entry.instance, playerIndex);
+}
+
+export function restoreVesselOccupant(world, playerIndex, boatId) {
+  const entry = nativeVesselForBoat(world, boatId);
+  if (!entry?.definition?.capabilities?.walkableInterior) return null;
+  const previous = entry.boat.vesselRuntimeState?.occupantMemory?.[playerIndex] || null;
+  const position = safeReconnectPosition(entry.definition, entry.instance, playerIndex, previous);
+  if (!position) return null;
+  setVesselOccupantPosition(entry.definition, entry.instance, playerIndex, position);
+  return position;
 }
 
 export function runVesselPhysics(context = {}) {
@@ -251,12 +311,13 @@ export function runVesselSystems(phase, context = {}) {
   const world = context.world;
   const nativeVessels = world ? syncNativeWorld(world) : [];
   if (world) syncLegacyVesselWorld(world);
-  registry.runSystems(phase, {
-    ...context,
-    registry,
-    vessels: world ? legacyVesselViews(world) : [],
-    nativeVessels,
-  });
+  if (phase === "before-step") {
+    for (const entry of nativeVessels) {
+      if (!entry.definition.deckArchitecture?.enabled) continue;
+      advanceVesselDeckRuntime(entry.definition, entry.instance, context.dt, {boat: entry.boat, world, context});
+    }
+  }
+  registry.runSystems(phase, {...context, registry, vessels: world ? legacyVesselViews(world) : [], nativeVessels});
   if (world) syncNativeWorld(world);
   return world;
 }
