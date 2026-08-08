@@ -15,6 +15,7 @@ import {STRESS_TEST_PHYSICS_ID, STRESS_TEST_PHYSICS_MODULE} from "../public/src/
 import {
   STRESS_TEST_AUDIO_PROFILE,
   STRESS_TEST_ENGINE_COUNT,
+  STRESS_TEST_ENGINE_LOOP_SECONDS,
   STRESS_TEST_ENGINE_URL,
   STRESS_TEST_MAX_SPEED,
   STRESS_TEST_START_AMMO,
@@ -77,7 +78,7 @@ test("stress physics derives power from the actual propulsion modules", () => {
   assert.ok(boat.speed <= STRESS_TEST_MAX_SPEED * 0.2);
 });
 
-test("shared vessel runtime spawns one stress boat and its mounted pistol fires server-side without projectiles", () => {
+test("shared vessel runtime spawns one stress boat and held fire stays server-side without projectile spam", () => {
   const world = createFreeWorld();
   stepFreeWorld(world, 0.04);
   let boats = world.boats.filter(boat => boat?.boatType === TYPE);
@@ -96,24 +97,28 @@ test("shared vessel runtime spawns one stress boat and its mounted pistol fires 
   board(world, boat, 0);
   drainEvents(world);
   setPlayerInput(world, 0, {attack: true});
-  stepFreeWorld(world, 0.04);
-  const events = drainEvents(world);
-  const shot = events.find(event => event.type === "vessel-mounted-shot" && event.boatId === boat.id);
-  assert.ok(shot, "mounted pistol should emit a shared server event");
-  assert.equal(shot.instant, true);
-  assert.equal(shot.weapon, "stress-pistol");
-  assert.equal(shot.ammo, STRESS_TEST_START_AMMO - 1);
-  assert.equal(boat.testWeaponAmmo, STRESS_TEST_START_AMMO - 1);
+  const shots = [];
+  for (let index = 0; index < 4; index += 1) {
+    stepFreeWorld(world, 0.04);
+    shots.push(...drainEvents(world).filter(event => event.type === "vessel-mounted-shot" && event.boatId === boat.id));
+    assert.equal(world.inputs[0].attack, true, "held mounted fire must be restored after the inherited common step");
+  }
+  assert.equal(shots.length, 4, "holding fire should continue producing rapid server hitscan shots");
+  assert.equal(shots[0].instant, true);
+  assert.equal(shots[0].weapon, "stress-pistol");
+  assert.equal(shots.at(-1).ammo, STRESS_TEST_START_AMMO - 4);
+  assert.equal(boat.testWeaponAmmo, STRESS_TEST_START_AMMO - 4);
   assert.equal(world.freeDualTurretProjectiles, undefined, "stress weapon must not create legacy projectile collections");
 });
 
-
-test("stress engine is one versioned binary WAV with the verified release checksum", async () => {
-  assert.equal(STRESS_TEST_ENGINE_URL, "/assets/audio/vessels/stress-50-engine-v1.wav?v=1");
-  const url = new URL("../public/assets/audio/vessels/stress-50-engine-v1.wav", import.meta.url);
+test("stress engine is one versioned binary MP3 with the verified release checksum", async () => {
+  assert.equal(STRESS_TEST_ENGINE_URL, "/assets/audio/vessels/stress-50-engine-v2.mp3?v=2");
+  assert.equal(STRESS_TEST_ENGINE_LOOP_SECONDS, 1);
+  const url = new URL("../public/assets/audio/vessels/stress-50-engine-v2.mp3", import.meta.url);
   const bytes = await readFile(url);
-  assert.equal(bytes.byteLength, 1964);
-  assert.equal(createHash("sha256").update(bytes).digest("hex"), "200c66daf0fbe052c755ae56c6e2c6a4103488d5dc7b4352ae8ec3f0800efd1a");
+  assert.equal(bytes.byteLength, 25388);
+  assert.equal(createHash("sha256").update(bytes).digest("hex"), "26c9dc85b8186d84cc742b058544337e22782d1b76b9f3a2658aa465da2eb516");
   const names = await readdir(new URL("../public/assets/audio/vessels/", import.meta.url));
+  assert.equal(names.includes("stress-50-engine-v1.wav"), false, "obsolete placeholder WAV must be removed");
   assert.equal(names.some(name => /(?:\.part-|\.b64$|chunk-)/i.test(name)), false);
 });

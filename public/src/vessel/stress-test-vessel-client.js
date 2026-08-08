@@ -3,11 +3,13 @@
 import {FreeRoamAudio} from "../free-roam-audio-v5.js?v=45";
 import {
   STRESS_TEST_AUDIO_PROFILE,
+  STRESS_TEST_ENGINE_LOOP_SECONDS,
   STRESS_TEST_ENGINE_URL,
   STRESS_TEST_MAX_SPEED,
   STRESS_TEST_VESSEL_TYPE,
-} from "./stress-test-vessel-config.js?v=1";
-const ENGINE_BUFFER = "stress50EngineV1";
+} from "./stress-test-vessel-config.js?v=2";
+
+const ENGINE_BUFFER = "stress50EngineV2";
 const MAX_AUDIBLE_DISTANCE = 320;
 
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, Number(value) || 0));
@@ -34,16 +36,30 @@ async function preloadStressEngine(audio) {
   audio.stress50PreloadPromise = (async () => {
     const response = await fetch(STRESS_TEST_ENGINE_URL, {cache: "force-cache"});
     if (!response.ok) throw new Error(`stress50Engine: ${response.status}`);
+    const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+    if (contentType && !contentType.startsWith("audio/")) throw new Error(`stress50Engine: unexpected content type ${contentType}`);
     const bytes = await response.arrayBuffer();
-    if (bytes.byteLength < 512) throw new Error("stress50Engine: audio file is unexpectedly small");
+    if (bytes.byteLength < 10_000) throw new Error("stress50Engine: audio file is unexpectedly small");
     audio.buffers.set(ENGINE_BUFFER, await audio.ctx.decodeAudioData(bytes.slice(0)));
-  })();
+  })().catch(error => {
+    audio.stress50PreloadPromise = null;
+    throw error;
+  });
   return audio.stress50PreloadPromise;
 }
 
 function engineMap(audio) {
   audio.stress50Engines ||= new Map();
   return audio.stress50Engines;
+}
+
+function stopEngineSource(engine) {
+  if (!engine) return;
+  try { engine.source.stop(); } catch (_) {}
+  try { engine.source.disconnect(); } catch (_) {}
+  try { engine.filter.disconnect(); } catch (_) {}
+  try { engine.panner.disconnect(); } catch (_) {}
+  try { engine.gain.disconnect(); } catch (_) {}
 }
 
 function startEngine(audio, boat) {
@@ -56,7 +72,7 @@ function startEngine(audio, boat) {
   source.buffer = audio.buffers.get(ENGINE_BUFFER);
   source.loop = true;
   source.loopStart = 0;
-  source.loopEnd = source.buffer.duration;
+  source.loopEnd = Math.min(source.buffer.duration, STRESS_TEST_ENGINE_LOOP_SECONDS);
   filter.type = "lowpass";
   filter.frequency.value = 1500;
   panner.pan.value = 0;
@@ -70,6 +86,7 @@ function startEngine(audio, boat) {
 
 function updateStressEngines(audio, world, playerIndex) {
   if (!audio?.ctx || !world) return;
+  if (!audio.buffers?.has(ENGINE_BUFFER)) preloadStressEngine(audio).catch(() => {});
   const listener = audio.listenerPoint || world.players?.[playerIndex];
   const local = world.players?.[playerIndex];
   const seen = new Set();
@@ -91,20 +108,15 @@ function updateStressEngines(audio, world, playerIndex) {
     const remoteGain = proximity * proximity * (0.025 + throttle * 0.15 + speed * 0.05);
     engine.gain.gain.setTargetAtTime(audible ? (localAboard ? 0.22 + throttle * 0.045 : remoteGain) : 0, now, 0.1);
   }
-  for (const [boatId, engine] of engineMap(audio)) {
+  for (const [boatId, engine] of [...engineMap(audio)]) {
     if (seen.has(boatId)) continue;
-    engine.gain.gain.setTargetAtTime(0, audio.ctx.currentTime, 0.08);
+    stopEngineSource(engine);
+    engineMap(audio).delete(boatId);
   }
 }
 
 function stopStressEngines(audio) {
-  for (const engine of engineMap(audio).values()) {
-    try { engine.source.stop(); } catch (_) {}
-    try { engine.source.disconnect(); } catch (_) {}
-    try { engine.filter.disconnect(); } catch (_) {}
-    try { engine.panner.disconnect(); } catch (_) {}
-    try { engine.gain.disconnect(); } catch (_) {}
-  }
+  for (const engine of engineMap(audio).values()) stopEngineSource(engine);
   engineMap(audio).clear();
 }
 
@@ -113,15 +125,15 @@ function maskStressProfiles(world) {
   for (const boat of world?.boats || []) {
     if (!isStressBoat(boat)) continue;
     masked.push([boat, boat.audioProfile]);
-    // Existing audio layers already suppress the ordinary engine for this
-    // profile. Mask only during their update, then restore our real profile.
+    // The existing common engine layer already knows how to suppress its
+    // ordinary loop for the armored custom-engine profile. Reuse that gate
+    // during the inherited update so the stress boat never plays two engines.
     boat.audioProfile = "dual-turret";
   }
   return () => {
     for (const [boat, profile] of masked) boat.audioProfile = profile || STRESS_TEST_AUDIO_PROFILE;
   };
 }
-
 
 function stressNetworkVessel(world, boat) {
   return (world?.vesselArchitecture?.vessels || []).find(vessel => (
@@ -160,8 +172,8 @@ function handleStressShot(audio, event, playerIndex) {
 }
 
 const prototype = FreeRoamAudio?.prototype;
-if (prototype && !prototype.__stress50VesselPatchedV1) {
-  prototype.__stress50VesselPatchedV1 = true;
+if (prototype && !prototype.__stress50VesselPatchedV2) {
+  prototype.__stress50VesselPatchedV2 = true;
   const inheritedPreload = prototype.preload;
   const inheritedUpdateWorld = prototype.updateWorld;
   const inheritedHandleEvent = prototype.handleFreeEvent;
