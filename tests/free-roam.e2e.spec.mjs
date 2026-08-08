@@ -336,7 +336,7 @@ test("threat five starts with the heavy boat and then creates the separate elite
     expect(result.heavyTargets).toEqual(["heavy-pursuer", "heavy-turret", "heavy-engine"]);
     expect(result.oldEliteActors).toEqual([]);
     expect(result.boss).toEqual({
-      version: "1.1.0",
+      version: "1.4.0",
       phase: "approaching",
       armor: [1000, 1000, 1000],
       hull: 5000,
