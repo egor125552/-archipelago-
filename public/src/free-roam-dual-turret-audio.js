@@ -4,6 +4,7 @@ import {
   DUAL_TURRET_AUDIO_ROOT,
   DUAL_TURRET_BOAT_TYPE,
 } from "./free-roam-dual-turret-config.js?v=4";
+import {relativeMovementPan} from "./free-roam-audio-v3.js?v=38";
 
 export const DUAL_TURRET_AUDIO = Object.freeze({
   engine: `${DUAL_TURRET_AUDIO_ROOT}dual-turret-engine-v1.mp3?v=2`,
@@ -13,13 +14,6 @@ export const DUAL_TURRET_AUDIO = Object.freeze({
 
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, Number(value) || 0));
 const distance = (a, b) => Math.hypot((Number(a?.x) || 0) - (Number(b?.x) || 0), (Number(a?.y) || 0) - (Number(b?.y) || 0));
-const wrapDeg = value => ((Number(value) + 180) % 360 + 360) % 360 - 180;
-
-function relativePan(listener, source) {
-  if (!listener || !source) return 0;
-  const bearing = Math.atan2((Number(source.x) || 0) - (Number(listener.x) || 0), -((Number(source.y) || 0) - (Number(listener.y) || 0))) * 180 / Math.PI;
-  return clamp(Math.sin(wrapDeg(bearing - (Number(listener.heading) || 0)) * Math.PI / 180), -1, 1);
-}
 
 function playerAboardBoat(player, boat) {
   return Boolean(
@@ -92,11 +86,12 @@ export function updateDualTurretEngine(audio, world, playerIndex) {
   const now = audio.ctx.currentTime;
   engine.source.playbackRate.setTargetAtTime(0.78 + speed * 0.82 + throttle * 0.08, now, 0.11);
   engine.filter.frequency.setTargetAtTime(900 + speed * 4300 + proximity * 700, now, 0.14);
-  // When the listener is aboard this exact hull, steering changes the hull's
-  // world heading but not the listener-to-engine vessel relationship. Keep the
-  // local motor centered, exactly like the ordinary local boat engine. Only a
-  // genuinely remote armored patrol is spatialized from world coordinates.
-  engine.panner.pan.setTargetAtTime(localAboard ? 0 : relativePan(listener, boat), now, localAboard ? 0.18 : 0.12);
+  // The custom engine is still a normal physical vessel sound source. Reuse
+  // the exact same listener-space transform as ordinary boats so a listener on
+  // foot, in water or aboard another boat hears both vessel classes from the
+  // same world direction. A listener aboard this hull keeps the local engine
+  // centered because source and listener move together with the vessel.
+  engine.panner.pan.setTargetAtTime(localAboard ? 0 : relativeMovementPan(listener, boat), now, localAboard ? 0.18 : 0.12);
   engine.gain.gain.setTargetAtTime(localAboard ? 0.16 : proximity * 0.13, now, 0.13);
 }
 
