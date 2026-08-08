@@ -129,7 +129,8 @@ function updateRespawns({world, registry, nativeVessels, dt} = {}) {
       continue;
     }
     state.remaining = Math.max(0, Number(state.remaining) - elapsed);
-    if (state.remaining > 0) continue;
+    if (state.remaining > 1e-6) continue;
+    state.remaining = 0;
     restoreBoat(world, registry, entry, config);
     state.active = false;
     state.remaining = null;
