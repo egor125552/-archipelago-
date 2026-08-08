@@ -4,8 +4,8 @@ import {VesselContractError, cloneData} from "./vessel-contract.js";
 import {createVesselRegistry} from "./vessel-registry.js";
 import {STANDARD_BOAT_PRESET, LEGACY_BOAT_PRESET} from "./vessel-defaults.js";
 import {syncLegacyVesselWorld, legacyVesselViews} from "./vessel-legacy-adapter.js";
-import {installVesselContent} from "./vessel-content-manifest.js";
-import {installVesselPlugins} from "./vessel-plugin-manifest.js";
+import {installVesselContent} from "./vessel-content-manifest.js?v=2";
+import {installVesselPlugins} from "./vessel-plugin-manifest.js?v=2";
 import {migratePersistedVesselWorld, VESSEL_SAVE_VERSION} from "./vessel-save.js";
 import {clearVesselOccupantPosition, setVesselOccupantPosition, syncWalkableVesselOccupants} from "./vessel-interior.js";
 import {
