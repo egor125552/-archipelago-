@@ -84,7 +84,7 @@ function suppressAttackForBaseStep(world, playerIndex) {
   const saved = inputObjects(world, playerIndex).map(input => [input, input.attack]);
   for (const [input] of saved) input.attack = false;
   const groups = suppressedAttackByWorld.get(world) || [];
-  groups.push(saved);
+  groups.push({playerIndex, saved});
   suppressedAttackByWorld.set(world, groups);
 }
 
@@ -92,11 +92,17 @@ function restoreSuppressedAttacks(world) {
   const groups = suppressedAttackByWorld.get(world) || [];
   suppressedAttackByWorld.delete(world);
   for (let groupIndex = groups.length - 1; groupIndex >= 0; groupIndex -= 1) {
-    const saved = groups[groupIndex];
+    const {playerIndex, saved} = groups[groupIndex];
+    const held = saved.some(([, value]) => value === true);
     for (let index = saved.length - 1; index >= 0; index -= 1) {
       const [input, value] = saved[index];
       input.attack = value;
     }
+    // world.inputs is the legacy movement store and older layers omit attack
+    // when copying input. Mirror the held bit only for this step so legacy
+    // observers/tests see the same authoritative hold state; the next input
+    // delivery remains the source of truth and may clear it normally.
+    if (held && world?.inputs?.[playerIndex]) world.inputs[playerIndex].attack = true;
   }
 }
 
@@ -237,7 +243,7 @@ function updateMountedWeapons(context) {
     const fallbackImpact = emptyImpact(boat, heading, range);
     const impactX = Number.isFinite(Number(target?.point?.x)) ? Number(target.point.x) : fallbackImpact.x;
     const impactY = Number.isFinite(Number(target?.point?.y)) ? Number(target.point.y) : fallbackImpact.y;
-    const applied = target ? Boolean(damageTarget(world, target, damage, playerIndex, weapon, boat)) : false;
+    const applied = target ? Boolean(damageTarget(world, target, damage,playerIndex, weapon, boat)) : false;
 
     mounted.state.ammo = Math.max(0, Math.floor(Number(mounted.state.ammo) || 0) - 1);
     mounted.state.cooldown = interval;
@@ -274,7 +280,12 @@ function announceBoarding(context) {
     if (!isStressBoat(boat)) continue;
     const ammo = Math.max(0, Math.floor(Number(boat?.testWeaponAmmo) || STRESS_TEST_START_AMMO));
     event.boatType = STRESS_TEST_VESSEL_TYPE;
-    event.text = `Ты сел в испытательный катер «Пятьдесят». Здесь 50 двигателей. Сверхскоростной пистолет: ${ammo} патронов. Удерживай огонь.`;
+    const ownership = event.ownedBoat === false
+      ? "Ты сел в испытательный катер другого игрока «Пятьдесят»."
+      : event.claimedBoat
+        ? "Ты занял свободный испытательный катер «Пятьдесят»; теперь он твой."
+        : "Ты сел в свой испытательный катер «Пятьдесят».";
+    event.text = `${ownership} Здесь 50 двигателей. Сверхскоростной пистолет: ${ammo} патронов. Удерживай огонь.`;
   }
 }
 
@@ -294,17 +305,17 @@ export const STRESS_TEST_VESSEL_SYSTEMS = Object.freeze([
     run: updateMountedWeapons,
   }),
   Object.freeze({
+    id: "stress-test-boarding-announcer-v3",
+    phase: "after-step",
+    order: 20,
+    run: announceBoarding,
+  }),
+  Object.freeze({
     id: "stress-test-held-attack-restore-v2",
     phase: "after-step",
     order: 90,
     run({world}) {
       if (world) restoreSuppressedAttacks(world);
     },
-  }),
-  Object.freeze({
-    id: "stress-test-boarding-announcer-v2",
-    phase: "after-input",
-    order: 20,
-    run: announceBoarding,
   }),
 ]);

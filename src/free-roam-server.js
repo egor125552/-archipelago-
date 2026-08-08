@@ -105,6 +105,10 @@ function applyAuthoritativeCombatHotfix(world, dt) {
 
 export function createServerFreeRoom(now = Date.now()) {
   const world = createFreeWorld();
+  // Run the normal authoritative vessel lifecycle once at dt=0 so native
+  // auto-spawn systems exist in the very first replicated state. This avoids
+  // turning a newly created vessel into a multi-kilobyte first-tick delta.
+  stepFreeWorld(world, 0);
   ensureMegaBombState(world);
   setPlayerPresence(world, 0, false);
   setPlayerPresence(world, 1, false);

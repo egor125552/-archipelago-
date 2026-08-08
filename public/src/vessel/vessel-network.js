@@ -14,6 +14,40 @@ function compactState(definition, boat) {
   return result;
 }
 
+function sameValue(left, right) {
+  if (Object.is(left, right)) return true;
+  if (!left || !right || typeof left !== "object" || typeof right !== "object") return false;
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function compactModuleState(registry, vesselDefinition, moduleDefinition, instance) {
+  const moduleType = registry.resolveModuleType(moduleDefinition.type);
+  const current = instance?.modules?.[moduleDefinition.id] || {};
+  const baseline = moduleType?.createState
+    ? moduleType.createState(moduleDefinition.config || {}, {vesselType: vesselDefinition, module: moduleDefinition}) || {}
+    : {};
+  const fields = Array.isArray(moduleType?.networkStateFields)
+    ? moduleType.networkStateFields
+    : Object.keys(current);
+  const always = new Set(Array.isArray(moduleType?.networkAlwaysFields) ? moduleType.networkAlwaysFields : []);
+  const changed = {};
+  for (const field of fields) {
+    if (!Object.hasOwn(current, field)) continue;
+    if (!always.has(field) && Object.hasOwn(baseline, field) && sameValue(current[field], baseline[field])) continue;
+    changed[field] = cloneData(current[field]);
+  }
+  return changed;
+}
+
+function compactModules(registry, definition, instance) {
+  const result = {};
+  for (const moduleDefinition of definition?.modules || []) {
+    const changed = compactModuleState(registry, definition, moduleDefinition, instance);
+    if (Object.keys(changed).length) result[moduleDefinition.id] = changed;
+  }
+  return result;
+}
+
 export function vesselNetworkMetadata() {
   return Object.freeze({version: VESSEL_NETWORK_VERSION, compatibleFrom: VESSEL_NETWORK_COMPATIBLE_FROM});
 }
@@ -46,7 +80,11 @@ export function vesselNetworkSnapshot(world, registry, nativeEntries = []) {
       typeId: instance.typeId,
       legacyBoatId: Number.isInteger(instance.legacyBoatId) ? instance.legacyBoatId : null,
       state: compactState(definition, boat),
-      modules: cloneData(instance.modules || {}),
+      // Module definitions are static content already present on both peers.
+      // Replicate only runtime fields that differ from each module type's
+      // initial state, except explicitly always-visible fields such as ammo.
+      // Fifty healthy propulsion modules therefore cost zero per snapshot.
+      modules: compactModules(registry, definition, instance),
       occupants: cloneData(instance.occupants || {}),
       zones: cloneData(instance.zones || {}),
     });

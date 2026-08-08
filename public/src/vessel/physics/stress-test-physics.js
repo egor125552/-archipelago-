@@ -22,6 +22,27 @@ function activePropulsionCount(definition, instance) {
   }).length;
 }
 
+function engineResponseFactor(engineFraction) {
+  return 0.2 + clamp(engineFraction, 0, 1) * 0.8;
+}
+
+function exposePredictionProfile(boat, engineFraction) {
+  const response = engineResponseFactor(engineFraction);
+  const propulsionAvailable = !boat.engineStalled && engineFraction > 0;
+  const predictionLimitFraction = engineFraction > 0 ? engineFraction : 1;
+  boat.predictionPhysicsProfile = {
+    id: STRESS_TEST_PHYSICS_ID,
+    source: "vessel-module",
+    maxForwardSpeed: STRESS_TEST_MAX_SPEED * predictionLimitFraction,
+    maxReverseSpeed: STRESS_TEST_REVERSE_SPEED * predictionLimitFraction,
+    acceleration: 92 * response,
+    deceleration: propulsionAvailable ? 118 * response : 110,
+    releaseBehavior: "target-zero",
+    applyDrag: false,
+    propulsionAvailable,
+  };
+}
+
 export const STRESS_TEST_PHYSICS_MODULE = Object.freeze({
   id: STRESS_TEST_PHYSICS_ID,
   step({boat, definition, instance, dt}) {
@@ -32,6 +53,7 @@ export const STRESS_TEST_PHYSICS_MODULE = Object.freeze({
     const engineFraction = clamp(active / installed, 0, 1);
     boat.stressEngineCount = installed;
     boat.stressActiveEngineCount = active;
+    exposePredictionProfile(boat, engineFraction);
 
     if (boat.engineStalled || engineFraction <= 0 || safeDt <= 0) {
       boat.speed += clamp(-boat.speed, -110 * safeDt, 110 * safeDt);
@@ -43,7 +65,7 @@ export const STRESS_TEST_PHYSICS_MODULE = Object.freeze({
     const reverseMaximum = STRESS_TEST_REVERSE_SPEED * engineFraction;
     const targetSpeed = throttle >= 0 ? throttle * forwardMaximum : throttle * reverseMaximum;
     const accelerating = Math.abs(targetSpeed) > Math.abs(Number(boat.speed) || 0);
-    const rate = (accelerating ? 92 : 118) * (0.2 + engineFraction * 0.8);
+    const rate = (accelerating ? 92 : 118) * engineResponseFactor(engineFraction);
     boat.speed += clamp(targetSpeed - boat.speed, -rate * safeDt, rate * safeDt);
     boat.speed = clamp(boat.speed, -reverseMaximum, forwardMaximum);
   },
