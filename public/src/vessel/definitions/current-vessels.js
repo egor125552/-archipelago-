@@ -205,6 +205,15 @@ export const CURRENT_VESSEL_TYPES = Object.freeze([
     label: "испытательный катер «Пятьдесят»",
     capabilities: {towable: true, sonarTarget: true, zonalDamage: false},
     physics: {mode: "module", module: "stress-50-engine-physics-v1"},
+    lifecycle: {
+      respawn: {
+        enabled: true,
+        delaySeconds: 10,
+        position: {x: 210, y: 132, heading: 180},
+        startText: "Лёгкий испытательный катер «Пятьдесят» затонул. Новый полностью исправный катер появится у причала через 10 секунд.",
+        recoveredText: "Лёгкий испытательный катер «Пятьдесят» полностью восстановлен у причала.",
+      },
+    },
     runtimeDefaults: {
       ...STANDARD_BOAT_RUNTIME_DEFAULTS,
       crewCapacity: 1,
