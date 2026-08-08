@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {createFreeWorld, setPlayerInput, stepFreeWorld} from "../public/src/free-roam-core-v8.js";
-import {nativeVesselForBoat, vesselRegistry} from "../public/src/vessel/vessel-runtime.js";
+import {nativeVesselForBoat, vesselRegistry} from "../public/src/vessel/vessel-runtime.js?v=2";
 import {setVesselOccupantPosition} from "../public/src/vessel/vessel-interior.js";
 
 function armoredBoat(world) {
@@ -32,15 +32,7 @@ function boardArmoredDeck(world, playerIndex = 0) {
   player.y = boat.y + 4;
   setPlayerInput(world, playerIndex, {action: true});
   const immediate = nativeVesselForBoat(world, boat.id);
-  assert.ok(immediate?.instance?.occupants?.[playerIndex], JSON.stringify({
-    phase: "after-setPlayerInput-before-step",
-    systems: vesselRegistry().listSystems().map(system => `${system.phase}:${system.order}:${system.id}`),
-    player: {mode: player.mode, activeBoat: player.activeBoat, deckOwned: player.vesselDeckInputOwned, x: player.x, y: player.y},
-    boat: {id: boat.id, driver: boat.driver, crew: boat.crew, reserved: boat.reserved, x: boat.x, y: boat.y, range: boat.boardingRange, radius: boat.collisionRadius},
-    definition: {walkable: immediate?.definition?.capabilities?.walkableInterior, boarding: immediate?.definition?.deckArchitecture?.boarding?.mode},
-    crates: world.freeActivities?.crates?.length,
-    events: (world.events || []).slice(-8).map(event => ({type: event.type, text: event.text, boatId: event.boatId, sourcePlayer: event.sourcePlayer})),
-  }));
+  assert.ok(immediate?.instance?.occupants?.[playerIndex], "boarding must create a vessel-local occupant in the live runtime");
   stepFreeWorld(world, 0.05);
   setPlayerInput(world, playerIndex, {action: false});
   return boat;
