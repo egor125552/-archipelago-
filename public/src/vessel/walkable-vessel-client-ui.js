@@ -16,18 +16,32 @@ function currentDeckContext() {
   return {world, playerIndex, player, boat, vessel, occupant, controlling: boat?.driver === playerIndex};
 }
 
-function setLabel(id, text) {
+function setText(id, text) {
   const node = byId(id);
   if (!node || node.textContent === text) return;
   node.textContent = text;
+}
+
+function setLabel(id, text) {
+  const node = byId(id);
+  if (!node || (node.textContent === text && node.getAttribute("aria-label") === text)) return;
+  node.textContent = text;
   node.setAttribute("aria-label", text);
+}
+
+function deckMovementText(context) {
+  const input = globalThis.__freeRoam?.input || {};
+  const moving = Boolean(input.up || input.down || input.left || input.right);
+  if (!moving) return "стоит на палубе";
+  return input.run || context.player?.running ? "бежит по палубе" : "идёт по палубе";
 }
 
 function syncWalkableVesselPresentation() {
   const context = currentDeckContext();
   if (!context) return;
   if (context.controlling) {
-    if (byId("modeValue")) byId("modeValue").textContent = "у пульта управления";
+    setText("modeValue", "у пульта управления");
+    setText("speedValue", Math.abs(Number(context.boat?.speed) || 0).toFixed(1));
     setLabel("actionButton", "Отойти от пульта / действие");
     setLabel("jumpButton", "Плавучий тормоз");
     setLabel("upButton", "Вперёд");
@@ -36,7 +50,8 @@ function syncWalkableVesselPresentation() {
     setLabel("rightButton", "Вправо");
     return;
   }
-  if (byId("modeValue")) byId("modeValue").textContent = "на палубе";
+  setText("modeValue", "на палубе");
+  setText("speedValue", deckMovementText(context));
   setLabel("actionButton", "Действие на палубе");
   setLabel("jumpButton", "Прыжок / спрыгнуть");
   setLabel("upButton", "Вперёд по палубе");
@@ -45,7 +60,7 @@ function syncWalkableVesselPresentation() {
   setLabel("rightButton", "Вправо по палубе");
 }
 
-const observed = ["controls", "modeValue", "message"].map(byId).filter(Boolean);
+const observed = ["controls", "modeValue", "speedValue", "message"].map(byId).filter(Boolean);
 if (typeof MutationObserver === "function") {
   const observer = new MutationObserver(syncWalkableVesselPresentation);
   for (const node of observed) observer.observe(node, {childList: true, subtree: true, characterData: true});
