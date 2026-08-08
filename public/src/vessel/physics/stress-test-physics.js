@@ -28,16 +28,17 @@ function engineResponseFactor(engineFraction) {
 
 function exposePredictionProfile(boat, engineFraction) {
   const response = engineResponseFactor(engineFraction);
-  const stalled = Boolean(boat.engineStalled) || engineFraction <= 0;
+  const propulsionAvailable = !boat.engineStalled && engineFraction > 0;
   boat.predictionPhysicsProfile = {
     id: STRESS_TEST_PHYSICS_ID,
     source: "vessel-module",
-    maxForwardSpeed: stalled ? 0 : STRESS_TEST_MAX_SPEED * engineFraction,
-    maxReverseSpeed: stalled ? 0 : STRESS_TEST_REVERSE_SPEED * engineFraction,
+    maxForwardSpeed: STRESS_TEST_MAX_SPEED * Math.max(engineFraction, 0.001),
+    maxReverseSpeed: STRESS_TEST_REVERSE_SPEED * Math.max(engineFraction, 0.001),
     acceleration: 92 * response,
-    deceleration: stalled ? 110 : 118 * response,
+    deceleration: propulsionAvailable ? 118 * response : 110,
     releaseBehavior: "target-zero",
     applyDrag: false,
+    propulsionAvailable,
   };
 }
 
