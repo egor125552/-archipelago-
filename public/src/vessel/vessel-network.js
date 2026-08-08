@@ -29,10 +29,11 @@ function compactModuleState(registry, vesselDefinition, moduleDefinition, instan
   const fields = Array.isArray(moduleType?.networkStateFields)
     ? moduleType.networkStateFields
     : Object.keys(current);
+  const always = new Set(Array.isArray(moduleType?.networkAlwaysFields) ? moduleType.networkAlwaysFields : []);
   const changed = {};
   for (const field of fields) {
     if (!Object.hasOwn(current, field)) continue;
-    if (Object.hasOwn(baseline, field) && sameValue(current[field], baseline[field])) continue;
+    if (!always.has(field) && Object.hasOwn(baseline, field) && sameValue(current[field], baseline[field])) continue;
     changed[field] = cloneData(current[field]);
   }
   return changed;
@@ -81,8 +82,8 @@ export function vesselNetworkSnapshot(world, registry, nativeEntries = []) {
       state: compactState(definition, boat),
       // Module definitions are static content already present on both peers.
       // Replicate only runtime fields that differ from each module type's
-      // initial state. Fifty healthy propulsion modules therefore cost zero
-      // per snapshot, while a damaged engine or spent weapon still appears.
+      // initial state, except explicitly always-visible fields such as ammo.
+      // Fifty healthy propulsion modules therefore cost zero per snapshot.
       modules: compactModules(registry, definition, instance),
       occupants: cloneData(instance.occupants || {}),
       zones: cloneData(instance.zones || {}),
