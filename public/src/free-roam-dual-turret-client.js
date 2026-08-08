@@ -1,18 +1,16 @@
 "use strict";
 
 import "./vessel/stress-test-vessel-client.js?v=3";
+import "./vessel/medium-crew-vessel-client.js?v=1";
 import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=45";
 import {updateDualTurretUi} from "./free-roam-dual-turret-ui.js?v=2";
 
-// The legacy armored runtime mutation is gone. This hook only paints the
-// patrol's extra hull, armor and mounted-weapon fields after the common
-// FreeRoamAudio update has consumed the same world snapshot as every boat.
-// The side-effect import above is the temporary client bootstrap for the
-// architecture stress-test vessel; its engine still routes through the shared
-// FreeRoamAudio master/compressor rather than creating a parallel audio engine.
+// Legacy armored runtime mutation is gone. These side-effect imports are
+// client adapters for architecture vessels: they only render audio/UI from the
+// shared replicated vessel state and use the same FreeRoamAudio graph.
 const prototype = FreeRoamAudio?.prototype;
-if (prototype && !prototype.__dualTurretUiPatchedV8) {
-  prototype.__dualTurretUiPatchedV8 = true;
+if (prototype && !prototype.__dualTurretUiPatchedV9) {
+  prototype.__dualTurretUiPatchedV9 = true;
   const inheritedUpdate = prototype.updateWorld;
   prototype.updateWorld = function updateWorldWithDualTurretUi(world, playerIndex) {
     const result = inheritedUpdate.call(this, world, playerIndex);
