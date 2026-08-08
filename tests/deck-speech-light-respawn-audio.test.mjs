@@ -55,7 +55,7 @@ test("walkable deck speaks configured zones and announces a nearby common action
     heading: 0,
   });
   const firstStart = world.events.length;
-  stepFreeWorld(world, 0.35);
+  for (let index = 0; index < 4; index += 1) stepFreeWorld(world, 0.1);
   const first = world.events.slice(firstStart).filter(event => event.type === "vessel-deck-action-available");
   assert.equal(first.length, 1);
   assert.match(first[0].text, /дверь лестничного люка/i);
