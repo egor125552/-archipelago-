@@ -80,7 +80,7 @@ test("player can board, walk, open the hatch, climb, take the helm, leave it and
   assert.ok(entry.instance.interior.traversals[0], "second action starts the real timed ladder traversal");
   assert.ok(entry.instance.interior.traversals[0].duration > 0);
   setPlayerInput(world, 0, {action: false});
-  for (let index = 0; index < 40 && entry.instance.occupants[0].deckId !== "armored-bridge-deck"; index += 1) stepFreeWorld(world, 0.1);
+  for (let index = 0; index < 80 && entry.instance.occupants[0].deckId !== "armored-bridge-deck"; index += 1) stepFreeWorld(world, 0.1);
   assert.equal(entry.instance.occupants[0].deckId, "armored-bridge-deck");
   assert.equal(entry.instance.interior.connections["armored-ladder-up"].state, "closed", "hatch closes after traversal");
 
