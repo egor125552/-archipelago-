@@ -1,5 +1,7 @@
 "use strict";
 
+import {setVesselOccupantPosition} from "../vessel-interior.js";
+
 const worldInputs = new WeakMap();
 const distance = (a, b) => Math.hypot((Number(a?.x) || 0) - (Number(b?.x) || 0), (Number(a?.y) || 0) - (Number(b?.y) || 0));
 
@@ -10,17 +12,6 @@ function inputState(world) {
     worldInputs.set(world, state);
   }
   return state;
-}
-
-function captureBoardingIntent({world, playerIndex, input} = {}) {
-  if (!world || !Number.isInteger(playerIndex) || !input) return;
-  const state = inputState(world);
-  const previous = state.get(playerIndex) || {action: false, pendingRise: false};
-  const action = Boolean(input.action);
-  state.set(playerIndex, {
-    action,
-    pendingRise: Boolean(previous.pendingRise || (action && !previous.action)),
-  });
 }
 
 function boardingPoint(player, boat) {
@@ -52,7 +43,11 @@ function playerCarriesCargo(player) {
   return Boolean(player?.combat?.carriedCrate);
 }
 
-function candidateDeckEntry(world, nativeVessels, playerIndex) {
+function worldCargoAtFeet(world, player, maximum = 3.5) {
+  return (world?.freeActivities?.crates || []).some(crate => crate?.state === "world" && distance(player, crate) <= maximum);
+}
+
+function candidateDeckEntry(world, nativeVessels, playerIndex, {immediate = false} = {}) {
   const player = world?.players?.[playerIndex];
   if (!player || !["foot", "swim", "roof"].includes(player.mode)) return null;
   const candidates = [];
@@ -63,7 +58,9 @@ function candidateDeckEntry(world, nativeVessels, playerIndex) {
     if (!boat || boat.sunk || boat.reserved || !crewHasSpace(boat, playerIndex)) continue;
     const point = boardingPoint(player, boat);
     const metres = distance(point, boat);
-    const range = Math.max(1, Number(boat.boardingRange) || 13);
+    const configuredRange = Math.max(1, Number(boat.boardingRange) || 13);
+    const immediateRange = Math.max(2.5, (Number(boat.collisionRadius) || 6) + 2.5);
+    const range = immediate ? Math.min(configuredRange, immediateRange) : configuredRange;
     if (metres > range) continue;
     candidates.push({entry, metres, owned: boat.owner === playerIndex});
   }
@@ -71,22 +68,37 @@ function candidateDeckEntry(world, nativeVessels, playerIndex) {
   return candidates[0]?.entry || null;
 }
 
-function emitEnter(world, entry, playerIndex) {
+function firstSafeBoardingPoint(definition) {
+  const points = definition?.deckArchitecture?.boarding?.points || [];
+  return points.find(point => point.safe !== false) || points[0] || null;
+}
+
+function boardDeckEntry(world, entry, playerIndex) {
   const boat = entry.boat;
   const player = world.players[playerIndex];
+  const point = firstSafeBoardingPoint(entry.definition);
+  if (!point) return false;
   addCrewMember(boat, playerIndex);
   player.mode = "boat";
   player.activeBoat = boat.id;
   player.x = Number(boat.x) || 0;
   player.y = Number(boat.y) || 0;
   player.heading = Number(boat.heading) || 0;
+  setVesselOccupantPosition(entry.definition, entry.instance, playerIndex, {
+    deckId: point.deckId,
+    x: point.position.x,
+    y: point.position.y,
+    heading: Number(point.heading) || 0,
+  });
+  player.vesselDeckInputOwned = true;
   world.events ||= [];
   world.events.push({
-    type: "enter",
-    text: `Ты поднялся на ${entry.definition.presentation?.label || boat.label || "судно"}.`,
+    type: "vessel-deck-enter",
+    text: String(point.enterText || `Ты поднялся на ${entry.definition.presentation?.label || boat.label || "судно"}.`),
     targets: [playerIndex],
     sourcePlayer: playerIndex,
     boatId: boat.id,
+    deckId: point.deckId,
     x: player.x,
     y: player.y,
     at: world.time,
@@ -94,6 +106,27 @@ function emitEnter(world, entry, playerIndex) {
     deckEntry: true,
   });
   if (world.events.length > 260) world.events.splice(0, world.events.length - 260);
+  return true;
+}
+
+function captureBoardingIntent({world, nativeVessels, playerIndex, input} = {}) {
+  if (!world || !Number.isInteger(playerIndex) || !input) return;
+  const state = inputState(world);
+  const previous = state.get(playerIndex) || {action: false, pendingRise: false};
+  const action = Boolean(input.action);
+  const rising = action && !previous.action;
+  const next = {
+    action,
+    pendingRise: Boolean(previous.pendingRise || rising),
+  };
+  state.set(playerIndex, next);
+  if (!rising) return;
+  const player = world.players?.[playerIndex];
+  if (!player || player.vesselDeckInputOwned === true || playerCarriesCargo(player) || worldCargoAtFeet(world, player)) return;
+  const entry = candidateDeckEntry(world, nativeVessels, playerIndex, {immediate: true});
+  if (!entry || !boardDeckEntry(world, entry, playerIndex)) return;
+  next.pendingRise = false;
+  input.action = false;
 }
 
 function finishDeckEntryBoarding({world, nativeVessels} = {}) {
@@ -107,7 +140,7 @@ function finishDeckEntryBoarding({world, nativeVessels} = {}) {
     if (actionWasConsumed(world, playerIndex)) continue;
     const entry = candidateDeckEntry(world, nativeVessels, playerIndex);
     if (!entry) continue;
-    emitEnter(world, entry, playerIndex);
+    boardDeckEntry(world, entry, playerIndex);
   }
 }
 
