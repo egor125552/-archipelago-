@@ -3,10 +3,15 @@
 import {FreeRoamAudio} from "../free-roam-audio-v5.js?v=45";
 import {MEDIUM_CREW_VESSEL_TYPE} from "./medium-crew-vessel-config.js?v=1";
 
+const MEDIUM_ENGINE_TEST_BUFFER = "mediumCrewEngineTest";
+const MEDIUM_ENGINE_TEST_URL = "/assets/audio/vessels/medium-crew-engine-test.mp3?v=1";
+
 const OPERATOR_RESOURCES = Object.freeze({
   "medium-pistol-control": Object.freeze({moduleId: "medium-pistol", label: "пистолетная установка"}),
   "medium-heavy-gun-control": Object.freeze({moduleId: "medium-heavy-gun", label: "тяжёлая установка"}),
 });
+
+const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
 function mediumBoatForPlayer(world, playerIndex) {
   const player = world?.players?.[playerIndex];
@@ -42,6 +47,22 @@ function updateMediumCrewUi(world, playerIndex) {
   if (attackButton) attackButton.textContent = `Огонь: ${weapon.label}`;
 }
 
+function updateMediumTestEngine(audio, world, playerIndex) {
+  const boat = mediumBoatForPlayer(world, playerIndex);
+  if (!boat || boat.sunk || boat.engineStalled || !audio?.buffers?.has(MEDIUM_ENGINE_TEST_BUFFER)) {
+    audio?.stopLoop?.(MEDIUM_ENGINE_TEST_BUFFER);
+    return;
+  }
+  const speedRatio = clamp(Math.abs(Number(boat.speed) || 0) / 17.2, 0, 1);
+  const throttle = clamp(Math.abs(Number(boat.throttle) || 0), 0, 1);
+  audio.ensureLoop?.(MEDIUM_ENGINE_TEST_BUFFER, {
+    gain: 0.24 + throttle * 0.16,
+    rate: 0.88 + speedRatio * 0.18 + throttle * 0.04,
+    lowpass: 5200 + speedRatio * 2200,
+    pan: 0,
+  });
+}
+
 function handleMediumShot(audio, event, playerIndex) {
   if (event?.type !== "vessel-mounted-shot" || event.boatType !== MEDIUM_CREW_VESSEL_TYPE || !event.targets?.includes(playerIndex)) return false;
   const spatial = audio.eventPanAndGain?.(event, event.weapon === "dual-turret" ? 420 : 320) || {pan: 0, gain: 1};
@@ -66,14 +87,42 @@ function handleMediumShot(audio, event, playerIndex) {
 }
 
 const prototype = FreeRoamAudio?.prototype;
-if (prototype && !prototype.__mediumCrewVesselPatchedV1) {
-  prototype.__mediumCrewVesselPatchedV1 = true;
+if (prototype && !prototype.__mediumCrewVesselPatchedV2) {
+  prototype.__mediumCrewVesselPatchedV2 = true;
+  const inheritedPreload = prototype.preload;
   const inheritedUpdateWorld = prototype.updateWorld;
   const inheritedHandleEvent = prototype.handleFreeEvent;
 
+  prototype.preload = async function preloadWithMediumCrewTestEngine() {
+    const result = await inheritedPreload.call(this);
+    if (!this.ctx || this.buffers?.has(MEDIUM_ENGINE_TEST_BUFFER)) return result;
+    try {
+      const response = await fetch(MEDIUM_ENGINE_TEST_URL, {cache: "no-store"});
+      const contentType = String(response.headers.get("content-type") || "").toLowerCase();
+      if (!response.ok || (!contentType.startsWith("audio/") && !contentType.includes("mpeg"))) return result;
+      const bytes = await response.arrayBuffer();
+      if (bytes.byteLength < 1024) return result;
+      this.buffers.set(MEDIUM_ENGINE_TEST_BUFFER, await this.ctx.decodeAudioData(bytes));
+    } catch (_) {
+      // Test asset is optional until it is manually uploaded.
+    }
+    return result;
+  };
+
   prototype.updateWorld = function updateWorldWithMediumCrew(world, playerIndex) {
-    const result = inheritedUpdateWorld.call(this, world, playerIndex);
+    const boat = mediumBoatForPlayer(world, playerIndex);
+    const originalAudioProfile = boat?.audioProfile;
+    // Reuse the existing "custom engine" gate only while the shared audio update
+    // runs, so the ordinary light-boat loop cannot duplicate this test engine.
+    if (boat) boat.audioProfile = "dual-turret";
+    let result;
+    try {
+      result = inheritedUpdateWorld.call(this, world, playerIndex);
+    } finally {
+      if (boat) boat.audioProfile = originalAudioProfile;
+    }
     updateMediumCrewUi(world, playerIndex);
+    updateMediumTestEngine(this, world, playerIndex);
     return result;
   };
 
