@@ -12,8 +12,8 @@ function eventBoat(world, event, playerIndex) {
   return Number.isInteger(activeBoat) ? world?.boats?.[activeBoat] || null : null;
 }
 
-function isClaimableNeutralVessel(boat) {
-  if (!boat || !boat.vesselInstanceId || Number.isInteger(boat.owner)) return false;
+function isManagedSingleSeatVessel(boat) {
+  if (!boat?.vesselInstanceId) return false;
   return Math.max(1, Math.floor(Number(boat.crewCapacity) || 1)) === 1;
 }
 
@@ -26,10 +26,10 @@ function normalizeEnterEvent(world, event) {
   const playerIndex = eventPlayerIndex(event);
   if (!Number.isInteger(playerIndex)) return;
   const boat = eventBoat(world, event, playerIndex);
-  if (!boat) return;
+  if (!isManagedSingleSeatVessel(boat)) return;
 
   const previousOwner = Number.isInteger(boat.owner) ? boat.owner : null;
-  const claimed = previousOwner == null && isClaimableNeutralVessel(boat);
+  const claimed = previousOwner == null;
   if (claimed) boat.owner = playerIndex;
 
   const owner = Number.isInteger(boat.owner) ? boat.owner : null;
