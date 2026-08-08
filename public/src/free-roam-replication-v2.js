@@ -11,6 +11,21 @@ function rounded(value) {
   return Math.round(number * 1_000) / 1_000;
 }
 
+function predictionProfile(source) {
+  const profile = source?.predictionPhysicsProfile;
+  if (!profile || typeof profile !== "object") return null;
+  return {
+    id: String(profile.id || "vessel-module"),
+    source: String(profile.source || "vessel-module"),
+    maxForwardSpeed: Math.max(0, rounded(profile.maxForwardSpeed)),
+    maxReverseSpeed: Math.max(0, rounded(profile.maxReverseSpeed)),
+    acceleration: Math.max(0, rounded(profile.acceleration)),
+    deceleration: Math.max(0, rounded(profile.deceleration)),
+    releaseBehavior: String(profile.releaseBehavior || "coast"),
+    applyDrag: profile.applyDrag !== false,
+  };
+}
+
 export function replicatedFreeWorld(world) {
   const snapshot = base.replicatedFreeWorld(world);
   snapshot.vesselArchitecture = replicatedVesselArchitecture(world);
@@ -29,6 +44,8 @@ export function replicatedFreeWorld(world) {
     target.cargoCapacity = Math.max(1, Math.floor(Number(source.cargoCapacity) || 5));
     target.audioProfile = source.audioProfile || "standard";
     target.hullMax = rounded(source.hullMax || 100);
+    const predicted = predictionProfile(source);
+    if (predicted) target.predictionPhysicsProfile = predicted;
     if (!isDualTurretBoat(source)) continue;
     target.turrets = (source.turrets || []).map(turret => ({
       id: turret.id,
