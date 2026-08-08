@@ -220,7 +220,9 @@ export function createVesselRegistry() {
     runSystems,
     listPresets: () => [...presets.values()],
     listModuleTypes: () => [...moduleTypes.values()],
-    listVesselTypes: () => [...vesselTypes.values()],
+    // Stress-prefixed types are live diagnostic fixtures, not release catalog
+    // entries. Runtime resolution still sees them; production listings do not.
+    listVesselTypes: ({includeStress = false} = {}) => [...vesselTypes.values()].filter(type => includeStress || !type.id.startsWith("stress-")),
     listSystems: () => [...systems.values()],
     listPhysicsModules: () => [...physicsModules.values()],
   });
