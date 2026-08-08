@@ -26,9 +26,21 @@ function boardArmoredDeck(world, playerIndex = 0) {
   const player = world.players[playerIndex];
   player.mode = "swim";
   player.activeBoat = null;
+  player.vesselDeckInputOwned = false;
+  player.combat.carriedCrate = null;
   player.x = boat.x;
   player.y = boat.y + 4;
   setPlayerInput(world, playerIndex, {action: true});
+  const immediate = nativeVesselForBoat(world, boat.id);
+  assert.ok(immediate?.instance?.occupants?.[playerIndex], JSON.stringify({
+    phase: "after-setPlayerInput-before-step",
+    systems: vesselRegistry().listSystems().map(system => `${system.phase}:${system.order}:${system.id}`),
+    player: {mode: player.mode, activeBoat: player.activeBoat, deckOwned: player.vesselDeckInputOwned, x: player.x, y: player.y},
+    boat: {id: boat.id, driver: boat.driver, crew: boat.crew, reserved: boat.reserved, x: boat.x, y: boat.y, range: boat.boardingRange, radius: boat.collisionRadius},
+    definition: {walkable: immediate?.definition?.capabilities?.walkableInterior, boarding: immediate?.definition?.deckArchitecture?.boarding?.mode},
+    crates: world.freeActivities?.crates?.length,
+    events: (world.events || []).slice(-8).map(event => ({type: event.type, text: event.text, boatId: event.boatId, sourcePlayer: event.sourcePlayer})),
+  }));
   stepFreeWorld(world, 0.05);
   setPlayerInput(world, playerIndex, {action: false});
   return boat;
