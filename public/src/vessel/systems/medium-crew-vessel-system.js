@@ -9,6 +9,8 @@ import {
   MEDIUM_CREW_VESSEL_TYPE,
 } from "../medium-crew-vessel-config.js?v=1";
 
+const MEDIUM_CREW_TEST_SPAWN_DELAY = 20;
+
 function emit(world, type, text, targets = [0, 1], extra = {}) {
   world.events ||= [];
   world.events.push({type, text, targets, at: world.time, operationEvent: true, ...extra});
@@ -27,6 +29,7 @@ function ensureMediumBoat(world, registry) {
     existing.manualRecoveryOnly = true;
     return existing;
   }
+  if ((Number(world?.time) || 0) < MEDIUM_CREW_TEST_SPAWN_DELAY) return null;
   const {boat} = spawnVessel(world, MEDIUM_CREW_VESSEL_TYPE, {
     x: MEDIUM_CREW_SPAWN.x,
     y: MEDIUM_CREW_SPAWN.y,
