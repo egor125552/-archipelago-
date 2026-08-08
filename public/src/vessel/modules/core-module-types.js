@@ -8,6 +8,7 @@ export const CORE_VESSEL_MODULE_TYPES = Object.freeze([
   Object.freeze({
     id: "propulsion",
     capabilities: ["propulsion"],
+    networkStateFields: ["enabled", "health"],
     semanticEvents: ["disabled", "restored"],
     presentation: {label: "двигатель", events: {disabled: "{label} выведен из строя.", restored: "{label} снова работает."}},
     createState: passiveState(),
@@ -15,6 +16,7 @@ export const CORE_VESSEL_MODULE_TYPES = Object.freeze([
   Object.freeze({
     id: "steering",
     capabilities: ["steering"],
+    networkStateFields: ["enabled", "health"],
     semanticEvents: ["disabled", "restored"],
     presentation: {label: "рулевое управление", events: {disabled: "{label} повреждено.", restored: "{label} восстановлено."}},
     createState: passiveState(),
@@ -22,6 +24,7 @@ export const CORE_VESSEL_MODULE_TYPES = Object.freeze([
   Object.freeze({
     id: "pump",
     capabilities: ["pump"],
+    networkStateFields: ["enabled", "active", "health"],
     semanticEvents: ["started", "stopped"],
     presentation: {label: "помпа", events: {started: "{label} включена.", stopped: "{label} выключена."}},
     createState: () => ({enabled: true, active: false, health: 100}),
@@ -29,6 +32,7 @@ export const CORE_VESSEL_MODULE_TYPES = Object.freeze([
   Object.freeze({
     id: "repair-station",
     capabilities: ["repair"],
+    networkStateFields: ["enabled", "health"],
     semanticEvents: ["used"],
     presentation: {label: "ремонтный пост", events: {used: "Использован {label}."}},
     createState: passiveState(),
@@ -37,17 +41,20 @@ export const CORE_VESSEL_MODULE_TYPES = Object.freeze([
     id: "fuel-tank",
     userFacing: false,
     capabilities: ["fuel"],
+    networkStateFields: ["enabled", "health", "amount"],
     createState: () => ({enabled: true, health: 100}),
   }),
   Object.freeze({
     id: "cargo-hold",
     userFacing: false,
     capabilities: ["cargo"],
+    networkStateFields: ["enabled", "health", "items"],
     createState: () => ({enabled: true, health: 100}),
   }),
   Object.freeze({
     id: "sonar",
     capabilities: ["sonar"],
+    networkStateFields: ["enabled", "health"],
     semanticEvents: ["enabled", "disabled"],
     presentation: {label: "сонар", events: {enabled: "{label} включён.", disabled: "{label} отключён."}},
     createState: passiveState(),
@@ -55,6 +62,7 @@ export const CORE_VESSEL_MODULE_TYPES = Object.freeze([
   Object.freeze({
     id: "mounted-weapon",
     capabilities: ["fire"],
+    networkStateFields: ["enabled", "health", "ammo"],
     installation: {mountCount: 1, mountKinds: ["weapon-hardpoint"]},
     semanticEvents: ["station-entered", "fired", "disabled"],
     presentation: {
