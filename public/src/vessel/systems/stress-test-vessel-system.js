@@ -4,6 +4,7 @@
 // plugin while it is initializing, but spawnVessel is only called later from a
 // gameplay phase, after the runtime module has completed initialization.
 import {spawnVessel} from "../vessel-runtime.js?v=2";
+import {vesselLocalToWorld} from "../vessel-interior.js";
 import {
   STRESS_TEST_START_AMMO,
   STRESS_TEST_VESSEL_TYPE,
@@ -21,7 +22,6 @@ import {releaseStolenCargo} from "../../free-roam-marauder.js?v=33";
 
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, Number(value) || 0));
 const rad = value => Number(value) * Math.PI / 180;
-const suppressedAttackByWorld = new WeakMap();
 
 function emit(world, type, text, targets = [0, 1], extra = {}) {
   world.events ||= [];
@@ -57,19 +57,11 @@ function ensureTestBoat(world) {
   emit(
     world,
     "stress-vessel-spawned",
-    "У причала готов испытательный катер «Пятьдесят»: 50 двигателей и сверхскоростной пистолет на 10000 патронов.",
+    "У причала готов самый быстрый катер «Пятьдесят»: 50 двигателей, две маленькие палубы, кресло водителя и отдельный пост сверхскоростного пистолета.",
     [0, 1],
     {boatId: boat.id, boatType: boat.boatType, audioProfile: boat.audioProfile, x: boat.x, y: boat.y},
   );
   return boat;
-}
-
-function inputObjects(world, playerIndex) {
-  return [...new Set([
-    world?.freeActivities?.inputs?.[playerIndex],
-    world?.operationInputs?.[playerIndex],
-    world?.inputs?.[playerIndex],
-  ].filter(Boolean))];
 }
 
 function currentInput(world, playerIndex) {
@@ -78,32 +70,6 @@ function currentInput(world, playerIndex) {
     ...(world?.operationInputs?.[playerIndex] || {}),
     ...(world?.inputs?.[playerIndex] || {}),
   };
-}
-
-function suppressAttackForBaseStep(world, playerIndex) {
-  const saved = inputObjects(world, playerIndex).map(input => [input, input.attack]);
-  for (const [input] of saved) input.attack = false;
-  const groups = suppressedAttackByWorld.get(world) || [];
-  groups.push({playerIndex, saved});
-  suppressedAttackByWorld.set(world, groups);
-}
-
-function restoreSuppressedAttacks(world) {
-  const groups = suppressedAttackByWorld.get(world) || [];
-  suppressedAttackByWorld.delete(world);
-  for (let groupIndex = groups.length - 1; groupIndex >= 0; groupIndex -= 1) {
-    const {playerIndex, saved} = groups[groupIndex];
-    const held = saved.some(([, value]) => value === true);
-    for (let index = saved.length - 1; index >= 0; index -= 1) {
-      const [input, value] = saved[index];
-      input.attack = value;
-    }
-    // world.inputs is the legacy movement store and older layers omit attack
-    // when copying input. Mirror the held bit only for this step so legacy
-    // observers/tests see the same authoritative hold state; the next input
-    // delivery remains the source of truth and may clear it normally.
-    if (held && world?.inputs?.[playerIndex]) world.inputs[playerIndex].attack = true;
-  }
 }
 
 function targetAllowed(world, boat, target) {
@@ -174,21 +140,54 @@ function targetBearing(from, target) {
   return Math.atan2((Number(target?.x) || 0) - (Number(from?.x) || 0), -((Number(target?.y) || 0) - (Number(from?.y) || 0))) * 180 / Math.PI;
 }
 
-function emptyImpact(boat, heading, range) {
+function emptyImpact(source, heading, range) {
   const direction = rad(heading);
   return {
-    x: Number(boat.x) + Math.sin(direction) * range,
-    y: Number(boat.y) - Math.cos(direction) * range,
+    x: Number(source.x) + Math.sin(direction) * range,
+    y: Number(source.y) - Math.cos(direction) * range,
   };
 }
 
 function stressMountedWeapon(entry) {
   const definition = entry?.definition?.modules?.find(module => (
-    module?.type === "mounted-weapon" && module?.config?.inputMode === "driver-attack"
+    module?.type === "mounted-weapon" && module?.id === "stress-pistol"
   ));
   if (!definition) return null;
   const state = entry.instance?.modules?.[definition.id];
   return state ? {definition, state} : null;
+}
+
+function weaponStation(entry, mounted) {
+  const resourceId = String(mounted?.definition?.config?.stationResourceId || "");
+  for (const deck of entry?.definition?.decks || []) {
+    for (const object of deck.objects || []) {
+      if (object?.kind !== "station") continue;
+      if (object.controlsModule === mounted?.definition?.id || (resourceId && String(object.resourceId || object.id) === resourceId)) {
+        return {deck, object, resourceId: String(object.resourceId || object.id)};
+      }
+    }
+  }
+  return null;
+}
+
+function weaponOperator(entry, mounted) {
+  const station = weaponStation(entry, mounted);
+  if (!station) return null;
+  const owner = entry?.instance?.interior?.claims?.[station.resourceId];
+  if (!Number.isInteger(owner) || !entry.instance?.occupants?.[owner]) return null;
+  return {playerIndex: owner, station};
+}
+
+function weaponSourcePoint(entry, mounted) {
+  const mountId = mounted?.definition?.mounts?.[0];
+  const mount = (entry?.definition?.mounts || []).find(candidate => candidate.id === mountId);
+  if (!mount?.position) return {x: Number(entry?.boat?.x) || 0, y: Number(entry?.boat?.y) || 0};
+  return vesselLocalToWorld(entry.boat, mount.position);
+}
+
+function operatorInput(entry, world, playerIndex) {
+  const deckInput = entry?.instance?.interior?.walkableControl?.inputs?.[String(playerIndex)];
+  return deckInput ? {...deckInput} : currentInput(world, playerIndex);
 }
 
 function updateMountedWeapons(context) {
@@ -209,17 +208,12 @@ function updateMountedWeapons(context) {
     mounted.state.cooldown = Math.max(0, (Number(mounted.state.cooldown) || 0) - safeDt);
     boat.testWeaponAmmo = Math.max(0, Math.floor(Number(mounted.state.ammo) || 0));
 
-    const playerIndex = Number.isInteger(boat.driver) ? boat.driver : null;
+    const operator = weaponOperator(entry, mounted);
+    const playerIndex = operator?.playerIndex;
     const player = Number.isInteger(playerIndex) ? world.players?.[playerIndex] : null;
     if (!player || player.mode !== "boat" || player.activeBoat !== boat.id) continue;
-    const input = currentInput(world, playerIndex);
+    const input = operatorInput(entry, world, playerIndex);
     if (!input.attack) continue;
-
-    // The mounted pistol owns the attack input while the player is driving this
-    // vessel. Suppress it only for the inherited common step, then restore it in
-    // after-step so a held key/touch remains held on the server and can fire the
-    // next 40 ms shot instead of becoming a one-shot pulse.
-    suppressAttackForBaseStep(world, playerIndex);
     if (player.combat?.alive === false) continue;
     if (boat.sunk || mounted.state.enabled === false || (Number(mounted.state.health) || 0) <= 0) continue;
 
@@ -238,12 +232,13 @@ function updateMountedWeapons(context) {
     const damage = Math.max(0.1, Number(config.damage) || 12);
     const interval = Math.max(0.04, Number(config.interval) || 0.04);
     const weapon = String(config.weaponId || mounted.definition.id);
+    const sourcePoint = weaponSourcePoint(entry, mounted);
     const target = selectTarget(world, playerIndex, boat, range);
-    const heading = target ? targetBearing(boat, target.point) : Number(boat.heading) || 0;
-    const fallbackImpact = emptyImpact(boat, heading, range);
+    const heading = target ? targetBearing(sourcePoint, target.point) : Number(boat.heading) || 0;
+    const fallbackImpact = emptyImpact(sourcePoint, heading, range);
     const impactX = Number.isFinite(Number(target?.point?.x)) ? Number(target.point.x) : fallbackImpact.x;
     const impactY = Number.isFinite(Number(target?.point?.y)) ? Number(target.point.y) : fallbackImpact.y;
-    const applied = target ? Boolean(damageTarget(world, target, damage,playerIndex, weapon, boat)) : false;
+    const applied = target ? Boolean(damageTarget(world, target, damage, playerIndex, weapon, sourcePoint)) : false;
 
     mounted.state.ammo = Math.max(0, Math.floor(Number(mounted.state.ammo) || 0) - 1);
     mounted.state.cooldown = interval;
@@ -254,6 +249,7 @@ function updateMountedWeapons(context) {
       boatType: boat.boatType,
       audioProfile: boat.audioProfile,
       moduleId: mounted.definition.id,
+      stationId: operator.station.object.id,
       weapon,
       ammo: mounted.state.ammo,
       damage,
@@ -263,8 +259,8 @@ function updateMountedWeapons(context) {
       targetId: target?.id ?? null,
       targetKind: target?.kind ?? null,
       heading,
-      x: boat.x,
-      y: boat.y,
+      x: sourcePoint.x,
+      y: sourcePoint.y,
       impactX,
       impactY,
     });
@@ -275,17 +271,12 @@ function announceBoarding(context) {
   const world = context?.world;
   if (!world) return;
   for (const event of (world.events || []).slice(context.eventStart || 0)) {
-    if (event?.type !== "enter") continue;
+    if (!["enter", "vessel-deck-enter"].includes(event?.type)) continue;
     const boat = (world.boats || []).find(candidate => candidate?.id === event.boatId) || null;
     if (!isStressBoat(boat)) continue;
     const ammo = Math.max(0, Math.floor(Number(boat?.testWeaponAmmo) || STRESS_TEST_START_AMMO));
     event.boatType = STRESS_TEST_VESSEL_TYPE;
-    const ownership = event.ownedBoat === false
-      ? "Ты сел в испытательный катер другого игрока «Пятьдесят»."
-      : event.claimedBoat
-        ? "Ты занял свободный испытательный катер «Пятьдесят»; теперь он твой."
-        : "Ты сел в свой испытательный катер «Пятьдесят».";
-    event.text = `${ownership} Здесь 50 двигателей. Сверхскоростной пистолет: ${ammo} патронов. Удерживай огонь.`;
+    event.text = `Ты на задней палубе самого быстрого катера «Пятьдесят». На рабочей палубе рядом кресло водителя и сверхскоростная пистолетная установка, ${ammo} патронов. Сначала займи нужный пост.`;
   }
 }
 
@@ -299,23 +290,21 @@ export const STRESS_TEST_VESSEL_SYSTEMS = Object.freeze([
     },
   }),
   Object.freeze({
-    id: "stress-test-mounted-pistol-v2",
+    id: "stress-test-mounted-pistol-v3",
     phase: "before-step",
     order: 10,
     run: updateMountedWeapons,
   }),
   Object.freeze({
-    id: "stress-test-boarding-announcer-v3",
-    phase: "after-step",
+    id: "stress-test-boarding-announcer-after-input-v4",
+    phase: "after-input",
     order: 20,
     run: announceBoarding,
   }),
   Object.freeze({
-    id: "stress-test-held-attack-restore-v2",
+    id: "stress-test-boarding-announcer-after-step-v4",
     phase: "after-step",
-    order: 90,
-    run({world}) {
-      if (world) restoreSuppressedAttacks(world);
-    },
+    order: 20,
+    run: announceBoarding,
   }),
 ]);
