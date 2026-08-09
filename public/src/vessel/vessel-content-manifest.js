@@ -3,7 +3,7 @@
 import {installCoreVesselModuleTypes} from "./modules/core-module-types.js?v=2";
 import {installStressTestPhysicsModules} from "./physics/stress-test-physics.js?v=1";
 import {installCurrentVesselTypes} from "./definitions/current-vessels.js?v=2";
-import {installMediumCrewVesselType} from "./definitions/medium-crew-vessel-v2.js?v=1";
+import {installMediumCrewVesselType} from "./definitions/medium-crew-vessel-v2.js?v=2";
 
 // Single explicit content extension point. Concrete module types, physics
 // modules and vessel definitions are registered here; generic free-roam code
