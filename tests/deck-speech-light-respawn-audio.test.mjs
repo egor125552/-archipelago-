@@ -120,11 +120,11 @@ test("fastest light vessel respawns fully after ten seconds without changing arm
   assert.ok(world.events.some(event => event.type === "vessel-respawn-complete" && event.boatId === boat.id));
 });
 
-test("armored custom engine uses the shared listener-relative vessel spatial transform", async () => {
+test("armored custom engine keeps the established foot/swim world-left-right convention", async () => {
   const east = {x: 10, y: 0};
-  assert.equal(relativeMovementPan({x: 0, y: 0, heading: 0, mode: "foot"}, east), 1, "east is right while the listener faces north");
-  assert.equal(relativeMovementPan({x: 0, y: 0, heading: 180, mode: "foot"}, east), -1, "turning around must move the same physical source to the listener's left");
-  assert.ok(Math.abs(relativeMovementPan({x: 0, y: 0, heading: 90, mode: "swim"}, east)) < 1e-9, "a source straight ahead must be centered while swimming too");
+  assert.equal(relativeMovementPan({x: 0, y: 0, heading: 0, mode: "foot"}, east), 1);
+  assert.equal(relativeMovementPan({x: 0, y: 0, heading: 180, mode: "foot"}, east), 1, "turning in place must not move a stationary vessel to the opposite ear");
+  assert.equal(relativeMovementPan({x: 0, y: 0, heading: 90, mode: "swim"}, east), 1, "swimming uses the same stable world-left/right navigation convention");
 
   const source = await readFile(new URL("../public/src/free-roam-dual-turret-audio.js", import.meta.url), "utf8");
   assert.match(source, /import \{relativeVesselPan\} from "\.\/vessel\/vessel-audio-policy\.js\?v=1"/);
