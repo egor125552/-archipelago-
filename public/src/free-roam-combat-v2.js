@@ -161,6 +161,37 @@ function destroyMarauder(world, attackerIndex, helpers) {
   helpers?.onEnemyBoatDestroyed?.(world, marauder, attackerIndex);
 }
 
+function maskExtendedBoatHulls(world, eventStart) {
+  const records = [];
+  for (const boat of world?.boats || []) {
+    if (!boat) continue;
+    const hullMax = Math.max(1, Number(boat.hullMax) || 100);
+    const hull = Math.max(0, Number(boat.hull) || 0);
+    if (hullMax <= 100 || hull <= 100) continue;
+    records.push({boat, hullMax, hull, maskedHull: 100});
+    boat.hull = 100;
+  }
+  return () => {
+    for (const record of records) {
+      const maskedAfter = clamp(Number(record.boat.hull) || 0, 0, record.maskedHull);
+      const damage = Math.max(0, record.maskedHull - maskedAfter);
+      record.boat.hull = Math.max(0, record.hull - damage);
+      for (const event of (world?.events || []).slice(eventStart)) {
+        if (event?.targetBoat !== record.boat.id || !["gun-boat-hit", "gun-boat-damaged"].includes(event.type)) continue;
+        event.hull = record.boat.hull;
+        event.hullMax = record.hullMax;
+        if (event.type === "gun-boat-damaged") {
+          event.text = `Твоя лодка под огнём. Корпус ${Math.round(record.boat.hull)} из ${Math.round(record.hullMax)}.`;
+        } else {
+          const targetPlayer = Number(event.targetPlayer);
+          const playerText = Number.isInteger(targetPlayer) ? ` игрока ${targetPlayer + 1}` : "";
+          event.text = `Попадание по лодке${playerText}. Корпус ${Math.round(record.boat.hull)} из ${Math.round(record.hullMax)}.`;
+        }
+      }
+    }
+  };
+}
+
 function firePistol(world, attackerIndex, helpers) {
   const attacker = world.players[attackerIndex];
   const combat = attacker.combat;
@@ -234,22 +265,26 @@ function firePistol(world, attackerIndex, helpers) {
 
   if (target.kind === "boat") {
     const boat = target.point;
-    boat.hull = clamp(boat.hull - COMBAT_TUNING.pistolBoatDamage, 0.05, 100);
+    const hullMax = Math.max(1, Number(boat.hullMax) || 100);
+    boat.hull = clamp(boat.hull - COMBAT_TUNING.pistolBoatDamage, 0.05, hullMax);
     boat.leak = clamp((Number(boat.leak) || 0) + COMBAT_TUNING.pistolBoatLeak, 0, 16);
-    emit(world, "gun-boat-hit", `Попадание из пистолета по лодке игрока ${target.playerIndex + 1}.`, [attackerIndex], {
-      sourcePlayer: attackerIndex,
-      targetPlayer: target.playerIndex,
-      targetBoat: boat.id,
-      weapon: "pistol",
-      x: boat.x,
-      y: boat.y,
-    });
-    emit(world, "gun-boat-damaged", `Пистолет попал в твою лодку. Корпус ${Math.round(boat.hull)}.`, [target.playerIndex], {
+    emit(world, "gun-boat-hit", `Попадание из пистолета по лодке игрока ${target.playerIndex + 1}. Корпус ${Math.round(boat.hull)} из ${Math.round(hullMax)}.`, [attackerIndex], {
       sourcePlayer: attackerIndex,
       targetPlayer: target.playerIndex,
       targetBoat: boat.id,
       weapon: "pistol",
       hull: boat.hull,
+      hullMax,
+      x: boat.x,
+      y: boat.y,
+    });
+    emit(world, "gun-boat-damaged", `Пистолет попал в твою лодку. Корпус ${Math.round(boat.hull)} из ${Math.round(hullMax)}.`, [target.playerIndex], {
+      sourcePlayer: attackerIndex,
+      targetPlayer: target.playerIndex,
+      targetBoat: boat.id,
+      weapon: "pistol",
+      hull: boat.hull,
+      hullMax,
       x: boat.x,
       y: boat.y,
     });
@@ -389,7 +424,12 @@ export function updateCombat(world, dt, helpers = {}) {
     }
   }
 
-  base.updateCombat(world, dt, helpers);
+  const restoreExtendedBoatHulls = maskExtendedBoatHulls(world, eventStart);
+  try {
+    base.updateCombat(world, dt, helpers);
+  } finally {
+    restoreExtendedBoatHulls();
+  }
 
   for (let index = 0; index < intercepted.length; index += 1) {
     const saved = intercepted[index];
