@@ -11,6 +11,7 @@ import {
 } from "../public/src/free-roam-core-v8.js";
 import {scenarioTarget} from "../public/src/free-roam-scenario.js";
 import {VESSEL_DECK_INPUT_BRIDGE_SYSTEMS} from "../public/src/vessel/systems/vessel-deck-input-bridge-system.js";
+import {VESSEL_MERCHANT_RECOVERY_SYSTEMS} from "../public/src/vessel/systems/vessel-merchant-recovery-system.js";
 import {listVesselNavigationTargets} from "../public/src/vessel/vessel-navigation.js";
 import {
   relativeVesselPan,
@@ -49,6 +50,41 @@ test("selected vessel navigation id survives real server ingress and becomes the
   assert.equal(target?.id, vessel.id);
   assert.equal(target?.x, world.boats[vessel.boatId].x);
   assert.equal(target?.y, world.boats[vessel.boatId].y);
+});
+
+test("native merchant recovery survives a stale zero-hull flooding snapshot", () => {
+  const after = VESSEL_MERCHANT_RECOVERY_SYSTEMS.find(system => system.phase === "after-step");
+  assert.ok(after);
+
+  const boat = {
+    id: 4,
+    label: "средний двухместный корабль",
+    hull: 0,
+    hullMax: 220,
+    sunk: false,
+    emergencyActive: true,
+    emergencyRemaining: 45,
+    emergencyWarned15: false,
+    emergencyWarned5: false,
+    speed: 0,
+    throttle: 0,
+    rudder: 0,
+    engineStalled: true,
+  };
+  const world = {
+    events: [
+      {type: "wreck-recovery-complete", boatId: 4, text: "Аварийный подъём завершён."},
+      {type: "flood-emergency-start", boatId: 4, cause: "wrecked", text: "Авария."},
+    ],
+  };
+
+  after.run({world, nativeVessels: [{boat}], eventStart: 0});
+
+  assert.equal(boat.hull, 44, "20% merchant recovery for a 220 hull vessel must survive the vessel authority handoff");
+  assert.equal(boat.sunk, false);
+  assert.equal(boat.emergencyActive, false, "the stale zero-hull snapshot must not start a new loss countdown");
+  assert.equal(boat.emergencyRemaining, 0);
+  assert.equal(world.events.some(event => event.type === "flood-emergency-start" && event.boatId === 4), false, "the false emergency must not be announced");
 });
 
 test("cargo on an old owned boat does not redirect a swimmer to the dock", () => {
