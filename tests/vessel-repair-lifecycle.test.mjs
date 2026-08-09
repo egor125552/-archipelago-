@@ -4,8 +4,9 @@ import {createVesselRegistry} from "../public/src/vessel/vessel-registry.js";
 import {STANDARD_BOAT_PRESET} from "../public/src/vessel/vessel-defaults.js";
 import {installCoreVesselModuleTypes} from "../public/src/vessel/modules/core-module-types.js";
 import {installMediumCrewVesselType} from "../public/src/vessel/definitions/medium-crew-vessel-v2.js?v=1";
-import {VESSEL_DECK_INPUT_BRIDGE_SYSTEMS} from "../public/src/vessel/systems/vessel-deck-input-bridge-system.js?v=3";
+import {VESSEL_DECK_INPUT_BRIDGE_SYSTEMS} from "../public/src/vessel/systems/vessel-deck-input-bridge-system.js?v=5";
 import {VESSEL_MODULE_REPAIR_SYSTEMS} from "../public/src/vessel/systems/vessel-module-repair-system.js?v=4";
+import {VESSEL_ZONE_WATER_SYSTEMS} from "../public/src/vessel/systems/vessel-zone-water-system.js?v=2";
 
 function fixture() {
   const registry = createVesselRegistry();
@@ -33,8 +34,8 @@ function fixture() {
     time: 0,
     boats: [null, null, null, null, boat],
     players: [{mode: "boat", activeBoat: 4, combat: {alive: true}}],
-    inputs: [{repair: false}], operationInputs: [{repair: false}], previousInputs: [{repair: false}], operationPreviousInputs: [{repair: false}],
-    freeActivities: {inputs: [{repair: false}], previousInputs: [{repair: false}], presence: [true]},
+    inputs: [{repair: false, pump: false}], operationInputs: [{repair: false, pump: false}], previousInputs: [{repair: false, pump: false}], operationPreviousInputs: [{repair: false, pump: false}],
+    freeActivities: {inputs: [{repair: false, pump: false}], previousInputs: [{repair: false, pump: false}], presence: [true]},
     events: [],
   };
   return {registry, definition, instance, boat, world, entry: {registry, definition, instance, boat}};
@@ -42,9 +43,11 @@ function fixture() {
 
 const beforeInput = VESSEL_DECK_INPUT_BRIDGE_SYSTEMS.find(system => system.phase === "before-input");
 const repairSystem = VESSEL_MODULE_REPAIR_SYSTEMS[0];
+const waterBefore = VESSEL_ZONE_WATER_SYSTEMS.find(system => system.phase === "before-step");
+const waterAfter = VESSEL_ZONE_WATER_SYSTEMS.find(system => system.phase === "after-step");
 
-function capture(world, entry, repair) {
-  beforeInput.run({world, nativeVessels: [entry], playerIndex: 0, input: {repair, attack: false, pump: false, guide: false}});
+function capture(world, entry, repair, pump = false) {
+  beforeInput.run({world, nativeVessels: [entry], playerIndex: 0, input: {repair, pump, attack: false, guide: false}});
 }
 
 test("leaving a repair station cancels an unfinished service and clears its owner state", () => {
@@ -87,4 +90,39 @@ test("holding repair after completion cannot consume a second plate", () => {
   capture(world, entry, false);
   repairSystem.run({world, registry, nativeVessels: [entry], dt: 0.1});
   assert.equal(instance.modules["bilge-pump"].repairLatched, false, "release rearms the repair control for a deliberate second cycle");
+});
+
+test("bridge v5 repair input reaches the module repair reader and a repaired engine really restarts", () => {
+  const {registry, instance, boat, world, entry} = fixture();
+  instance.interior.claims["medium-engine-repair-control"] = 0;
+  instance.modules.engine.health = 20;
+  instance.modules.engine.enabled = false;
+  boat.engineStalled = true;
+  boat.restartProgress = 0;
+
+  // Production currently loads the deck bridge as ?v=5 while the repair
+  // system itself still imports the bridge through an older query revision.
+  // These must share the same captured raw input state.
+  capture(world, entry, true);
+  for (let index = 0; index < 56; index += 1) {
+    repairSystem.run({world, registry, nativeVessels: [entry], dt: 0.1});
+    world.time += 0.1;
+  }
+
+  assert.equal(instance.modules.engine.health, 75);
+  assert.equal(instance.modules.engine.enabled, true, "repair must re-enable the actual propulsion module");
+  assert.equal(boat.engineStalled, true, "repair completion hands off to the normal restart lifecycle");
+  assert.ok(world.events.some(event => event.type === "vessel-module-repair-complete" && event.moduleId === "engine"));
+
+  capture(world, entry, false);
+  for (let index = 0; index < 13; index += 1) {
+    const eventStart = world.events.length;
+    waterBefore.run({world, nativeVessels: [entry], dt: 0.1, eventStart});
+    waterAfter.run({world, nativeVessels: [entry], dt: 0.1, eventStart});
+    world.time += 0.1;
+  }
+
+  assert.equal(boat.engineStalled, false, "a repaired, fueled, dry engine must leave the stalled state");
+  assert.equal(boat.restartProgress, 0);
+  assert.ok(world.events.some(event => event.type === "engine-water-restart" && event.boatId === boat.id), "the player must receive a real engine-start event after repair");
 });
