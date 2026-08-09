@@ -1,6 +1,6 @@
 "use strict";
 
-import {stationOwnsInput} from "../vessel-authority.js?v=1";
+import {claimedVesselStation, stationOwnsInput} from "../vessel-authority.js?v=1";
 
 const pendingByWorld = new WeakMap();
 const CARGO_ACTION_RANGE = 12;
@@ -39,13 +39,23 @@ function captureDeckSharedInput({world, nativeVessels, playerIndex, input} = {})
     state.delete(playerIndex);
     return;
   }
+
+  const cargoAction = Boolean(input.action && cargoActionAvailable(world, playerIndex));
+  const occupiedStation = claimedVesselStation(entry, playerIndex);
   state.set(playerIndex, {
     attack: Boolean(input.attack),
     pump: Boolean(input.pump),
     repair: Boolean(input.repair),
     guide: Boolean(input.guide),
-    cargoAction: Boolean(input.action && cargoActionAvailable(world, playerIndex)),
+    cargoAction,
   });
+
+  // One physical button press must have one owner. While a player occupies any
+  // vessel station, a valid nearby cargo action belongs to the shared cargo
+  // system and must not simultaneously reach the deck interaction runtime as
+  // "leave station". The same button still leaves the station normally when
+  // there is no cargo operation available.
+  if (cargoAction && occupiedStation) input.action = false;
 }
 
 export function capturedVesselSharedInput(world, playerIndex) {
@@ -86,6 +96,6 @@ function restoreDeckSharedInput({world, nativeVessels, playerIndex} = {}) {
 }
 
 export const VESSEL_DECK_INPUT_BRIDGE_SYSTEMS = Object.freeze([
-  Object.freeze({id: "vessel-deck-input-bridge-before-input-v3", phase: "before-input", order: 4, run: captureDeckSharedInput}),
-  Object.freeze({id: "vessel-deck-input-bridge-after-input-v3", phase: "after-input", order: 4, run: restoreDeckSharedInput}),
+  Object.freeze({id: "vessel-deck-input-bridge-before-input-v4", phase: "before-input", order: 4, run: captureDeckSharedInput}),
+  Object.freeze({id: "vessel-deck-input-bridge-after-input-v4", phase: "after-input", order: 4, run: restoreDeckSharedInput}),
 ]);
