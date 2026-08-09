@@ -6,8 +6,8 @@ import {VESSEL_MOUNTED_WEAPON_SYSTEMS} from "./systems/vessel-mounted-weapon-sys
 import {VESSEL_ZONE_WATER_SYSTEMS} from "./systems/vessel-zone-water-system.js?v=2";
 import {VESSEL_WATER_MOBILITY_SYSTEMS} from "./systems/vessel-water-mobility-system.js?v=2";
 import {VESSEL_WATER_AUTHORITY_PERSISTENCE_SYSTEMS} from "./systems/vessel-water-authority-persistence-system.js?v=1";
-import {VESSEL_MODULE_REPAIR_SYSTEMS} from "./systems/vessel-module-repair-system.js?v=4";
-import {VESSEL_MERCHANT_RECOVERY_SYSTEMS} from "./systems/vessel-merchant-recovery-system.js?v=1";
+import {VESSEL_MODULE_REPAIR_SYSTEMS} from "./systems/vessel-module-repair-system.js?v=5";
+import {VESSEL_MERCHANT_RECOVERY_SYSTEMS} from "./systems/vessel-merchant-recovery-system.js?v=2";
 import {VESSEL_OWNERSHIP_SYSTEMS} from "./systems/vessel-ownership-system.js?v=1";
 import {VESSEL_DECK_BOARDING_SYSTEMS} from "./systems/vessel-deck-boarding-system.js?v=1";
 import {VESSEL_DECK_INPUT_BRIDGE_SYSTEMS} from "./systems/vessel-deck-input-bridge-system.js?v=5";
