@@ -1,7 +1,7 @@
 "use strict";
 
-import "./vessel/stress-test-vessel-client.js?v=3";
-import "./vessel/medium-crew-vessel-client.js?v=3";
+import "./vessel/stress-test-vessel-client.js?v=4";
+import "./vessel/medium-crew-vessel-client.js?v=4";
 import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=45";
 import {updateDualTurretUi} from "./free-roam-dual-turret-ui.js?v=2";
 
@@ -9,8 +9,8 @@ import {updateDualTurretUi} from "./free-roam-dual-turret-ui.js?v=2";
 // client adapters for architecture vessels: they only render audio/UI from the
 // shared replicated vessel state and use the same FreeRoamAudio graph.
 const prototype = FreeRoamAudio?.prototype;
-if (prototype && !prototype.__dualTurretUiPatchedV9) {
-  prototype.__dualTurretUiPatchedV9 = true;
+if (prototype && !prototype.__dualTurretUiPatchedV10) {
+  prototype.__dualTurretUiPatchedV10 = true;
   const inheritedUpdate = prototype.updateWorld;
   prototype.updateWorld = function updateWorldWithDualTurretUi(world, playerIndex) {
     const result = inheritedUpdate.call(this, world, playerIndex);
