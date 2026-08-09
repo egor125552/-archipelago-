@@ -32,8 +32,9 @@ function clearRepairProgress(module) {
   module.repairActive = false;
 }
 
-function beginService(entry, module, definition) {
+function beginService(entry, module, definition, playerIndex) {
   module.repairWasEnabled = module.enabled !== false;
+  module.repairOwner = playerIndex;
   module.repairActive = true;
   module.repairProgress = 0;
   module.repairQuarter = 0;
@@ -73,12 +74,14 @@ function restoreInterruptedModule(entry, moduleId, module, definition) {
     }
   }
   delete module.repairWasEnabled;
+  delete module.repairOwner;
   clearRepairProgress(module);
 }
 
 function interruptService(world, entry, playerIndex, moduleId, module, definition, label, announce = true) {
   const wasActive = Boolean(module?.repairActive);
   if (!wasActive) {
+    delete module?.repairOwner;
     clearRepairProgress(module);
     return;
   }
@@ -103,8 +106,7 @@ function updateRepairStation({world, registry, entry, playerIndex, station, dt})
   const repairing = Boolean(input.repair && stationOwnsInput(entry, playerIndex, "repair"));
   const invalid = entry.boat?.sunk || world.players?.[playerIndex]?.combat?.alive === false;
   if (!repairing || invalid) {
-    if (!repairing) module.repairLatched = false;
-    else if (invalid) module.repairLatched = false;
+    module.repairLatched = false;
     interruptService(world, entry, playerIndex, moduleId, module, definition, label, !invalid && repairing === false);
     return;
   }
@@ -140,7 +142,7 @@ function updateRepairStation({world, registry, entry, playerIndex, station, dt})
   }
 
   if (!module.repairActive) {
-    beginService(entry, module, definition);
+    beginService(entry, module, definition, playerIndex);
     emit(world, "vessel-module-repair-start", `Ремонт: ${label}. Модуль отключён на время обслуживания.`, [playerIndex], {
       sourcePlayer: playerIndex,
       boatId: entry.boat.id,
@@ -167,6 +169,7 @@ function updateRepairStation({world, registry, entry, playerIndex, station, dt})
   module.active = false;
   module.repairLatched = true;
   delete module.repairWasEnabled;
+  delete module.repairOwner;
   clearRepairProgress(module);
 
   if (definition.type === "propulsion") {
@@ -196,21 +199,52 @@ function updateRepairStation({world, registry, entry, playerIndex, station, dt})
   });
 }
 
+function repairStations(entry) {
+  const result = [];
+  for (const deck of entry?.definition?.decks || []) {
+    for (const object of deck.objects || []) {
+      if (object?.kind !== "station" || object.stationRole !== "repair" || !object.controlsModule) continue;
+      result.push({deck, object, resourceId: String(object.resourceId || object.id || "")});
+    }
+  }
+  return result;
+}
+
+function cleanupUnownedRepairs(world, registry, entry, ownedResources) {
+  for (const station of repairStations(entry)) {
+    if (ownedResources.has(station.resourceId)) continue;
+    const moduleId = String(station.object.controlsModule || "");
+    const module = entry.instance?.modules?.[moduleId];
+    const definition = moduleDefinition(entry, moduleId);
+    if (!module || !definition) continue;
+    const previousOwner = Number.isInteger(module.repairOwner) ? module.repairOwner : null;
+    const label = moduleLabel(registry, entry, moduleId);
+    if (module.repairActive) {
+      interruptService(world, entry, previousOwner, moduleId, module, definition, label, Number.isInteger(previousOwner));
+    }
+    module.repairLatched = false;
+    delete module.repairOwner;
+  }
+}
+
 function updateModuleRepairs({world, registry, nativeVessels, dt} = {}) {
   if (!world || !registry) return;
   for (const entry of nativeVessels || []) {
     if (!vesselOwnsSubsystem(entry?.definition, "repair")) continue;
+    const ownedResources = new Set();
     for (let playerIndex = 0; playerIndex < (world.players || []).length; playerIndex += 1) {
       const station = claimedVesselStation(entry, playerIndex);
       if (!station?.object?.controlsModule || station.object.stationRole !== "repair") continue;
+      ownedResources.add(station.resourceId);
       updateRepairStation({world, registry, entry, playerIndex, station, dt});
     }
+    cleanupUnownedRepairs(world, registry, entry, ownedResources);
   }
 }
 
 export const VESSEL_MODULE_REPAIR_SYSTEMS = Object.freeze([
   Object.freeze({
-    id: "vessel-module-repair-before-step-v3",
+    id: "vessel-module-repair-before-step-v4",
     phase: "before-step",
     order: 30,
     run: updateModuleRepairs,
