@@ -1,6 +1,6 @@
 "use strict";
 
-import {capturedVesselSharedInput} from "./vessel-deck-input-bridge-system.js?v=2";
+import {capturedVesselSharedInput} from "./vessel-deck-input-bridge-system.js?v=3";
 import {claimedVesselStation, stationOwnsInput, vesselOwnsSubsystem} from "../vessel-authority.js?v=1";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, Number(value) || 0));
@@ -25,11 +25,77 @@ function floodDisabled(entry, moduleId) {
   return Boolean(entry?.instance?.interior?.waterBridge?.floodDisabledModules?.[moduleId]);
 }
 
-function resetProgress(state) {
-  if (!state) return;
-  state.repairProgress = 0;
-  state.repairQuarter = 0;
-  state.repairActive = false;
+function clearRepairProgress(module) {
+  if (!module) return;
+  module.repairProgress = 0;
+  module.repairQuarter = 0;
+  module.repairActive = false;
+}
+
+function serviceType(entry, definition) {
+  const type = entry?.registry?.resolveModuleType?.(definition?.type);
+  return type?.id || definition?.type || "";
+}
+
+function beginService(entry, moduleId, module, definition) {
+  module.repairWasEnabled = module.enabled !== false;
+  module.repairActive = true;
+  module.repairProgress = 0;
+  module.repairQuarter = 0;
+
+  if (definition.type === "propulsion") {
+    module.enabled = false;
+    entry.boat.engineStalled = true;
+    entry.boat.throttle = 0;
+    entry.boat.restartProgress = 0;
+  } else if (definition.type === "pump") {
+    module.enabled = false;
+    module.active = false;
+    entry.boat.pumpActive = false;
+  }
+}
+
+function restoreInterruptedModule(entry, moduleId, module, definition) {
+  const mayRestore = module.repairWasEnabled !== false
+    && (Number(module.health) || 0) > 0
+    && !floodDisabled(entry, moduleId)
+    && !entry.boat?.sunk;
+  module.enabled = Boolean(mayRestore);
+  if (definition.type === "pump") {
+    module.active = false;
+    entry.boat.pumpActive = false;
+  }
+  if (definition.type === "propulsion") {
+    entry.boat.throttle = 0;
+    entry.boat.restartProgress = 0;
+    if (vesselOwnsSubsystem(entry.definition, "flooding")) {
+      // The flooding/propulsion authority owns the restart delay.
+      entry.boat.engineStalled = true;
+    } else {
+      entry.boat.engineStalled = !mayRestore
+        || entry.boat.emergencyActive
+        || (Number(entry.boat.fuel) || 0) <= 0.01
+        || Number(entry.boat.engineTemp || 0) >= 104;
+    }
+  }
+  delete module.repairWasEnabled;
+  clearRepairProgress(module);
+}
+
+function interruptService(world, entry, playerIndex, moduleId, module, definition, label, announce = true) {
+  const wasActive = Boolean(module?.repairActive);
+  if (!wasActive) {
+    clearRepairProgress(module);
+    return;
+  }
+  restoreInterruptedModule(entry, moduleId, module, definition);
+  if (announce && Number.isInteger(playerIndex)) {
+    emit(world, "vessel-module-repair-cancelled", `Ремонт прерван: ${label}.`, [playerIndex], {
+      sourcePlayer: playerIndex,
+      boatId: entry.boat.id,
+      moduleId,
+    });
+  }
 }
 
 function updateRepairStation({world, registry, entry, playerIndex, station, dt}) {
@@ -37,17 +103,21 @@ function updateRepairStation({world, registry, entry, playerIndex, station, dt})
   const module = entry.instance?.modules?.[moduleId];
   const definition = moduleDefinition(entry, moduleId);
   if (!module || !definition) return;
+  // Expose registry to tiny lifecycle helpers without creating a parallel lookup table.
+  entry.registry = registry;
 
+  const label = moduleLabel(registry, entry, moduleId);
   const input = capturedVesselSharedInput(world, playerIndex) || {};
   const repairing = Boolean(input.repair && stationOwnsInput(entry, playerIndex, "repair"));
-  if (!repairing || entry.boat?.sunk || world.players?.[playerIndex]?.combat?.alive === false) {
-    resetProgress(module);
+  const interrupted = !repairing || entry.boat?.sunk || world.players?.[playerIndex]?.combat?.alive === false;
+  if (interrupted) {
+    interruptService(world, entry, playerIndex, moduleId, module, definition, label, repairing === false && !entry.boat?.sunk);
     return;
   }
 
   const health = clamp(module.health ?? 100, 0, 100);
   if (health >= 99.999) {
-    resetProgress(module);
+    interruptService(world, entry, playerIndex, moduleId, module, definition, label, false);
     return;
   }
 
@@ -56,7 +126,6 @@ function updateRepairStation({world, registry, entry, playerIndex, station, dt})
   const amount = Math.max(1, Number(repairConfig.amount) || 50);
   const resourceField = String(repairConfig.resourceField || "repairPatches");
   const available = Math.max(0, Math.floor(Number(entry.boat?.[resourceField]) || 0));
-  const label = moduleLabel(registry, entry, moduleId);
 
   if (available <= 0) {
     const now = Number(world.time) || 0;
@@ -68,15 +137,13 @@ function updateRepairStation({world, registry, entry, playerIndex, station, dt})
         moduleId,
       });
     }
-    resetProgress(module);
+    interruptService(world, entry, playerIndex, moduleId, module, definition, label, false);
     return;
   }
 
   if (!module.repairActive) {
-    module.repairActive = true;
-    module.repairProgress = 0;
-    module.repairQuarter = 0;
-    emit(world, "vessel-module-repair-start", `Ремонт: ${label}.`, [playerIndex], {
+    beginService(entry, moduleId, module, definition);
+    emit(world, "vessel-module-repair-start", `Ремонт: ${label}. Модуль отключён на время обслуживания.`, [playerIndex], {
       sourcePlayer: playerIndex,
       boatId: entry.boat.id,
       moduleId,
@@ -98,17 +165,29 @@ function updateRepairStation({world, registry, entry, playerIndex, station, dt})
 
   entry.boat[resourceField] = Math.max(0, available - 1);
   module.health = clamp(health + amount, 0, 100);
-  module.enabled = module.health > 0 && !floodDisabled(entry, moduleId);
-  resetProgress(module);
+  module.enabled = module.health > 0 && !floodDisabled(entry, moduleId) && !entry.boat.sunk;
+  module.active = false;
+  delete module.repairWasEnabled;
+  clearRepairProgress(module);
 
   if (definition.type === "propulsion") {
-    if (module.enabled && !entry.boat.emergencyActive && (Number(entry.boat.fuel) || 0) > 0.01 && Number(entry.boat.engineTemp || 0) < 104) {
-      entry.boat.engineStalled = false;
-    } else entry.boat.engineStalled = true;
+    entry.boat.throttle = 0;
+    entry.boat.restartProgress = 0;
+    if (vesselOwnsSubsystem(entry.definition, "flooding")) {
+      entry.boat.engineStalled = true;
+    } else {
+      entry.boat.engineStalled = !module.enabled
+        || entry.boat.emergencyActive
+        || (Number(entry.boat.fuel) || 0) <= 0.01
+        || Number(entry.boat.engineTemp || 0) >= 104;
+    }
   }
-  if (definition.type === "pump" && !module.enabled) entry.boat.pumpActive = false;
+  if (definition.type === "pump") entry.boat.pumpActive = false;
 
-  emit(world, "vessel-module-repair-complete", `${label} восстановлен до ${Math.round(module.health)} процентов. Пластин осталось ${entry.boat[resourceField]}.`, [playerIndex], {
+  const finish = definition.type === "propulsion" && module.enabled && vesselOwnsSubsystem(entry.definition, "flooding")
+    ? " Запуск двигателя пройдёт штатно после короткой задержки."
+    : "";
+  emit(world, "vessel-module-repair-complete", `${label} восстановлен до ${Math.round(module.health)} процентов. Пластин осталось ${entry.boat[resourceField]}.${finish}`, [playerIndex], {
     sourcePlayer: playerIndex,
     boatId: entry.boat.id,
     moduleId,
@@ -132,7 +211,7 @@ function updateModuleRepairs({world, registry, nativeVessels, dt} = {}) {
 
 export const VESSEL_MODULE_REPAIR_SYSTEMS = Object.freeze([
   Object.freeze({
-    id: "vessel-module-repair-before-step-v1",
+    id: "vessel-module-repair-before-step-v2",
     phase: "before-step",
     order: 30,
     run: updateModuleRepairs,
