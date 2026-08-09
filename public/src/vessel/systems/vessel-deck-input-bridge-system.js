@@ -2,7 +2,21 @@
 
 import {claimedVesselStation, stationOwnsInput} from "../vessel-authority.js?v=1";
 
-const pendingByWorld = new WeakMap();
+// IMPORTANT: this module is imported with cache-busting ?v= revisions from
+// several vessel systems. In native ESM every distinct query string is a
+// distinct module instance, so a module-local WeakMap would split the raw
+// button state between e.g. bridge ?v=5, repair ?v=3 and water ?v=2.
+// Store the WeakMap behind Symbol.for on globalThis so all revisions in the
+// same game/Worker realm share exactly one input authority state.
+const SHARED_INPUT_STATE_KEY = Symbol.for("archipelago.vesselDeckSharedInput.pending.v1");
+const existingSharedInputState = globalThis[SHARED_INPUT_STATE_KEY];
+const pendingByWorld = existingSharedInputState instanceof WeakMap
+  ? existingSharedInputState
+  : new WeakMap();
+if (!(existingSharedInputState instanceof WeakMap)) {
+  globalThis[SHARED_INPUT_STATE_KEY] = pendingByWorld;
+}
+
 const CARGO_ACTION_RANGE = 12;
 const SHARED_FIELDS = Object.freeze(["attack", "pump", "repair", "guide"]);
 const distance = (a, b) => Math.hypot((Number(a?.x) || 0) - (Number(b?.x) || 0), (Number(a?.y) || 0) - (Number(b?.y) || 0));
@@ -96,6 +110,6 @@ function restoreDeckSharedInput({world, nativeVessels, playerIndex} = {}) {
 }
 
 export const VESSEL_DECK_INPUT_BRIDGE_SYSTEMS = Object.freeze([
-  Object.freeze({id: "vessel-deck-input-bridge-before-input-v4", phase: "before-input", order: 4, run: captureDeckSharedInput}),
-  Object.freeze({id: "vessel-deck-input-bridge-after-input-v4", phase: "after-input", order: 4, run: restoreDeckSharedInput}),
+  Object.freeze({id: "vessel-deck-input-bridge-before-input-v5", phase: "before-input", order: 4, run: captureDeckSharedInput}),
+  Object.freeze({id: "vessel-deck-input-bridge-after-input-v5", phase: "after-input", order: 4, run: restoreDeckSharedInput}),
 ]);
