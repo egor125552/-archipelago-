@@ -5,6 +5,7 @@
 import {spawnVessel} from "../vessel-runtime.js?v=2";
 import {installMediumCrewVesselType} from "../definitions/medium-crew-vessel-v2.js?v=1";
 import {
+  MEDIUM_CREW_AUDIO_PROFILE,
   MEDIUM_CREW_SPAWN,
   MEDIUM_CREW_VESSEL_TYPE,
 } from "../medium-crew-vessel-config.js?v=2";
@@ -25,6 +26,15 @@ function playerIsAboard(world, boat) {
   return (world?.players || []).some(player => (
     player && Number.isInteger(player.activeBoat) && player.activeBoat === boat?.id
   ));
+}
+
+function normalizeMediumAuthorityFields(boat) {
+  if (!boat) return;
+  boat.fleetService = true;
+  boat.manualRecoveryOnly = true;
+  boat.mediumCrewMarker = true;
+  boat.audioProfile = MEDIUM_CREW_AUDIO_PROFILE;
+  boat.requestedAudioProfile = MEDIUM_CREW_AUDIO_PROFILE;
 }
 
 function migrateExistingMediumBoat(world, boat) {
@@ -48,8 +58,7 @@ function migrateExistingMediumBoat(world, boat) {
   boat.leak = 0;
   boat.engineStalled = false;
   boat.mediumCrewPlacementVersion = MEDIUM_CREW_PLACEMENT_VERSION;
-  boat.fleetService = true;
-  boat.manualRecoveryOnly = true;
+  normalizeMediumAuthorityFields(boat);
 
   emit(
     world,
@@ -65,8 +74,7 @@ function ensureMediumBoat(world, registry) {
   if (!registry?.resolveVesselType?.(MEDIUM_CREW_VESSEL_TYPE)) installMediumCrewVesselType(registry);
   const existing = mediumBoat(world);
   if (existing) {
-    existing.fleetService = true;
-    existing.manualRecoveryOnly = true;
+    normalizeMediumAuthorityFields(existing);
     migrateExistingMediumBoat(world, existing);
     return existing;
   }
@@ -91,8 +99,11 @@ function ensureMediumBoat(world, registry) {
       manualRecoveryOnly: true,
       mediumCrewMarker: true,
       mediumCrewPlacementVersion: MEDIUM_CREW_PLACEMENT_VERSION,
+      audioProfile: MEDIUM_CREW_AUDIO_PROFILE,
+      requestedAudioProfile: MEDIUM_CREW_AUDIO_PROFILE,
     },
   });
+  normalizeMediumAuthorityFields(boat);
   emit(
     world,
     "medium-crew-vessel-spawned",
@@ -107,21 +118,20 @@ function normalizeBoarding(context) {
   const world = context?.world;
   const boat = mediumBoat(world);
   if (!world || !boat) return;
+  normalizeMediumAuthorityFields(boat);
   for (const event of (world.events || []).slice(context.eventStart || 0)) {
     if (!["enter", "vessel-deck-enter"].includes(event?.type) || event.boatId !== boat.id) continue;
     const playerIndex = Number.isInteger(event.sourcePlayer)
       ? event.sourcePlayer
       : event.targets?.find(Number.isInteger);
     if (Number.isInteger(playerIndex) && !Number.isInteger(boat.owner)) boat.owner = playerIndex;
-    boat.fleetService = true;
-    boat.manualRecoveryOnly = true;
     event.text = "Ты на среднем двухместном корабле. Сейчас ты в кормовом отсеке: слева пистолетная установка, справа тяжёлая установка. Герметичная дверь ведёт в рубку; из рубки люк ведёт в машинное отделение.";
   }
 }
 
 export const MEDIUM_CREW_VESSEL_SYSTEMS = Object.freeze([
   Object.freeze({
-    id: "medium-crew-vessel-spawner-v2",
+    id: "medium-crew-vessel-spawner-v3",
     phase: "before-step",
     order: -90,
     run({world, registry}) {
@@ -129,13 +139,13 @@ export const MEDIUM_CREW_VESSEL_SYSTEMS = Object.freeze([
     },
   }),
   Object.freeze({
-    id: "medium-crew-vessel-boarding-after-input-v2",
+    id: "medium-crew-vessel-boarding-after-input-v3",
     phase: "after-input",
     order: 21,
     run: normalizeBoarding,
   }),
   Object.freeze({
-    id: "medium-crew-vessel-boarding-after-step-v2",
+    id: "medium-crew-vessel-boarding-after-step-v3",
     phase: "after-step",
     order: 21,
     run: normalizeBoarding,
