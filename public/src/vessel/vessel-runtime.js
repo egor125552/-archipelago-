@@ -16,8 +16,9 @@ import {
 } from "./vessel-deck-runtime.js";
 import {installVesselModule} from "./vessel-modules.js";
 import {vesselNetworkSnapshot} from "./vessel-network.js";
+import {vesselOwnsSubsystem} from "./vessel-authority.js?v=1";
 
-const VESSEL_RUNTIME_STATE_VERSION = 1;
+const VESSEL_RUNTIME_STATE_VERSION = 2;
 const registry = createVesselRegistry();
 const nativeWorldInstances = new WeakMap();
 const preparedWorlds = new WeakSet();
@@ -93,13 +94,38 @@ function runtimeState(definition, boat) {
   return state;
 }
 
+function authoritativeModuleState(definition) {
+  return Object.values(definition?.subsystemAuthority || {}).some(value => String(value || "legacy") !== "legacy");
+}
+
+function finiteHealth(state, fallback = 100) {
+  const value = Number(state?.health);
+  return Number.isFinite(value) ? Math.max(0, value) : fallback;
+}
+
 function syncModuleState(entry) {
-  const {instance, boat} = entry;
+  const {definition, instance, boat} = entry;
   if (instance.modules.engine) {
-    instance.modules.engine.enabled = !boat.engineStalled && !boat.sunk;
-    instance.modules.engine.health = boat.sunk ? 0 : Math.max(0, Number(instance.modules.engine.health) || 100);
+    const engine = instance.modules.engine;
+    engine.health = finiteHealth(engine);
+    if (vesselOwnsSubsystem(definition, "propulsion")) {
+      if (boat.sunk || engine.health <= 0) engine.enabled = false;
+      else if (typeof engine.enabled !== "boolean") engine.enabled = true;
+      if (engine.enabled === false || engine.health <= 0) {
+        boat.engineStalled = true;
+        boat.throttle = 0;
+      }
+    } else {
+      engine.enabled = !boat.engineStalled && !boat.sunk;
+      if (boat.sunk) engine.health = 0;
+    }
   }
-  if (instance.modules["bilge-pump"]) instance.modules["bilge-pump"].active = boat.pumpActive === true;
+  if (instance.modules["bilge-pump"]) {
+    const pump = instance.modules["bilge-pump"];
+    pump.health = finiteHealth(pump);
+    if (pump.health <= 0) pump.enabled = false;
+    pump.active = !boat.sunk && pump.enabled !== false && boat.pumpActive === true;
+  }
   if (instance.modules.fuel) instance.modules.fuel.amount = Math.max(0, Number(boat.fuel) || 0);
   if (instance.modules.cargo) instance.modules.cargo.items = cloneData(boat.cargo || []);
   const mounted = Object.keys(instance.installations || {}).filter(id => instance.installations[id]?.type === "mounted-weapon");
@@ -114,6 +140,15 @@ function syncModuleState(entry) {
 function persistedRuntime(boat) {
   const value = boat?.vesselRuntimeState;
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+}
+
+function restoreStaticModules(definition, instance, persisted) {
+  const saved = persisted?.staticModules || {};
+  for (const module of definition.modules || []) {
+    const state = saved[module.id];
+    if (!state || !instance.modules?.[module.id]) continue;
+    instance.modules[module.id] = {...instance.modules[module.id], ...cloneData(state)};
+  }
 }
 
 function restoreDynamicModules(definition, instance, persisted) {
@@ -142,6 +177,28 @@ function restoreLiveOccupants(world, definition, instance, boatId, persisted) {
   }
 }
 
+function persistentModuleSubset(moduleType, state) {
+  if (!state || typeof state !== "object") return {};
+  const fields = Array.isArray(moduleType?.persistentStateFields)
+    ? moduleType.persistentStateFields
+    : ["enabled", "health"];
+  const result = {};
+  for (const field of fields) if (Object.hasOwn(state, field)) result[field] = cloneData(state[field]);
+  return result;
+}
+
+function compactStaticModules(definition, instance) {
+  if (!authoritativeModuleState(definition)) return {};
+  const result = {};
+  for (const module of definition.modules || []) {
+    const state = instance.modules?.[module.id];
+    if (!state) continue;
+    const moduleType = registry.resolveModuleType(module.type);
+    result[module.id] = persistentModuleSubset(moduleType, state);
+  }
+  return result;
+}
+
 function compactDynamicModules(definition, instance) {
   const staticIds = new Set((definition.modules || []).map(module => module.id));
   const dynamicInstallations = {};
@@ -158,16 +215,19 @@ function persistNativeEntry(entry) {
   const {definition, instance, boat} = entry;
   const previousMemory = boat.vesselRuntimeState?.occupantMemory || {};
   const occupantMemory = {...cloneData(previousMemory), ...cloneData(instance.occupants || {})};
+  const staticModules = compactStaticModules(definition, instance);
   const dynamic = compactDynamicModules(definition, instance);
   const deckEnabled = definition.deckArchitecture?.enabled === true;
+  const hasStatic = Object.keys(staticModules).length > 0;
   const hasDynamic = Object.keys(dynamic.dynamicInstallations).length > 0;
   const hasMemory = Object.keys(occupantMemory).length > 0;
-  if (!deckEnabled && !hasDynamic && !hasMemory) {
+  if (!deckEnabled && !hasStatic && !hasDynamic && !hasMemory) {
     if (boat.vesselRuntimeState?.version === VESSEL_RUNTIME_STATE_VERSION) delete boat.vesselRuntimeState;
     return;
   }
   boat.vesselRuntimeState = {
     version: VESSEL_RUNTIME_STATE_VERSION,
+    staticModules,
     dynamicModules: dynamic.dynamicModules,
     dynamicInstallations: dynamic.dynamicInstallations,
     deck: deckEnabled ? vesselDeckPersistentState(registry, definition, instance) : null,
@@ -207,6 +267,7 @@ function adoptBoat(world, boat, fallbackBoatId = null) {
     state: runtimeState(definition, boat),
     deckState: persisted?.deck || null,
   });
+  restoreStaticModules(definition, instance, persisted);
   restoreDynamicModules(definition, instance, persisted);
   restoreLiveOccupants(world, definition, instance, boatId, persisted);
   const entry = {instance, boat, definition, adoptedLegacy: true};
