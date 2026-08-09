@@ -134,11 +134,35 @@ function incomingSide(targetBoat, sourcePoint) {
   return "side";
 }
 
+function damageableModuleForZone(targetEntry, zoneId) {
+  if (!zoneId) return null;
+  const damageConfig = targetEntry.definition?.damage || {};
+  const choices = Array.isArray(damageConfig.zoneModuleChoices?.[zoneId])
+    ? damageConfig.zoneModuleChoices[zoneId]
+    : [];
+  const valid = choices.filter(moduleId => targetEntry.instance?.modules?.[moduleId]);
+  if (valid.length) {
+    // Prefer the healthiest live component. This spreads repeated compartment
+    // impacts across real machinery without a transient random/cursor state
+    // that could be reset by reconnecting to change the result.
+    valid.sort((leftId, rightId) => {
+      const left = Number(targetEntry.instance.modules[leftId]?.health);
+      const right = Number(targetEntry.instance.modules[rightId]?.health);
+      const leftHealth = Number.isFinite(left) ? left : 100;
+      const rightHealth = Number.isFinite(right) ? right : 100;
+      return rightHealth - leftHealth;
+    });
+    return valid[0];
+  }
+  const configured = damageConfig.zoneModules?.[zoneId];
+  return configured && targetEntry.instance?.modules?.[configured] ? configured : null;
+}
+
 function zonalBoatDamage(context, targetEntry, amount, sourcePoint, config) {
   const damageConfig = targetEntry.definition?.damage || {};
   const side = incomingSide(targetEntry.boat, sourcePoint);
   const zoneId = damageConfig.directionalZones?.[side] || null;
-  const moduleId = zoneId ? damageConfig.zoneModules?.[zoneId] || null : null;
+  const moduleId = damageableModuleForZone(targetEntry, zoneId);
   return applyVesselDamage(targetEntry.definition, targetEntry.instance, targetEntry.boat, {
     damage: amount,
     zoneId,
@@ -263,7 +287,7 @@ function updateMountedWeapons(context) {
 
 export const VESSEL_MOUNTED_WEAPON_SYSTEMS = Object.freeze([
   Object.freeze({
-    id: "vessel-station-hitscan-weapons-v1",
+    id: "vessel-station-hitscan-weapons-v2",
     phase: "before-step",
     order: 11,
     run: updateMountedWeapons,
