@@ -10,7 +10,9 @@ import {
   MEDIUM_CREW_VESSEL_TYPE,
 } from "../medium-crew-vessel-config.js?v=2";
 
+export const MEDIUM_CREW_TEST_SPAWN_DELAY = 5;
 const MEDIUM_CREW_PLACEMENT_VERSION = 2;
+const STARTUP_RESERVE_LIMIT = -900;
 
 function emit(world, type, text, targets = [0, 1], extra = {}) {
   world.events ||= [];
@@ -20,6 +22,10 @@ function emit(world, type, text, targets = [0, 1], extra = {}) {
 
 function mediumBoat(world) {
   return (world?.boats || []).find(boat => boat?.mediumCrewMarker === true) || null;
+}
+
+function mediumEntry(nativeVessels, boat) {
+  return (nativeVessels || []).find(entry => entry?.boat === boat || entry?.boat?.id === boat?.id) || null;
 }
 
 function playerIsAboard(world, boat) {
@@ -35,6 +41,57 @@ function normalizeMediumAuthorityFields(boat) {
   boat.mediumCrewMarker = true;
   boat.audioProfile = MEDIUM_CREW_AUDIO_PROFILE;
   boat.requestedAudioProfile = MEDIUM_CREW_AUDIO_PROFILE;
+}
+
+function isStartupReservedMedium(boat) {
+  return Boolean(
+    boat?.mediumCrewMarker === true
+    && boat.reserved === true
+    && boat.connectionActivated === false
+    && boat.sunk === true
+    && Number(boat.x) <= STARTUP_RESERVE_LIMIT
+    && Number(boat.y) <= STARTUP_RESERVE_LIMIT
+  );
+}
+
+function restoreStartupReservedMedium(world, boat, entry) {
+  if (!isStartupReservedMedium(boat)) return false;
+  if ((Number(world?.time) || 0) < MEDIUM_CREW_TEST_SPAWN_DELAY) return false;
+
+  boat.x = MEDIUM_CREW_SPAWN.x;
+  boat.y = MEDIUM_CREW_SPAWN.y;
+  boat.heading = MEDIUM_CREW_SPAWN.heading;
+  boat.speed = 0;
+  boat.throttle = 0;
+  boat.rudder = 0;
+  boat.reserved = false;
+  boat.connectionActivated = true;
+  boat.sunk = false;
+  boat.hull = Math.max(1, Number(boat.hullMax) || Number(boat.hull) || 220);
+  boat.water = 0;
+  boat.leak = 0;
+  boat.engineStalled = false;
+
+  // Startup reservation temporarily marks every boat as sunk. With propulsion
+  // authority that can legitimately disable the engine module on the next
+  // vessel sync. Restore it only for this unmistakable off-map startup state;
+  // a genuinely damaged/sunk vessel elsewhere still requires normal repair.
+  const engine = entry?.instance?.modules?.engine;
+  if (engine) {
+    const health = Number(engine.health);
+    if (!Number.isFinite(health) || health <= 0) engine.health = 100;
+    engine.enabled = true;
+  }
+
+  normalizeMediumAuthorityFields(boat);
+  emit(
+    world,
+    "medium-crew-vessel-spawned",
+    "У причала появился средний двухместный корабль. Он готов к посадке.",
+    [0, 1],
+    {boatId: boat.id, x: boat.x, y: boat.y},
+  );
+  return true;
 }
 
 function migrateExistingMediumBoat(world, boat) {
@@ -70,18 +127,24 @@ function migrateExistingMediumBoat(world, boat) {
   return true;
 }
 
-function ensureMediumBoat(world, registry) {
+function ensureMediumBoat(world, registry, nativeVessels = []) {
   if (!registry?.resolveVesselType?.(MEDIUM_CREW_VESSEL_TYPE)) installMediumCrewVesselType(registry);
   const existing = mediumBoat(world);
   if (existing) {
     normalizeMediumAuthorityFields(existing);
+    const entry = mediumEntry(nativeVessels, existing);
+    if (restoreStartupReservedMedium(world, existing, entry)) return existing;
     migrateExistingMediumBoat(world, existing);
     return existing;
   }
 
-  // Saved worlds may restore/reset their clock differently. The vessel is
-  // therefore guaranteed on the first vessel-system tick instead of depending
-  // on a client-side delay.
+  // Do not create this test vessel on the server's dt=0 bootstrap frame.
+  // That frame is followed by reserveUnconnectedBoats(), which deliberately
+  // parks every existing boat off-map and marks it sunk. Spawning after five
+  // seconds means the medium vessel enters the live world once, already at the
+  // pier, with its propulsion/audio authority intact.
+  if ((Number(world?.time) || 0) < MEDIUM_CREW_TEST_SPAWN_DELAY) return null;
+
   const {boat} = spawnVessel(world, MEDIUM_CREW_VESSEL_TYPE, {
     x: MEDIUM_CREW_SPAWN.x,
     y: MEDIUM_CREW_SPAWN.y,
@@ -107,7 +170,7 @@ function ensureMediumBoat(world, registry) {
   emit(
     world,
     "medium-crew-vessel-spawned",
-    "У торговца в воде появился средний двухместный корабль. От торговца иди назад к воде — он стоит совсем рядом. В кормовом отсеке две оружейные установки, за герметичной дверью рубка с креслом водителя и пассажирским креслом, ниже машинное отделение.",
+    "У причала появился средний двухместный корабль. От торговца иди назад к воде — он стоит совсем рядом. В кормовом отсеке две оружейные установки, за герметичной дверью рубка с креслом водителя и пассажирским креслом, ниже машинное отделение.",
     [0, 1],
     {boatId: boat.id, x: boat.x, y: boat.y},
   );
@@ -131,11 +194,11 @@ function normalizeBoarding(context) {
 
 export const MEDIUM_CREW_VESSEL_SYSTEMS = Object.freeze([
   Object.freeze({
-    id: "medium-crew-vessel-spawner-v3",
+    id: "medium-crew-vessel-spawner-v4",
     phase: "before-step",
     order: -90,
-    run({world, registry}) {
-      if (world && registry) ensureMediumBoat(world, registry);
+    run({world, registry, nativeVessels}) {
+      if (world && registry) ensureMediumBoat(world, registry, nativeVessels);
     },
   }),
   Object.freeze({
