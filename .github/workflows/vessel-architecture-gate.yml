@@ -41,12 +41,13 @@ jobs:
           node --check tests/vessel-stress-test.test.mjs
           node --check tests/deck-speech-light-respawn-audio.test.mjs
           node --check tests/medium-crew-vessel.test.mjs
+          node --check tests/vessel-authority.test.mjs
 
       - name: Run vessel runtime smoke
         run: timeout 20s node tests/vessel-release-smoke.mjs
 
       - name: Run vessel gameplay integrations
-        run: timeout 90s node --test tests/vessel-stress-test.test.mjs tests/deck-speech-light-respawn-audio.test.mjs tests/medium-crew-vessel.test.mjs
+        run: timeout 90s node --test tests/vessel-stress-test.test.mjs tests/deck-speech-light-respawn-audio.test.mjs tests/medium-crew-vessel.test.mjs tests/vessel-authority.test.mjs
 
       - name: Run strict vessel architecture gate
         env:
