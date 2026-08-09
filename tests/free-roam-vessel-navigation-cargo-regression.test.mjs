@@ -100,12 +100,18 @@ test("cargo action from an occupied vessel station does not also leave the stati
   assert.equal(leaveInput.action, true, "without cargo, the same action remains available to leave the station");
 });
 
-test("vessel spatial audio follows listener heading instead of world X", () => {
-  // Real coordinates from the reported developer log: the listener and vessel
-  // are almost exactly on the same longitudinal bearing at roughly -44.65 deg.
-  const listener = {x: 262.88, y: 80.15, heading: -44.65, mode: "foot"};
-  const vessel = {x: 260.843, y: 78.085};
-  assert.ok(Math.abs(relativeVesselPan(listener, vessel)) < 0.01, "a vessel straight ahead/behind must be centered regardless of world X");
+test("foot and swim vessel audio stays world-anchored when the listener turns", () => {
+  const east = {x: 10, y: 0};
+  const west = {x: -10, y: 0};
+
+  assert.equal(relativeVesselPan({x: 0, y: 0, heading: 0, mode: "foot"}, east), 1);
+  assert.equal(relativeVesselPan({x: 0, y: 0, heading: 180, mode: "foot"}, east), 1, "turning in place must not throw the same boat into the opposite ear");
+  assert.equal(relativeVesselPan({x: 0, y: 0, heading: 90, mode: "swim"}, east), 1, "swimming keeps the same world-anchored navigation convention");
+  assert.equal(relativeVesselPan({x: 0, y: 0, heading: -90, mode: "foot"}, west), -1);
+
+  const beforeCrossing = relativeVesselPan({x: -4, y: 0, heading: 180, mode: "foot"}, {x: 0, y: 0});
+  const afterCrossing = relativeVesselPan({x: 4, y: 0, heading: 180, mode: "foot"}, {x: 0, y: 0});
+  assert.ok(beforeCrossing > 0 && afterCrossing < 0, "the ear changes only after the listener actually crosses the vessel in world space");
 
   assert.equal(vesselUsesCustomEngineAudio({audioProfile: "standard"}), false);
   assert.equal(vesselUsesCustomEngineAudio({audioProfile: "stress-50-engine-v2"}), true);
