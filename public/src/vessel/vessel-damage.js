@@ -44,6 +44,9 @@ export function applyVesselDamage(definition, runtime, boat, hit = {}) {
     current.health = clamp((Number(current.health) || 0) - amount, 0, 100);
     current.flooding = clamp((Number(current.flooding) || 0) + Math.max(0, Number(hit.flooding) || 0), 0, 100);
     current.fire = clamp((Number(current.fire) || 0) + Math.max(0, Number(hit.fire) || 0), 0, 100);
+    if (Number.isFinite(Number(hit.leak))) {
+      current.leakRate = clamp((Number(current.leakRate) || 0) + Math.max(0, Number(hit.leak) || 0), 0, 16);
+    }
     runtime.zones[zone.id] = current;
   }
   if (moduleId) {
@@ -55,7 +58,10 @@ export function applyVesselDamage(definition, runtime, boat, hit = {}) {
   const hullShare = clamp(Number(definition.damage?.hullShare ?? 0.25), 0, 1);
   const hullDamage = amount * hullShare;
   boat.hull = Math.max(0, (Number(boat.hull) || 0) - hullDamage);
-  if (Number.isFinite(Number(hit.leak))) boat.leak = Math.max(0, (Number(boat.leak) || 0) + Number(hit.leak));
+  const vesselFloodAuthority = String(definition?.subsystemAuthority?.flooding || "") === "vessel-zonal-v2";
+  if (!vesselFloodAuthority && Number.isFinite(Number(hit.leak))) {
+    boat.leak = Math.max(0, (Number(boat.leak) || 0) + Number(hit.leak));
+  }
   return Object.freeze({
     mode: "zonal",
     zoneId,
