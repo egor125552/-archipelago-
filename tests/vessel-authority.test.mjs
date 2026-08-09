@@ -5,8 +5,8 @@ import {createVesselRegistry} from "../public/src/vessel/vessel-registry.js";
 import {STANDARD_BOAT_PRESET} from "../public/src/vessel/vessel-defaults.js";
 import {installCoreVesselModuleTypes} from "../public/src/vessel/modules/core-module-types.js";
 import {installMediumCrewVesselType} from "../public/src/vessel/definitions/medium-crew-vessel-v2.js?v=1";
-import {VESSEL_DECK_INPUT_BRIDGE_SYSTEMS, capturedVesselSharedInput} from "../public/src/vessel/systems/vessel-deck-input-bridge-system.js?v=2";
-import {VESSEL_MODULE_REPAIR_SYSTEMS} from "../public/src/vessel/systems/vessel-module-repair-system.js?v=1";
+import {VESSEL_DECK_INPUT_BRIDGE_SYSTEMS, capturedVesselSharedInput} from "../public/src/vessel/systems/vessel-deck-input-bridge-system.js?v=3";
+import {VESSEL_MODULE_REPAIR_SYSTEMS} from "../public/src/vessel/systems/vessel-module-repair-system.js?v=2";
 import {VESSEL_ZONE_WATER_SYSTEMS} from "../public/src/vessel/systems/vessel-zone-water-system.js?v=2";
 
 function fixture() {
@@ -47,8 +47,14 @@ function fixture() {
     boats: [null, null, null, null, boat],
     players: [{mode: "boat", activeBoat: 4, x: boat.x, y: boat.y, heading: 0, combat: {alive: true}}],
     inputs: [{attack: false, pump: false, repair: false}],
+    previousInputs: [{attack: true, pump: false, repair: false}],
     operationInputs: [{attack: false, pump: false, repair: false}],
-    freeActivities: {inputs: [{attack: false, pump: false, repair: false}], previousInputs: [{}], presence: [true]},
+    operationPreviousInputs: [{attack: true, pump: false, repair: false}],
+    freeActivities: {
+      inputs: [{attack: false, pump: false, repair: false}],
+      previousInputs: [{attack: true, pump: false, repair: false}],
+      presence: [true],
+    },
     events: [],
   };
   return {registry, definition, instance, boat, world, entry: {registry, definition, instance, boat}};
@@ -78,7 +84,7 @@ test("medium vessel explicitly owns modular subsystems and exposes physical repa
   assert.deepEqual(pumpRepair?.inputAuthority, ["repair"]);
 });
 
-test("weapon station owns attack so personal weapon input is not restored", () => {
+test("weapon station owns attack so personal weapon input and previous trigger are both suppressed", () => {
   const {world, entry, instance} = fixture();
   instance.interior.claims["medium-pistol-control"] = 0;
   const input = {attack: true, pump: false, repair: false, guide: false};
@@ -87,7 +93,6 @@ test("weapon station owns attack so personal weapon input is not restored", () =
   const captured = capturedVesselSharedInput(world, 0);
   assert.equal(captured.attack, true, "vessel weapon must retain the raw trigger");
 
-  // Walkable-vessel sanitization and base.setPlayerInput leave legacy stores false.
   world.inputs[0].attack = false;
   world.operationInputs[0].attack = false;
   world.freeActivities.inputs[0].attack = false;
@@ -96,6 +101,9 @@ test("weapon station owns attack so personal weapon input is not restored", () =
   assert.equal(world.inputs[0].attack, false);
   assert.equal(world.operationInputs[0].attack, false);
   assert.equal(world.freeActivities.inputs[0].attack, false, "personal combat must not receive the mounted-gun trigger");
+  assert.equal(world.previousInputs[0].attack, false);
+  assert.equal(world.operationPreviousInputs[0].attack, false);
+  assert.equal(world.freeActivities.previousInputs[0].attack, false, "station ownership must not create a fake personal-weapon release edge");
 });
 
 test("legacy shared attack is restored when no vessel station owns it", () => {
@@ -119,7 +127,6 @@ test("old equalized saved water migrates into compartments without changing tota
   const values = ["medium-aft-zone", "medium-cabin-zone", "medium-engine-room"].map(id => instance.zones[id].flooding);
   assert.ok(new Set(values.map(value => Math.round(value))).size > 1, "migration must not preserve fake equal flooding in every compartment");
 
-  // Simulate legacy core doing no damage, then restore authority state.
   water("after-step").run({world, nativeVessels: [entry], dt: 0.05, eventStart: 0});
   assert.ok(Math.abs(boat.water - 60) < 0.15, `aggregate water should remain 60, got ${boat.water}`);
   assert.equal(instance.interior.connections["medium-cabin-door-in"].state, "closed");
@@ -143,7 +150,7 @@ test("broken bilge pump cannot remove zonal water", () => {
   assert.ok(world.events.some(event => event.type === "vessel-pump-disabled"));
 });
 
-test("engine repair post repairs only engine, consumes one plate, and does not patch hull", () => {
+test("engine repair post repairs only engine, consumes one plate, and waits for the normal restart lifecycle", () => {
   const {world, registry, entry, instance, boat} = fixture();
   instance.occupants["0"] = {deckId: "medium-engine-deck", zoneId: "medium-engine-room", x: -1.35, y: -1.45, heading: 0, mode: "walking"};
   instance.interior.claims["medium-engine-repair-control"] = 0;
@@ -163,29 +170,35 @@ test("engine repair post repairs only engine, consumes one plate, and does not p
 
   assert.equal(instance.modules.engine.health, 75);
   assert.equal(instance.modules.engine.enabled, true);
-  assert.equal(boat.engineStalled, false);
+  assert.equal(boat.engineStalled, true, "repair completion must not bypass the normal engine restart delay");
   assert.equal(boat.repairPatches, 2);
   assert.equal(boat.hull, 150, "module repair must not secretly repair hull");
   assert.ok(world.events.some(event => event.type === "vessel-module-repair-complete" && event.moduleId === "engine"));
 });
 
-test("pump repair post restores the pump as a separate module", () => {
+test("pump repair post stops the pump during service and restores it as a separate module", () => {
   const {world, registry, entry, instance, boat} = fixture();
   instance.occupants["0"] = {deckId: "medium-engine-deck", zoneId: "medium-engine-room", x: 1.35, y: -1.45, heading: 0, mode: "walking"};
   instance.interior.claims["medium-pump-repair-control"] = 0;
   instance.modules["bilge-pump"].health = 0;
   instance.modules["bilge-pump"].enabled = false;
+  instance.modules["bilge-pump"].active = true;
+  boat.pumpActive = true;
   boat.repairPatches = 2;
   const input = {attack: false, pump: false, repair: true, guide: false};
   bridge("before-input").run({world, nativeVessels: [entry], playerIndex: 0, input});
 
-  for (let index = 0; index < 43; index += 1) {
+  VESSEL_MODULE_REPAIR_SYSTEMS[0].run({world, registry, nativeVessels: [entry], dt: 0.1});
+  assert.equal(instance.modules["bilge-pump"].active, false);
+  assert.equal(boat.pumpActive, false);
+  for (let index = 1; index < 43; index += 1) {
     VESSEL_MODULE_REPAIR_SYSTEMS[0].run({world, registry, nativeVessels: [entry], dt: 0.1});
     world.time += 0.1;
   }
 
   assert.equal(instance.modules["bilge-pump"].health, 60);
   assert.equal(instance.modules["bilge-pump"].enabled, true);
+  assert.equal(instance.modules["bilge-pump"].active, false, "repaired pump waits for an explicit pump command");
   assert.equal(boat.repairPatches, 1);
 });
 
