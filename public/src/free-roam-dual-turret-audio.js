@@ -4,7 +4,7 @@ import {
   DUAL_TURRET_AUDIO_ROOT,
   DUAL_TURRET_BOAT_TYPE,
 } from "./free-roam-dual-turret-config.js?v=4";
-import {relativeMovementPan} from "./free-roam-audio-v3.js?v=39";
+import {relativeVesselPan} from "./vessel/vessel-audio-policy.js?v=1";
 
 export const DUAL_TURRET_AUDIO = Object.freeze({
   engine: `${DUAL_TURRET_AUDIO_ROOT}dual-turret-engine-v1.mp3?v=2`,
@@ -86,8 +86,7 @@ export function updateDualTurretEngine(audio, world, playerIndex) {
   const now = audio.ctx.currentTime;
   engine.source.playbackRate.setTargetAtTime(0.78 + speed * 0.82 + throttle * 0.08, now, 0.11);
   engine.filter.frequency.setTargetAtTime(900 + speed * 4300 + proximity * 700, now, 0.14);
-  // One shared listener-space transform now covers foot, swim and other boats.
-  engine.panner.pan.setTargetAtTime(localAboard ? 0 : relativeMovementPan(listener, boat), now, localAboard ? 0.18 : 0.12);
+  engine.panner.pan.setTargetAtTime(localAboard ? 0 : relativeVesselPan(listener, boat), now, localAboard ? 0.18 : 0.12);
   engine.gain.gain.setTargetAtTime(localAboard ? 0.16 : proximity * 0.13, now, 0.13);
 }
 
