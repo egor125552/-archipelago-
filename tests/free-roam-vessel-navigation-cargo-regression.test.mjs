@@ -5,17 +5,50 @@ import {
   createFreeWorld,
   setPlayerInput,
 } from "../public/src/free-roam-core-v7.js";
+import {
+  createFreeWorld as createCurrentFreeWorld,
+  stepFreeWorld as stepCurrentFreeWorld,
+} from "../public/src/free-roam-core-v8.js";
 import {scenarioTarget} from "../public/src/free-roam-scenario.js";
 import {VESSEL_DECK_INPUT_BRIDGE_SYSTEMS} from "../public/src/vessel/systems/vessel-deck-input-bridge-system.js";
+import {listVesselNavigationTargets} from "../public/src/vessel/vessel-navigation.js";
 import {
   relativeVesselPan,
   vesselUsesCustomEngineAudio,
 } from "../public/src/vessel/vessel-audio-policy.js";
+import {applyServerFreeInput} from "../src/free-roam-server.js";
 
 test("generic vessel navigation ids survive the shared input pipeline", () => {
   const world = createFreeWorld();
   setPlayerInput(world, 0, {navigationTargetId: "vessel:42"});
   assert.equal(world.freeActivities.inputs[0].navigationTargetId, "vessel:42");
+});
+
+test("selected vessel navigation id survives real server ingress and becomes the scenario target", () => {
+  const world = createCurrentFreeWorld();
+  const vessel = listVesselNavigationTargets(world, 0)[0];
+  assert.ok(vessel, "the live world must expose at least one navigable vessel");
+
+  const serverRoom = {
+    world,
+    lastTickAt: 1_000,
+    sequence: 0,
+    inputSequence: [0, 0],
+    receivedInputs: [{}, {}],
+    pendingPulses: [{}, {}],
+  };
+
+  assert.equal(applyServerFreeInput(serverRoom, "captain", {navigationTargetId: vessel.id}, 1), true);
+  assert.equal(serverRoom.receivedInputs[0].navigationTargetId, vessel.id, "server normalization must not rewrite vessel:<id> to objective");
+  assert.equal(world.freeActivities.inputs[0].navigationTargetId, vessel.id, "the selected vessel id must reach the shared scenario input");
+
+  stepCurrentFreeWorld(world, 0.05);
+  const target = scenarioTarget(world, 0);
+  assert.equal(target?.kind, "vessel");
+  assert.equal(target?.boatId, vessel.boatId);
+  assert.equal(target?.id, vessel.id);
+  assert.equal(target?.x, world.boats[vessel.boatId].x);
+  assert.equal(target?.y, world.boats[vessel.boatId].y);
 });
 
 test("cargo on an old owned boat does not redirect a swimmer to the dock", () => {
