@@ -7,9 +7,8 @@ import {installMediumCrewVesselType} from "../definitions/medium-crew-vessel.js?
 import {
   MEDIUM_CREW_SPAWN,
   MEDIUM_CREW_VESSEL_TYPE,
-} from "../medium-crew-vessel-config.js?v=1";
+} from "../medium-crew-vessel-config.js?v=2";
 
-const MEDIUM_CREW_TEST_SPAWN_DELAY = 20;
 const MEDIUM_CREW_PLACEMENT_VERSION = 2;
 
 function emit(world, type, text, targets = [0, 1], extra = {}) {
@@ -40,9 +39,9 @@ function migrateExistingMediumBoat(world, boat) {
   boat.throttle = 0;
   boat.rudder = 0;
 
-  // This is a one-time migration for the test vessel. Old saves may contain a
-  // hidden/sunk copy at the previous coordinates, which otherwise prevents the
-  // spawner from creating a visible vessel forever.
+  // One-time repair/migration for the test vessel. An older saved world may
+  // already contain an invisible/sunk copy at the previous coordinates; that
+  // stale copy used to block the spawner forever.
   boat.sunk = false;
   boat.hull = Math.max(1, Number(boat.hullMax) || Number(boat.hull) || 220);
   boat.water = 0;
@@ -71,7 +70,10 @@ function ensureMediumBoat(world, registry) {
     migrateExistingMediumBoat(world, existing);
     return existing;
   }
-  if ((Number(world?.time) || 0) < MEDIUM_CREW_TEST_SPAWN_DELAY) return null;
+
+  // For the current integration test we deliberately do not depend on
+  // world.time. Saved worlds may restore/reset their clock differently. The
+  // vessel is therefore guaranteed on the first vessel-system tick.
   const {boat} = spawnVessel(world, MEDIUM_CREW_VESSEL_TYPE, {
     x: MEDIUM_CREW_SPAWN.x,
     y: MEDIUM_CREW_SPAWN.y,
