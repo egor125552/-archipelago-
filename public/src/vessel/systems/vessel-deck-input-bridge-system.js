@@ -1,7 +1,10 @@
 "use strict";
 
+import {stationOwnsInput} from "../vessel-authority.js?v=1";
+
 const pendingByWorld = new WeakMap();
 const CARGO_ACTION_RANGE = 12;
+const SHARED_FIELDS = Object.freeze(["attack", "pump", "repair", "guide"]);
 const distance = (a, b) => Math.hypot((Number(a?.x) || 0) - (Number(b?.x) || 0), (Number(a?.y) || 0) - (Number(b?.y) || 0));
 
 function pending(world) {
@@ -31,7 +34,8 @@ function cargoActionAvailable(world, playerIndex) {
 function captureDeckSharedInput({world, nativeVessels, playerIndex, input} = {}) {
   if (!world || !Number.isInteger(playerIndex) || !input) return;
   const state = pending(world);
-  if (!liveDeckEntry(world, nativeVessels, playerIndex)) {
+  const entry = liveDeckEntry(world, nativeVessels, playerIndex);
+  if (!entry) {
     state.delete(playerIndex);
     return;
   }
@@ -44,6 +48,11 @@ function captureDeckSharedInput({world, nativeVessels, playerIndex, input} = {})
   });
 }
 
+export function capturedVesselSharedInput(world, playerIndex) {
+  const value = pendingByWorld.get(world)?.get(Number(playerIndex));
+  return value ? {...value} : null;
+}
+
 function restoreField(world, playerIndex, key, value) {
   if (world.inputs?.[playerIndex]) world.inputs[playerIndex][key] = value;
   if (world.operationInputs?.[playerIndex]) world.operationInputs[playerIndex][key] = value;
@@ -53,15 +62,21 @@ function restoreField(world, playerIndex, key, value) {
 function restoreDeckSharedInput({world, nativeVessels, playerIndex} = {}) {
   if (!world || !Number.isInteger(playerIndex)) return;
   const state = pending(world).get(playerIndex);
-  if (!state || !liveDeckEntry(world, nativeVessels, playerIndex)) return;
-  restoreField(world, playerIndex, "attack", state.attack);
-  restoreField(world, playerIndex, "pump", state.pump);
-  restoreField(world, playerIndex, "repair", state.repair);
-  restoreField(world, playerIndex, "guide", state.guide);
+  const entry = liveDeckEntry(world, nativeVessels, playerIndex);
+  if (!state || !entry) return;
+
+  // A shared control is restored to legacy gameplay only when no occupied
+  // vessel station owns that action. The captured value remains available to
+  // vessel systems, so a mounted gun can fire without also firing the player's
+  // automatic weapon, and a repair post can work without also patching hull.
+  for (const field of SHARED_FIELDS) {
+    if (stationOwnsInput(entry, playerIndex, field)) continue;
+    restoreField(world, playerIndex, field, state[field]);
+  }
   if (state.cargoAction) restoreField(world, playerIndex, "action", true);
 }
 
 export const VESSEL_DECK_INPUT_BRIDGE_SYSTEMS = Object.freeze([
-  Object.freeze({id: "vessel-deck-input-bridge-before-input-v1", phase: "before-input", order: 4, run: captureDeckSharedInput}),
-  Object.freeze({id: "vessel-deck-input-bridge-after-input-v1", phase: "after-input", order: 4, run: restoreDeckSharedInput}),
+  Object.freeze({id: "vessel-deck-input-bridge-before-input-v2", phase: "before-input", order: 4, run: captureDeckSharedInput}),
+  Object.freeze({id: "vessel-deck-input-bridge-after-input-v2", phase: "after-input", order: 4, run: restoreDeckSharedInput}),
 ]);
