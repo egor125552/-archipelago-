@@ -7,7 +7,9 @@ export const MEDIUM_CREW_HULL = 220;
 export const MEDIUM_CREW_ARMOR = 60;
 export const MEDIUM_CREW_START_AMMO = 1000;
 export const MEDIUM_CREW_HEAVY_AMMO = 1000;
-export const MEDIUM_CREW_SPAWN = Object.freeze({x: 264, y: 108, heading: 180});
+// Merchant is at (210, 58). y ~= 90 is already used by dock recovery,
+// so this places the medium vessel just behind the merchant, in the water.
+export const MEDIUM_CREW_SPAWN = Object.freeze({x: 210, y: 92, heading: 0});
 export const MEDIUM_CREW_PHYSICS_PROFILE = Object.freeze({
   id: "medium-crew-physics-v1",
   version: 1,
