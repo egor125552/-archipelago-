@@ -16,6 +16,7 @@ import {VESSEL_STATION_INPUT_SYSTEMS} from "./systems/vessel-station-input-syste
 import {WALKABLE_VESSEL_SYSTEMS} from "./systems/walkable-vessel-system.js?v=1";
 import {VESSEL_DECK_ACCESSIBILITY_SYSTEMS} from "./systems/vessel-deck-accessibility-system.js?v=1";
 import {VESSEL_RESPAWN_SYSTEMS} from "./systems/vessel-respawn-system.js?v=1";
+import {VESSEL_FEEDBACK_POLICY_SYSTEMS} from "./systems/vessel-feedback-policy-system.js?v=1";
 
 // Single explicit extension point for vessel-wide systems. New mechanics are
 // registered here instead of adding concrete branches to the free-roam loop.
@@ -35,5 +36,6 @@ export function installVesselPlugins(registry) {
   for (const system of VESSEL_MOUNTED_WEAPON_SYSTEMS) registry.registerSystem(system);
   for (const system of VESSEL_WATER_AUTHORITY_PERSISTENCE_SYSTEMS) registry.registerSystem(system);
   for (const system of VESSEL_ZONE_WATER_SYSTEMS) registry.registerSystem(system);
+  for (const system of VESSEL_FEEDBACK_POLICY_SYSTEMS) registry.registerSystem(system);
   for (const system of STRESS_TEST_VESSEL_SYSTEMS) registry.registerSystem(system);
 }
