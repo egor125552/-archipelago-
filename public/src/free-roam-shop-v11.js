@@ -25,6 +25,28 @@ function ensureFleetSelectionState(world) {
   return state;
 }
 
+function legacyShopWorld(world) {
+  const boats = world?.boats || [];
+  if (!boats.some(boat => boat == null)) return world;
+  // Older shop layers dereference boat.owner without a null check. Preserve
+  // physical boat indices and real object identity while giving only those
+  // legacy lookups inert placeholders for empty fleet slots.
+  world.events ||= [];
+  return {
+    ...world,
+    boats: boats.map((boat, index) => boat || {
+      id: index,
+      owner: null,
+      driver: null,
+      crew: [],
+      sunk: true,
+      shopEligible: false,
+      x: -100000,
+      y: -100000,
+    }),
+  };
+}
+
 function teamFleetBoat(boat) {
   if (!boat || boat.shopEligible === false) return false;
   if (boat.fleetService === true) return true;
@@ -194,12 +216,12 @@ function patchArchitectureRecovery(world, startIndex) {
 export function handleMerchantAction(world, playerIndex) {
   const state = ensureFleetSelectionState(world);
   if (state) state.boatTargetSelection[playerIndex] = null;
-  return base.handleMerchantAction(world, playerIndex);
+  return base.handleMerchantAction(legacyShopWorld(world), playerIndex);
 }
 
 export function updateMerchantShop(world) {
   const state = ensureFleetSelectionState(world);
-  if (!state) return base.updateMerchantShop(world);
+  if (!state) return base.updateMerchantShop(legacyShopWorld(world));
   const startIndex = world.events?.length || 0;
   const saved = [];
 
@@ -224,7 +246,7 @@ export function updateMerchantShop(world) {
     }
   }
 
-  base.updateMerchantShop(world);
+  base.updateMerchantShop(legacyShopWorld(world));
   restoreSuppressed(saved);
   patchArchitectureRecovery(world, startIndex);
 }
