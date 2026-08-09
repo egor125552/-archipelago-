@@ -4,6 +4,7 @@ import {STRESS_TEST_VESSEL_SYSTEMS} from "./systems/stress-test-vessel-system.js
 import {MEDIUM_CREW_VESSEL_SYSTEMS} from "./systems/medium-crew-vessel-system.js?v=3";
 import {VESSEL_MOUNTED_WEAPON_SYSTEMS} from "./systems/vessel-mounted-weapon-system.js?v=1";
 import {VESSEL_ZONE_WATER_SYSTEMS} from "./systems/vessel-zone-water-system.js?v=2";
+import {VESSEL_WATER_AUTHORITY_PERSISTENCE_SYSTEMS} from "./systems/vessel-water-authority-persistence-system.js?v=1";
 import {VESSEL_MODULE_REPAIR_SYSTEMS} from "./systems/vessel-module-repair-system.js?v=1";
 import {VESSEL_MERCHANT_RECOVERY_SYSTEMS} from "./systems/vessel-merchant-recovery-system.js?v=1";
 import {VESSEL_OWNERSHIP_SYSTEMS} from "./systems/vessel-ownership-system.js?v=1";
@@ -30,6 +31,7 @@ export function installVesselPlugins(registry) {
   for (const system of MEDIUM_CREW_VESSEL_SYSTEMS) registry.registerSystem(system);
   for (const system of VESSEL_MODULE_REPAIR_SYSTEMS) registry.registerSystem(system);
   for (const system of VESSEL_MOUNTED_WEAPON_SYSTEMS) registry.registerSystem(system);
+  for (const system of VESSEL_WATER_AUTHORITY_PERSISTENCE_SYSTEMS) registry.registerSystem(system);
   for (const system of VESSEL_ZONE_WATER_SYSTEMS) registry.registerSystem(system);
   for (const system of STRESS_TEST_VESSEL_SYSTEMS) registry.registerSystem(system);
 }
