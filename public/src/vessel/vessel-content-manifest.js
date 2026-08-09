@@ -1,6 +1,6 @@
 "use strict";
 
-import {installCoreVesselModuleTypes} from "./modules/core-module-types.js";
+import {installCoreVesselModuleTypes} from "./modules/core-module-types.js?v=2";
 import {installStressTestPhysicsModules} from "./physics/stress-test-physics.js?v=1";
 import {installCurrentVesselTypes} from "./definitions/current-vessels.js?v=2";
 import {installMediumCrewVesselType} from "./definitions/medium-crew-vessel-v2.js?v=1";
