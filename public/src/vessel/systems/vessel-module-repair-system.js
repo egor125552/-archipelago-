@@ -1,6 +1,6 @@
 "use strict";
 
-import {capturedVesselSharedInput} from "./vessel-deck-input-bridge-system.js?v=3";
+import {capturedVesselSharedInput} from "./vessel-deck-input-bridge-system.js?v=5";
 import {claimedVesselStation, stationOwnsInput, vesselOwnsSubsystem} from "../vessel-authority.js?v=1";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, Number(value) || 0));
@@ -107,12 +107,15 @@ function updateRepairStation({world, registry, entry, playerIndex, station, dt})
   const invalid = entry.boat?.sunk || world.players?.[playerIndex]?.combat?.alive === false;
   if (!repairing || invalid) {
     module.repairLatched = false;
+    delete module.repairDeniedReason;
     interruptService(world, entry, playerIndex, moduleId, module, definition, label, !invalid && repairing === false);
     return;
   }
 
-  // One continuous hold can consume at most one plate. This prevents an
-  // accessible hold control from silently draining all repair resources.
+  // One continuous hold can consume at most one plate. The same latch also
+  // prevents an impossible repair from repeating its denial every 1.3 seconds:
+  // one physical hold gets one clear result, then the player must release and
+  // deliberately try again.
   if (module.repairLatched) return;
 
   const health = clamp(module.health ?? 100, 0, 100);
@@ -128,19 +131,19 @@ function updateRepairStation({world, registry, entry, playerIndex, station, dt})
   const available = Math.max(0, Math.floor(Number(entry.boat?.[resourceField]) || 0));
 
   if (available <= 0) {
-    const now = Number(world.time) || 0;
-    if (now - (Number(module.lastRepairDeniedAt) || -999) >= 1.3) {
-      module.lastRepairDeniedAt = now;
-      emit(world, "vessel-module-repair-denied", `Нечем ремонтировать ${label}: ремонтные пластины закончились.`, [playerIndex], {
-        sourcePlayer: playerIndex,
-        boatId: entry.boat.id,
-        moduleId,
-      });
-    }
+    module.repairDeniedReason = "no-repair-patches";
+    module.repairLatched = true;
+    emit(world, "vessel-module-repair-denied", `Ремонт невозможен: ${label}. Ремонтные пластины закончились.`, [playerIndex], {
+      sourcePlayer: playerIndex,
+      boatId: entry.boat.id,
+      moduleId,
+      reason: module.repairDeniedReason,
+    });
     interruptService(world, entry, playerIndex, moduleId, module, definition, label, false);
     return;
   }
 
+  delete module.repairDeniedReason;
   if (!module.repairActive) {
     beginService(entry, module, definition, playerIndex);
     emit(world, "vessel-module-repair-start", `Ремонт: ${label}. Модуль отключён на время обслуживания.`, [playerIndex], {
@@ -170,6 +173,7 @@ function updateRepairStation({world, registry, entry, playerIndex, station, dt})
   module.repairLatched = true;
   delete module.repairWasEnabled;
   delete module.repairOwner;
+  delete module.repairDeniedReason;
   clearRepairProgress(module);
 
   if (definition.type === "propulsion") {
@@ -224,6 +228,7 @@ function cleanupUnownedRepairs(world, registry, entry, ownedResources) {
     }
     module.repairLatched = false;
     delete module.repairOwner;
+    delete module.repairDeniedReason;
   }
 }
 
@@ -244,7 +249,7 @@ function updateModuleRepairs({world, registry, nativeVessels, dt} = {}) {
 
 export const VESSEL_MODULE_REPAIR_SYSTEMS = Object.freeze([
   Object.freeze({
-    id: "vessel-module-repair-before-step-v4",
+    id: "vessel-module-repair-before-step-v5",
     phase: "before-step",
     order: 30,
     run: updateModuleRepairs,
