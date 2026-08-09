@@ -5,7 +5,7 @@ import {STANDARD_BOAT_PRESET} from "../public/src/vessel/vessel-defaults.js";
 import {installCoreVesselModuleTypes} from "../public/src/vessel/modules/core-module-types.js";
 import {installMediumCrewVesselType} from "../public/src/vessel/definitions/medium-crew-vessel-v2.js?v=1";
 import {VESSEL_DECK_INPUT_BRIDGE_SYSTEMS} from "../public/src/vessel/systems/vessel-deck-input-bridge-system.js?v=5";
-import {VESSEL_MODULE_REPAIR_SYSTEMS} from "../public/src/vessel/systems/vessel-module-repair-system.js?v=4";
+import {VESSEL_MODULE_REPAIR_SYSTEMS} from "../public/src/vessel/systems/vessel-module-repair-system.js?v=5";
 import {VESSEL_ZONE_WATER_SYSTEMS} from "../public/src/vessel/systems/vessel-zone-water-system.js?v=2";
 
 function fixture() {
@@ -92,6 +92,31 @@ test("holding repair after completion cannot consume a second plate", () => {
   assert.equal(instance.modules["bilge-pump"].repairLatched, false, "release rearms the repair control for a deliberate second cycle");
 });
 
+test("impossible pump repair is announced once per continuous hold", () => {
+  const {registry, instance, boat, world, entry} = fixture();
+  instance.interior.claims["medium-pump-repair-control"] = 0;
+  instance.occupants["0"] = {deckId: "medium-engine-deck", zoneId: "medium-engine-room", x: 1.35, y: -1.45, heading: 0, mode: "walking"};
+  instance.modules["bilge-pump"].health = 35;
+  instance.modules["bilge-pump"].enabled = true;
+  boat.repairPatches = 0;
+
+  capture(world, entry, true);
+  for (let index = 0; index < 80; index += 1) {
+    repairSystem.run({world, registry, nativeVessels: [entry], dt: 0.1});
+    world.time += 0.1;
+  }
+  const denialsDuringHold = world.events.filter(event => event.type === "vessel-module-repair-denied");
+  assert.equal(denialsDuringHold.length, 1, "one physical hold must not repeat the same impossible-repair speech");
+  assert.equal(denialsDuringHold[0].reason, "no-repair-patches");
+  assert.match(denialsDuringHold[0].text, /ремонт невозможен/i);
+
+  capture(world, entry, false);
+  repairSystem.run({world, registry, nativeVessels: [entry], dt: 0.1});
+  capture(world, entry, true);
+  repairSystem.run({world, registry, nativeVessels: [entry], dt: 0.1});
+  assert.equal(world.events.filter(event => event.type === "vessel-module-repair-denied").length, 2, "a deliberate release and new hold may report the reason once again");
+});
+
 test("bridge v5 repair input reaches the module repair reader and a repaired engine really restarts", () => {
   const {registry, instance, boat, world, entry} = fixture();
   instance.interior.claims["medium-engine-repair-control"] = 0;
@@ -100,9 +125,6 @@ test("bridge v5 repair input reaches the module repair reader and a repaired eng
   boat.engineStalled = true;
   boat.restartProgress = 0;
 
-  // Production currently loads the deck bridge as ?v=5 while the repair
-  // system itself still imports the bridge through an older query revision.
-  // These must share the same captured raw input state.
   capture(world, entry, true);
   for (let index = 0; index < 56; index += 1) {
     repairSystem.run({world, registry, nativeVessels: [entry], dt: 0.1});
