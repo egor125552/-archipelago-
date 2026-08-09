@@ -44,9 +44,14 @@ function normalizeInput(input) {
   const result = {};
   for (const key of INPUT_KEYS) result[key] = Boolean(input?.[key]);
   result.targetId = typeof input?.targetId === "string" ? input.targetId.slice(0, 80) : null;
-  result.navigationTargetId = ["objective", "merchant", "board"].includes(input?.navigationTargetId)
-    ? input.navigationTargetId
-    : "objective";
+  const navigationTargetId = typeof input?.navigationTargetId === "string"
+    ? input.navigationTargetId.slice(0, 80)
+    : "";
+  // Keep the bounded client-selected navigation identity intact. The scenario
+  // layer is the authority that validates objective/merchant/board and live
+  // vessel IDs; rewriting unknown strings here to "objective" destroys valid
+  // vessel:<id> selections before the vessel resolver can ever see them.
+  result.navigationTargetId = navigationTargetId || "objective";
   return result;
 }
 
