@@ -32,12 +32,7 @@ function clearRepairProgress(module) {
   module.repairActive = false;
 }
 
-function serviceType(entry, definition) {
-  const type = entry?.registry?.resolveModuleType?.(definition?.type);
-  return type?.id || definition?.type || "";
-}
-
-function beginService(entry, moduleId, module, definition) {
+function beginService(entry, module, definition) {
   module.repairWasEnabled = module.enabled !== false;
   module.repairActive = true;
   module.repairProgress = 0;
@@ -69,7 +64,6 @@ function restoreInterruptedModule(entry, moduleId, module, definition) {
     entry.boat.throttle = 0;
     entry.boat.restartProgress = 0;
     if (vesselOwnsSubsystem(entry.definition, "flooding")) {
-      // The flooding/propulsion authority owns the restart delay.
       entry.boat.engineStalled = true;
     } else {
       entry.boat.engineStalled = !mayRestore
@@ -103,17 +97,21 @@ function updateRepairStation({world, registry, entry, playerIndex, station, dt})
   const module = entry.instance?.modules?.[moduleId];
   const definition = moduleDefinition(entry, moduleId);
   if (!module || !definition) return;
-  // Expose registry to tiny lifecycle helpers without creating a parallel lookup table.
-  entry.registry = registry;
 
   const label = moduleLabel(registry, entry, moduleId);
   const input = capturedVesselSharedInput(world, playerIndex) || {};
   const repairing = Boolean(input.repair && stationOwnsInput(entry, playerIndex, "repair"));
-  const interrupted = !repairing || entry.boat?.sunk || world.players?.[playerIndex]?.combat?.alive === false;
-  if (interrupted) {
-    interruptService(world, entry, playerIndex, moduleId, module, definition, label, repairing === false && !entry.boat?.sunk);
+  const invalid = entry.boat?.sunk || world.players?.[playerIndex]?.combat?.alive === false;
+  if (!repairing || invalid) {
+    if (!repairing) module.repairLatched = false;
+    else if (invalid) module.repairLatched = false;
+    interruptService(world, entry, playerIndex, moduleId, module, definition, label, !invalid && repairing === false);
     return;
   }
+
+  // One continuous hold can consume at most one plate. This prevents an
+  // accessible hold control from silently draining all repair resources.
+  if (module.repairLatched) return;
 
   const health = clamp(module.health ?? 100, 0, 100);
   if (health >= 99.999) {
@@ -142,7 +140,7 @@ function updateRepairStation({world, registry, entry, playerIndex, station, dt})
   }
 
   if (!module.repairActive) {
-    beginService(entry, moduleId, module, definition);
+    beginService(entry, module, definition);
     emit(world, "vessel-module-repair-start", `Ремонт: ${label}. Модуль отключён на время обслуживания.`, [playerIndex], {
       sourcePlayer: playerIndex,
       boatId: entry.boat.id,
@@ -167,6 +165,7 @@ function updateRepairStation({world, registry, entry, playerIndex, station, dt})
   module.health = clamp(health + amount, 0, 100);
   module.enabled = module.health > 0 && !floodDisabled(entry, moduleId) && !entry.boat.sunk;
   module.active = false;
+  module.repairLatched = true;
   delete module.repairWasEnabled;
   clearRepairProgress(module);
 
@@ -211,7 +210,7 @@ function updateModuleRepairs({world, registry, nativeVessels, dt} = {}) {
 
 export const VESSEL_MODULE_REPAIR_SYSTEMS = Object.freeze([
   Object.freeze({
-    id: "vessel-module-repair-before-step-v2",
+    id: "vessel-module-repair-before-step-v3",
     phase: "before-step",
     order: 30,
     run: updateModuleRepairs,
