@@ -5,11 +5,11 @@ import {MEDIUM_CREW_VESSEL_SYSTEMS} from "./systems/medium-crew-vessel-system.js
 import {VESSEL_MOUNTED_WEAPON_SYSTEMS} from "./systems/vessel-mounted-weapon-system.js?v=1";
 import {VESSEL_ZONE_WATER_SYSTEMS} from "./systems/vessel-zone-water-system.js?v=2";
 import {VESSEL_WATER_AUTHORITY_PERSISTENCE_SYSTEMS} from "./systems/vessel-water-authority-persistence-system.js?v=1";
-import {VESSEL_MODULE_REPAIR_SYSTEMS} from "./systems/vessel-module-repair-system.js?v=1";
+import {VESSEL_MODULE_REPAIR_SYSTEMS} from "./systems/vessel-module-repair-system.js?v=2";
 import {VESSEL_MERCHANT_RECOVERY_SYSTEMS} from "./systems/vessel-merchant-recovery-system.js?v=1";
 import {VESSEL_OWNERSHIP_SYSTEMS} from "./systems/vessel-ownership-system.js?v=1";
 import {VESSEL_DECK_BOARDING_SYSTEMS} from "./systems/vessel-deck-boarding-system.js?v=1";
-import {VESSEL_DECK_INPUT_BRIDGE_SYSTEMS} from "./systems/vessel-deck-input-bridge-system.js?v=2";
+import {VESSEL_DECK_INPUT_BRIDGE_SYSTEMS} from "./systems/vessel-deck-input-bridge-system.js?v=3";
 import {VESSEL_DECK_LIFECYCLE_SYSTEMS} from "./systems/vessel-deck-lifecycle-system.js?v=1";
 import {VESSEL_STATION_INPUT_SYSTEMS} from "./systems/vessel-station-input-system.js?v=1";
 import {WALKABLE_VESSEL_SYSTEMS} from "./systems/walkable-vessel-system.js?v=1";
