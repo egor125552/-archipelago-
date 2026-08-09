@@ -59,6 +59,12 @@ function restoreField(world, playerIndex, key, value) {
   if (world.freeActivities?.inputs?.[playerIndex]) world.freeActivities.inputs[playerIndex][key] = value;
 }
 
+function suppressLegacyPreviousField(world, playerIndex, key) {
+  if (world.previousInputs?.[playerIndex]) world.previousInputs[playerIndex][key] = false;
+  if (world.operationPreviousInputs?.[playerIndex]) world.operationPreviousInputs[playerIndex][key] = false;
+  if (world.freeActivities?.previousInputs?.[playerIndex]) world.freeActivities.previousInputs[playerIndex][key] = false;
+}
+
 function restoreDeckSharedInput({world, nativeVessels, playerIndex} = {}) {
   if (!world || !Number.isInteger(playerIndex)) return;
   const state = pending(world).get(playerIndex);
@@ -66,17 +72,20 @@ function restoreDeckSharedInput({world, nativeVessels, playerIndex} = {}) {
   if (!state || !entry) return;
 
   // A shared control is restored to legacy gameplay only when no occupied
-  // vessel station owns that action. The captured value remains available to
-  // vessel systems, so a mounted gun can fire without also firing the player's
-  // automatic weapon, and a repair post can work without also patching hull.
+  // vessel station owns that action. Ownership includes previous input state:
+  // a trigger that changes hands must not look like a personal-weapon release
+  // on the same frame (which could otherwise create a stray melee attack).
   for (const field of SHARED_FIELDS) {
-    if (stationOwnsInput(entry, playerIndex, field)) continue;
+    if (stationOwnsInput(entry, playerIndex, field)) {
+      suppressLegacyPreviousField(world, playerIndex, field);
+      continue;
+    }
     restoreField(world, playerIndex, field, state[field]);
   }
   if (state.cargoAction) restoreField(world, playerIndex, "action", true);
 }
 
 export const VESSEL_DECK_INPUT_BRIDGE_SYSTEMS = Object.freeze([
-  Object.freeze({id: "vessel-deck-input-bridge-before-input-v2", phase: "before-input", order: 4, run: captureDeckSharedInput}),
-  Object.freeze({id: "vessel-deck-input-bridge-after-input-v2", phase: "after-input", order: 4, run: restoreDeckSharedInput}),
+  Object.freeze({id: "vessel-deck-input-bridge-before-input-v3", phase: "before-input", order: 4, run: captureDeckSharedInput}),
+  Object.freeze({id: "vessel-deck-input-bridge-after-input-v3", phase: "after-input", order: 4, run: restoreDeckSharedInput}),
 ]);
