@@ -24,10 +24,18 @@ export function relativeVesselPan(listener, source) {
   const metres = Math.hypot(dx, dy);
   if (metres < 0.001) return 0;
 
-  // All spatial vessel audio is listener-relative. World X is not "right" once
-  // the listener has turned. Using heading here keeps a physical boat in the
-  // same perceived direction as its actual server coordinates on foot, while
-  // swimming, or from another vessel.
+  // Preserve the navigation-friendly free-roam convention used before the
+  // regression: while the listener is on foot or swimming, vessel stereo is
+  // anchored to the world's left/right axis. Merely turning in place must not
+  // make a stationary boat jump from one ear to the other. The pan changes only
+  // when the listener or vessel actually changes world position.
+  if (["foot", "swim"].includes(listener.mode)) {
+    return clamp(dx / Math.max(metres, 8), -1, 1);
+  }
+
+  // A listener aboard another vessel still uses heading-relative spatial audio,
+  // matching the existing boat-to-boat convention. A local vessel is centered
+  // by its client adapter before this function is called.
   const absoluteBearing = Math.atan2(dx, -dy) * 180 / Math.PI;
   const relativeBearing = wrapDeg(absoluteBearing - (Number(listener.heading) || 0));
   return clamp(Math.sin(relativeBearing * Math.PI / 180), -1, 1);
