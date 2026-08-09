@@ -3,7 +3,7 @@
 // Late-bound like the existing stress-vessel spawner: this system is installed
 // while vessel-runtime initializes, but spawnVessel is only invoked later.
 import {spawnVessel} from "../vessel-runtime.js?v=2";
-import {installMediumCrewVesselType} from "../definitions/medium-crew-vessel.js?v=1";
+import {installMediumCrewVesselType} from "../definitions/medium-crew-vessel-v2.js?v=1";
 import {
   MEDIUM_CREW_SPAWN,
   MEDIUM_CREW_VESSEL_TYPE,
@@ -71,9 +71,9 @@ function ensureMediumBoat(world, registry) {
     return existing;
   }
 
-  // For the current integration test we deliberately do not depend on
-  // world.time. Saved worlds may restore/reset their clock differently. The
-  // vessel is therefore guaranteed on the first vessel-system tick.
+  // Saved worlds may restore/reset their clock differently. The vessel is
+  // therefore guaranteed on the first vessel-system tick instead of depending
+  // on a client-side delay.
   const {boat} = spawnVessel(world, MEDIUM_CREW_VESSEL_TYPE, {
     x: MEDIUM_CREW_SPAWN.x,
     y: MEDIUM_CREW_SPAWN.y,
@@ -121,7 +121,7 @@ function normalizeBoarding(context) {
 
 export const MEDIUM_CREW_VESSEL_SYSTEMS = Object.freeze([
   Object.freeze({
-    id: "medium-crew-vessel-spawner-v1",
+    id: "medium-crew-vessel-spawner-v2",
     phase: "before-step",
     order: -90,
     run({world, registry}) {
@@ -129,13 +129,13 @@ export const MEDIUM_CREW_VESSEL_SYSTEMS = Object.freeze([
     },
   }),
   Object.freeze({
-    id: "medium-crew-vessel-boarding-after-input-v1",
+    id: "medium-crew-vessel-boarding-after-input-v2",
     phase: "after-input",
     order: 21,
     run: normalizeBoarding,
   }),
   Object.freeze({
-    id: "medium-crew-vessel-boarding-after-step-v1",
+    id: "medium-crew-vessel-boarding-after-step-v2",
     phase: "after-step",
     order: 21,
     run: normalizeBoarding,
