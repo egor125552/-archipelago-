@@ -108,9 +108,14 @@ function playerBoat(world, playerIndex) {
   return world.boats.find(boat => boat.owner === playerIndex) || null;
 }
 
+function activeCargoBoat(world, playerIndex) {
+  const boatId = world.players[playerIndex]?.activeBoat;
+  return Number.isInteger(boatId) ? world.boats[boatId] || null : null;
+}
+
 function cargoNeedsDock(world, playerIndex, requiredKind = null) {
   const player = world.players[playerIndex];
-  const boat = playerBoat(world, playerIndex);
+  const boat = activeCargoBoat(world, playerIndex);
   const carried = world.freeActivities.crates.find(crate => crate.id === player?.combat?.carriedCrate);
   if (carried && (!requiredKind || carried.kind === requiredKind)) return true;
   return (boat?.cargo || []).some(id => {
@@ -268,7 +273,6 @@ function updateLockedTarget(scenario, playerIndex, target) {
 function updateTargets(world) {
   const scenario = world.freeScenario;
   for (let index = 0; index < world.players.length; index += 1) {
-    const previous = scenario.targets[index];
     const target = scenarioTarget(world, index);
     scenario.targets[index] = target;
     updateLockedTarget(scenario, index, target);
