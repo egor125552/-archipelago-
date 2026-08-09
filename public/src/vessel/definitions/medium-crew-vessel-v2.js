@@ -27,7 +27,7 @@ definition.runtimeDefaults.audioProfile = MEDIUM_CREW_AUDIO_PROFILE;
 definition.runtimeDefaults.requestedAudioProfile = MEDIUM_CREW_AUDIO_PROFILE;
 definition.deckArchitecture.sinking = {
   ...definition.deckArchitecture.sinking,
-  mode: "vessel-authority",
+  mode: "emergency-phase",
 };
 
 const engineDeck = definition.decks.find(deck => deck.id === "medium-engine-deck");
