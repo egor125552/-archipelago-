@@ -3,14 +3,14 @@ import assert from "node:assert/strict";
 import {createVesselRegistry} from "../public/src/vessel/vessel-registry.js";
 import {STANDARD_BOAT_PRESET} from "../public/src/vessel/vessel-defaults.js";
 import {installCoreVesselModuleTypes} from "../public/src/vessel/modules/core-module-types.js";
-import {installMediumCrewVesselType} from "../public/src/vessel/definitions/medium-crew-vessel.js?v=1";
+import {installMediumCrewVesselType} from "../public/src/vessel/definitions/medium-crew-vessel-v2.js?v=1";
 import {
   adjustVesselZoneWater,
   setVesselConnectionState,
   stepVesselWater,
 } from "../public/src/vessel/vessel-deck-runtime.js";
-import {VESSEL_MOUNTED_WEAPON_SYSTEMS} from "../public/src/vessel/systems/vessel-mounted-weapon-system.js?v=1";
-import {VESSEL_ZONE_WATER_SYSTEMS} from "../public/src/vessel/systems/vessel-zone-water-system.js?v=1";
+import {VESSEL_MOUNTED_WEAPON_SYSTEMS} from "../public/src/vessel/systems/vessel-mounted-weapon-system.js?v=2";
+import {VESSEL_ZONE_WATER_SYSTEMS} from "../public/src/vessel/systems/vessel-zone-water-system.js?v=2";
 import {VESSEL_MERCHANT_RECOVERY_SYSTEMS} from "../public/src/vessel/systems/vessel-merchant-recovery-system.js?v=1";
 import * as shop from "../public/src/free-roam-shop-v11.js?v=1";
 
@@ -45,12 +45,16 @@ test("medium crew vessel is composed from shared decks, stations, modules and zo
   assert.equal(definition.runtimeDefaults.crewCapacity, 2);
   assert.equal(definition.decks.length, 3);
   assert.equal(definition.damage.mode, "zonal");
+  assert.equal(definition.subsystemAuthority.flooding, "vessel-zonal-v2");
+  assert.equal(definition.subsystemAuthority.repair, "vessel-modules-v1");
 
   const objects = definition.decks.flatMap(deck => deck.objects || []);
   assert.equal(objects.find(object => object.id === "medium-driver-seat")?.controlsVessel, true);
   assert.equal(objects.find(object => object.id === "medium-passenger-seat")?.stationRole, "passenger");
   assert.equal(objects.find(object => object.id === "medium-pistol-station")?.controlsModule, "medium-pistol");
   assert.equal(objects.find(object => object.id === "medium-heavy-gun-station")?.controlsModule, "medium-heavy-gun");
+  assert.equal(objects.find(object => object.id === "medium-engine-repair-station")?.controlsModule, "engine");
+  assert.equal(objects.find(object => object.id === "medium-pump-repair-station")?.controlsModule, "bilge-pump");
 
   const weapons = definition.modules.filter(module => module.type === "mounted-weapon");
   assert.deepEqual(weapons.map(module => module.id).sort(), ["medium-heavy-gun", "medium-pistol"]);
@@ -101,20 +105,29 @@ test("generic station hitscan weapon fires only for the physical station owner",
   assert.equal(world.events.filter(event => event.type === "vessel-mounted-shot").length, 1, "unoccupied/nonexistent operator cannot fire");
 });
 
-test("flood bridge makes compartment water authoritative and can stall the engine", () => {
+test("zonal flooding authority makes compartment water authoritative and can stall the engine", () => {
   const {definition, instance, boat} = fixture();
   adjustVesselZoneWater(definition, instance, "medium-engine-room", 90);
   const world = {
     time: 2,
     boats: [null, null, null, null, boat],
     players: [{mode: "boat", activeBoat: 4, combat: {alive: true, health: 100}}],
+    inputs: [{}],
+    previousInputs: [{}],
+    operationInputs: [{}],
+    operationPreviousInputs: [{}],
+    freeActivities: {inputs: [{}], previousInputs: [{}], presence: [true]},
     events: [],
   };
-  const system = VESSEL_ZONE_WATER_SYSTEMS[0];
-  system.run({world, dt: 0.05, nativeVessels: [{definition, instance, boat}]});
+  const entry = {definition, instance, boat};
+  const before = VESSEL_ZONE_WATER_SYSTEMS.find(system => system.phase === "before-step");
+  const after = VESSEL_ZONE_WATER_SYSTEMS.find(system => system.phase === "after-step");
+  before.run({world, dt: 0.05, nativeVessels: [entry], eventStart: 0});
+  after.run({world, dt: 0.05, nativeVessels: [entry], eventStart: 0});
   assert.equal(instance.modules.engine.enabled, false);
   assert.equal(boat.engineStalled, true);
   assert.ok(boat.water > 0);
+  assert.equal(instance.zones["medium-cabin-zone"].flooding, 0, "closed hatch must keep the flooded engine room isolated from the cabin");
 });
 
 test("merchant wreck recovery opens a boat chooser when multiple fleet vessels are sunk", () => {
