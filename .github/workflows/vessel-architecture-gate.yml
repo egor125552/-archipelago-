@@ -33,7 +33,6 @@ jobs:
           node --check public/src/free-roam-replication-v2.js
           node --check public/src/free-roam-dual-turret-audio.js
           node --check public/src/free-roam-dual-turret-client.js
-          node --check public/src/free-roam-combat-v2.js
           node --check src/world-storage-normalization.js
           node --check src/worker-persistent.js
           while IFS= read -r file; do node --check "$file"; done < <(find public/src/vessel -type f -name '*.js' | sort)
@@ -41,6 +40,7 @@ jobs:
           node --check tests/vessel-architecture.test.mjs
           node --check tests/vessel-stress-test.test.mjs
           node --check tests/deck-speech-light-respawn-audio.test.mjs
+          node --check tests/free-roam-vessel-navigation-cargo-regression.test.mjs
           node --check tests/medium-crew-vessel.test.mjs
           node --check tests/vessel-authority.test.mjs
           node --check tests/vessel-authority-persistence.test.mjs
@@ -49,6 +49,9 @@ jobs:
 
       - name: Run vessel runtime smoke
         run: timeout 20s node tests/vessel-release-smoke.mjs
+
+      - name: Run vessel sonar cargo and spatial audio regressions
+        run: timeout 30s node --test tests/free-roam-vessel-navigation-cargo-regression.test.mjs tests/deck-speech-light-respawn-audio.test.mjs
 
       - name: Run vessel gameplay integrations
         run: timeout 90s node --test tests/vessel-stress-test.test.mjs tests/deck-speech-light-respawn-audio.test.mjs tests/medium-crew-vessel.test.mjs tests/vessel-authority.test.mjs tests/vessel-authority-persistence.test.mjs tests/vessel-extended-hull-combat.test.mjs tests/vessel-repair-lifecycle.test.mjs
