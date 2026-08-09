@@ -52,7 +52,7 @@ function addedLines(diff) {
 test("release contract is version 2 and production contains only current vessel types", () => {
   assert.equal(VESSEL_CONTRACT_VERSION, 2);
   const ids = vesselRegistry().listVesselTypes().map(type => type.id).sort();
-  assert.deepEqual(ids, ["dual-turret-patrol", "standard"]);
+  assert.deepEqual(ids, ["dual-turret-patrol", "medium-crew-vessel", "standard"]);
 });
 
 test("preset and explicit definitions normalize through one strict registry", () => {
