@@ -9,6 +9,7 @@ const movementSnapshots = new WeakMap();
 const waterModes = new WeakMap();
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, Number(value) || 0));
+const WATER_MODE_RANK = Object.freeze({dry: 0, ankle: 1, wading: 2, swimming: 3, full: 4});
 
 function emit(world, type, text, targets, extra = {}) {
   world.events ||= [];
@@ -48,12 +49,22 @@ function movementMultiplier(mode) {
   }
 }
 
-function modeText(mode) {
-  if (mode === "ankle") return "Вода уже по щиколотку. Бежать становится тяжелее.";
+function modeText(mode, previousMode = null) {
+  const previousRank = WATER_MODE_RANK[previousMode];
+  const nextRank = WATER_MODE_RANK[mode];
+  const falling = Number.isFinite(previousRank) && Number.isFinite(nextRank) && nextRank < previousRank;
+
+  if (mode === "dry") return "Вода ушла. Снова можно нормально идти по отсеку.";
+  if (falling) {
+    if (mode === "ankle") return "Вода опустилась до щиколоток. Двигаться становится легче.";
+    if (mode === "wading") return "Вода опустилась. Теперь можно идти вброд, двигаться становится легче.";
+    if (mode === "swimming") return "Вода опустилась ниже. По отсеку всё ещё приходится плыть, но воды становится меньше.";
+  }
+  if (mode === "ankle") return "Вода поднялась до щиколоток. Бежать становится тяжелее.";
   if (mode === "wading") return "Вода поднялась выше. Ты идёшь вброд, бежать уже не получается.";
   if (mode === "swimming") return "Вода поднялась до уровня плавания. Теперь по отсеку приходится плыть.";
   if (mode === "full") return "Отсек полностью затоплен. Ты плывёшь под водой и начинаешь терять здоровье.";
-  return "Вода ушла. Снова можно нормально идти по отсеку.";
+  return "Уровень воды изменился.";
 }
 
 function modeMap(instance) {
@@ -84,17 +95,25 @@ function publishWaterMode(world, record, state) {
   if (previous == null && state.mode === "dry") return;
   if (previous === state.mode) return;
 
+  const previousRank = WATER_MODE_RANK[previous];
+  const nextRank = WATER_MODE_RANK[state.mode];
+  const trend = Number.isFinite(previousRank) && Number.isFinite(nextRank)
+    ? nextRank > previousRank ? "rising" : nextRank < previousRank ? "falling" : "steady"
+    : "initial";
+
   emit(
     world,
     "vessel-water-mobility",
-    modeText(state.mode),
+    modeText(state.mode, previous),
     [record.playerIndex],
     {
       sourcePlayer: record.playerIndex,
       boatId: record.entry.boat.id,
       deckId: record.entry.instance?.occupants?.[record.playerIndex]?.deckId || null,
       zoneId: record.entry.instance?.occupants?.[record.playerIndex]?.zoneId || null,
+      previousWaterMode: previous || null,
       waterMode: state.mode,
+      waterTrend: trend,
       flooding: clamp(state.flooding, 0, 100),
       depth: Math.max(0, Number(state.depth) || 0),
     },
@@ -226,7 +245,7 @@ export const VESSEL_WATER_MOBILITY_SYSTEMS = Object.freeze([
     run: captureWaterMovement,
   }),
   Object.freeze({
-    id: "vessel-water-mobility-apply-after-step-v1",
+    id: "vessel-water-mobility-apply-after-step-v2",
     phase: "after-step",
     order: 6,
     run: applyWaterMovement,
