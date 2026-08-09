@@ -2,7 +2,7 @@ import {vesselRegistry, attachVesselArchitecture, nativeVesselForBoat} from "../
 import {migratePersistedVesselWorld} from "../public/src/vessel/vessel-save.js";
 
 const types = vesselRegistry().listVesselTypes().map(type => type.id).sort();
-if (types.join(",") !== "dual-turret-patrol,standard") throw new Error(`unexpected production vessel types: ${types.join(",")}`);
+if (types.join(",") !== "dual-turret-patrol,medium-crew-vessel,standard") throw new Error(`unexpected production vessel types: ${types.join(",")}`);
 console.log("vessel registry loaded");
 
 const saved = {boats: [{id: 0, boatType: "standard", hull: 88}], players: []};
