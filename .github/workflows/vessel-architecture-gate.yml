@@ -58,12 +58,13 @@ jobs:
           node --check tests/vessel-authority-persistence.test.mjs
           node --check tests/vessel-extended-hull-combat.test.mjs
           node --check tests/vessel-repair-lifecycle.test.mjs
+          node --check tests/vessel-impact-routing.test.mjs
 
       - name: Run vessel runtime smoke
         run: timeout 20s node tests/vessel-release-smoke.mjs
 
-      - name: Run vessel sonar cargo keyboard speech water repair pump propulsion and feedback regressions
-        run: timeout 45s node --test tests/free-roam-vessel-navigation-cargo-regression.test.mjs tests/free-roam-keyboard-edge-guard.test.mjs tests/free-roam-pump-command-policy.test.mjs tests/free-roam-speech-policy.test.mjs tests/free-roam-speech-output-mode.test.mjs tests/vessel-feedback-policy.test.mjs tests/vessel-propulsion-authority.test.mjs tests/deck-speech-light-respawn-audio.test.mjs tests/vessel-water-mobility-large-medium.test.mjs tests/vessel-repair-lifecycle.test.mjs tests/vessel-authority.test.mjs
+      - name: Run vessel sonar cargo keyboard speech water repair pump propulsion feedback and impact regressions
+        run: timeout 50s node --test tests/free-roam-vessel-navigation-cargo-regression.test.mjs tests/free-roam-keyboard-edge-guard.test.mjs tests/free-roam-pump-command-policy.test.mjs tests/free-roam-speech-policy.test.mjs tests/free-roam-speech-output-mode.test.mjs tests/vessel-feedback-policy.test.mjs tests/vessel-propulsion-authority.test.mjs tests/deck-speech-light-respawn-audio.test.mjs tests/vessel-water-mobility-large-medium.test.mjs tests/vessel-repair-lifecycle.test.mjs tests/vessel-authority.test.mjs tests/vessel-impact-routing.test.mjs
 
       - name: Run vessel gameplay integrations
         run: timeout 90s node --test tests/vessel-stress-test.test.mjs tests/deck-speech-light-respawn-audio.test.mjs tests/medium-crew-vessel.test.mjs tests/vessel-authority.test.mjs tests/vessel-authority-persistence.test.mjs tests/vessel-extended-hull-combat.test.mjs tests/vessel-repair-lifecycle.test.mjs

@@ -1,10 +1,12 @@
 "use strict";
 
 import * as base from "./free-roam-mega-bomb-v37.js?v=3";
+import {queueExternalVesselImpact} from "../public/src/vessel/vessel-impact-routing.js?v=1";
+import {runVesselSystems} from "../public/src/vessel/vessel-runtime.js?v=2";
 
 export * from "./free-roam-mega-bomb-v37.js?v=3";
 
-export const MEGA_BOMB_PLAYER_BOAT_ARMOR_VERSION = "1.0.0";
+export const MEGA_BOMB_PLAYER_BOAT_ARMOR_VERSION = "1.1.0";
 
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, Number(value) || 0));
 const values = value => Array.isArray(value)
@@ -57,14 +59,15 @@ function boatSnapshots(world) {
   const result = new Map();
   for (const boat of values(world?.boats)) {
     if (!boat || !Number.isFinite(Number(boat.id))) continue;
-    result.set(String(boat.id), {
+    const snapshot = {
       hull: Math.max(0, Number(boat.hull) || 0),
       hullMax: Math.max(1, Number(boat.hullMax) || 100),
       armor: Math.max(0, Number(boat.armor) || 0),
       armorMax: Math.max(0, Number(boat.armorMax) || 0),
       leak: Math.max(0, Number(boat.leak) || 0),
       water: clamp(boat.water, 0, 100),
-    });
+    };
+    result.set(String(boat.id), {...snapshot, baseline: Object.freeze({...snapshot})});
   }
   return result;
 }
@@ -73,9 +76,16 @@ function boatById(world, id) {
   return values(world?.boats).find(boat => String(boat?.id) === String(id)) || null;
 }
 
+function explosionByProjectile(world, eventStart) {
+  return new Map(values(world?.events).slice(eventStart)
+    .filter(event => event?.type === "mega-bomb-explosion")
+    .map(event => [String(event.projectileId || ""), event]));
+}
+
 function rebalancePlayerBoatBombHits(world, eventStart, states) {
   const hitEvents = values(world?.events).slice(eventStart)
     .filter(event => event?.type === "mega-bomb-boat-hit" && event.boatId != null);
+  const explosions = explosionByProjectile(world, eventStart);
 
   for (const event of hitEvents) {
     const key = String(event.boatId);
@@ -97,11 +107,13 @@ function rebalancePlayerBoatBombHits(world, eventStart, states) {
       : 0;
     const hullDamage = nominalHullDamage * (1 - armorCoverage * 0.68);
     const penetration = 1 - armorCoverage * 0.72;
+    const leakIncrease = raw * 0.045 * penetration;
+    const floodingIncrease = raw * 0.08 * penetration;
 
     state.armor = Math.max(0, state.armor - armorDamage);
     state.hull = clamp(state.hull - hullDamage, 0, state.hullMax);
-    state.leak = clamp(state.leak + raw * 0.045 * penetration, 0, 24);
-    state.water = clamp(state.water + raw * 0.08 * penetration, 0, 100);
+    state.leak = clamp(state.leak + leakIncrease, 0, 24);
+    state.water = clamp(state.water + floodingIncrease, 0, 100);
 
     boat.armor = state.armor;
     boat.hull = state.hull;
@@ -116,6 +128,26 @@ function rebalancePlayerBoatBombHits(world, eventStart, states) {
     event.hullMax = state.hullMax;
     event.megaBombPlayerBoatArmorVersion = MEGA_BOMB_PLAYER_BOAT_ARMOR_VERSION;
 
+    const explosion = explosions.get(String(event.projectileId || ""));
+    const impactPoint = Number.isFinite(Number(explosion?.x)) && Number.isFinite(Number(explosion?.y))
+      ? {x: Number(explosion.x), y: Number(explosion.y)}
+      : Number.isFinite(Number(event.x)) && Number.isFinite(Number(event.y))
+        ? {x: Number(event.x), y: Number(event.y)}
+        : {x: Number(boat.x) || 0, y: Number(boat.y) || 0};
+    queueExternalVesselImpact(world, {
+      kind: "mega-bomb",
+      boatId: boat.id,
+      baseline: state.baseline,
+      event,
+      projectileId: event.projectileId,
+      armorDamage,
+      hullDamage,
+      leak: leakIncrease,
+      flooding: floodingIncrease,
+      impactPoint,
+      blastRadius: Math.max(12, Number(explosion?.radius) || 38),
+    });
+
     if (state.armorMax > 0) {
       event.text = `Мега-бомба ударила по бронекатеру. Броня ${Math.round(state.armor)} из ${Math.round(state.armorMax)}, корпус ${Math.round(state.hull)} из ${Math.round(state.hullMax)}.`;
     }
@@ -123,9 +155,7 @@ function rebalancePlayerBoatBombHits(world, eventStart, states) {
 
   // The old implementation hard-clamped every player boat to 100 hull. The
   // state above is now authoritative, so refresh aggregate disabled counts too.
-  const explosions = values(world?.events).slice(eventStart)
-    .filter(event => event?.type === "mega-bomb-explosion");
-  for (const explosion of explosions) {
+  for (const explosion of explosions.values()) {
     const projectileId = String(explosion.projectileId || "");
     const related = hitEvents.filter(event => String(event.projectileId || "") === projectileId);
     explosion.disabledBoatCount = related.filter(event => {
@@ -154,5 +184,6 @@ export function stepMegaBombs(world, dt) {
   const eventStart = values(world?.events).length;
   base.stepMegaBombs(world, dt);
   rebalancePlayerBoatBombHits(world, eventStart, states);
+  runVesselSystems("external-impact", {world, dt: 0, eventStart});
   normalizeFreshSpatial(world, eventStart);
 }

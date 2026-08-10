@@ -176,6 +176,31 @@ definition.damage.zoneModuleChoices = {
   "medium-engine-room": ["engine", "bilge-pump"],
 };
 
+// Walkable deck polygons can overlap in a 2D projection because the machinery
+// room is physically below the cabin. External weapon impacts therefore use a
+// separate, non-overlapping hull projection. This keeps hit routing physical
+// without corrupting the interior navigation geometry.
+definition.damage.impactRegions = [
+  {
+    id: "medium-impact-aft",
+    zoneId: "medium-aft-zone",
+    shape: {outer: [[-7.2, -13], [7.2, -13], [7.2, -3], [-7.2, -3]]},
+    blastAnchor: [0, -8],
+  },
+  {
+    id: "medium-impact-machinery",
+    zoneId: "medium-engine-room",
+    shape: {outer: [[-7.2, -3], [7.2, -3], [7.2, 3], [-7.2, 3]]},
+    blastAnchor: [0, 0],
+  },
+  {
+    id: "medium-impact-cabin",
+    zoneId: "medium-cabin-zone",
+    shape: {outer: [[-7.2, 3], [7.2, 3], [7.2, 13], [-7.2, 13]]},
+    blastAnchor: [0, 8],
+  },
+];
+
 export const MEDIUM_CREW_VESSEL_DEFINITION = Object.freeze(definition);
 
 export function installMediumCrewVesselType(registry) {
