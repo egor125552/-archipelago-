@@ -126,7 +126,7 @@ test("legacy gun hit is removed from global damage then reapplied to the hit com
     sourcePlayer: 0,
     weapon: "pistol",
     x: entry.boat.x,
-   y: entry.boat.y,
+    y: entry.boat.y,
     text: "legacy",
   };
   world.events.push(hit, {
@@ -145,7 +145,11 @@ test("legacy gun hit is removed from global damage then reapplied to the hit com
   assert.equal(entry.instance.zones.cabin.health, 96);
   assert.equal(entry.instance.modules.helm.health, 96);
   assert.equal(hit.zoneId, "cabin");
-  assert.match(hit.text, /Ѐубку/);
+  const expectedZoneName = entry.definition.decks
+    .flatMap(deck => deck.zones)
+    .find(zone => zone.id === "cabin")
+    .presentation.forms.accusative;
+  assert.ok(hit.text.includes(expectedZoneName));
   assert.equal(world.events[1].zoneId, "cabin");
 });
 
