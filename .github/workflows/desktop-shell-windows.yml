@@ -7,6 +7,12 @@ on:
     paths:
       - "desktop-shell/**"
       - ".github/workflows/desktop-shell-windows.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "desktop-shell/**"
+      - ".github/workflows/desktop-shell-windows.yml"
   workflow_dispatch:
 
 permissions:
@@ -62,6 +68,7 @@ jobs:
           compression-level: 0
 
       - name: Publish stable download release
+        if: github.event_name == 'push'
         working-directory: desktop-shell
         shell: pwsh
         env:
