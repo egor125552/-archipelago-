@@ -1,0 +1,43 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Archipelago",
+  "version": "0.1.0",
+  "identifier": "dev.archipelago.desktop",
+  "build": {
+    "frontendDist": "../web"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Архипелаг",
+        "url": "https://archipelago.k69ysrndm7.workers.dev/free-roam",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 720,
+        "minHeight": 480,
+        "resizable": true,
+        "fullscreen": false,
+        "focus": true,
+        "decorations": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "publisher": "Archipelago Project",
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": ["Russian", "English"]
+      }
+    }
+  }
+}
