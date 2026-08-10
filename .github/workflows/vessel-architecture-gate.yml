@@ -34,6 +34,7 @@ jobs:
           node --check public/src/free-roam-dual-turret-audio.js
           node --check public/src/free-roam-dual-turret-client.js
           node --check public/src/free-roam-keyboard-edge-guard-v1.js
+          node --check public/src/free-roam-pump-command-policy-v1.js
           node --check public/src/free-roam-speech.js
           node --check public/src/free-roam-speech-policy.js
           node --check src/world-storage-normalization.js
@@ -45,6 +46,7 @@ jobs:
           node --check tests/deck-speech-light-respawn-audio.test.mjs
           node --check tests/free-roam-vessel-navigation-cargo-regression.test.mjs
           node --check tests/free-roam-keyboard-edge-guard.test.mjs
+          node --check tests/free-roam-pump-command-policy.test.mjs
           node --check tests/free-roam-speech-policy.test.mjs
           node --check tests/vessel-feedback-policy.test.mjs
           node --check tests/vessel-propulsion-authority.test.mjs
@@ -59,7 +61,7 @@ jobs:
         run: timeout 20s node tests/vessel-release-smoke.mjs
 
       - name: Run vessel sonar cargo keyboard speech water repair pump propulsion and feedback regressions
-        run: timeout 45s node --test tests/free-roam-vessel-navigation-cargo-regression.test.mjs tests/free-roam-keyboard-edge-guard.test.mjs tests/free-roam-speech-policy.test.mjs tests/vessel-feedback-policy.test.mjs tests/vessel-propulsion-authority.test.mjs tests/deck-speech-light-respawn-audio.test.mjs tests/vessel-water-mobility-large-medium.test.mjs tests/vessel-repair-lifecycle.test.mjs tests/vessel-authority.test.mjs
+        run: timeout 45s node --test tests/free-roam-vessel-navigation-cargo-regression.test.mjs tests/free-roam-keyboard-edge-guard.test.mjs tests/free-roam-pump-command-policy.test.mjs tests/free-roam-speech-policy.test.mjs tests/vessel-feedback-policy.test.mjs tests/vessel-propulsion-authority.test.mjs tests/deck-speech-light-respawn-audio.test.mjs tests/vessel-water-mobility-large-medium.test.mjs tests/vessel-repair-lifecycle.test.mjs tests/vessel-authority.test.mjs
 
       - name: Run vessel gameplay integrations
         run: timeout 90s node --test tests/vessel-stress-test.test.mjs tests/deck-speech-light-respawn-audio.test.mjs tests/medium-crew-vessel.test.mjs tests/vessel-authority.test.mjs tests/vessel-authority-persistence.test.mjs tests/vessel-extended-hull-combat.test.mjs tests/vessel-repair-lifecycle.test.mjs
