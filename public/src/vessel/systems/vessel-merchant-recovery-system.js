@@ -1,5 +1,12 @@
 "use strict";
 
+import {
+  DOCK_BOAT_MAX_X,
+  DOCK_BOAT_MAX_Y,
+  DOCK_BOAT_MIN_X,
+  isBoatDockPosition,
+} from "../../free-roam-cargo-rules.js?v=32";
+
 const LOCKED_RECOVERY_TIMER = Number.MAX_SAFE_INTEGER;
 const MERCHANT_RECOVERY_HULL_FRACTION = 0.2;
 
@@ -26,6 +33,57 @@ function nativeEntryForBoat(nativeVessels, boatId) {
   return (nativeVessels || []).find(entry => entry?.boat?.id === boatId) || null;
 }
 
+function berthCandidates() {
+  const minX = Number(DOCK_BOAT_MIN_X) || 148;
+  const maxX = Number(DOCK_BOAT_MAX_X) || 272;
+  const maxY = Number(DOCK_BOAT_MAX_Y) || 98;
+  const middleX = (minX + maxX) / 2;
+  return [
+    {x: maxX - 12, y: maxY - 6},
+    {x: minX + 12, y: maxY - 6},
+    {x: middleX, y: maxY - 6},
+    {x: maxX - 38, y: maxY - 20},
+    {x: minX + 38, y: maxY - 20},
+  ];
+}
+
+function berthClearance(world, boat, candidate) {
+  let clearance = Infinity;
+  for (const other of world?.boats || []) {
+    if (!other || other.id === boat.id || other.sunk) continue;
+    const metres = Math.hypot(
+      (Number(other.x) || 0) - candidate.x,
+      (Number(other.y) || 0) - candidate.y,
+    );
+    const required = Math.max(4, Number(other.collisionRadius) || 6) + Math.max(4, Number(boat.collisionRadius) || 6);
+    clearance = Math.min(clearance, metres - required);
+  }
+  return clearance;
+}
+
+function ensureMerchantServiceBerth(world, boat, event) {
+  if (isBoatDockPosition(boat)) return;
+  const candidates = berthCandidates()
+    .filter(candidate => isBoatDockPosition({...boat, ...candidate, sunk: false}))
+    .sort((left, right) => berthClearance(world, boat, right) - berthClearance(world, boat, left));
+  const berth = candidates[0];
+  if (!berth) return;
+  boat.x = berth.x;
+  boat.y = berth.y;
+  boat.heading = 0;
+  if (event) {
+    event.x = boat.x;
+    event.y = boat.y;
+    event.serviceBerth = true;
+  }
+}
+
+function rememberRecoveredServiceTarget(world, event, boat) {
+  const playerIndex = Number.isInteger(event?.sourcePlayer) ? event.sourcePlayer : null;
+  const player = playerIndex == null ? null : world?.players?.[playerIndex];
+  if (player) player.lastBoatId = boat.id;
+}
+
 function reconcileNativeMerchantRecovery({world, nativeVessels, eventStart = 0} = {}) {
   if (!world) return;
   const events = world.events || [];
@@ -41,6 +99,14 @@ function reconcileNativeMerchantRecovery({world, nativeVessels, eventStart = 0} 
     const boat = entry?.boat;
     if (!boat || boat.sunk) continue;
     recoveredBoatIds.add(boat.id);
+
+    // Merchant recovery is a service transition. Native vessels may have a
+    // gameplay home outside the merchant dock; using that home would make the
+    // freshly recovered vessel impossible to service even though the recovery
+    // message says it is at the pier. Guarantee a real service berth instead.
+    ensureMerchantServiceBerth(world, boat, event);
+    rememberRecoveredServiceTarget(world, event, boat);
+    boat.fleetService = true;
 
     // The legacy merchant performs the explicit sunk -> recovered transition
     // during the masked legacy step. The vessel flooding authority must not
@@ -114,7 +180,7 @@ export const VESSEL_MERCHANT_RECOVERY_SYSTEMS = Object.freeze([
     run: lockLegacyAutomaticRecovery,
   }),
   Object.freeze({
-    id: "vessel-manual-merchant-recovery-after-step-v2",
+    id: "vessel-manual-merchant-recovery-after-step-v3",
     phase: "after-step",
     order: 90,
     run: rewriteLegacyRecoveryEvents,
