@@ -1,15 +1,9 @@
-name: Build Windows desktop shell
+name: Build Windows portable app
 
 on:
   push:
     branches:
       - agent/fix-vessel-sonar-cargo-targets
-    paths:
-      - "desktop-shell/**"
-      - ".github/workflows/desktop-shell-windows.yml"
-  pull_request:
-    branches:
-      - main
     paths:
       - "desktop-shell/**"
       - ".github/workflows/desktop-shell-windows.yml"
@@ -46,29 +40,37 @@ jobs:
         working-directory: desktop-shell
         run: npm install --no-audit --no-fund
 
-      - name: Build NSIS installer
-        working-directory: desktop-shell
-        run: npm run tauri build -- --bundles nsis
-
-      - name: Normalize installer name
+      - name: Restore generated lighthouse icon
         working-directory: desktop-shell
         shell: pwsh
         run: |
-          $setup = Get-ChildItem "src-tauri/target/release/bundle/nsis/*-setup.exe" | Select-Object -First 1
-          if (-not $setup) { throw "Tauri NSIS installer was not produced" }
-          Copy-Item $setup.FullName "Archipelago-Windows-Setup.exe" -Force
-          Get-Item "Archipelago-Windows-Setup.exe" | Format-List Name,Length,LastWriteTime
+          $base64 = (Get-Content "icon-source.png.b64" -Raw).Trim()
+          [IO.File]::WriteAllBytes("icon-source.png", [Convert]::FromBase64String($base64))
+          npx tauri icon icon-source.png
+          if (-not (Test-Path "src-tauri/icons/icon.ico")) { throw "Windows icon was not generated" }
+
+      - name: Build portable executable
+        working-directory: desktop-shell
+        run: npm run tauri build -- --no-bundle
+
+      - name: Normalize portable app name
+        working-directory: desktop-shell
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem "src-tauri/target/release/*.exe" | Where-Object { $_.Name -notmatch 'build-script' } | Select-Object -First 1
+          if (-not $exe) { throw "Tauri portable executable was not produced" }
+          Copy-Item $exe.FullName "Archipelago.exe" -Force
+          Get-Item "Archipelago.exe" | Format-List Name,Length,LastWriteTime
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Archipelago-Windows-Setup
-          path: desktop-shell/Archipelago-Windows-Setup.exe
+          name: Archipelago-Windows-Portable
+          path: desktop-shell/Archipelago.exe
           if-no-files-found: error
           compression-level: 0
 
-      - name: Publish stable download release
-        if: github.event_name == 'push'
+      - name: Publish stable portable download
         working-directory: desktop-shell
         shell: pwsh
         env:
@@ -76,7 +78,7 @@ jobs:
         run: |
           $tag = "desktop-shell-latest"
           if (gh release view $tag 2>$null) {
-            gh release upload $tag "Archipelago-Windows-Setup.exe" --clobber
+            gh release upload $tag "Archipelago.exe" --clobber
           } else {
-            gh release create $tag "Archipelago-Windows-Setup.exe" --target "$env:GITHUB_SHA" --title "Archipelago Windows" --notes "Thin Windows Tauri shell for the live Archipelago game. Install once; normal game updates are loaded from the live web deployment."
+            gh release create $tag "Archipelago.exe" --target "$env:GITHUB_SHA" --title "Archipelago Windows" --notes "Portable Windows Tauri shell for the live Archipelago game. No installer: download Archipelago.exe and run it. Normal game updates are loaded from the live web deployment."
           }
