@@ -277,12 +277,6 @@ export const VESSEL_IMPACT_ROUTING_SYSTEMS = Object.freeze([
     order: 13,
     run: applyStagedBulletImpacts,
   }),
-  Object.freeze({
-    id: "vessel-impact-routing-external-v1",
-    phase: "external-impact",
-    order: 0,
-    run: applyExternalImpacts,
-  }),
 ]);
 
 export {

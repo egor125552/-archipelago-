@@ -2,7 +2,8 @@
 
 import * as base from "./free-roam-mega-bomb-v37.js?v=3";
 import {queueExternalVesselImpact} from "../public/src/vessel/vessel-impact-routing.js?v=1";
-import {runVesselSystems} from "../public/src/vessel/vessel-runtime.js?v=2";
+import {applyExternalImpacts} from "../public/src/vessel/systems/vessel-impact-routing-system.js?v=2";
+import {listNativeVessels} from "../public/src/vessel/vessel-runtime.js?v=2";
 
 export * from "./free-roam-mega-bomb-v37.js?v=3";
 
@@ -184,6 +185,6 @@ export function stepMegaBombs(world, dt) {
   const eventStart = values(world?.events).length;
   base.stepMegaBombs(world, dt);
   rebalancePlayerBoatBombHits(world, eventStart, states);
-  runVesselSystems("external-impact", {world, dt: 0, eventStart});
+  applyExternalImpacts({world, nativeVessels: listNativeVessels(world)});
   normalizeFreshSpatial(world, eventStart);
 }
