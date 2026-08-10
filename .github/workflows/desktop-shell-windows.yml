@@ -1,0 +1,75 @@
+name: Build Windows desktop shell
+
+on:
+  push:
+    branches:
+      - agent/fix-vessel-sonar-cargo-targets
+    paths:
+      - "desktop-shell/**"
+      - ".github/workflows/desktop-shell-windows.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Verify live game endpoint
+        shell: pwsh
+        run: |
+          $response = Invoke-WebRequest -Uri "https://archipelago.k69ysrndm7.workers.dev/free-roam" -MaximumRedirection 5 -TimeoutSec 30 -UseBasicParsing
+          if ($response.StatusCode -ne 200) { throw "Live game returned HTTP $($response.StatusCode)" }
+          if ($response.Headers['Content-Type'] -notmatch 'text/html') { throw "Live game did not return HTML" }
+
+      - name: Install Tauri CLI
+        working-directory: desktop-shell
+        run: npm install --no-audit --no-fund
+
+      - name: Build NSIS installer
+        working-directory: desktop-shell
+        run: npm run tauri build -- --bundles nsis
+
+      - name: Normalize installer name
+        working-directory: desktop-shell
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem "src-tauri/target/release/bundle/nsis/*-setup.exe" | Select-Object -First 1
+          if (-not $setup) { throw "Tauri NSIS installer was not produced" }
+          Copy-Item $setup.FullName "Archipelago-Windows-Setup.exe" -Force
+          Get-Item "Archipelago-Windows-Setup.exe" | Format-List Name,Length,LastWriteTime
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Archipelago-Windows-Setup
+          path: desktop-shell/Archipelago-Windows-Setup.exe
+          if-no-files-found: error
+          compression-level: 0
+
+      - name: Publish stable download release
+        working-directory: desktop-shell
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "desktop-shell-latest"
+          if (gh release view $tag 2>$null) {
+            gh release upload $tag "Archipelago-Windows-Setup.exe" --clobber
+          } else {
+            gh release create $tag "Archipelago-Windows-Setup.exe" --target "$env:GITHUB_SHA" --title "Archipelago Windows" --notes "Thin Windows Tauri shell for the live Archipelago game. Install once; normal game updates are loaded from the live web deployment."
+          }
