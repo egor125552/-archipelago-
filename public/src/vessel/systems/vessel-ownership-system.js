@@ -21,6 +21,28 @@ function vesselLabel(boat) {
   return String(boat?.label || "лодка").trim() || "лодка";
 }
 
+function rememberActiveArchitectureVessels({world, nativeVessels} = {}) {
+  if (!world) return;
+  const nativeBoatIds = new Set(
+    (nativeVessels || [])
+      .map(entry => entry?.boat?.id)
+      .filter(Number.isInteger),
+  );
+  if (!nativeBoatIds.size) return;
+
+  for (let playerIndex = 0; playerIndex < (world.players || []).length; playerIndex += 1) {
+    const player = world.players[playerIndex];
+    const activeBoat = player?.activeBoat;
+    if (!Number.isInteger(activeBoat) || !nativeBoatIds.has(activeBoat)) continue;
+    if (!world.boats?.[activeBoat]) continue;
+    // lastBoatId is the shared merchant/service affinity used by the legacy
+    // shop layer. Architecture vessels must participate in that same contract:
+    // while a player is physically aboard one, it becomes their most recently
+    // used vessel and remains the service target after they step ashore.
+    player.lastBoatId = activeBoat;
+  }
+}
+
 function normalizeEnterEvent(world, event) {
   if (event?.type !== "enter") return;
   const playerIndex = eventPlayerIndex(event);
@@ -49,14 +71,16 @@ function normalizeEnterEvent(world, event) {
   }
 }
 
-function normalizeBoardingOwnership({world, eventStart = 0} = {}) {
+function normalizeBoardingOwnership(context = {}) {
+  const {world, eventStart = 0} = context;
   if (!world) return;
+  rememberActiveArchitectureVessels(context);
   for (const event of (world.events || []).slice(eventStart)) normalizeEnterEvent(world, event);
 }
 
 export const VESSEL_OWNERSHIP_SYSTEMS = Object.freeze([
   Object.freeze({
-    id: "vessel-ownership-after-step-v1",
+    id: "vessel-ownership-after-step-v2",
     phase: "after-step",
     order: 10,
     run: normalizeBoardingOwnership,
