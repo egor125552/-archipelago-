@@ -17,7 +17,28 @@ function armoredLegacyPair(world) {
   return controller && boat ? {controller, boat} : null;
 }
 
-function lockLegacyAutomaticRecovery({world} = {}) {
+function unlockRecoverableNativeEngines({nativeVessels} = {}) {
+  for (const entry of nativeVessels || []) {
+    const boat = entry?.boat;
+    const engine = entry?.instance?.modules?.engine;
+    const waterBridge = entry?.instance?.interior?.waterBridge;
+    if (!boat || !engine || !waterBridge?.floodStalled || boat.sunk) continue;
+    if (waterBridge.floodDisabledModules?.engine) continue;
+    if (engine.repairActive) continue;
+    if ((Number(engine.health) || 0) <= 0) continue;
+
+    // A merchant recovery marks the engine as stalled while preserving a
+    // minimum operable module health. Older recovery code also left the module
+    // disabled, which converted "stalled" into an impossible permanent repair
+    // requirement. Re-enable only this recoverable-stall state; the flooding
+    // authority still owns the timed restart and all genuine damage gates.
+    if (engine.enabled === false) engine.enabled = true;
+  }
+}
+
+function prepareRecoveryLifecycle(context = {}) {
+  const {world} = context;
+  unlockRecoverableNativeEngines(context);
   const pair = armoredLegacyPair(world);
   if (!pair) return;
   const {controller, boat} = pair;
@@ -124,6 +145,17 @@ function reconcileNativeMerchantRecovery({world, nativeVessels, eventStart = 0} 
     boat.throttle = 0;
     boat.rudder = 0;
     boat.engineStalled = true;
+
+    const engine = entry.instance?.modules?.engine;
+    const waterBridge = entry.instance?.interior?.waterBridge;
+    if (
+      engine
+      && (Number(engine.health) || 0) > 0
+      && !waterBridge?.floodDisabledModules?.engine
+      && !engine.repairActive
+    ) {
+      engine.enabled = true;
+    }
   }
 
   if (!recoveredBoatIds.size) return;
@@ -174,10 +206,10 @@ function rewriteLegacyRecoveryEvents(context = {}) {
 
 export const VESSEL_MERCHANT_RECOVERY_SYSTEMS = Object.freeze([
   Object.freeze({
-    id: "vessel-manual-merchant-recovery-before-step-v1",
+    id: "vessel-manual-merchant-recovery-before-step-v2",
     phase: "before-step",
     order: -80,
-    run: lockLegacyAutomaticRecovery,
+    run: prepareRecoveryLifecycle,
   }),
   Object.freeze({
     id: "vessel-manual-merchant-recovery-after-step-v3",
