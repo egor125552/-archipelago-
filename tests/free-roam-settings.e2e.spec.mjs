@@ -64,6 +64,17 @@ test("interface, speech, and reload settings persist from the main menu into the
     await expect(page.getByRole("heading", {name: "После обновления страницы"})).toBeVisible();
     await expect(page.getByText(/вариант «вернуться в тот же мир»/)).toBeVisible();
 
+    // The settings dialog owns keyboard input before the game capture listener.
+    // A focused range must therefore still implement normal screen-reader and
+    // keyboard semantics instead of swallowing the arrow key.
+    const speechRate = page.locator("#settingsSpeechRate");
+    await expect(speechRate).toHaveValue("1.18");
+    await speechRate.focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(speechRate).toHaveValue("1.2");
+    await expect(page.locator("#settingsSpeechRateValue")).toContainText("1.20");
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("echo-free-roam-speech-rate"))).toBe("1.2");
+
     const autoResume = page.locator("#settingsAutoResumeButton");
     await expect(autoResume).toHaveAttribute("aria-pressed", "false");
     await expect(autoResume).toContainText("остаться в меню");
@@ -74,8 +85,11 @@ test("interface, speech, and reload settings persist from the main menu into the
     const expectedEnabled = !initiallyEnabled;
     await expect(gameButtons).toHaveAttribute("aria-pressed", String(expectedEnabled));
 
+    // Buttons inside the modal must also remain keyboard-activatable while
+    // their Space/Enter keystrokes are kept away from gameplay controls.
     const quickSpeech = page.locator("#settingsQuickSpeechButton");
-    await quickSpeech.click();
+    await quickSpeech.focus();
+    await page.keyboard.press("Enter");
     await expect(quickSpeech).toHaveAttribute("aria-pressed", "true");
     await page.locator("#settingsCloseButton").click();
 
@@ -96,6 +110,7 @@ test("interface, speech, and reload settings persist from the main menu into the
     await page.getByRole("button", {name: "Настройки"}).click();
     await expect(page.locator("#settingsGameButtonsButton")).toHaveAttribute("aria-pressed", String(expectedEnabled));
     await expect(page.locator("#settingsQuickSpeechButton")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("#settingsSpeechRate")).toHaveValue("1.2");
     await expect(autoResume).toHaveAttribute("aria-pressed", "false");
     await autoResume.click();
     await expect(autoResume).toHaveAttribute("aria-pressed", "true");
@@ -111,6 +126,7 @@ test("interface, speech, and reload settings persist from the main menu into the
 
     await page.locator("#gameSettingsButton").click();
     await expect(page.locator("#settingsAutoResumeButton")).toHaveAttribute("aria-pressed", "true");
+    await expect(page.locator("#settingsSpeechRate")).toHaveValue("1.2");
   } finally {
     await context.close();
   }
