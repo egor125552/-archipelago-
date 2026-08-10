@@ -100,7 +100,7 @@ test("all combat guidance switches are policy gates, while ordinary deck speech 
   const samples = [
     ["Ты погиб.", "death"],
     ["Уровень угрозы 4.", "threat"],
-    ["Навожусь на цель.", "aim"],
+    ["Противник готовит удар.", "aim"],
     ["Здоровье 76.", "playerHit"],
     ["Попали в твою лодку. Корпус 80.", "boatHit"],
     ["Аварийный ремонт тяжёлого катера начат.", "repair"],
