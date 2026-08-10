@@ -126,7 +126,7 @@ test("legacy gun hit is removed from global damage then reapplied to the hit com
     sourcePlayer: 0,
     weapon: "pistol",
     x: entry.boat.x,
-    y: entry.boat.y,
+   y: entry.boat.y,
     text: "legacy",
   };
   world.events.push(hit, {
@@ -145,7 +145,7 @@ test("legacy gun hit is removed from global damage then reapplied to the hit com
   assert.equal(entry.instance.zones.cabin.health, 96);
   assert.equal(entry.instance.modules.helm.health, 96);
   assert.equal(hit.zoneId, "cabin");
-  assert.match(hit.text, /рубку/);
+  assert.match(hit.text, /Ѐубку/);
   assert.equal(world.events[1].zoneId, "cabin");
 });
 
@@ -206,7 +206,7 @@ test("external mega-bomb replay restores baseline then applies zonal blast immed
     blastRadius: 30,
   });
   applyExternalImpacts({world, nativeVessels: [entry]});
-  assert.equal(entry.boat.hull, 90);
+  assert.ok(Math.abs(entry.boat.hull - 90) < 1e-9, "zonal blast preserves the original hull-damage budget within float precision");
   assert.equal(entry.boat.armor, 15);
   assert.equal(event.vesselZonalImpact, true);
   assert.equal(event.affectedZoneIds.length, 3);
