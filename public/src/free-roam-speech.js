@@ -1,5 +1,7 @@
 "use strict";
 
+import {speechPolicyAllows} from "./free-roam-speech-policy.js?v=1";
+
 const SPEECH_RATE_KEY = "echo-free-roam-speech-rate";
 const DEFAULT_SPEECH_RATE = 1.18;
 const normalize = value => String(value || "").toLowerCase().replace(/ё/g, "е");
@@ -60,6 +62,11 @@ export function createSpeechController({
     return storedSpeechRate(speechRateStorage, currentRate);
   }
 
+  function allowed(text) {
+    try { return speechPolicyAllows(text, {storage: speechRateStorage}); }
+    catch (_) { return true; }
+  }
+
   function refreshVoice() {
     if (!available) return null;
     selectedVoice = [...(synth.getVoices?.() || [])]
@@ -74,7 +81,7 @@ export function createSpeechController({
 
   function start(text) {
     const normalized = String(text || "").replace(/\s+/g, " ").trim();
-    if (!enabled || !available || !normalized) return false;
+    if (!enabled || !available || !normalized || !allowed(normalized)) return false;
     refreshVoice();
     synth.resume?.();
     const token = ++activeToken;
@@ -109,11 +116,15 @@ export function createSpeechController({
     const normalized = String(text || "").replace(/\s+/g, " ").trim();
     if (!enabled || !available || !normalized) return false;
 
-    // Match the original free-roam speech behaviour: there is no application
-    // speech queue. A newer game message immediately replaces the phrase that
-    // is currently being spoken, so an old position or combat report can
-    // never be heard after the situation has already changed. `interrupt`
-    // remains accepted for API compatibility; every announcement is fresh.
+    // Speech policy is evaluated before *any* replacement side effect. A muted
+    // category is not a silent utterance: it is no utterance at all. It must not
+    // cancel the phrase already in progress, invalidate its token, clear its
+    // watchdog, or become the controller's active text.
+    if (!allowed(normalized)) return false;
+
+    // Match the original free-roam speech behaviour for phrases that are
+    // actually enabled: there is no application speech queue. A newer allowed
+    // game message immediately replaces the phrase currently being spoken.
     void interrupt;
     activeText = "";
     clearWatchdog();
