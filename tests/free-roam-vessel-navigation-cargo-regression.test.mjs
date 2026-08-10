@@ -10,8 +10,11 @@ import {
   stepFreeWorld as stepCurrentFreeWorld,
 } from "../public/src/free-roam-core-v8.js";
 import {scenarioTarget} from "../public/src/free-roam-scenario.js";
+import {merchantBoatForPlayer} from "../public/src/free-roam-shop.js";
+import {isBoatDockPosition} from "../public/src/free-roam-cargo-rules.js";
 import {VESSEL_DECK_INPUT_BRIDGE_SYSTEMS} from "../public/src/vessel/systems/vessel-deck-input-bridge-system.js";
 import {VESSEL_MERCHANT_RECOVERY_SYSTEMS} from "../public/src/vessel/systems/vessel-merchant-recovery-system.js";
+import {VESSEL_OWNERSHIP_SYSTEMS} from "../public/src/vessel/systems/vessel-ownership-system.js";
 import {listVesselNavigationTargets} from "../public/src/vessel/vessel-navigation.js";
 import {
   relativeVesselPan,
@@ -52,16 +55,33 @@ test("selected vessel navigation id survives real server ingress and becomes the
   assert.equal(target?.y, world.boats[vessel.boatId].y);
 });
 
-test("native merchant recovery survives a stale zero-hull flooding snapshot", () => {
+test("native merchant recovery becomes a real serviceable vessel and survives stale flooding state", () => {
+  const before = VESSEL_MERCHANT_RECOVERY_SYSTEMS.find(system => system.phase === "before-step");
   const after = VESSEL_MERCHANT_RECOVERY_SYSTEMS.find(system => system.phase === "after-step");
-  assert.ok(after);
+  assert.ok(before && after);
 
+  const testBoat = {
+    id: 3,
+    label: "испытательный катер «Пятьдесят»",
+    x: 210,
+    y: 78,
+    hull: 105,
+    hullMax: 180,
+    sunk: false,
+    owner: 0,
+    repairPatches: 10,
+  };
   const boat = {
     id: 4,
     label: "средний двухместный корабль",
+    x: 276.53,
+    y: 121.8,
+    collisionRadius: 13.5,
     hull: 0,
     hullMax: 220,
     sunk: false,
+    owner: 0,
+    repairPatches: 0,
     emergencyActive: true,
     emergencyRemaining: 45,
     emergencyWarned15: false,
@@ -71,20 +91,58 @@ test("native merchant recovery survives a stale zero-hull flooding snapshot", ()
     rudder: 0,
     engineStalled: true,
   };
+  const engine = {health: 35, enabled: false, repairActive: false};
+  const instance = {
+    modules: {engine},
+    interior: {
+      waterBridge: {
+        floodStalled: true,
+        floodDisabledModules: {},
+      },
+    },
+  };
   const world = {
+    players: [{activeBoat: null, lastBoatId: 3}],
+    boats: [null, null, null, testBoat, boat],
     events: [
-      {type: "wreck-recovery-complete", boatId: 4, text: "Аварийный подъём завершён."},
+      {type: "wreck-recovery-complete", sourcePlayer: 0, boatId: 4, text: "Аварийный подъём завершён."},
       {type: "flood-emergency-start", boatId: 4, cause: "wrecked", text: "Авария."},
     ],
   };
+  const entry = {boat, instance};
 
-  after.run({world, nativeVessels: [{boat}], eventStart: 0});
+  after.run({world, nativeVessels: [entry], eventStart: 0});
 
   assert.equal(boat.hull, 44, "20% merchant recovery for a 220 hull vessel must survive the vessel authority handoff");
   assert.equal(boat.sunk, false);
   assert.equal(boat.emergencyActive, false, "the stale zero-hull snapshot must not start a new loss countdown");
   assert.equal(boat.emergencyRemaining, 0);
   assert.equal(world.events.some(event => event.type === "flood-emergency-start" && event.boatId === 4), false, "the false emergency must not be announced");
+  assert.equal(isBoatDockPosition(boat), true, "a recovered architecture vessel advertised as being at the pier must actually be inside the merchant service dock");
+  assert.equal(world.players[0].lastBoatId, 4, "recovery must make the recovered vessel the player's merchant service target");
+  assert.equal(engine.enabled, true, "an operable recovered engine must be stalled, not permanently disabled behind a repair plate");
+  assert.equal(merchantBoatForPlayer(world, 0, {docked: true, sunk: false})?.id, 4, "merchant repair plates must target the recovered medium vessel instead of a stale test boat");
+
+  // Existing saved worlds from the previous recovery contract can already have
+  // floodStalled + positive engine health + enabled=false with no new recovery
+  // event. The before-step reconciliation must unlock that state too.
+  engine.enabled = false;
+  world.events = [];
+  before.run({world, nativeVessels: [entry], eventStart: 0});
+  assert.equal(engine.enabled, true, "a previously recovered saved world must escape the old permanent engine-disabled softlock");
+});
+
+test("active architecture vessel becomes the shared last service vessel", () => {
+  const ownership = VESSEL_OWNERSHIP_SYSTEMS.find(system => system.phase === "after-step");
+  assert.ok(ownership);
+  const boat = {id: 4, vesselInstanceId: "medium:4"};
+  const world = {
+    players: [{activeBoat: 4, lastBoatId: 3}],
+    boats: [null, null, null, null, boat],
+    events: [],
+  };
+  ownership.run({world, nativeVessels: [{boat}], eventStart: 0});
+  assert.equal(world.players[0].lastBoatId, 4, "walking or sitting aboard a native vessel must update the same service affinity used by the merchant");
 });
 
 test("cargo on an old owned boat does not redirect a swimmer to the dock", () => {
