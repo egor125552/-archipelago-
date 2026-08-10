@@ -126,7 +126,10 @@
     slider.type = "range";
     slider.min = "0.6";
     slider.max = "2";
-    slider.step = "0.05";
+    // 1.18 is the established default. A 0.02 step keeps that default on the
+    // range's valid step grid, so keyboard/screen-reader arrows move it
+    // predictably instead of snapping from a step-mismatched value.
+    slider.step = "0.02";
     slider.value = String(currentSpeechRate());
     slider.setAttribute("aria-describedby", "settingsSpeechRateValue settingsSpeechRateHint");
     slider.style.width = "100%";
@@ -172,6 +175,7 @@
     const value = $("settingsSpeechRateValue");
     const rate = currentSpeechRate();
     if (slider && Math.abs(Number(slider.value) - rate) > 0.001) slider.value = String(rate);
+    if (slider) slider.setAttribute("aria-valuetext", `${rate.toFixed(2)}, ${speechRateLabel(rate)}`);
     if (value) value.textContent = `Текущая скорость: ${rate.toFixed(2)}, ${speechRateLabel(rate)}.`;
   }
 
@@ -304,6 +308,48 @@
     syncSettingsControls();
   }
 
+  // The settings dialog has to consume game-control keys before the free-roam
+  // capture listener sees them. Because that happens on window capture, native
+  // range/button keyboard behavior cannot be allowed through normally: doing so
+  // would also steer/jump/confirm in the running game. Reproduce the small set
+  // of native control actions here, then consume the event. This keeps NVDA and
+  // keyboard users in the dialog without sending input to the vessel.
+  function handleSettingsControlKey(event) {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return false;
+
+    if (target instanceof HTMLInputElement && target.id === "settingsSpeechRate" && target.type === "range") {
+      const key = event.key || event.code;
+      const min = Number(target.min) || 0.6;
+      const max = Number(target.max) || 2;
+      const step = Number(target.step) || 0.02;
+      const current = Number(target.value) || currentSpeechRate();
+      let next = current;
+      if (key === "ArrowRight" || key === "ArrowUp") next += step;
+      else if (key === "ArrowLeft" || key === "ArrowDown") next -= step;
+      else if (key === "PageUp") next += step * 5;
+      else if (key === "PageDown") next -= step * 5;
+      else if (key === "Home") next = min;
+      else if (key === "End") next = max;
+      else return false;
+
+      event.preventDefault();
+      next = Math.max(min, Math.min(max, next));
+      target.value = String(Math.round(next * 100) / 100);
+      target.dispatchEvent(new Event("input", {bubbles: true}));
+      target.dispatchEvent(new Event("change", {bubbles: true}));
+      return true;
+    }
+
+    if (target.matches("button") && !event.repeat && (event.key === "Enter" || event.key === " " || event.code === "Space")) {
+      event.preventDefault();
+      target.click();
+      return true;
+    }
+
+    return false;
+  }
+
   installSpeechRateHook();
   savePreferences();
 
@@ -334,7 +380,9 @@
       closeSettings();
       return;
     }
-    if (event.key !== "Tab") event.stopImmediatePropagation();
+    if (event.key === "Tab") return;
+    handleSettingsControlKey(event);
+    event.stopImmediatePropagation();
   }, true);
 
   $("settingsPanel")?.addEventListener("click", event => {
