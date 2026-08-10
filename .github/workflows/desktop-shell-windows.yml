@@ -40,14 +40,16 @@ jobs:
         working-directory: desktop-shell
         run: npm install --no-audit --no-fund
 
-      - name: Restore generated lighthouse icon
+      - name: Generate lighthouse app icons
+        working-directory: desktop-shell
+        run: npx tauri icon icon-source.svg
+
+      - name: Verify Windows icon
         working-directory: desktop-shell
         shell: pwsh
         run: |
-          $base64 = (Get-Content "icon-source.png.b64" -Raw).Trim()
-          [IO.File]::WriteAllBytes("icon-source.png", [Convert]::FromBase64String($base64))
-          npx tauri icon icon-source.png
           if (-not (Test-Path "src-tauri/icons/icon.ico")) { throw "Windows icon was not generated" }
+          Get-Item "src-tauri/icons/icon.ico" | Format-List Name,Length,LastWriteTime
 
       - name: Build portable executable
         working-directory: desktop-shell
