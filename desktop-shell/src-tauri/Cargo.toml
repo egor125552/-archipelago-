@@ -1,0 +1,16 @@
+[package]
+name = "archipelago-desktop"
+version = "0.1.0"
+description = "Thin desktop shell for the live Archipelago web game"
+authors = ["Archipelago"]
+edition = "2021"
+
+[lib]
+name = "archipelago_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }

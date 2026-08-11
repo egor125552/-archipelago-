@@ -4,7 +4,10 @@ import {createVesselRegistry} from "../public/src/vessel/vessel-registry.js";
 import {STANDARD_BOAT_PRESET} from "../public/src/vessel/vessel-defaults.js";
 import {installCoreVesselModuleTypes} from "../public/src/vessel/modules/core-module-types.js";
 import {installMediumCrewVesselType} from "../public/src/vessel/definitions/medium-crew-vessel-v2.js?v=2";
-import {adjustVesselZoneWater} from "../public/src/vessel/vessel-deck-runtime.js";
+import {
+  adjustVesselZoneWater,
+  vesselOccupantWaterState,
+} from "../public/src/vessel/vessel-deck-runtime.js";
 import {VESSEL_WATER_MOBILITY_SYSTEMS} from "../public/src/vessel/systems/vessel-water-mobility-system.js?v=1";
 
 function fixture() {
@@ -66,6 +69,14 @@ function span(deck, axis) {
   return Math.max(...values) - Math.min(...values);
 }
 
+function floodingForMode(definition, instance, zoneId, playerIndex, wantedMode) {
+  for (let amount = 1; amount <= 100; amount += 1) {
+    instance.zones[zoneId].flooding = amount;
+    if (vesselOccupantWaterState(definition, instance, playerIndex).mode === wantedMode) return amount;
+  }
+  throw new Error(`unable to find flooding amount for ${wantedMode}`);
+}
+
 test("medium crew vessel v2 provides genuinely large walkable compartments and generous interaction ranges", () => {
   const {definition} = fixture();
   const aft = definition.decks.find(deck => deck.id === "medium-aft-deck");
@@ -121,6 +132,36 @@ test("deep compartment flooding turns walking into swimming instead of cosmetic 
   assert.equal(world.players[0].vesselWaterMode, "swimming");
   assert.equal(world.events.find(event => event.vesselDeckWater === true)?.type, "splash");
   assert.ok(world.events.some(event => event.type === "vessel-water-mobility" && /плыть/.test(event.text)));
+});
+
+test("pumping from wading down to ankle depth announces improvement, not worsening", () => {
+  const {definition, instance, world, entry} = fixture();
+  const capture = VESSEL_WATER_MOBILITY_SYSTEMS.find(system => system.id.includes("capture-after-step"));
+  const apply = VESSEL_WATER_MOBILITY_SYSTEMS.find(system => system.id.includes("apply-after-step"));
+  const zoneId = "medium-aft-zone";
+  const wading = floodingForMode(definition, instance, zoneId, 0, "wading");
+  const ankle = floodingForMode(definition, instance, zoneId, 0, "ankle");
+  assert.ok(ankle < wading, "ankle water must be shallower than wading water");
+
+  instance.zones[zoneId].flooding = wading;
+  capture.run({world, nativeVessels: [entry]});
+  apply.run({world, nativeVessels: [entry]});
+  assert.equal(world.players[0].vesselWaterMode, "wading");
+
+  world.events = [];
+  world.time += 1;
+  instance.zones[zoneId].flooding = ankle;
+  capture.run({world, nativeVessels: [entry]});
+  apply.run({world, nativeVessels: [entry]});
+
+  const event = world.events.find(candidate => candidate.type === "vessel-water-mobility");
+  assert.ok(event, "crossing down into ankle depth must be announced once");
+  assert.equal(event.previousWaterMode, "wading");
+  assert.equal(event.waterMode, "ankle");
+  assert.equal(event.waterTrend, "falling");
+  assert.match(event.text, /опустилась до щиколоток/i);
+  assert.match(event.text, /становится легче/i);
+  assert.doesNotMatch(event.text, /становится тяжелее/i);
 });
 
 test("a dry compartment keeps normal deck movement and controls", () => {

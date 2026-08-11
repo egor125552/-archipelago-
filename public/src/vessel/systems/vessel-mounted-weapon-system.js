@@ -1,7 +1,7 @@
 "use strict";
 
 import {vesselLocalToWorld} from "../vessel-interior.js";
-import {applyVesselDamage} from "../vessel-damage.js";
+import {applyRoutedVesselImpact} from "../vessel-impact-routing.js?v=1";
 import {listCombatTargets, resolveCombatTarget} from "../../free-roam-targeting.js?v=39";
 import {applyBoatDamage} from "../../collision-model.js";
 import {applyCombatDamage} from "../../free-roam-combat-v2.js?v=6";
@@ -15,7 +15,6 @@ import {releaseStolenCargo} from "../../free-roam-marauder.js?v=33";
 
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, Number(value) || 0));
 const rad = value => Number(value) * Math.PI / 180;
-const wrapDeg = value => ((Number(value || 0) + 180) % 360 + 360) % 360 - 180;
 
 function emit(world, type, text, targets = [0, 1], extra = {}) {
   world.events ||= [];
@@ -123,55 +122,6 @@ function destroyMarauder(world, target, sourcePlayer, weapon, label) {
   return true;
 }
 
-function incomingSide(targetBoat, sourcePoint) {
-  const absolute = Math.atan2(
-    (Number(sourcePoint?.x) || 0) - (Number(targetBoat?.x) || 0),
-    -((Number(sourcePoint?.y) || 0) - (Number(targetBoat?.y) || 0)),
-  ) * 180 / Math.PI;
-  const relative = Math.abs(wrapDeg(absolute - (Number(targetBoat?.heading) || 0)));
-  if (relative <= 60) return "front";
-  if (relative >= 120) return "rear";
-  return "side";
-}
-
-function damageableModuleForZone(targetEntry, zoneId) {
-  if (!zoneId) return null;
-  const damageConfig = targetEntry.definition?.damage || {};
-  const choices = Array.isArray(damageConfig.zoneModuleChoices?.[zoneId])
-    ? damageConfig.zoneModuleChoices[zoneId]
-    : [];
-  const valid = choices.filter(moduleId => targetEntry.instance?.modules?.[moduleId]);
-  if (valid.length) {
-    // Prefer the healthiest live component. This spreads repeated compartment
-    // impacts across real machinery without a transient random/cursor state
-    // that could be reset by reconnecting to change the result.
-    valid.sort((leftId, rightId) => {
-      const left = Number(targetEntry.instance.modules[leftId]?.health);
-      const right = Number(targetEntry.instance.modules[rightId]?.health);
-      const leftHealth = Number.isFinite(left) ? left : 100;
-      const rightHealth = Number.isFinite(right) ? right : 100;
-      return rightHealth - leftHealth;
-    });
-    return valid[0];
-  }
-  const configured = damageConfig.zoneModules?.[zoneId];
-  return configured && targetEntry.instance?.modules?.[configured] ? configured : null;
-}
-
-function zonalBoatDamage(context, targetEntry, amount, sourcePoint, config) {
-  const damageConfig = targetEntry.definition?.damage || {};
-  const side = incomingSide(targetEntry.boat, sourcePoint);
-  const zoneId = damageConfig.directionalZones?.[side] || null;
-  const moduleId = damageableModuleForZone(targetEntry, zoneId);
-  return applyVesselDamage(targetEntry.definition, targetEntry.instance, targetEntry.boat, {
-    damage: amount,
-    zoneId,
-    moduleId,
-    flooding: Math.max(0, Number(damageConfig.floodingPerHit) || 0),
-    leak: Math.max(0, Number(config?.leakOnBoatHit) || 0),
-  });
-}
-
 function damageTarget(context, target, amount, sourcePlayer, weapon, label, sourcePoint, config) {
   const world = context.world;
   if (!target) return false;
@@ -186,7 +136,14 @@ function damageTarget(context, target, amount, sourcePlayer, weapon, label, sour
   if (target.kind === "boat") {
     const targetEntry = (context.nativeVessels || []).find(entry => entry?.boat === target.point || entry?.boat?.id === target.boatId);
     if (targetEntry?.definition?.capabilities?.zonalDamage === true && targetEntry.definition?.damage?.mode === "zonal") {
-      return zonalBoatDamage(context, targetEntry, amount, sourcePoint, config).hullDamage > 0;
+      return applyRoutedVesselImpact(targetEntry, {
+        damage: amount,
+        sourcePoint,
+        impactPoint: target.point,
+        flooding: Math.max(0, Number(targetEntry.definition?.damage?.floodingPerHit) || 0),
+        leak: Math.max(0, Number(config?.leakOnBoatHit) || 0),
+        weapon,
+      }).hullDamage > 0;
     }
     return applyBoatDamage(target.point, amount, {
       armorShare: 0.72,

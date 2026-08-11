@@ -1,0 +1,93 @@
+name: Build Windows portable app
+
+on:
+  push:
+    branches:
+      - agent/fix-vessel-sonar-cargo-targets
+    paths:
+      - "desktop-shell/**"
+      - ".github/workflows/desktop-shell-windows.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "desktop-shell/**"
+      - ".github/workflows/desktop-shell-windows.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Verify live game endpoint
+        shell: pwsh
+        run: |
+          $response = Invoke-WebRequest -Uri "https://archipelago.k69ysrndm7.workers.dev/free-roam" -MaximumRedirection 5 -TimeoutSec 30 -UseBasicParsing
+          if ($response.StatusCode -ne 200) { throw "Live game returned HTTP $($response.StatusCode)" }
+          if ($response.Headers['Content-Type'] -notmatch 'text/html') { throw "Live game did not return HTML" }
+
+      - name: Install Tauri CLI
+        working-directory: desktop-shell
+        run: npm install --no-audit --no-fund
+
+      - name: Generate lighthouse app icons
+        working-directory: desktop-shell
+        run: npx tauri icon icon-source.svg
+
+      - name: Verify Windows icon
+        working-directory: desktop-shell
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "src-tauri/icons/icon.ico")) { throw "Windows icon was not generated" }
+          Get-Item "src-tauri/icons/icon.ico" | Format-List Name,Length,LastWriteTime
+
+      - name: Build portable executable
+        working-directory: desktop-shell
+        run: npm run tauri build -- --no-bundle
+
+      - name: Normalize portable app name
+        working-directory: desktop-shell
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem "src-tauri/target/release/*.exe" | Where-Object { $_.Name -notmatch 'build-script' } | Select-Object -First 1
+          if (-not $exe) { throw "Tauri portable executable was not produced" }
+          Copy-Item $exe.FullName "Archipelago.exe" -Force
+          Get-Item "Archipelago.exe" | Format-List Name,Length,LastWriteTime
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Archipelago-Windows-Portable
+          path: desktop-shell/Archipelago.exe
+          if-no-files-found: error
+          compression-level: 0
+
+      - name: Publish stable portable download
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        working-directory: desktop-shell
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "desktop-shell-latest"
+          if (gh release view $tag 2>$null) {
+            gh release upload $tag "Archipelago.exe" --clobber
+          } else {
+            gh release create $tag "Archipelago.exe" --target "$env:GITHUB_SHA" --title "Archipelago Windows" --notes "Portable Windows Tauri shell for the live Archipelago game. No installer: download Archipelago.exe and run it. Normal game updates are loaded from the live web deployment."
+          }

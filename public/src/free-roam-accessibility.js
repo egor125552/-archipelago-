@@ -1,5 +1,8 @@
 "use strict";
 
+import "./free-roam-pump-command-policy-v1.js?v=1";
+import "./free-roam-speech-output-mode.js?v=1";
+
 const shortcuts = Object.freeze({
   leftButton: {key: "ArrowLeft", code: "ArrowLeft", duration: 480},
   rightButton: {key: "ArrowRight", code: "ArrowRight", duration: 480},

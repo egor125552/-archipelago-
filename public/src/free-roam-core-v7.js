@@ -9,6 +9,16 @@ function targetForBoat(boat) {
   return boat?.driver ?? boat?.owner;
 }
 
+export function setPlayerInput(world, playerIndex, nextInput) {
+  base.setPlayerInput(world, playerIndex, nextInput);
+  const navigationTargetId = typeof nextInput?.navigationTargetId === "string"
+    ? nextInput.navigationTargetId.slice(0, 80)
+    : null;
+  if (navigationTargetId && world?.freeActivities?.inputs?.[playerIndex]) {
+    world.freeActivities.inputs[playerIndex].navigationTargetId = navigationTargetId;
+  }
+}
+
 export function stepFreeWorld(world, dt) {
   const before = (world?.boats || []).map(boat => ({
     refuelActive: Boolean(boat?.refuelActive),

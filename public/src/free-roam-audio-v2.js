@@ -2,6 +2,7 @@
 
 import {FreeRoamAudio as BaseFreeRoamAudio} from "./free-roam-audio.js?v=39";
 import {handleDualTurretAudioEvent} from "./free-roam-dual-turret-audio.js?v=7";
+import {vesselUsesCustomEngineAudio} from "./vessel/vessel-audio-policy.js?v=1";
 
 const ORDINARY_LOCAL_ENGINE_LOOPS = Object.freeze([
   "motorboatReal",
@@ -40,9 +41,11 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
     this.ordinaryLocalEngineAllowed = Boolean(
       localBoat
       && !localBoat.sunk
-      && localBoat.audioProfile !== "dual-turret",
+      && !vesselUsesCustomEngineAudio(localBoat),
     );
 
+    // Audio authority is exclusive: a vessel with its own engine source never
+    // receives the ordinary light-boat loop underneath it.
     if (!this.ordinaryLocalEngineAllowed) this.stopOrdinaryLocalEngine();
     super.updateWorld(world, playerIndex);
     if (!this.ordinaryLocalEngineAllowed) this.stopOrdinaryLocalEngine();

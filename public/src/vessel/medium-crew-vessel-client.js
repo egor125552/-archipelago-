@@ -2,6 +2,7 @@
 
 import {FreeRoamAudio} from "../free-roam-audio-v5.js?v=45";
 import {MEDIUM_CREW_VESSEL_TYPE} from "./medium-crew-vessel-config.js?v=1";
+import {relativeVesselPan} from "./vessel-audio-policy.js?v=1";
 
 const MEDIUM_ENGINE_TEST_BUFFER = "mediumCrewEngineTest";
 const MEDIUM_ENGINE_TEST_URL = "/assets/audio/vessels/medium-crew-engine-test.mp3?v=3";
@@ -16,7 +17,6 @@ const OPERATOR_RESOURCES = Object.freeze({
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, Number(value) || 0));
 const distance = (a, b) => Math.hypot((Number(a?.x) || 0) - (Number(b?.x) || 0), (Number(a?.y) || 0) - (Number(b?.y) || 0));
-const wrapDeg = value => ((Number(value) + 180) % 360 + 360) % 360 - 180;
 
 function isMediumBoat(boat) {
   return Boolean(boat && (
@@ -58,17 +58,6 @@ function updateMediumCrewUi(world, playerIndex) {
   const attackButton = document.getElementById("attackButton");
   if (weaponValue) weaponValue.textContent = `${weapon.label}, ${weapon.ammo}`;
   if (attackButton) attackButton.textContent = `Огонь: ${weapon.label}`;
-}
-
-function relativePan(listener, source) {
-  if (!listener || !source) return 0;
-  const dx = (Number(source.x) || 0) - (Number(listener.x) || 0);
-  const dy = (Number(source.y) || 0) - (Number(listener.y) || 0);
-  const metres = Math.hypot(dx, dy);
-  if (metres < 0.001) return 0;
-  if (["foot", "swim"].includes(listener.mode)) return clamp(dx / Math.max(metres, 8), -1, 1);
-  const absolute = Math.atan2(dx, -dy) * 180 / Math.PI;
-  return clamp(Math.sin(wrapDeg(absolute - (Number(listener.heading) || 0)) * Math.PI / 180), -1, 1);
 }
 
 async function loadMediumEngine(audio) {
@@ -169,7 +158,7 @@ function updateMediumEngines(audio, world, playerIndex) {
 
     engine.source.playbackRate.setTargetAtTime(0.84 + speedRatio * 0.23 + throttle * 0.08, now, 0.1);
     engine.filter.frequency.setTargetAtTime(4300 + speedRatio * 2600 + throttle * 700, now, 0.12);
-    engine.panner.pan.setTargetAtTime(localAboard ? 0 : relativePan(listener, boat), now, 0.08);
+    engine.panner.pan.setTargetAtTime(localAboard ? 0 : relativeVesselPan(listener, boat), now, 0.08);
     const remoteGain = proximity * proximity * (0.035 + throttle * 0.16 + speedRatio * 0.045);
     const targetGain = audible ? (localAboard ? 0.25 + throttle * 0.09 : remoteGain) : 0;
     engine.gain.gain.setTargetAtTime(targetGain, now, 0.11);
@@ -192,9 +181,8 @@ function maskMediumProfiles(world) {
   for (const boat of world?.boats || []) {
     if (!isMediumBoat(boat)) continue;
     masked.push([boat, boat.audioProfile]);
-    // The shared free-roam audio graph already treats the armored profile as a
-    // custom-engine gate. Mask only while it updates so the legacy light-boat
-    // motor cannot play under the medium vessel's own source.
+    // Compatibility for older cached common-audio clients. New common audio
+    // recognizes the custom profile directly and owns legacy suppression.
     boat.audioProfile = "dual-turret";
   }
   return () => {
@@ -226,8 +214,8 @@ function handleMediumShot(audio, event, playerIndex) {
 }
 
 const prototype = FreeRoamAudio?.prototype;
-if (prototype && !prototype.__mediumCrewVesselPatchedV3) {
-  prototype.__mediumCrewVesselPatchedV3 = true;
+if (prototype && !prototype.__mediumCrewVesselPatchedV4) {
+  prototype.__mediumCrewVesselPatchedV4 = true;
   const inheritedPreload = prototype.preload;
   const inheritedUpdateWorld = prototype.updateWorld;
   const inheritedHandleEvent = prototype.handleFreeEvent;

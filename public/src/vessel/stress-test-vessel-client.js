@@ -8,27 +8,16 @@ import {
   STRESS_TEST_MAX_SPEED,
   STRESS_TEST_VESSEL_TYPE,
 } from "./stress-test-vessel-config.js?v=2";
+import {relativeVesselPan} from "./vessel-audio-policy.js?v=1";
 
 const ENGINE_BUFFER = "stress50EngineV2";
 const MAX_AUDIBLE_DISTANCE = 320;
 
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, Number(value) || 0));
 const distance = (a, b) => Math.hypot((Number(a?.x) || 0) - (Number(b?.x) || 0), (Number(a?.y) || 0) - (Number(b?.y) || 0));
-const wrapDeg = value => ((Number(value) + 180) % 360 + 360) % 360 - 180;
 
 function isStressBoat(boat) {
   return Boolean(boat && (boat.boatType === STRESS_TEST_VESSEL_TYPE || boat.vesselType === STRESS_TEST_VESSEL_TYPE));
-}
-
-function relativePan(listener, source) {
-  if (!listener || !source) return 0;
-  const dx = (Number(source.x) || 0) - (Number(listener.x) || 0);
-  const dy = (Number(source.y) || 0) - (Number(listener.y) || 0);
-  const metres = Math.hypot(dx, dy);
-  if (metres < 0.001) return 0;
-  if (["foot", "swim"].includes(listener.mode)) return clamp(dx / Math.max(metres, 8), -1, 1);
-  const absolute = Math.atan2(dx, -dy) * 180 / Math.PI;
-  return clamp(Math.sin(wrapDeg(absolute - (Number(listener.heading) || 0)) * Math.PI / 180), -1, 1);
 }
 
 async function preloadStressEngine(audio) {
@@ -104,7 +93,7 @@ function updateStressEngines(audio, world, playerIndex) {
     const now = audio.ctx.currentTime;
     engine.source.playbackRate.setTargetAtTime(0.68 + speed * 0.62 + throttle * 0.12, now, 0.1);
     engine.filter.frequency.setTargetAtTime(1200 + speed * 7600 + throttle * 900, now, 0.12);
-    engine.panner.pan.setTargetAtTime(localAboard ? 0 : relativePan(listener, boat), now, 0.08);
+    engine.panner.pan.setTargetAtTime(localAboard ? 0 : relativeVesselPan(listener, boat), now, 0.08);
     const remoteGain = proximity * proximity * (0.025 + throttle * 0.15 + speed * 0.05);
     engine.gain.gain.setTargetAtTime(audible ? (localAboard ? 0.22 + throttle * 0.045 : remoteGain) : 0, now, 0.1);
   }
@@ -125,9 +114,9 @@ function maskStressProfiles(world) {
   for (const boat of world?.boats || []) {
     if (!isStressBoat(boat)) continue;
     masked.push([boat, boat.audioProfile]);
-    // The existing common engine layer already knows how to suppress its
-    // ordinary loop for the armored custom-engine profile. Reuse that gate
-    // during the inherited update so the stress boat never plays two engines.
+    // Compatibility for older cached common-audio clients. New common audio
+    // also recognizes the custom vessel profile directly and suppresses its
+    // ordinary motor without relying on this temporary mask.
     boat.audioProfile = "dual-turret";
   }
   return () => {
@@ -178,8 +167,8 @@ function handleStressShot(audio, event, playerIndex) {
 }
 
 const prototype = FreeRoamAudio?.prototype;
-if (prototype && !prototype.__stress50VesselPatchedV3) {
-  prototype.__stress50VesselPatchedV3 = true;
+if (prototype && !prototype.__stress50VesselPatchedV4) {
+  prototype.__stress50VesselPatchedV4 = true;
   const inheritedPreload = prototype.preload;
   const inheritedUpdateWorld = prototype.updateWorld;
   const inheritedHandleEvent = prototype.handleFreeEvent;

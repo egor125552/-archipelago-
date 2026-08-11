@@ -1,8 +1,22 @@
 "use strict";
 
-import {stationOwnsInput} from "../vessel-authority.js?v=1";
+import {claimedVesselStation, stationOwnsInput} from "../vessel-authority.js?v=1";
 
-const pendingByWorld = new WeakMap();
+// IMPORTANT: this module is imported with cache-busting ?v= revisions from
+// several vessel systems. In native ESM every distinct query string is a
+// distinct module instance, so a module-local WeakMap would split the raw
+// button state between e.g. bridge ?v=5, repair ?v=3 and water ?v=2.
+// Store the WeakMap behind Symbol.for on globalThis so all revisions in the
+// same game/Worker realm share exactly one input authority state.
+const SHARED_INPUT_STATE_KEY = Symbol.for("archipelago.vesselDeckSharedInput.pending.v1");
+const existingSharedInputState = globalThis[SHARED_INPUT_STATE_KEY];
+const pendingByWorld = existingSharedInputState instanceof WeakMap
+  ? existingSharedInputState
+  : new WeakMap();
+if (!(existingSharedInputState instanceof WeakMap)) {
+  globalThis[SHARED_INPUT_STATE_KEY] = pendingByWorld;
+}
+
 const CARGO_ACTION_RANGE = 12;
 const SHARED_FIELDS = Object.freeze(["attack", "pump", "repair", "guide"]);
 const distance = (a, b) => Math.hypot((Number(a?.x) || 0) - (Number(b?.x) || 0), (Number(a?.y) || 0) - (Number(b?.y) || 0));
@@ -39,13 +53,23 @@ function captureDeckSharedInput({world, nativeVessels, playerIndex, input} = {})
     state.delete(playerIndex);
     return;
   }
+
+  const cargoAction = Boolean(input.action && cargoActionAvailable(world, playerIndex));
+  const occupiedStation = claimedVesselStation(entry, playerIndex);
   state.set(playerIndex, {
     attack: Boolean(input.attack),
     pump: Boolean(input.pump),
     repair: Boolean(input.repair),
     guide: Boolean(input.guide),
-    cargoAction: Boolean(input.action && cargoActionAvailable(world, playerIndex)),
+    cargoAction,
   });
+
+  // One physical button press must have one owner. While a player occupies any
+  // vessel station, a valid nearby cargo action belongs to the shared cargo
+  // system and must not simultaneously reach the deck interaction runtime as
+  // "leave station". The same button still leaves the station normally when
+  // there is no cargo operation available.
+  if (cargoAction && occupiedStation) input.action = false;
 }
 
 export function capturedVesselSharedInput(world, playerIndex) {
@@ -86,6 +110,6 @@ function restoreDeckSharedInput({world, nativeVessels, playerIndex} = {}) {
 }
 
 export const VESSEL_DECK_INPUT_BRIDGE_SYSTEMS = Object.freeze([
-  Object.freeze({id: "vessel-deck-input-bridge-before-input-v3", phase: "before-input", order: 4, run: captureDeckSharedInput}),
-  Object.freeze({id: "vessel-deck-input-bridge-after-input-v3", phase: "after-input", order: 4, run: restoreDeckSharedInput}),
+  Object.freeze({id: "vessel-deck-input-bridge-before-input-v5", phase: "before-input", order: 4, run: captureDeckSharedInput}),
+  Object.freeze({id: "vessel-deck-input-bridge-after-input-v5", phase: "after-input", order: 4, run: restoreDeckSharedInput}),
 ]);

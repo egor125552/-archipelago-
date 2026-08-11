@@ -1,11 +1,11 @@
 "use strict";
 
-import {FreeRoamAudio as BaseFreeRoamAudio, relativeMovementPan} from "./free-roam-audio-v3.js?v=38";
+import {FreeRoamAudio as BaseFreeRoamAudio, relativeMovementPan} from "./free-roam-audio-v3.js?v=39";
+import {vesselUsesCustomEngineAudio} from "./vessel/vessel-audio-policy.js?v=1";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));
 const aboardBoat = player => Boolean(player && ["boat", "roof"].includes(player.mode) && Number.isInteger(player.activeBoat));
-const customVesselEngine = boat => String(boat?.audioProfile || "").startsWith("dual-turret");
 
 export function spatialGainForDistance(metres, maximum = 120) {
   const proximity = clamp(1 - (Number(metres) || 0) / maximum, 0, 1);
@@ -57,7 +57,7 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
     const speed = Math.abs(Number(otherBoat?.speed) || 0);
     const throttle = Math.abs(Number(otherBoat?.throttle) || 0);
     const lowpass = 900 + shaped * 5200 + clamp(speed / 18, 0, 1) * 900;
-    const customEngine = customVesselEngine(otherBoat);
+    const customEngine = vesselUsesCustomEngineAudio(otherBoat);
     const engineGain = customEngine || otherBoat?.engineStalled
       ? 0
       : shaped * (0.025 + throttle * 0.15);
