@@ -1,7 +1,16 @@
 import persistentWorker, {Lobby as PersistentLobby} from "./worker-persistent.js";
 import {FREE_STATE_ACK_TIMEOUT_MS} from "./worker-resilient-config.js";
+import {freePlayerIndex} from "./free-roam-server.js";
+import {diffReplicatedWorld} from "../public/src/free-roam-replication.js";
+import {
+  browserCacheControl,
+  freeRoamDocument,
+  resetStreamWindowAfterAck,
+  streamWindowCanSend,
+  streamWindowCount,
+} from "./worker-delivery-policy.js";
 
-const ARCHIPELAGO_BUILD_ID = "2026-08-07-local-spatial-armor-targets-7";
+const ARCHIPELAGO_BUILD_ID = "2026-08-12-fast-start-stream-window-1";
 
 const FREE_ROAM_HTML_REPLACEMENTS = Object.freeze([
   ["free-roam-v4.js?v=62", "free-roam-v4.js?v=66"],
@@ -24,8 +33,14 @@ function openSocket(socket) {
   return Boolean(socket && socket.readyState === 1 && typeof socket.send === "function");
 }
 
-function freeRoamDocument(pathname) {
-  return pathname === "/free-roam" || pathname === "/free-roam/" || pathname === "/free-roam.html";
+function sendSocketJson(socket, payload) {
+  if (!openSocket(socket)) return false;
+  try {
+    socket.send(JSON.stringify(payload));
+    return true;
+  } catch (_) {
+    return false;
+  }
 }
 
 function injectFreeRoamBuild(html) {
@@ -59,14 +74,6 @@ function injectFreeRoamBuild(html) {
   return result;
 }
 
-function noStoreAsset(pathname) {
-  return freeRoamDocument(pathname)
-    || pathname === "/"
-    || pathname === "/index.html"
-    || pathname.startsWith("/src/")
-    || pathname.endsWith(".css");
-}
-
 async function fetchWithBuild(request, env, ctx) {
   const url = new URL(request.url);
   if (url.pathname === "/api/build") {
@@ -80,13 +87,21 @@ async function fetchWithBuild(request, env, ctx) {
   }
 
   const response = await persistentWorker.fetch(request, env, ctx);
-  if (url.pathname.startsWith("/api/") || !noStoreAsset(url.pathname)) return response;
+  if (url.pathname.startsWith("/api/")) return response;
+
+  const cacheControl = browserCacheControl(url);
+  if (!cacheControl) return response;
 
   const headers = new Headers(response.headers);
-  headers.set("cache-control", "no-store, max-age=0, must-revalidate");
-  headers.set("pragma", "no-cache");
-  headers.set("expires", "0");
+  headers.set("cache-control", cacheControl);
   headers.set("x-archipelago-build", ARCHIPELAGO_BUILD_ID);
+  if (cacheControl.startsWith("public")) {
+    headers.delete("pragma");
+    headers.delete("expires");
+  } else {
+    headers.set("pragma", "no-cache");
+    headers.set("expires", "0");
+  }
 
   if (freeRoamDocument(url.pathname) && response.ok) {
     const html = injectFreeRoamBuild(await response.text());
@@ -120,20 +135,17 @@ export class Lobby extends PersistentLobby {
     }
 
     const roleIndex = client.role === "captain" ? 0 : 1;
-    try {
-      socket.send(JSON.stringify({
-        type: "free-state",
-        sequence: inFlight.sequence,
-        serverAt: now,
-        ackInput: inFlight.ackInput?.[roleIndex] || 0,
-        full: true,
-        world: inFlight.world,
-        delta: null,
-        events: inFlight.events || [],
-      }));
-    } catch (_) {
-      return false;
-    }
+    if (!sendSocketJson(socket, {
+      type: "free-state",
+      sequence: inFlight.sequence,
+      serverAt: now,
+      ackInput: inFlight.ackInput?.[roleIndex] || 0,
+      full: true,
+      world: inFlight.world,
+      delta: null,
+      events: inFlight.events || [],
+    })) return false;
+
     client.freeStateSentAt = now;
     client.freeStateResends = (Number(client.freeStateResends) || 0) + 1;
     return true;
@@ -146,24 +158,46 @@ export class Lobby extends PersistentLobby {
 
   flushFreeState(socket) {
     const client = this.clients.get(socket);
-    const pendingState = client?.freePending
-      ? {
-          ...client.freePending,
-          events: Array.isArray(client.freePending.events)
-            ? [...client.freePending.events]
-            : [],
-        }
-      : null;
-    const sent = super.flushFreeState(socket);
-    const refreshed = this.clients.get(socket);
-    if (sent && refreshed?.freeStateInFlight) {
-      refreshed.freeStateSentAt = Date.now();
-      refreshed.freeInFlightState = pendingState;
-    } else if (refreshed && !refreshed.freeStateInFlight) {
-      refreshed.freeStateSentAt = 0;
-      refreshed.freeInFlightState = null;
-    }
-    return sent;
+    if (!client || client.mode !== "free") return false;
+
+    // worker.js clears freeStateInFlight only when the newest transmitted
+    // sequence is acknowledged. That is the safe point to collapse the whole
+    // ordered WebSocket window into a new delta base.
+    resetStreamWindowAfterAck(client);
+    if (!client.freePending || !streamWindowCanSend(client)) return false;
+
+    const pending = client.freePending;
+    const pendingState = {
+      ...pending,
+      events: Array.isArray(pending.events) ? [...pending.events] : [],
+    };
+    const playerIndex = freePlayerIndex(client.role);
+    const baseWorld = client.freeStreamBaseWorld || client.freeAckedWorld || null;
+    const full = !baseWorld;
+    const payload = {
+      type: "free-state",
+      sequence: pending.sequence,
+      serverAt: pending.serverAt,
+      ackInput: pending.ackInput?.[playerIndex] || 0,
+      full,
+      events: pending.events || [],
+    };
+    if (full) payload.world = pending.world;
+    else payload.delta = diffReplicatedWorld(baseWorld, pending.world);
+    if (!sendSocketJson(socket, payload)) return false;
+
+    client.freePending = null;
+    client.freeUnackedStreamStates = streamWindowCount(client) + 1;
+    client.freeStreamBaseWorld = pending.world;
+
+    // Keep the legacy aliases pointing at the newest state in the ordered
+    // stream. Existing ACK and stalled-resend code can therefore remain simple:
+    // an ACK for the newest sequence acknowledges everything before it too.
+    client.freeStateInFlight = pending.sequence;
+    client.freeInFlightWorld = pending.world;
+    client.freeStateSentAt = Date.now();
+    client.freeInFlightState = pendingState;
+    return true;
   }
 }
 
