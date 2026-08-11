@@ -57,6 +57,13 @@ const pumpRateText = value => {
   return `${formatted} ${Number.isInteger(rate) ? "процентов" : "процента"}`;
 };
 
+function normalizeNavigationTargetId(value) {
+  const targetId = typeof value === "string" ? value.slice(0, 160) : "objective";
+  if (["objective", "merchant", "board"].includes(targetId)) return targetId;
+  if (targetId.startsWith("vessel:") || targetId.startsWith("vessel-id:")) return targetId;
+  return "objective";
+}
+
 function copyCrate(crate) {
   return {
     ...crate,
@@ -154,7 +161,7 @@ export function storeActivityInput(world, playerIndex, input) {
     sonar: Boolean(input?.sonar),
     guide: Boolean(input?.guide),
     targetId: typeof input?.targetId === "string" ? input.targetId.slice(0, 80) : null,
-    navigationTargetId: ["objective", "merchant"].includes(input?.navigationTargetId) ? input.navigationTargetId : "objective",
+    navigationTargetId: normalizeNavigationTargetId(input?.navigationTargetId),
     shopPrevious: Boolean(input?.shopPrevious),
     shopNext: Boolean(input?.shopNext),
     shopBuy: Boolean(input?.shopBuy),
