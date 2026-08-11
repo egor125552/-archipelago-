@@ -40,13 +40,18 @@ export function freePlayerIndex(role) {
   return role === "captain" ? 0 : role === "crew" ? 1 : -1;
 }
 
+function normalizeNavigationTargetId(value) {
+  const targetId = typeof value === "string" ? value.slice(0, 160) : "objective";
+  if (["objective", "merchant", "board"].includes(targetId)) return targetId;
+  if (targetId.startsWith("vessel:") || targetId.startsWith("vessel-id:")) return targetId;
+  return "objective";
+}
+
 function normalizeInput(input) {
   const result = {};
   for (const key of INPUT_KEYS) result[key] = Boolean(input?.[key]);
   result.targetId = typeof input?.targetId === "string" ? input.targetId.slice(0, 80) : null;
-  result.navigationTargetId = ["objective", "merchant", "board"].includes(input?.navigationTargetId)
-    ? input.navigationTargetId
-    : "objective";
+  result.navigationTargetId = normalizeNavigationTargetId(input?.navigationTargetId);
   return result;
 }
 
@@ -105,9 +110,6 @@ function applyAuthoritativeCombatHotfix(world, dt) {
 
 export function createServerFreeRoom(now = Date.now()) {
   const world = createFreeWorld();
-  // Run the normal authoritative vessel lifecycle once at dt=0 so native
-  // auto-spawn systems exist in the very first replicated state. This avoids
-  // turning a newly created vessel into a multi-kilobyte first-tick delta.
   stepFreeWorld(world, 0);
   ensureMegaBombState(world);
   setPlayerPresence(world, 0, false);
