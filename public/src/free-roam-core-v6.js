@@ -355,6 +355,43 @@ function discardBlockedFootsteps(world, eventStart, physicalState) {
   }
 }
 
+function runLegacyThreatWithExtendedHullProtection(world, runThreat) {
+  const eventStart = world?.events?.length || 0;
+  const records = [];
+  for (const boat of world?.boats || []) {
+    if (!boat) continue;
+    const hullMax = Math.max(1, Number(boat.hullMax) || 100);
+    const hull = Math.max(0, Number(boat.hull) || 0);
+    if (hullMax <= 100 || hull <= 100) continue;
+    records.push({boat, hull, hullMax, maskedHull: 100});
+    boat.hull = 100;
+  }
+
+  try {
+    return runThreat();
+  } finally {
+    for (const record of records) {
+      const maskedAfter = clamp(Number(record.boat.hull) || 0, 0, record.maskedHull);
+      const damage = Math.max(0, record.maskedHull - maskedAfter);
+      record.boat.hull = clamp(record.hull - damage, 0, record.hullMax);
+
+      for (const event of (world?.events || []).slice(eventStart)) {
+        if (event?.targetBoat !== record.boat.id) continue;
+        if (Object.hasOwn(event, "hull")) {
+          event.hull = record.boat.hull;
+          event.hullMax = record.hullMax;
+        }
+        if (typeof event.text === "string" && /Корпус \d+/.test(event.text)) {
+          event.text = event.text.replace(
+            /Корпус \d+(?: из \d+)?/,
+            `Корпус ${Math.round(record.boat.hull)} из ${Math.round(record.hullMax)}`,
+          );
+        }
+      }
+    }
+  }
+}
+
 export function stepFreeWorld(world, dt) {
   ensureState(world);
   const safeDt = clamp(Number(dt) || 0, 0, 0.1);
@@ -382,13 +419,17 @@ export function stepFreeWorld(world, dt) {
   };
   updateCombat(world, safeDt, combatHelpers);
   const threatIntelligence = prepareThreatIntelligence(world);
-  updateMarauder(world, safeDt, {spawnRareCrate, onEnemyBoatDestroyed: combatHelpers.onEnemyBoatDestroyed});
-  if (threatIntelligence.hasLivingTargets) updatePursuerSquad(world, safeDt, {
-    spawnRareCrate,
-    onEnemyBoatDestroyed: combatHelpers.onEnemyBoatDestroyed,
-    damagePlayer(targetWorld, targetIndex, amount, details) {
-      return applyCombatDamage(targetWorld, targetIndex, amount, -1, details, combatHelpers);
-    },
+  runLegacyThreatWithExtendedHullProtection(world, () => {
+    updateMarauder(world, safeDt, {spawnRareCrate, onEnemyBoatDestroyed: combatHelpers.onEnemyBoatDestroyed});
+  });
+  if (threatIntelligence.hasLivingTargets) runLegacyThreatWithExtendedHullProtection(world, () => {
+    updatePursuerSquad(world, safeDt, {
+      spawnRareCrate,
+      onEnemyBoatDestroyed: combatHelpers.onEnemyBoatDestroyed,
+      damagePlayer(targetWorld, targetIndex, amount, details) {
+        return applyCombatDamage(targetWorld, targetIndex, amount, -1, details, combatHelpers);
+      },
+    });
   });
   const enemyDamageHelpers = {
     damagePlayer(targetWorld, targetIndex, amount, details) {
@@ -398,8 +439,12 @@ export function stepFreeWorld(world, dt) {
   };
   if (threatIntelligence.hasLivingTargets) {
     if (threatLevel(world) < 3) updateHostileGunners(world, safeDt, enemyDamageHelpers);
-    updateEnemyBoats(world, safeDt, enemyDamageHelpers);
-    updateHeavyPursuer(world, safeDt, enemyDamageHelpers);
+    runLegacyThreatWithExtendedHullProtection(world, () => {
+      updateEnemyBoats(world, safeDt, enemyDamageHelpers);
+    });
+    runLegacyThreatWithExtendedHullProtection(world, () => {
+      updateHeavyPursuer(world, safeDt, enemyDamageHelpers);
+    });
     updateHostileActors(world, safeDt, enemyDamageHelpers);
   } else if (activeEliteBoatBoss(world)?.phase === "commander-combat") {
     updateHostileActors(world, safeDt, enemyDamageHelpers);
