@@ -32,10 +32,27 @@ function withLegacyNullBoatSlots(world, action) {
   }
 }
 
+function keepBoatChooserFocused(world, startIndex) {
+  const fresh = (world?.events || []).slice(startIndex);
+  const chooserPlayers = new Set(
+    fresh
+      .filter(event => event?.type === "shop-boat-selection-open" && Number.isInteger(event.sourcePlayer))
+      .map(event => event.sourcePlayer),
+  );
+  if (!chooserPlayers.size) return;
+  const kept = fresh.filter(event => !(event?.type === "merchant-ready" && chooserPlayers.has(event.sourcePlayer)));
+  world.events.splice(startIndex, fresh.length, ...kept);
+}
+
 export function handleMerchantAction(world, playerIndex) {
   return withLegacyNullBoatSlots(world, () => base.handleMerchantAction(world, playerIndex));
 }
 
 export function updateMerchantShop(world) {
-  return withLegacyNullBoatSlots(world, () => base.updateMerchantShop(world));
+  return withLegacyNullBoatSlots(world, () => {
+    const startIndex = world?.events?.length || 0;
+    const result = base.updateMerchantShop(world);
+    keepBoatChooserFocused(world, startIndex);
+    return result;
+  });
 }
