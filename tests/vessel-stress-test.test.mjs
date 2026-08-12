@@ -11,7 +11,9 @@ import {
 } from "../public/src/free-roam-core-v8.js";
 import {CURRENT_VESSEL_TYPES} from "../public/src/vessel/definitions/current-vessels.js";
 import {setVesselOccupantPosition} from "../public/src/vessel/vessel-interior.js";
-import {nativeVesselForBoat} from "../public/src/vessel/vessel-runtime.js";
+// Match the exact runtime identity used by free-roam-core-v8.js. Query-string
+// variants are distinct ESM modules and must not own separate vessel WeakMaps.
+import {nativeVesselForBoat} from "../public/src/vessel/vessel-runtime.js?v=2";
 import {STRESS_TEST_PHYSICS_ID, STRESS_TEST_PHYSICS_MODULE} from "../public/src/vessel/physics/stress-test-physics.js";
 import {
   STRESS_TEST_AUDIO_PROFILE,

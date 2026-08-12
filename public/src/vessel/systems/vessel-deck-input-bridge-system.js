@@ -2,7 +2,10 @@
 
 import {stationOwnsInput} from "../vessel-authority.js?v=1";
 
-const pendingByWorld = new WeakMap();
+const PENDING_STORE = Symbol.for("archipelago.vessel-deck-input-bridge.pending-v3");
+const pendingByWorld = globalThis[PENDING_STORE] instanceof WeakMap
+  ? globalThis[PENDING_STORE]
+  : (globalThis[PENDING_STORE] = new WeakMap());
 const CARGO_ACTION_RANGE = 12;
 const SHARED_FIELDS = Object.freeze(["attack", "pump", "repair", "guide"]);
 const distance = (a, b) => Math.hypot((Number(a?.x) || 0) - (Number(b?.x) || 0), (Number(a?.y) || 0) - (Number(b?.y) || 0));
@@ -71,10 +74,6 @@ function restoreDeckSharedInput({world, nativeVessels, playerIndex} = {}) {
   const entry = liveDeckEntry(world, nativeVessels, playerIndex);
   if (!state || !entry) return;
 
-  // A shared control is restored to legacy gameplay only when no occupied
-  // vessel station owns that action. Ownership includes previous input state:
-  // a trigger that changes hands must not look like a personal-weapon release
-  // on the same frame (which could otherwise create a stray melee attack).
   for (const field of SHARED_FIELDS) {
     if (stationOwnsInput(entry, playerIndex, field)) {
       suppressLegacyPreviousField(world, playerIndex, field);

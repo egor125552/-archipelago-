@@ -10,14 +10,19 @@ import {
   streamWindowCount,
 } from "./worker-delivery-policy.js";
 
-const ARCHIPELAGO_BUILD_ID = "2026-08-12-v1.7.2-medium-engine-cache-fix";
+const ARCHIPELAGO_BUILD_ID = "2026-08-12-v1.7.3-vessel-regressions";
 
 const FREE_ROAM_HTML_REPLACEMENTS = Object.freeze([
   ["free-roam-v4.js?v=62", "free-roam-v4.js?v=66"],
-  ["free-roam-dual-turret-client.js?v=9", "free-roam-dual-turret-client.js?v=10"],
+  ["free-roam-dual-turret-client.js?v=7", "free-roam-dual-turret-client.js?v=11"],
+  ["free-roam-dual-turret-client.js?v=9", "free-roam-dual-turret-client.js?v=11"],
+  ["free-roam-dual-turret-client.js?v=10", "free-roam-dual-turret-client.js?v=11"],
   ["/src/free-roam-core-v8.js?v=4", "/src/free-roam-core-v8.js?v=5"],
   ["/src/free-roam-client-prediction.js?v=43", "/src/free-roam-client-prediction.js?v=44"],
-  ["/src/vessel/vessel-plugin-manifest.js?v=7", "/src/vessel/vessel-plugin-manifest.js?v=8"],
+  ["/src/vessel/vessel-plugin-manifest.js?v=7", "/src/vessel/vessel-plugin-manifest.js?v=9"],
+  ["/src/vessel/vessel-plugin-manifest.js?v=8", "/src/vessel/vessel-plugin-manifest.js?v=9"],
+  ["/src/vessel/systems/vessel-deck-input-bridge-system.js?v=3", "/src/vessel/systems/vessel-deck-input-bridge-system.js?v=4"],
+  ["/src/free-roam-shop.js?v=5", "/src/free-roam-shop.js?v=6"],
   ["/src/free-roam-dual-turret-projectiles.js?v=4", "/src/free-roam-dual-turret-projectiles.js?v=5"],
   ["/src/free-roam-dual-turret-audio.js?v=4", "/src/free-roam-dual-turret-audio.js?v=7"],
 ]);
@@ -63,8 +68,11 @@ function injectFreeRoamBuild(html) {
     '        "/src/free-roam-targeting.js?v=39": "/src/free-roam-targeting.js?v=40",',
     '        "/src/free-roam-dual-turret-weapons.js?v=4": "/src/free-roam-dual-turret-weapons.js?v=6",',
     '        "/src/free-roam-dual-turret-weapons.js?v=5": "/src/free-roam-dual-turret-weapons.js?v=6",',
-    '        "/src/free-roam-shop.js?v=4": "/src/free-roam-shop.js?v=5",',
-    '        "/src/free-roam-shop.js?v=3": "/src/free-roam-shop.js?v=5",',
+    '        "/src/free-roam-shop.js?v=3": "/src/free-roam-shop.js?v=6",',
+    '        "/src/free-roam-shop.js?v=4": "/src/free-roam-shop.js?v=6",',
+    '        "/src/free-roam-shop.js?v=5": "/src/free-roam-shop.js?v=6",',
+    '        "/src/vessel/systems/vessel-deck-input-bridge-system.js?v=2": "/src/vessel/systems/vessel-deck-input-bridge-system.js?v=4",',
+    '        "/src/vessel/systems/vessel-deck-input-bridge-system.js?v=3": "/src/vessel/systems/vessel-deck-input-bridge-system.js?v=4",',
   ].join("\n");
   if (!result.includes("free-roam-audio-v4.js?v=42")) {
     result = result.replace(/"imports"\s*:\s*\{/, match => `${match}\n${extraMappings}`);
@@ -164,9 +172,6 @@ export class Lobby extends PersistentLobby {
     const client = this.clients.get(socket);
     if (!client || client.mode !== "free") return false;
 
-    // worker.js clears freeStateInFlight only when the newest transmitted
-    // sequence is acknowledged. That is the safe point to collapse the whole
-    // ordered WebSocket window into a new delta base.
     resetStreamWindowAfterAck(client);
     if (!client.freePending || !streamWindowCanSend(client)) return false;
 
@@ -193,10 +198,6 @@ export class Lobby extends PersistentLobby {
     client.freePending = null;
     client.freeUnackedStreamStates = streamWindowCount(client) + 1;
     client.freeStreamBaseWorld = pending.world;
-
-    // Keep the legacy aliases pointing at the newest state in the ordered
-    // stream. Existing ACK and stalled-resend code can therefore remain simple:
-    // an ACK for the newest sequence acknowledges everything before it too.
     client.freeStateInFlight = pending.sequence;
     client.freeInFlightWorld = pending.world;
     client.freeStateSentAt = Date.now();

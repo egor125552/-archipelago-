@@ -11,8 +11,8 @@ import {
 } from "../public/src/vessel/vessel-deck-runtime.js";
 import {VESSEL_MOUNTED_WEAPON_SYSTEMS} from "../public/src/vessel/systems/vessel-mounted-weapon-system.js?v=2";
 import {VESSEL_ZONE_WATER_SYSTEMS} from "../public/src/vessel/systems/vessel-zone-water-system.js?v=2";
-import {VESSEL_MERCHANT_RECOVERY_SYSTEMS} from "../public/src/vessel/systems/vessel-merchant-recovery-system.js?v=1";
-import * as shop from "../public/src/free-roam-shop-v11.js?v=1";
+import {VESSEL_MERCHANT_RECOVERY_SYSTEMS} from "../public/src/vessel/systems/vessel-merchant-recovery-system.js?v=2";
+import * as shop from "../public/src/free-roam-shop-v13.js?v=1";
 
 function fixture() {
   const registry = createVesselRegistry();
@@ -151,6 +151,7 @@ test("merchant wreck recovery opens a boat chooser when multiple fleet vessels a
   assert.match(world.events.at(-1)?.text || "", /Выберите лодку/);
   assert.equal(light.sunk, true);
   assert.equal(armored.sunk, true);
+  assert.equal(world.boats[1], null, "пустой слот флота должен остаться пустым после магазина");
 });
 
 test("armored patrol automatic respawn is locked behind merchant recovery", () => {

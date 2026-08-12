@@ -10,15 +10,13 @@ import {VESSEL_MODULE_REPAIR_SYSTEMS} from "./systems/vessel-module-repair-syste
 import {VESSEL_MERCHANT_RECOVERY_SYSTEMS} from "./systems/vessel-merchant-recovery-system.js?v=2";
 import {VESSEL_OWNERSHIP_SYSTEMS} from "./systems/vessel-ownership-system.js?v=1";
 import {VESSEL_DECK_BOARDING_SYSTEMS} from "./systems/vessel-deck-boarding-system.js?v=1";
-import {VESSEL_DECK_INPUT_BRIDGE_SYSTEMS} from "./systems/vessel-deck-input-bridge-system.js?v=3";
+import {VESSEL_DECK_INPUT_BRIDGE_SYSTEMS} from "./systems/vessel-deck-input-bridge-system.js?v=4";
 import {VESSEL_DECK_LIFECYCLE_SYSTEMS} from "./systems/vessel-deck-lifecycle-system.js?v=1";
 import {VESSEL_STATION_INPUT_SYSTEMS} from "./systems/vessel-station-input-system.js?v=1";
 import {WALKABLE_VESSEL_SYSTEMS} from "./systems/walkable-vessel-system.js?v=1";
 import {VESSEL_DECK_ACCESSIBILITY_SYSTEMS} from "./systems/vessel-deck-accessibility-system.js?v=1";
 import {VESSEL_RESPAWN_SYSTEMS} from "./systems/vessel-respawn-system.js?v=1";
 
-// Single explicit extension point for vessel-wide systems. New mechanics are
-// registered here instead of adding concrete branches to the free-roam loop.
 export function installVesselPlugins(registry) {
   for (const system of VESSEL_DECK_BOARDING_SYSTEMS) registry.registerSystem(system);
   for (const system of VESSEL_DECK_INPUT_BRIDGE_SYSTEMS) registry.registerSystem(system);
