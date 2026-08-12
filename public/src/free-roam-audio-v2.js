@@ -14,6 +14,11 @@ function isOrdinaryLocalEngine(name) {
   return ORDINARY_LOCAL_ENGINE_LOOPS.includes(name);
 }
 
+function hasDedicatedVesselEngine(boat) {
+  const profile = String(boat?.audioProfile || "");
+  return profile.startsWith("dual-turret") || profile.startsWith("medium-crew");
+}
+
 export class FreeRoamAudio extends BaseFreeRoamAudio {
   constructor() {
     super();
@@ -40,7 +45,7 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
     this.ordinaryLocalEngineAllowed = Boolean(
       localBoat
       && !localBoat.sunk
-      && localBoat.audioProfile !== "dual-turret",
+      && !hasDedicatedVesselEngine(localBoat),
     );
 
     if (!this.ordinaryLocalEngineAllowed) this.stopOrdinaryLocalEngine();

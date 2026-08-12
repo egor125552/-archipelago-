@@ -1,7 +1,7 @@
 "use strict";
 
 import "./vessel/stress-test-vessel-client.js?v=3";
-import "./vessel/medium-crew-vessel-client.js?v=3";
+import "./vessel/medium-crew-vessel-client.js?v=4";
 import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=45";
 import {updateDualTurretUi} from "./free-roam-dual-turret-ui.js?v=2";
 

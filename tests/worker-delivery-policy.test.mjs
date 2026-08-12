@@ -50,11 +50,12 @@ function offer(client, sequence) {
   };
 }
 
-test("versioned production modules are browser-cacheable while live HTML stays fresh", () => {
+test("game documents and versioned JS/CSS stay revalidatable during stabilization", () => {
+  assert.equal(VERSIONED_ASSET_CACHE_CONTROL, LIVE_DOCUMENT_CACHE_CONTROL);
   assert.equal(browserCacheControl("https://game.test/free-roam"), LIVE_DOCUMENT_CACHE_CONTROL);
   assert.equal(browserCacheControl("https://game.test/free-roam.html?v=9"), LIVE_DOCUMENT_CACHE_CONTROL);
-  assert.equal(browserCacheControl("https://game.test/src/free-roam-v4.js?v=66"), VERSIONED_ASSET_CACHE_CONTROL);
-  assert.equal(browserCacheControl("https://game.test/free-roam.css?v=7"), VERSIONED_ASSET_CACHE_CONTROL);
+  assert.equal(browserCacheControl("https://game.test/src/free-roam-v4.js?v=66"), LIVE_DOCUMENT_CACHE_CONTROL);
+  assert.equal(browserCacheControl("https://game.test/free-roam.css?v=7"), LIVE_DOCUMENT_CACHE_CONTROL);
   assert.equal(browserCacheControl("https://game.test/src/free-roam-v4.js"), LIVE_DOCUMENT_CACHE_CONTROL);
 });
 

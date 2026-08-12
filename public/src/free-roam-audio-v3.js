@@ -1,6 +1,6 @@
 "use strict";
 
-import {FreeRoamAudio as BaseFreeRoamAudio} from "./free-roam-audio-v2.js?v=39";
+import {FreeRoamAudio as BaseFreeRoamAudio} from "./free-roam-audio-v2.js?v=41";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));

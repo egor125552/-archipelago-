@@ -10,12 +10,14 @@ import {
   streamWindowCount,
 } from "./worker-delivery-policy.js";
 
-const ARCHIPELAGO_BUILD_ID = "2026-08-12-fast-start-stream-window-1";
+const ARCHIPELAGO_BUILD_ID = "2026-08-12-v1.7.2-medium-engine-cache-fix";
 
 const FREE_ROAM_HTML_REPLACEMENTS = Object.freeze([
   ["free-roam-v4.js?v=62", "free-roam-v4.js?v=66"],
+  ["free-roam-dual-turret-client.js?v=9", "free-roam-dual-turret-client.js?v=10"],
   ["/src/free-roam-core-v8.js?v=4", "/src/free-roam-core-v8.js?v=5"],
   ["/src/free-roam-client-prediction.js?v=43", "/src/free-roam-client-prediction.js?v=44"],
+  ["/src/vessel/vessel-plugin-manifest.js?v=7", "/src/vessel/vessel-plugin-manifest.js?v=8"],
   ["/src/free-roam-dual-turret-projectiles.js?v=4", "/src/free-roam-dual-turret-projectiles.js?v=5"],
   ["/src/free-roam-dual-turret-audio.js?v=4", "/src/free-roam-dual-turret-audio.js?v=7"],
 ]);
@@ -51,9 +53,11 @@ function injectFreeRoamBuild(html) {
     '        "/src/free-roam-audio-v4.js?v=38": "/src/free-roam-audio-v4.js?v=42",',
     '        "/src/free-roam-audio-v4.js?v=39": "/src/free-roam-audio-v4.js?v=42",',
     '        "/src/free-roam-audio-v4.js?v=41": "/src/free-roam-audio-v4.js?v=42",',
-    '        "/src/free-roam-audio-v3.js?v=38": "/src/free-roam-audio-v3.js?v=39",',
-    '        "/src/free-roam-audio-v2.js?v=38": "/src/free-roam-audio-v2.js?v=40",',
-    '        "/src/free-roam-audio-v2.js?v=39": "/src/free-roam-audio-v2.js?v=40",',
+    '        "/src/free-roam-audio-v3.js?v=38": "/src/free-roam-audio-v3.js?v=40",',
+    '        "/src/free-roam-audio-v3.js?v=39": "/src/free-roam-audio-v3.js?v=40",',
+    '        "/src/free-roam-audio-v2.js?v=38": "/src/free-roam-audio-v2.js?v=41",',
+    '        "/src/free-roam-audio-v2.js?v=39": "/src/free-roam-audio-v2.js?v=41",',
+    '        "/src/free-roam-audio-v2.js?v=40": "/src/free-roam-audio-v2.js?v=41",',
     '        "/src/free-roam-targeting.js?v=35": "/src/free-roam-targeting.js?v=40",',
     '        "/src/free-roam-targeting.js?v=36": "/src/free-roam-targeting.js?v=40",',
     '        "/src/free-roam-targeting.js?v=39": "/src/free-roam-targeting.js?v=40",',
