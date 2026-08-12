@@ -5,7 +5,10 @@ import {FreeRoamAudio as BaseFreeRoamAudio, relativeMovementPan} from "./free-ro
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));
 const aboardBoat = player => Boolean(player && ["boat", "roof"].includes(player.mode) && Number.isInteger(player.activeBoat));
-const customVesselEngine = boat => String(boat?.audioProfile || "").startsWith("dual-turret");
+const customVesselEngine = boat => {
+  const profile = String(boat?.audioProfile || "");
+  return profile.startsWith("dual-turret") || profile.startsWith("medium-crew");
+};
 
 export function spatialGainForDistance(metres, maximum = 120) {
   const proximity = clamp(1 - (Number(metres) || 0) / maximum, 0, 1);

@@ -10,7 +10,7 @@ import {
   streamWindowCount,
 } from "./worker-delivery-policy.js";
 
-const ARCHIPELAGO_BUILD_ID = "2026-08-12-v1.7.3-vessel-regressions";
+const ARCHIPELAGO_BUILD_ID = "2026-08-12-v1.7.5-medium-engine-remote-fix";
 
 const FREE_ROAM_HTML_REPLACEMENTS = Object.freeze([
   ["free-roam-v4.js?v=62", "free-roam-v4.js?v=66"],
@@ -55,9 +55,10 @@ function injectFreeRoamBuild(html) {
   for (const [from, to] of FREE_ROAM_HTML_REPLACEMENTS) result = result.replaceAll(from, to);
   const extraMappings = [
     '        "/src/free-roam-audio-v5.js?v=45": "/src/free-roam-audio-v5.js?v=46",',
-    '        "/src/free-roam-audio-v4.js?v=38": "/src/free-roam-audio-v4.js?v=42",',
-    '        "/src/free-roam-audio-v4.js?v=39": "/src/free-roam-audio-v4.js?v=42",',
-    '        "/src/free-roam-audio-v4.js?v=41": "/src/free-roam-audio-v4.js?v=42",',
+    '        "/src/free-roam-audio-v4.js?v=38": "/src/free-roam-audio-v4.js?v=43",',
+    '        "/src/free-roam-audio-v4.js?v=39": "/src/free-roam-audio-v4.js?v=43",',
+    '        "/src/free-roam-audio-v4.js?v=41": "/src/free-roam-audio-v4.js?v=43",',
+    '        "/src/free-roam-audio-v4.js?v=42": "/src/free-roam-audio-v4.js?v=43",',
     '        "/src/free-roam-audio-v3.js?v=38": "/src/free-roam-audio-v3.js?v=40",',
     '        "/src/free-roam-audio-v3.js?v=39": "/src/free-roam-audio-v3.js?v=40",',
     '        "/src/free-roam-audio-v2.js?v=38": "/src/free-roam-audio-v2.js?v=41",',
@@ -74,7 +75,7 @@ function injectFreeRoamBuild(html) {
     '        "/src/vessel/systems/vessel-deck-input-bridge-system.js?v=2": "/src/vessel/systems/vessel-deck-input-bridge-system.js?v=4",',
     '        "/src/vessel/systems/vessel-deck-input-bridge-system.js?v=3": "/src/vessel/systems/vessel-deck-input-bridge-system.js?v=4",',
   ].join("\n");
-  if (!result.includes("free-roam-audio-v4.js?v=42")) {
+  if (!result.includes("free-roam-audio-v4.js?v=43")) {
     result = result.replace(/"imports"\s*:\s*\{/, match => `${match}\n${extraMappings}`);
   }
   if (!result.includes("archipelago-build")) {
