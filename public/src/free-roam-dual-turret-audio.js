@@ -4,7 +4,6 @@ import {
   DUAL_TURRET_AUDIO_ROOT,
   DUAL_TURRET_BOAT_TYPE,
 } from "./free-roam-dual-turret-config.js?v=4";
-import {relativeMovementPan} from "./free-roam-audio-v3.js?v=38";
 
 export const DUAL_TURRET_AUDIO = Object.freeze({
   engine: `${DUAL_TURRET_AUDIO_ROOT}dual-turret-engine-v1.mp3?v=2`,
@@ -14,14 +13,21 @@ export const DUAL_TURRET_AUDIO = Object.freeze({
 
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, Number(value) || 0));
 const distance = (a, b) => Math.hypot((Number(a?.x) || 0) - (Number(b?.x) || 0), (Number(a?.y) || 0) - (Number(b?.y) || 0));
+const wrapDeg = value => ((Number(value || 0) + 180) % 360 + 360) % 360 - 180;
+
+function vesselRelativePan(listener, source) {
+  const dx = (Number(source?.x) || 0) - (Number(listener?.x) || 0);
+  const dy = (Number(source?.y) || 0) - (Number(listener?.y) || 0);
+  const metres = Math.hypot(dx, dy);
+  if (metres < 0.001) return 0;
+  if (["foot", "swim"].includes(listener?.mode)) return clamp(dx / Math.max(metres, 8), -1, 1);
+  const absolute = Math.atan2(dx, -dy) * 180 / Math.PI;
+  const relative = wrapDeg(absolute - (Number(listener?.heading) || 0));
+  return clamp(Math.sin(relative * Math.PI / 180), -1, 1);
+}
 
 function playerAboardBoat(player, boat) {
-  return Boolean(
-    player
-    && boat
-    && player.activeBoat === boat.id
-    && ["boat", "roof"].includes(player.mode),
-  );
+  return Boolean(player && boat && player.activeBoat === boat.id && ["boat", "roof"].includes(player.mode));
 }
 
 export async function preloadDualTurretAudio(audio) {
@@ -86,12 +92,7 @@ export function updateDualTurretEngine(audio, world, playerIndex) {
   const now = audio.ctx.currentTime;
   engine.source.playbackRate.setTargetAtTime(0.78 + speed * 0.82 + throttle * 0.08, now, 0.11);
   engine.filter.frequency.setTargetAtTime(900 + speed * 4300 + proximity * 700, now, 0.14);
-  // The custom engine is still a normal physical vessel sound source. Reuse
-  // the exact same listener-space transform as ordinary boats so a listener on
-  // foot, in water or aboard another boat hears both vessel classes from the
-  // same world direction. A listener aboard this hull keeps the local engine
-  // centered because source and listener move together with the vessel.
-  engine.panner.pan.setTargetAtTime(localAboard ? 0 : relativeMovementPan(listener, boat), now, localAboard ? 0.18 : 0.12);
+  engine.panner.pan.setTargetAtTime(localAboard ? 0 : vesselRelativePan(listener, boat), now, localAboard ? 0.18 : 0.12);
   engine.gain.gain.setTargetAtTime(localAboard ? 0.16 : proximity * 0.13, now, 0.13);
 }
 
@@ -106,12 +107,7 @@ export function handleDualTurretAudioEvent(audio, event, playerIndex) {
   if (!event?.targets?.includes(playerIndex)) return false;
   if (isArmoredTransition(event)) {
     const spatial = audio.eventPanAndGain?.(event, 120) || {pan: Number(event.pan) || 0, gain: 1};
-    audio.play?.("dualTurretBoarding", {
-      pan: spatial.pan,
-      gain: (event.type === "exit" ? 0.42 : 0.36) * spatial.gain,
-      rate: event.type === "exit" ? 0.86 : 1.02,
-      lowpass: 7200,
-    });
+    audio.play?.("dualTurretBoarding", {pan: spatial.pan, gain: (event.type === "exit" ? 0.42 : 0.36) * spatial.gain, rate: event.type === "exit" ? 0.86 : 1.02, lowpass: 7200});
     return true;
   }
   if (event.type === "dual-turret-shot") {
