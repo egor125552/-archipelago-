@@ -52,7 +52,7 @@ test("a surviving crew member stays aboard but does not magically inherit the ph
   assert.equal(boat.turrets[1].assignedPlayer, 1);
 });
 
-test("sinking clears every seat and recovery restores the same registered boat", () => {
+test("sinking clears every seat and waits for manual merchant recovery", () => {
   const world = createFreeWorld();
   const boat = prepareDualTurretBoatRoom(world);
   const original = boat;
@@ -62,17 +62,15 @@ test("sinking clears every seat and recovery restores the same registered boat",
   placeAboard(world, 1, boat);
   boat.sunk = true;
   world.freeDualTurretBoat.recoveryRemaining = 0.04;
-  world.freeDualTurretBoat.recoveryWarned30 = true;
-  world.freeDualTurretBoat.recoveryWarned10 = true;
+  world.freeDualTurretBoat.recoveryWarned30 = false;
+  world.freeDualTurretBoat.recoveryWarned10 = false;
 
   stepFreeWorld(world, 0.05);
 
-  assert.equal(world.boats[boat.id], original);
-  assert.equal(boat.sunk, false);
-  assert.equal(boat.hull, 300);
-  assert.equal(boat.armor, 200);
+  assert.equal(world.boats[boat.id], original, "manual recovery must keep the same registered vessel object");
+  assert.equal(boat.sunk, true, "legacy automatic respawn must stay disabled until merchant recovery completes");
   assert.equal(boat.driver, null);
   assert.deepEqual(boat.crew, [null, null]);
-  assert.equal(world.freeDualTurretBoat.recoveryRemaining, null);
-  assert.ok(world.events.some(event => event.type === "dual-turret-recovered"));
+  assert.equal(world.freeDualTurretBoat.recoveryRemaining, Number.MAX_SAFE_INTEGER);
+  assert.equal(world.events.some(event => event.type === "dual-turret-recovered"), false);
 });
