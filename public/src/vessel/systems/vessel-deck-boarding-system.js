@@ -78,6 +78,9 @@ function boardDeckEntry(world, entry, playerIndex) {
   const player = world.players[playerIndex];
   const point = firstSafeBoardingPoint(entry.definition);
   if (!point) return false;
+  const claimedBoat = !Number.isInteger(boat.owner);
+  if (claimedBoat) boat.owner = playerIndex;
+  const ownedBoat = boat.owner === playerIndex;
   addCrewMember(boat, playerIndex);
   player.mode = "boat";
   player.activeBoat = boat.id;
@@ -98,6 +101,9 @@ function boardDeckEntry(world, entry, playerIndex) {
     targets: [playerIndex],
     sourcePlayer: playerIndex,
     boatId: boat.id,
+    ownerPlayer: Number.isInteger(boat.owner) ? boat.owner : null,
+    claimedBoat,
+    ownedBoat,
     deckId: point.deckId,
     x: player.x,
     y: player.y,
