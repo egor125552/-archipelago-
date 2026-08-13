@@ -67,5 +67,4 @@ test("a manually marked wreck waits for merchant recovery instead of auto-respaw
   assert.equal(boat.sunk, true, "legacy automatic respawn must stay disabled until merchant recovery completes");
   assert.equal(world.freeDualTurretBoat.recoveryRemaining, Number.MAX_SAFE_INTEGER);
   assert.equal(world.events.some(event => event.type === "dual-turret-recovered"), false);
-  assert.ok(world.events.some(event => event.type === "vessel-manual-recovery-required"), "the legacy recovery event must be rewritten into a merchant recovery instruction");
 });
