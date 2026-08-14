@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#071922">
+  <title>Эхо-Архипелаг — доступная браузерная аудиоигра</title>
+  <meta name="description" content="Эхо-Архипелаг — доступная браузерная аудиоигра про лодки, спасение и выживание. Одиночная кампания, кооператив, свободная бухта, пространственный звук и полноценная поддержка VoiceOver.">
+  <meta name="keywords" content="аудиоигра, доступная игра, игра для незрячих, VoiceOver, браузерная игра, multiplayer audio game, accessible game, Echo Archipelago">
+  <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1">
+  <link rel="canonical" href="https://archipelago.k69ysrndm7.workers.dev/about/">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="ru_RU">
+  <meta property="og:title" content="Эхо-Архипелаг — доступная браузерная аудиоигра">
+  <meta property="og:description" content="Управляй лодкой на слух, спасай людей, переживай аварии и играй вместе с другом. Игра работает прямо в браузере и создана с полноценной поддержкой экранных дикторов.">
+  <meta property="og:url" content="https://archipelago.k69ysrndm7.workers.dev/about/">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Эхо-Архипелаг">
+  <meta name="twitter:description" content="Доступная браузерная аудиоигра про спасение, лодки и свободный кооперативный мир.">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "VideoGame",
+    "name": "Эхо-Архипелаг",
+    "alternateName": "Echo Archipelago",
+    "url": "https://archipelago.k69ysrndm7.workers.dev/",
+    "description": "Доступная браузерная кооперативная аудиоигра про спасение на лодке, навигацию на слух и выживание в свободной бухте.",
+    "applicationCategory": "Game",
+    "operatingSystem": "Web browser",
+    "gamePlatform": "Web browser",
+    "playMode": ["SinglePlayer", "MultiPlayer", "CoOp"],
+    "accessibilityFeature": ["screenReaderSupport", "keyboardControl", "audioDescription"],
+    "inLanguage": "ru"
+  }
+  </script>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #071922;
+      --panel: #0d2a36;
+      --panel2: #113746;
+      --text: #f4fbff;
+      --muted: #bed2dc;
+      --accent: #75e8ff;
+      --focus: #fff38a;
+      --line: #315b6a;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 15% 0%, rgba(61, 185, 218, .18), transparent 30rem),
+        radial-gradient(circle at 90% 18%, rgba(31, 107, 133, .22), transparent 26rem),
+        var(--bg);
+    }
+    a { color: inherit; }
+    a:focus-visible { outline: 4px solid var(--focus); outline-offset: 4px; border-radius: .35rem; }
+    .skip {
+      position: absolute;
+      left: 1rem;
+      top: -8rem;
+      z-index: 10;
+      padding: .8rem 1rem;
+      background: var(--focus);
+      color: #081218;
+      font-weight: 800;
+      border-radius: .6rem;
+    }
+    .skip:focus { top: 1rem; }
+    .shell { width: min(72rem, 100%); margin: 0 auto; padding: 1rem clamp(1rem, 4vw, 2rem) 4rem; }
+    header { padding: clamp(3rem, 9vw, 7rem) 0 3rem; }
+    .eyebrow { margin: 0 0 .7rem; color: var(--accent); font-weight: 850; letter-spacing: .08em; text-transform: uppercase; }
+    h1 { margin: 0; max-width: 13ch; font-size: clamp(2.8rem, 10vw, 6.7rem); line-height: .93; letter-spacing: -.055em; }
+    .lead { max-width: 48rem; margin: 1.4rem 0 0; color: var(--muted); font-size: clamp(1.15rem, 2.5vw, 1.5rem); line-height: 1.55; }
+    .actions { display: flex; flex-wrap: wrap; gap: .8rem; margin-top: 1.8rem; }
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 3.2rem;
+      padding: .8rem 1.15rem;
+      border: 2px solid var(--line);
+      border-radius: .9rem;
+      background: var(--panel2);
+      font-weight: 800;
+      text-decoration: none;
+    }
+    .button.primary { background: var(--accent); color: #04151c; border-color: transparent; }
+    main { display: grid; gap: 1rem; }
+    section {
+      padding: clamp(1.2rem, 3vw, 2rem);
+      border: 1px solid var(--line);
+      border-radius: 1.2rem;
+      background: rgba(13, 42, 54, .88);
+      box-shadow: 0 1.2rem 4rem rgba(0,0,0,.16);
+    }
+    section h2 { margin: 0 0 .8rem; font-size: clamp(1.5rem, 4vw, 2.2rem); }
+    section p { margin: .65rem 0 0; line-height: 1.65; color: var(--muted); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 1rem; }
+    .card { min-height: 100%; }
+    .card strong { display: block; margin-bottom: .35rem; color: var(--text); font-size: 1.12rem; }
+    ul { margin: .8rem 0 0; padding-left: 1.3rem; color: var(--muted); }
+    li { margin: .55rem 0; line-height: 1.55; }
+    .fact { color: var(--text); font-weight: 750; }
+    footer { padding: 2.2rem 0 0; color: var(--muted); line-height: 1.6; }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  </style>
+</head>
+<body>
+  <a class="skip" href="#content">Перейти к содержимому</a>
+  <div class="shell">
+    <header>
+      <p class="eyebrow">Браузерная аудиоигра</p>
+      <h1>Эхо-Архипелаг</h1>
+      <p class="lead">Игра про лодки, спасение и выживание, которую можно проходить на слух. Никакой установки: открываешь браузер, надеваешь наушники и выходишь в бухту.</p>
+      <div class="actions" aria-label="Основные ссылки">
+        <a class="button primary" href="/">Играть сейчас</a>
+        <a class="button" href="https://github.com/egor125552/-archipelago-">Исходный код на GitHub</a>
+      </div>
+    </header>
+
+    <main id="content">
+      <section aria-labelledby="what-title">
+        <h2 id="what-title">Что это вообще такое</h2>
+        <p>Эхо-Архипелаг — доступная кооперативная аудиоигра, где пространство читается не по карте, а по звуку. Сонар показывает направление, двигатель сообщает о состоянии лодки, вода внутри корпуса меняет весь микс, а аварии приходится буквально слышать раньше, чем они станут критическими.</p>
+        <p>Есть одиночная кампания из шести операций и отдельная Свободная бухта, где два игрока получают собственные лодки, могут ходить по берегу, плавать, перевозить груз, ремонтироваться, буксировать друг друга, драться и охотиться за добычей.</p>
+      </section>
+
+      <div class="grid">
+        <section class="card" aria-labelledby="sound-title">
+          <h2 id="sound-title">Мир существует в звуке</h2>
+          <p><strong>Пространственный сонар.</strong> Цель слышна слева, справа и по центру, поэтому направление можно держать без визуальной карты.</p>
+          <p><strong>Физика лодки.</strong> Инерция, торможение, топливо, перегрев, течь, затопление двигателя и повреждения корпуса влияют на то, что происходит и как это звучит.</p>
+        </section>
+
+        <section class="card" aria-labelledby="coop-title">
+          <h2 id="coop-title">Не просто одиночная демка</h2>
+          <p>В кооперативе один игрок может вести лодку, а второй работать с сонаром, насосом, ремонтом и спасательным тросом. В Свободной бухте оба игрока равноправны и управляют отдельными физическими лодками.</p>
+        </section>
+
+        <section class="card" aria-labelledby="access-title">
+          <h2 id="access-title">Сделано для экранных дикторов</h2>
+          <p>В игре есть отдельный режим VoiceOver без двойных команд и скачущего фокуса. Частые сообщения сокращены, встроенная речь может быть отключена, а управление работает с клавиатуры и на iPhone.</p>
+        </section>
+      </div>
+
+      <section aria-labelledby="free-title">
+        <h2 id="free-title">Свободная бухта</h2>
+        <ul>
+          <li>Можно выйти из лодки, ходить по берегу, плавать и залезать на крышу катера.</li>
+          <li>Звучащие ящики содержат топливо, ремонтные пластины, оружие, усилители и ценный груз.</li>
+          <li>Груз можно передавать другому игроку, перевозить на любой лодке и доставлять к причалу.</li>
+          <li>Катер-мародёр выбирает богатую цель, таранит её и пытается украсть добычу.</li>
+          <li>Лодки остаются физическими объектами мира: их можно бросать, занимать снова, буксировать и таранить.</li>
+        </ul>
+      </section>
+
+      <section aria-labelledby="tech-title">
+        <h2 id="tech-title">Почему это работает прямо в браузере</h2>
+        <p>Клиент написан на JavaScript и Web Audio. Сетевой свободный мир считается на Cloudflare Durable Objects с фиксированным серверным шагом 25 Гц. Браузеры отправляют команды, локально предсказывают движение собственного игрока и получают единое серверное состояние.</p>
+        <p class="fact">То есть это не страница, которая притворяется игрой. Это полноценный сетевой игровой мир, работающий по обычной ссылке.</p>
+      </section>
+
+      <section aria-labelledby="open-title">
+        <h2 id="open-title">Проект открыт</h2>
+        <p>Исходный код опубликован на GitHub. Проект развивается открыто: игровые системы, сетевой код, механики лодок, аудиодвижок и документация находятся в одном публичном репозитории.</p>
+        <div class="actions">
+          <a class="button primary" href="/">Открыть игру</a>
+          <a class="button" href="https://github.com/egor125552/-archipelago-">Посмотреть GitHub</a>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <p>Эхо-Архипелаг. Доступная браузерная аудиоигра для одиночной и совместной игры.</p>
+    </footer>
+  </div>
+</body>
+</html>
