@@ -24,7 +24,12 @@ function releaseSunkCrew({world, nativeVessels} = {}) {
   if (!world) return;
   for (const entry of nativeVessels || []) {
     const boat = entry?.boat;
-    if (!boat?.sunk || entry?.definition?.deckArchitecture?.enabled !== true) continue;
+    if (!boat) continue;
+    if (!boat.sunk) {
+      delete boat.vesselManualRecoveryNoticeSent;
+      continue;
+    }
+    if (entry?.definition?.deckArchitecture?.enabled !== true) continue;
 
     const playerIndices = new Set();
     for (const raw of Object.keys(entry.instance?.occupants || {})) {
@@ -64,6 +69,17 @@ function releaseSunkCrew({world, nativeVessels} = {}) {
     if (Array.isArray(boat.crew)) boat.crew.fill(null);
     for (const turret of boat.turrets || []) {
       if (turret) turret.assignedPlayer = null;
+    }
+
+    if (boat.manualRecoveryOnly === true && boat.vesselManualRecoveryNoticeSent !== true) {
+      boat.vesselManualRecoveryNoticeSent = true;
+      emit(world, "vessel-manual-recovery-required", `${boat.label || "Судно"} остаётся затонувшим. Для восстановления используй аварийный подъём у торговца.`, [0, 1], {
+        boatId: boat.id,
+        boatType: boat.boatType || boat.vesselType || null,
+        manualRecoveryOnly: true,
+        x: boat.x,
+        y: boat.y,
+      });
     }
   }
 }
