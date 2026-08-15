@@ -1,1 +1,1 @@
-export * from "./free-roam-mega-bomb-v38.js?v=1";
+export * from "./free-roam-mega-bomb-v38.js?v=2";
