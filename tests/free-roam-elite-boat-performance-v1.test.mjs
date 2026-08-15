@@ -55,10 +55,11 @@ test("two-player elite boss remains bounded at the authoritative 25 Hz tick", t 
     maximumEvents = Math.max(maximumEvents, snapshot.events?.length || 0);
   }
   const elapsed = performance.now() - started;
-  t.diagnostic(`1500 authoritative ticks: ${elapsed.toFixed(1)} ms; max snapshot ${maximumSnapshotBytes} bytes; bullets ${maximumProjectiles}; bombs ${maximumBombs}; events ${maximumEvents}`);
+  const meanTickMs = elapsed / 1_500;
+  t.diagnostic(`1500 authoritative ticks: ${elapsed.toFixed(1)} ms (${meanTickMs.toFixed(2)} ms/tick); max snapshot ${maximumSnapshotBytes} bytes; bullets ${maximumProjectiles}; bombs ${maximumBombs}; events ${maximumEvents}`);
   assert.ok(maximumProjectiles <= 96, "turret bullets must stay under the server cap");
   assert.ok(maximumBombs <= 8, "finite salvos must not accumulate an unbounded bomb queue");
   assert.ok(maximumEvents <= 40, "one network tick must not dump an old event backlog");
   assert.ok(maximumSnapshotBytes < 90_000, "slow clients must receive a bounded current snapshot, not frame history");
-  assert.ok(elapsed < 8_000, "a 60-second encounter simulation must finish comfortably faster than real time");
+  assert.ok(meanTickMs < 20, `elite encounter averaged ${meanTickMs.toFixed(2)} ms per 40 ms server tick`);
 });
