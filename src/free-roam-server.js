@@ -20,6 +20,7 @@ import {
   reportMegaBombStatus,
   stepMegaBombs,
 } from "./free-roam-mega-bomb.js";
+import {recoverOrphanedHeavyPhase} from "./free-roam-threat-recovery.js";
 
 export const FREE_TICK_MS = 40;
 const MAX_ELAPSED_SECONDS = 0.2;
@@ -172,6 +173,7 @@ function stepInChunks(world, elapsedSeconds) {
     enforceHostileRespawnGrace(world);
     applyAuthoritativeCombatHotfix(world, 0);
     stepFreeWorld(world, chunk);
+    recoverOrphanedHeavyPhase(world);
     enforceHostileRespawnGrace(world);
     launchPendingEliteBossBombs(world);
     stepMegaBombs(world, chunk);
