@@ -21,6 +21,17 @@ function vesselLabel(boat) {
   return String(boat?.label || "лодка").trim() || "лодка";
 }
 
+function claimActiveSingleSeatVessels(world) {
+  for (let playerIndex = 0; playerIndex < (world?.players || []).length; playerIndex += 1) {
+    const player = world.players[playerIndex];
+    const boatId = Number.isInteger(player?.activeBoat) ? player.activeBoat : null;
+    const boat = boatId == null ? null : world.boats?.[boatId];
+    if (!isManagedSingleSeatVessel(boat) || Number.isInteger(boat.owner)) continue;
+    if (!["boat", "roof"].includes(player?.mode)) continue;
+    boat.owner = playerIndex;
+  }
+}
+
 function normalizeEnterEvent(world, event) {
   if (event?.type !== "enter") return;
   const playerIndex = eventPlayerIndex(event);
@@ -28,9 +39,10 @@ function normalizeEnterEvent(world, event) {
   const boat = eventBoat(world, event, playerIndex);
   if (!isManagedSingleSeatVessel(boat)) return;
 
+  const eventAlreadyClaimed = event.claimedBoat === true;
   const previousOwner = Number.isInteger(boat.owner) ? boat.owner : null;
-  const claimed = previousOwner == null;
-  if (claimed) boat.owner = playerIndex;
+  const claimed = eventAlreadyClaimed || previousOwner == null;
+  if (previousOwner == null) boat.owner = playerIndex;
 
   const owner = Number.isInteger(boat.owner) ? boat.owner : null;
   event.sourcePlayer = playerIndex;
@@ -38,9 +50,9 @@ function normalizeEnterEvent(world, event) {
   event.boatType = boat.boatType || boat.vesselType || "standard";
   event.ownerPlayer = owner;
   event.ownedBoat = owner === playerIndex;
-  event.claimedBoat = claimed;
+  event.claimedBoat = claimed && owner === playerIndex;
 
-  if (claimed) {
+  if (event.claimedBoat) {
     event.text = `Ты занял свободное судно: ${vesselLabel(boat)}.`;
   } else if (owner === playerIndex) {
     event.text = `Ты вернулся в своё судно: ${vesselLabel(boat)}.`;
@@ -51,7 +63,16 @@ function normalizeEnterEvent(world, event) {
 
 function normalizeBoardingOwnership({world, eventStart = 0} = {}) {
   if (!world) return;
-  for (const event of (world.events || []).slice(eventStart)) normalizeEnterEvent(world, event);
+  const events = (world.events || []).slice(eventStart);
+  for (const event of events) {
+    const playerIndex = eventPlayerIndex(event);
+    const boat = eventBoat(world, event, playerIndex);
+    if (event?.type === "enter" && isManagedSingleSeatVessel(boat) && !Number.isInteger(boat.owner)) {
+      event.claimedBoat = true;
+    }
+  }
+  claimActiveSingleSeatVessels(world);
+  for (const event of events) normalizeEnterEvent(world, event);
 }
 
 export const VESSEL_OWNERSHIP_SYSTEMS = Object.freeze([
