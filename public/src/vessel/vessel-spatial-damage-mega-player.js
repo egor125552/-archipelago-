@@ -16,7 +16,9 @@ export function normalizeMegaBombOccupantEffects(world, entry, event, before, lo
   if (!player?.combat || !before) return false;
   const sameDeck = Boolean(local && deck && local.deckId === deck.id && localImpact);
   const internalDistance = sameDeck ? distance(local, localImpact) : Infinity;
+  const legacyStunned = Boolean(player.combat.knockedDown && !before.knockedDown);
   const spatialStunned = Boolean(player.combat.alive && correctDamage > 1 && sameDeck && internalDistance <= 8.5);
+  event.legacyStunned = legacyStunned;
   player.combat.stun = clamp(before.stun + Math.max(0, correctDamage) * 2.4, 0, 100);
   if (!before.knockedDown) {
     const critical = player.combat.alive && finite(player.combat.health) > 0 && finite(player.combat.health) <= 7;
@@ -49,17 +51,26 @@ export function refreshMegaBombExplosionCounts(world, events, explosions) {
   for (const explosion of explosions) {
     const projectileId = String(explosion.projectileId || "");
     const playerEvents = events.filter(event => event?.type === "mega-bomb-player-hit" && String(event.projectileId || "") === projectileId);
-    const correctedHits = playerEvents.filter(event => finite(event.damage) > 1);
-    const correctedDeaths = correctedHits.filter(event => {
+    const spatialEvents = playerEvents.filter(event => event.vesselSpatialDamageVersion === VESSEL_SPATIAL_DAMAGE_VERSION);
+    if (!spatialEvents.length) continue;
+
+    const correctedSpatialHits = spatialEvents.filter(event => finite(event.damage) > 1);
+    const legacySpatialDeaths = spatialEvents.filter(event => {
+      const playerIndex = Number(event.targetPlayer);
+      const before = snapshot?.players?.[playerIndex];
+      return before?.alive && finite(before.health) > 0 && finite(event.legacyDamage) >= finite(before.health);
+    }).length;
+    const correctedSpatialDeaths = correctedSpatialHits.filter(event => {
       const playerIndex = Number(event.targetPlayer);
       return snapshot?.players?.[playerIndex]?.alive && world.players?.[playerIndex]?.combat?.alive === false;
     }).length;
-    const correctedStuns = correctedHits.filter(event => event.spatialStunned === true).length;
-    const legacyPlayerHits = Math.max(0, finite(explosion.playerHitCount));
-    explosion.hitCount = Math.max(0, finite(explosion.hitCount) - legacyPlayerHits + correctedHits.length);
-    explosion.playerHitCount = correctedHits.length;
-    explosion.playerDeathCount = correctedDeaths;
-    explosion.stunnedCount = correctedStuns;
+    const legacySpatialStuns = spatialEvents.filter(event => event.legacyStunned === true).length;
+    const correctedSpatialStuns = correctedSpatialHits.filter(event => event.spatialStunned === true).length;
+
+    explosion.hitCount = Math.max(0, finite(explosion.hitCount) - spatialEvents.length + correctedSpatialHits.length);
+    explosion.playerHitCount = Math.max(0, finite(explosion.playerHitCount) - spatialEvents.length + correctedSpatialHits.length);
+    explosion.playerDeathCount = Math.max(0, finite(explosion.playerDeathCount) - legacySpatialDeaths + correctedSpatialDeaths);
+    explosion.stunnedCount = Math.max(0, finite(explosion.stunnedCount) - legacySpatialStuns + correctedSpatialStuns);
     if (explosion.hitCount > 0) {
       explosion.text = `Взрыв поразил объектов: ${explosion.hitCount}. Противников уничтожено: ${Math.max(0, finite(explosion.destroyedCount))}.`;
     } else if (finite(explosion.blockedCount) > 0) {
