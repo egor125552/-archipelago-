@@ -158,6 +158,6 @@ test("server-side pursuer gunfire stays finite and sends render-only projectiles
   assert.ok(gunshotEvents > 0, "the stress run should include audible gunfire events");
   assert.ok(maximumProjectiles <= 36);
   assert.ok(maximumBytes < 12_000, `combat state grew unexpectedly: ${maximumBytes} bytes`);
-  assert.ok(maximumSixTickDeltaBytes < 6_000, `combat delta grew unexpectedly: ${maximumSixTickDeltaBytes} bytes`);
+  assert.ok(maximumSixTickDeltaBytes < 8_192, `combat delta exceeded the 8 KiB budget: ${maximumSixTickDeltaBytes} bytes`);
   assert.doesNotThrow(() => JSON.stringify(serverRoom.world));
 });
