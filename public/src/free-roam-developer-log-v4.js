@@ -390,7 +390,7 @@ function makeCheckpoint(current, force = false) {
   state.checkpoints.push({
     atMs: now, worldTime: roundLogNumber(current?.time, 3), phase: phaseSummary(current),
     input: compactLogValue(state.lastInput), network: compactLogValue(state.lastNetwork),
-    entities: activeEntitySnapshots(current).map(compactLogValue),
+    entities: activeEntitySnapshots(current).map(snapshot => compactLogValue(snapshot)),
   });
   state.lastCheckpointAt = now;
   while (state.checkpoints.length > MAX_CHECKPOINTS) { state.checkpoints.shift(); state.droppedCheckpoints += 1; }
