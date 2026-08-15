@@ -26,13 +26,13 @@ export const FREE_TICK_MS = 40;
 const MAX_ELAPSED_SECONDS = 0.2;
 const MAX_STEP_SECONDS = 0.05;
 const INPUT_KEYS = Object.freeze([
-  "up", "down", "left", "right", "run", "pump", "repair", "action",
+  "up", "down", "left", "right", "run", "pump", "repair", "action", "respawn",
   "jump", "attack", "weapon", "sonar", "guide", "megaBomb",
   "shopPrevious", "shopNext", "shopBuy", "shopClose",
   "boardPrevious", "boardNext", "boardAccept", "boardClose",
 ]);
 const PULSE_INPUT_KEYS = Object.freeze([
-  "action", "jump", "weapon", "sonar", "guide", "megaBomb",
+  "action", "respawn", "jump", "weapon", "sonar", "guide", "megaBomb",
   "shopPrevious", "shopNext", "shopBuy", "shopClose",
   "boardPrevious", "boardNext", "boardAccept", "boardClose",
 ]);
@@ -83,6 +83,15 @@ function deliverPendingPulses(serverRoom) {
   ensureInputBuffers(serverRoom);
   for (let index = 0; index < serverRoom.world.players.length; index += 1) {
     setPlayerInput(serverRoom.world, index, bufferedInput(serverRoom, index));
+  }
+}
+
+function applyPendingRespawns(serverRoom) {
+  ensureInputBuffers(serverRoom);
+  for (let index = 0; index < serverRoom.world.players.length; index += 1) {
+    if (!serverRoom.pendingPulses[index]?.respawn) continue;
+    const combat = serverRoom.world.players[index]?.combat;
+    if (combat?.alive === false) combat.respawnRemaining = 0;
   }
 }
 
@@ -201,6 +210,7 @@ export function tickServerFreeRoom(serverRoom, now = Date.now()) {
   serverRoom.lastTickAt = now;
   if (elapsedSeconds > 0.0001) {
     deliverPendingPulses(serverRoom);
+    applyPendingRespawns(serverRoom);
     launchPendingMegaBombs(serverRoom);
     stepInChunks(serverRoom.world, elapsedSeconds);
     clearDeliveredPulses(serverRoom);
