@@ -90,7 +90,7 @@ if (guideButton) {
 }
 
 const nullCanvasContext = {
-  clearRect() {}, fillRect() {}, save() {}, restore() {}, translate() {}, rotate(),
+  clearRect() {}, fillRect() {}, save() {}, restore() {}, translate() {}, rotate() {},
   beginPath() {}, moveTo() {}, lineTo() {}, stroke() {}, arc() {}, fill() {},
 };
 const map = $("map");
