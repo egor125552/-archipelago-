@@ -56,6 +56,12 @@ function normalizeBoardingOwnership({world, eventStart = 0} = {}) {
 
 export const VESSEL_OWNERSHIP_SYSTEMS = Object.freeze([
   Object.freeze({
+    id: "vessel-ownership-after-input-v1",
+    phase: "after-input",
+    order: 10,
+    run: normalizeBoardingOwnership,
+  }),
+  Object.freeze({
     id: "vessel-ownership-after-step-v1",
     phase: "after-step",
     order: 10,
