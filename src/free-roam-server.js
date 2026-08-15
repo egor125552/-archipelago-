@@ -26,13 +26,13 @@ export const FREE_TICK_MS = 40;
 const MAX_ELAPSED_SECONDS = 0.2;
 const MAX_STEP_SECONDS = 0.05;
 const INPUT_KEYS = Object.freeze([
-  "up", "down", "left", "right", "run", "pump", "repair", "action", "respawn",
+  "up", "down", "left", "right", "run", "pump", "repair", "action",
   "jump", "attack", "weapon", "sonar", "guide", "megaBomb",
   "shopPrevious", "shopNext", "shopBuy", "shopClose",
   "boardPrevious", "boardNext", "boardAccept", "boardClose",
 ]);
 const PULSE_INPUT_KEYS = Object.freeze([
-  "action", "respawn", "jump", "weapon", "sonar", "guide", "megaBomb",
+  "action", "jump", "weapon", "sonar", "guide", "megaBomb",
   "shopPrevious", "shopNext", "shopBuy", "shopClose",
   "boardPrevious", "boardNext", "boardAccept", "boardClose",
 ]);
@@ -89,8 +89,7 @@ function deliverPendingPulses(serverRoom) {
 function applyPendingRespawns(serverRoom) {
   ensureInputBuffers(serverRoom);
   for (let index = 0; index < serverRoom.world.players.length; index += 1) {
-    const pending = serverRoom.pendingPulses[index] || {};
-    if (!pending.respawn && !pending.action) continue;
+    if (!serverRoom.pendingPulses[index]?.action) continue;
     const combat = serverRoom.world.players[index]?.combat;
     if (combat?.alive === false) combat.respawnRemaining = 0;
   }
