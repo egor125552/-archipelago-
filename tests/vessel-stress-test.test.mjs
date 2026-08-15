@@ -11,8 +11,8 @@ import {
 } from "../public/src/free-roam-core-v8.js";
 import {CURRENT_VESSEL_TYPES} from "../public/src/vessel/definitions/current-vessels.js";
 import {setVesselOccupantPosition} from "../public/src/vessel/vessel-interior.js";
-// Match the exact runtime identity used by free-roam-core-v8.js. Query-string
-// variants are distinct ESM modules and must not own separate vessel WeakMaps.
+// vessel-runtime-v3 delegates storage and native identity to this same v2
+// singleton, so tests must keep using the exact underlying WeakMap owner.
 import {nativeVesselForBoat} from "../public/src/vessel/vessel-runtime.js?v=2";
 import {STRESS_TEST_PHYSICS_ID, STRESS_TEST_PHYSICS_MODULE} from "../public/src/vessel/physics/stress-test-physics.js";
 import {
@@ -111,15 +111,13 @@ test("stress physics still derives power from the actual fifty propulsion module
   assert.ok(boat.speed <= STRESS_TEST_MAX_SPEED * 0.2);
 });
 
-test("stress physics takes clean speed authority back from the legacy ordinary-boat step", () => {
+test("stress physics contains only vessel propulsion and no private legacy motion bridge", () => {
   const definition = stressDefinition();
   const instance = {
     modules: Object.fromEntries(definition.modules
       .filter(module => module.type === "propulsion")
       .map(module => [module.id, {enabled: true, health: 100}])),
   };
-  const before = {x: 210, y: 150, heading: 180, speed: 52, rudder: 0};
-  const world = {events: [], players: [], bounds: {width: 420, height: 320, shoreY: 72}};
   const boat = {
     id: 0,
     x: 210,
@@ -134,35 +132,18 @@ test("stress physics takes clean speed authority back from the legacy ordinary-b
   };
 
   STRESS_TEST_PHYSICS_MODULE.step({
-    world,
+    world: {events: [], players: [], bounds: {width: 420, height: 320, shoreY: 72}},
     boat,
     definition,
     instance,
     dt: 0.04,
-    previousStates: [before],
+    previousStates: [{x: 210, y: 150, heading: 180, speed: 52, rudder: 0}],
     eventStart: 0,
   });
-  assert.ok(boat.speed > before.speed, `custom propulsion must accelerate from ${before.speed}, got ${boat.speed}`);
-  assert.ok(boat.y > before.y, "clean motion must be rebuilt from the pre-legacy vessel state");
 
-  const disrupted = {
-    ...boat,
-    x: 205,
-    y: 155,
-    speed: 10,
-  };
-  world.events = [{type: "collision", boatId: 0}];
-  STRESS_TEST_PHYSICS_MODULE.step({
-    world,
-    boat: disrupted,
-    definition,
-    instance,
-    dt: 0.04,
-    previousStates: [before],
-    eventStart: 0,
-  });
-  assert.ok(disrupted.speed < 20, "a real collision must keep its resolved speed instead of restoring the clean baseline");
-  assert.equal(disrupted.x, 205, "a real collision must keep its resolved contact position");
+  assert.ok(boat.speed > 36 && boat.speed < 52, "standalone propulsion must use its supplied current speed only");
+  assert.equal(boat.x, 210, "the concrete stress module must not rebuild shared linear motion itself");
+  assert.equal(boat.y, 151, "the concrete stress module must leave authority bridging to vessel runtime");
 });
 
 test("fastest vessel accelerates monotonically through the shared free-roam step", () => {

@@ -26,7 +26,8 @@ import {
   attachBoatTransitionMetadata,
 } from "./free-roam-boat-events.js?v=1";
 import {isPlayerNearMerchant} from "./free-roam-shop.js?v=5";
-import {attachVesselArchitecture, runVesselPhysics, runVesselSystems} from "./vessel/vessel-runtime.js?v=2";
+import {attachVesselArchitecture, runVesselSystems} from "./vessel/vessel-runtime.js?v=2";
+import {runVesselPhysics} from "./vessel/vessel-runtime-v3.js?v=1";
 
 export * from "./free-roam-core-v7.js?v=1";
 export {prepareDualTurretBoatRoom};
