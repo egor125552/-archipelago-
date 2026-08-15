@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {FREE_STATE_ACK_TIMEOUT_MS} from "../src/worker-resilient-config.js";
+import {FREE_STATE_STREAM_WINDOW} from "../src/worker-delivery-policy.js";
 import {Lobby} from "../src/worker-resilient.js";
 
 function testLobby(client) {
@@ -32,7 +33,7 @@ function freeState(sequence, events = []) {
   };
 }
 
-test("a lost ACK resends the same full state sequence and keeps newer state queued", () => {
+test("a lost ACK resends the stalled full state before a newer world is streamed", () => {
   const oldEvent = {type: "engine-stall", text: "Мотор заглох."};
   const queuedEvent = {type: "pump-start", text: "Насос включён."};
   const inFlight = freeState(40, [oldEvent]);
@@ -45,6 +46,8 @@ test("a lost ACK resends the same full state sequence and keeps newer state queu
     freeInFlightState: inFlight,
     freeAckedWorld: freeState(39).world,
     freePending: freeState(40.5, [queuedEvent]),
+    freeUnackedStreamStates: 1,
+    freeStreamBaseWorld: inFlight.world,
   };
   const {lobby, socket, sent} = testLobby(client);
 
@@ -60,7 +63,6 @@ test("a lost ACK resends the same full state sequence and keeps newer state queu
   assert.deepEqual(client.freePending.events, [queuedEvent]);
   assert.equal(client.freeStateResends, 1);
 
-  // Simulate the repeated ACK. The pending newest state is sent only after it.
   client.freeAckedWorld = client.freeInFlightWorld;
   client.freeStateInFlight = 0;
   client.freeInFlightWorld = null;
@@ -70,7 +72,7 @@ test("a lost ACK resends the same full state sequence and keeps newer state queu
   assert.deepEqual(sent[1].events, [queuedEvent]);
 });
 
-test("a recent in-flight state remains stop-and-wait and keeps only the newest pending world", () => {
+test("a recent in-flight state continues through the bounded streaming window", () => {
   const inFlight = freeState(50);
   const client = {
     mode: "free",
@@ -81,14 +83,20 @@ test("a recent in-flight state remains stop-and-wait and keeps only the newest p
     freeInFlightState: inFlight,
     freeAckedWorld: freeState(49).world,
     freePending: null,
+    freeUnackedStreamStates: 1,
+    freeStreamBaseWorld: inFlight.world,
   };
   const {lobby, socket, sent} = testLobby(client);
 
   lobby.offerFreeState(socket, freeState(51));
   lobby.offerFreeState(socket, freeState(52));
 
-  assert.equal(sent.length, 0);
-  assert.equal(client.freeStateInFlight, 50);
-  assert.equal(client.freePending.sequence, 52);
+  assert.equal(sent.length, 2);
+  assert.deepEqual(sent.map(item => item.sequence), [51, 52]);
+  assert.equal(sent.every(item => item.full === false), true);
+  assert.equal(client.freeStateInFlight, 52);
+  assert.equal(client.freePending, null);
+  assert.equal(client.freeUnackedStreamStates, 3);
+  assert.ok(client.freeUnackedStreamStates < FREE_STATE_STREAM_WINDOW);
   assert.equal(client.freeStateResends || 0, 0);
 });

@@ -61,11 +61,14 @@ test("modular vessel prediction uses the server physics hint instead of standard
 test("first driver claims a neutral single-seat vessel and the other player then sees it as someone else's", () => {
   const world = createFreeWorld();
   stepFreeWorld(world, 0.04);
-  const boat = stressBoat(world);
-  assert.ok(boat);
+  const boat = world.boats.find(candidate => candidate?.vesselInstanceId && Math.max(1, Number(candidate.crewCapacity) || 1) === 1);
+  assert.ok(boat, "the world must contain a registered single-seat vessel for the ownership contract");
+  assert.notEqual(boat.boatType, STRESS_TEST_VESSEL_TYPE, "the two-seat stress vessel must not be used as a single-seat ownership fixture");
   boat.owner = null;
   boat.driver = null;
   boat.crew = [];
+  boat.reserved = false;
+  for (const candidate of world.boats) if (candidate && candidate !== boat) candidate.reserved = true;
 
   putPlayerBesideBoat(world, 0, boat);
   putPlayerBesideBoat(world, 1, boat, 40);

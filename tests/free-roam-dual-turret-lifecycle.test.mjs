@@ -52,7 +52,7 @@ test("a surviving crew member stays aboard but does not magically inherit the ph
   assert.equal(boat.turrets[1].assignedPlayer, 1);
 });
 
-test("sinking clears every seat and recovery restores the same registered boat", () => {
+test("a sunk armored patrol clears its seats and stays sunk until manual merchant recovery", () => {
   const world = createFreeWorld();
   const boat = prepareDualTurretBoatRoom(world);
   const original = boat;
@@ -60,19 +60,28 @@ test("sinking clears every seat and recovery restores the same registered boat",
   boat.crew = [0, 1];
   placeAboard(world, 0, boat);
   placeAboard(world, 1, boat);
-  boat.sunk = true;
-  world.freeDualTurretBoat.recoveryRemaining = 0.04;
-  world.freeDualTurretBoat.recoveryWarned30 = true;
-  world.freeDualTurretBoat.recoveryWarned10 = true;
 
-  stepFreeWorld(world, 0.05);
+  boat.hull = 0;
+  boat.water = 100;
+  boat.leak = 16;
+  boat.engineStalled = true;
+  boat.sunk = true;
+
+  const start = world.events.length;
+  stepFreeWorld(world, 0.1);
 
   assert.equal(world.boats[boat.id], original);
-  assert.equal(boat.sunk, false);
-  assert.equal(boat.hull, 300);
-  assert.equal(boat.armor, 200);
+  assert.equal(boat.sunk, true);
   assert.equal(boat.driver, null);
   assert.deepEqual(boat.crew, [null, null]);
-  assert.equal(world.freeDualTurretBoat.recoveryRemaining, null);
-  assert.ok(world.events.some(event => event.type === "dual-turret-recovered"));
+  assert.equal(world.freeDualTurretBoat.recoveryRemaining, Number.MAX_SAFE_INTEGER, "legacy automatic recovery must stay locked while merchant recovery owns the lifecycle");
+  assert.ok(world.events.slice(start).some(event => event.type === "vessel-manual-recovery-required"));
+  assert.equal(world.events.slice(start).some(event => event.type === "dual-turret-recovered"), false);
+
+  for (let index = 0; index < 600; index += 1) stepFreeWorld(world, 0.1);
+
+  assert.equal(world.boats[boat.id], original);
+  assert.equal(boat.sunk, true, "the armored patrol must not resurrect automatically after the old sixty-second delay");
+  assert.equal(world.freeDualTurretBoat.recoveryRemaining, Number.MAX_SAFE_INTEGER);
+  assert.equal(world.events.some(event => event.type === "dual-turret-recovered"), false);
 });

@@ -22,7 +22,7 @@ test("mega bomb foot spatialization is world-coordinate based and armor aware", 
     readFile(new URL("../src/free-roam-mega-bomb.js", import.meta.url), "utf8"),
     readFile(new URL("../src/free-roam-mega-bomb-v38.js", import.meta.url), "utf8"),
   ]);
-  assert.match(entry, /free-roam-mega-bomb-v38\.js\?v=1/);
+  assert.match(entry, /free-roam-mega-bomb-v38\.js\?v=2/);
   assert.match(bomb, /worldSpacePan\(listener, event\)/);
   assert.match(bomb, /nominalArmorDamage = raw \* 0\.72/);
   assert.match(bomb, /state\.hull = clamp\(state\.hull - hullDamage, 0, state\.hullMax\)/);
