@@ -1,7 +1,7 @@
 "use strict";
 
 import "./free-roam-player-boat-audio-v1.js?v=3";
-import "./free-roam-elite-boat-audio-v11.js?v=3";
+import "./free-roam-elite-boat-audio-v11.js?v=4";
 import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=45";
 import {predictLocalWorld} from "./free-roam-client-prediction.js?v=41";
 import {
@@ -90,7 +90,7 @@ if (guideButton) {
 }
 
 const nullCanvasContext = {
-  clearRect() {}, fillRect() {}, save() {}, restore() {}, translate() {}, rotate() {},
+  clearRect() {}, fillRect() {}, save() {}, restore() {}, translate() {}, rotate(),
   beginPath() {}, moveTo() {}, lineTo() {}, stroke() {}, arc() {}, fill() {},
 };
 const map = $("map");
