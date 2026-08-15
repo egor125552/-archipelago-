@@ -89,7 +89,8 @@ function deliverPendingPulses(serverRoom) {
 function applyPendingRespawns(serverRoom) {
   ensureInputBuffers(serverRoom);
   for (let index = 0; index < serverRoom.world.players.length; index += 1) {
-    if (!serverRoom.pendingPulses[index]?.respawn) continue;
+    const pending = serverRoom.pendingPulses[index] || {};
+    if (!pending.respawn && !pending.action) continue;
     const combat = serverRoom.world.players[index]?.combat;
     if (combat?.alive === false) combat.respawnRemaining = 0;
   }
