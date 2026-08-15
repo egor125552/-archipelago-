@@ -13,7 +13,7 @@ test("merchant action has priority over nearby armored boarding", async () => {
   assert.match(core, /merchantOwnsAction\(world, playerIndex, nextInput\)/);
 });
 
-test("ordinary motor cannot start on shore, in water, or for the armored boat", async () => {
+test("ordinary motor is suppressed whenever the current vessel owns a dedicated engine", async () => {
   const [audioV2, audioV3, audioV4] = await Promise.all([
     readFile(new URL("../public/src/free-roam-audio-v2.js", import.meta.url), "utf8"),
     readFile(new URL("../public/src/free-roam-audio-v3.js", import.meta.url), "utf8"),
@@ -21,14 +21,18 @@ test("ordinary motor cannot start on shore, in water, or for the armored boat", 
   ]);
 
   assert.match(audioV2, /ORDINARY_LOCAL_ENGINE_LOOPS/);
-  assert.match(audioV2, /ordinaryLocalEngineAllowed/);
-  assert.match(audioV2, /ensureLoop\(name, options\)/);
+  assert.match(audioV2, /hasDedicatedVesselEngine/);
+  assert.match(audioV2, /profile\.startsWith\("dual-turret"\)/);
+  assert.match(audioV2, /profile\.startsWith\("medium-crew"\)/);
   assert.match(audioV2, /isOrdinaryLocalEngine\(name\) && !this\.ordinaryLocalEngineAllowed/);
-  assert.match(audioV2, /localBoat\.audioProfile !== "dual-turret"/);
+  assert.match(audioV2, /!hasDedicatedVesselEngine\(localBoat\)/);
   assert.match(audioV2, /stopOrdinaryLocalEngine\(\)/);
-  assert.match(audioV3, /free-roam-audio-v2\.js\?v=39/);
+  assert.match(audioV3, /free-roam-audio-v2\.js\?v=41/);
+  assert.match(audioV3, /free-roam-audio-spatial\.js\?v=1/);
 
-  assert.match(audioV4, /const customEngine = otherBoat\?\.audioProfile === "dual-turret"/);
+  assert.match(audioV4, /customVesselEngine/);
+  assert.match(audioV4, /profile\.startsWith\("dual-turret"\)/);
+  assert.match(audioV4, /profile\.startsWith\("medium-crew"\)/);
   assert.match(audioV4, /if \(!customEngine\) this\.startRemoteLoop\("remote", "motorboatReal"\)/);
   assert.match(audioV4, /customEngine \? 0 : engineGain/);
 });
@@ -73,12 +77,12 @@ test("worker server uses only the unified armored boat room API", async () => {
   assert.match(core, /export \{prepareDualTurretBoatRoom\}/);
 });
 
-test("armored boat is normalized as owned after legacy first boarding", async () => {
+test("armored boat first boarding is normalized as owned without depending on announcement grammar", async () => {
   const core = await readFile(new URL("../public/src/free-roam-core-v8.js", import.meta.url), "utf8");
   assert.match(core, /normalizeDualTurretOwnership/);
   assert.match(core, /if \(!Number\.isInteger\(boat\.owner\)\) boat\.owner = Number\.isInteger\(boat\.driver\) \? boat\.driver : playerIndex/);
   assert.match(core, /угнал чужую лодку/);
-  assert.match(core, /на своём двухместном бронекатере/);
+  assert.match(core, /event\.boatId = boat\.id/);
   assert.match(core, /event\.ownedBoat = true/);
 });
 
