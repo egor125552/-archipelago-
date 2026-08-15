@@ -127,7 +127,7 @@ test("armored custom engine uses the same foot/swim spatial transform as ordinar
   assert.equal(relativeMovementPan({x: 0, y: 0, heading: 90, mode: "swim"}, right), 1);
 
   const source = await readFile(new URL("../public/src/free-roam-dual-turret-audio.js", import.meta.url), "utf8");
-  assert.match(source, /import \{relativeMovementPan\} from "\.\/free-roam-audio-v3\.js\?v=38"/);
+  assert.match(source, /import \{relativeMovementPan\} from "\.\/free-roam-audio-spatial\.js\?v=1"/);
   assert.match(source, /relativeMovementPan\(listener, boat\)/);
   assert.doesNotMatch(source, /function relativePan\(/, "armored engine must not carry a parallel spatializer");
 });
