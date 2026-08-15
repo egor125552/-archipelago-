@@ -4,6 +4,9 @@ import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=45";
 import {relativeMovementPan} from "./free-roam-audio-v3.js?v=38";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, Number(value) || 0));
+const values = value => Array.isArray(value)
+  ? value
+  : value && typeof value === "object" ? Object.values(value) : [];
 const distance = (a, b) => Math.hypot(
   (Number(a?.x) || 0) - (Number(b?.x) || 0),
   (Number(a?.y) || 0) - (Number(b?.y) || 0),
@@ -73,7 +76,7 @@ function updateBulletVoices(audio, world, playerIndex) {
     return;
   }
 
-  const audible = (boss.projectiles || [])
+  const audible = values(boss.projectiles)
     .filter(projectile => projectile && Number(projectile.energy) > 0.01)
     .map(projectile => ({projectile, metres: distance(listener, projectile)}))
     .filter(item => item.metres <= BULLET_AUDIO_RANGE)
@@ -196,7 +199,7 @@ if (!FreeRoamAudio.prototype.__eliteBoatAudioV13) {
         return;
       case "elite-bullet-ended":
         if (["terrain-impact", "boundary-impact"].includes(event.reason)) {
-this.play("gunHit", {pan: spatial.pan, gain: 0.35 * spatial.gain, rate: 1.18, lowpass: 5200});
+          this.play("gunHit", {pan: spatial.pan, gain: 0.35 * spatial.gain, rate: 1.18, lowpass: 5200});
         }
         return;
       case "elite-boat-boundary-impact":
