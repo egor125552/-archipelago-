@@ -111,6 +111,110 @@ test("stress physics still derives power from the actual fifty propulsion module
   assert.ok(boat.speed <= STRESS_TEST_MAX_SPEED * 0.2);
 });
 
+test("stress physics takes clean speed authority back from the legacy ordinary-boat step", () => {
+  const definition = stressDefinition();
+  const instance = {
+    modules: Object.fromEntries(definition.modules
+      .filter(module => module.type === "propulsion")
+      .map(module => [module.id, {enabled: true, health: 100}])),
+  };
+  const before = {x: 210, y: 150, heading: 180, speed: 52, rudder: 0};
+  const world = {events: [], players: [], bounds: {width: 420, height: 320, shoreY: 72}};
+  const boat = {
+    id: 0,
+    x: 210,
+    y: 151,
+    heading: 180,
+    speed: 36,
+    throttle: 1,
+    sunk: false,
+    reserved: false,
+    engineStalled: false,
+    collisionRadius: 6,
+  };
+
+  STRESS_TEST_PHYSICS_MODULE.step({
+    world,
+    boat,
+    definition,
+    instance,
+    dt: 0.04,
+    previousStates: [before],
+    eventStart: 0,
+  });
+  assert.ok(boat.speed > before.speed, `custom propulsion must accelerate from ${before.speed}, got ${boat.speed}`);
+  assert.ok(boat.y > before.y, "clean motion must be rebuilt from the pre-legacy vessel state");
+
+  const disrupted = {
+    ...boat,
+    x: 205,
+    y: 155,
+    speed: 10,
+  };
+  world.events = [{type: "collision", boatId: 0}];
+  STRESS_TEST_PHYSICS_MODULE.step({
+    world,
+    boat: disrupted,
+    definition,
+    instance,
+    dt: 0.04,
+    previousStates: [before],
+    eventStart: 0,
+  });
+  assert.ok(disrupted.speed < 20, "a real collision must keep its resolved speed instead of restoring the clean baseline");
+  assert.equal(disrupted.x, 205, "a real collision must keep its resolved contact position");
+});
+
+test("fastest vessel accelerates monotonically through the shared free-roam step", () => {
+  const world = createFreeWorld();
+  stepFreeWorld(world, 0.04);
+  const boat = world.boats.find(candidate => candidate?.boatType === TYPE);
+  assert.ok(boat);
+
+  for (const candidate of world.boats) {
+    if (!candidate || candidate.id === boat.id) continue;
+    candidate.reserved = true;
+    candidate.speed = 0;
+  }
+  boat.x = 210;
+  boat.y = 120;
+  boat.heading = 180;
+  boat.speed = 0;
+  boat.collisionCooldown = 0;
+
+  placeOnDeck(world, boat, 0, {deckId: "stress-control-deck", x: -1.15, y: 1.15, heading: 0});
+  drainEvents(world);
+  pulseAction(world, 0);
+  assert.equal(boat.driver, 0);
+  drainEvents(world);
+  setPlayerInput(world, 0, {up: true});
+
+  let previousFullThrottleSpeed = null;
+  let fullThrottleSamples = 0;
+  for (let index = 0; index < 45; index += 1) {
+    stepFreeWorld(world, 0.04);
+    const events = drainEvents(world);
+    const disruption = events.find(event => (
+      ["collision", "ram", "water-boundary", "tow-attach", "tow-detach", "sonar-guide-snap"].includes(event?.type)
+      && (event.boatId === boat.id || event.targetBoat === boat.id || (event.targets || []).includes(0))
+    ));
+    assert.equal(disruption, undefined, `test route unexpectedly hit ${disruption?.type || "a disruption"}`);
+    if (boat.throttle < 0.99) continue;
+    if (previousFullThrottleSpeed != null) {
+      assert.ok(
+        boat.speed >= previousFullThrottleSpeed - 0.01,
+        `full-throttle speed regressed from ${previousFullThrottleSpeed.toFixed(2)} to ${boat.speed.toFixed(2)}`,
+      );
+    }
+    previousFullThrottleSpeed = boat.speed;
+    fullThrottleSamples += 1;
+  }
+
+  assert.ok(fullThrottleSamples >= 8, "test must observe a sustained full-throttle window");
+  assert.ok(boat.speed > 55, `fastest vessel should be well into its acceleration run, got ${boat.speed}`);
+  assert.ok(boat.speed <= STRESS_TEST_MAX_SPEED + 0.001);
+});
+
 test("driver and gunner occupy separate shared stations; only the gunner fires the same server weapon", () => {
   const world = createFreeWorld();
   stepFreeWorld(world, 0.04);
