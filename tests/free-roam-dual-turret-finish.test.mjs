@@ -81,7 +81,7 @@ test("prediction source contains no separate armored-boat physics", async () => 
   assert.match(source, /reconciledHeading/);
 });
 
-test("Safari maps the old prediction URL to the finished shared prediction", async () => {
+test("Safari import map sends stale prediction code directly to the current shared prediction", async () => {
   const html = await readFile(new URL("../public/free-roam.html", import.meta.url), "utf8");
-  assert.match(html, /free-roam-client-prediction\.js\?v=42[^\n]+free-roam-client-prediction\.js\?v=43/);
+  assert.match(html, /free-roam-client-prediction\.js\?v=42[^\n]+free-roam-client-prediction\.js\?v=44/);
 });
