@@ -16,8 +16,10 @@ import {VESSEL_STATION_INPUT_SYSTEMS} from "./systems/vessel-station-input-syste
 import {WALKABLE_VESSEL_SYSTEMS} from "./systems/walkable-vessel-system.js?v=1";
 import {VESSEL_DECK_ACCESSIBILITY_SYSTEMS} from "./systems/vessel-deck-accessibility-system.js?v=1";
 import {VESSEL_RESPAWN_SYSTEMS} from "./systems/vessel-respawn-system.js?v=1";
+import {VESSEL_SPATIAL_DAMAGE_SYSTEMS} from "./systems/vessel-spatial-damage-system.js?v=1";
 
 export function installVesselPlugins(registry) {
+  for (const system of VESSEL_SPATIAL_DAMAGE_SYSTEMS) registry.registerSystem(system);
   for (const system of VESSEL_DECK_BOARDING_SYSTEMS) registry.registerSystem(system);
   for (const system of VESSEL_DECK_INPUT_BRIDGE_SYSTEMS) registry.registerSystem(system);
   for (const system of VESSEL_STATION_INPUT_SYSTEMS) registry.registerSystem(system);
