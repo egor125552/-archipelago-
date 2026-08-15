@@ -108,7 +108,7 @@ test("mega bomb uses world coordinates on foot and armor before structural hull"
     readFile(new URL("../src/free-roam-mega-bomb.js", import.meta.url), "utf8"),
     readFile(new URL("../src/free-roam-mega-bomb-v38.js", import.meta.url), "utf8"),
   ]);
-  assert.match(entry, /free-roam-mega-bomb-v38\.js\?v=1/);
+  assert.match(entry, /free-roam-mega-bomb-v38\.js\?v=2/);
   assert.match(v38, /\["foot", "swim"\]\.includes\(player\.mode\)/);
   assert.match(v38, /event\.spatial\[index\]\.pan = worldSpacePan\(listener, event\)/);
   assert.match(v38, /nominalArmorDamage = raw \* 0\.72/);
