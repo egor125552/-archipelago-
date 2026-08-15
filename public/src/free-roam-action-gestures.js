@@ -1,7 +1,5 @@
 "use strict";
 
-import "./free-roam-manual-respawn-client.js?v=1";
-
 const STATIONARY_LIMIT = 24;
 const HOLD_TIME = 520;
 
