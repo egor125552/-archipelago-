@@ -1,9 +1,5 @@
 "use strict";
 
-const RESPAWN_LABEL = "Возродиться";
-const RESPAWN_PULSE_MS = 140;
-let releaseTimer = 0;
-
 function freeRoamApi() {
   return globalThis.__freeRoam || null;
 }
@@ -16,46 +12,22 @@ function playerIsDead() {
   return Boolean(player && (player.mode === "dead" || player.combat?.alive === false));
 }
 
-function pulseRespawn() {
-  const api = freeRoamApi();
-  if (!api?.setControl || !playerIsDead()) return false;
-  api.setControl("action", true);
-  clearTimeout(releaseTimer);
-  releaseTimer = setTimeout(() => {
-    releaseTimer = 0;
-    freeRoamApi()?.setControl?.("action", false);
-  }, RESPAWN_PULSE_MS);
+function triggerRespawn() {
+  if (!playerIsDead()) return false;
+  const actionButton = document.getElementById("actionButton");
+  if (!actionButton) return false;
+  actionButton.click();
   return true;
 }
 
-function ensureRespawnButton() {
-  const actionButton = document.getElementById("actionButton");
-  if (!actionButton) return null;
-  let button = document.getElementById("respawnButton");
-  if (button) return button;
-
-  button = document.createElement("button");
-  button.id = "respawnButton";
-  button.type = "button";
-  button.className = actionButton.className;
-  button.textContent = RESPAWN_LABEL;
-  button.setAttribute("aria-label", "Возродиться");
-  button.setAttribute("aria-keyshortcuts", "R");
-  button.hidden = true;
-  button.addEventListener("click", event => {
-    if (!pulseRespawn()) return;
-    event.preventDefault();
-  });
-  actionButton.insertAdjacentElement("beforebegin", button);
-  return button;
-}
-
 function syncRespawnControls() {
-  const button = ensureRespawnButton();
+  const game = document.getElementById("game");
   const actionButton = document.getElementById("actionButton");
-  if (!button || !actionButton) return;
-  const dead = playerIsDead();
-  button.hidden = !dead;
+  const respawnButton = document.getElementById("respawnButton");
+  if (!actionButton || !respawnButton) return;
+  const dead = !game?.hidden && playerIsDead();
+  respawnButton.hidden = !dead;
+  respawnButton.disabled = false;
   actionButton.hidden = dead;
 }
 
@@ -69,20 +41,20 @@ function handleRespawnKey(event) {
     || event.isComposing
     || event.target?.matches?.("input, textarea, select, [contenteditable='true']")
   ) return;
-  if (!pulseRespawn()) return;
+  if (!triggerRespawn()) return;
   event.preventDefault();
   event.stopImmediatePropagation();
 }
 
 function installManualRespawnControls() {
-  ensureRespawnButton();
-  syncRespawnControls();
-  window.addEventListener("keydown", handleRespawnKey, true);
-  window.addEventListener("blur", () => {
-    clearTimeout(releaseTimer);
-    releaseTimer = 0;
-    freeRoamApi()?.setControl?.("action", false);
+  const respawnButton = document.getElementById("respawnButton");
+  if (!respawnButton) return;
+  respawnButton.addEventListener("click", event => {
+    if (!triggerRespawn()) return;
+    event.preventDefault();
   });
+  window.addEventListener("keydown", handleRespawnKey, true);
+  syncRespawnControls();
   setInterval(() => {
     if (!document.hidden) syncRespawnControls();
   }, 250);
