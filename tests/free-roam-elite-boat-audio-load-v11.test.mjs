@@ -8,7 +8,7 @@ test("elite bomb-bay audio is loaded through the live Safari cache chain", () =>
   const eliteAudio = fs.readFileSync(new URL("../public/src/free-roam-elite-boat-audio-v11.js", import.meta.url), "utf8");
 
   assert.match(html, /free-roam-quality-v1\.js\?v=7/);
-  assert.match(quality, /free-roam-elite-boat-audio-v11\.js\?v=3/);
+  assert.match(quality, /free-roam-elite-boat-audio-v11\.js\?v=4/);
   assert.match(eliteAudio, /free-roam-audio-v5\.js\?v=45/);
   assert.match(eliteAudio, /elite-bomb-bay-opening/);
   assert.match(eliteAudio, /elite-bomb-bay-closing/);
