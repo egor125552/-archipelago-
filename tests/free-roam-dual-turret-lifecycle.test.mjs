@@ -61,6 +61,20 @@ test("a genuinely sunk patrol clears every seat and recovers the same registered
   placeAboard(world, 0, boat);
   placeAboard(world, 1, boat);
 
+  const controller = world.freeDualTurretBoat;
+  let recoveryRemaining = controller.recoveryRemaining;
+  Object.defineProperty(controller, "recoveryRemaining", {
+    configurable: true,
+    enumerable: true,
+    get() { return recoveryRemaining; },
+    set(value) {
+      if (value === Number.MAX_SAFE_INTEGER) {
+        throw new Error(`recoveryRemaining was frozen at MAX_SAFE_INTEGER\n${new Error().stack}`);
+      }
+      recoveryRemaining = value;
+    },
+  });
+
   boat.hull = 0;
   boat.water = 100;
   boat.leak = 16;
