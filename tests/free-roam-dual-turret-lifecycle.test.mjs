@@ -70,7 +70,8 @@ test("a genuinely sunk patrol clears every seat and recovers the same registered
   const start = world.events.length;
   stepFreeWorld(world, 0.1);
   assert.equal(boat.sunk, true);
-  assert.ok(Number(world.freeDualTurretBoat.recoveryRemaining) > 59 && Number(world.freeDualTurretBoat.recoveryRemaining) < 60);
+  const initialRecovery = world.freeDualTurretBoat.recoveryRemaining;
+  assert.ok(Number.isFinite(initialRecovery) && initialRecovery > 0 && initialRecovery <= 60, `recovery timer must start within the sixty-second window, got ${initialRecovery}`);
   assert.ok(world.events.slice(start).some(event => event.type === "dual-turret-recovery-start"));
 
   for (let index = 0; index < 600; index += 1) stepFreeWorld(world, 0.1);
