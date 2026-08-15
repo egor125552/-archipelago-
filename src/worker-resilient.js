@@ -36,6 +36,32 @@ function stalledFreeState(client, now = Date.now()) {
   );
 }
 
+function compactQueuedEvents(events) {
+  const list = Array.isArray(events) ? events : [];
+  if (list.length <= 128) return list;
+  const described = list
+    .map((event, index) => ({event, index}))
+    .filter(({event}) => Boolean(event?.text))
+    .slice(-96);
+  const ambient = list
+    .map((event, index) => ({event, index}))
+    .filter(({event}) => !event?.text)
+    .slice(-32);
+  return [...described, ...ambient]
+    .sort((left, right) => left.index - right.index)
+    .map(({event}) => event);
+}
+
+function queueNewestFreeState(client, state) {
+  if (!client || !state) return false;
+  const previousEvents = client.freePending?.events || [];
+  client.freePending = {
+    ...state,
+    events: compactQueuedEvents([...previousEvents, ...(state.events || [])]),
+  };
+  return true;
+}
+
 function openSocket(socket) {
   return Boolean(socket && socket.readyState === 1 && typeof socket.send === "function");
 }
@@ -165,8 +191,12 @@ export class Lobby extends PersistentLobby {
   }
 
   offerFreeState(socket, state) {
-    const offered = super.offerFreeState(socket, state);
-    return this.resendStalledFreeState(socket) || offered;
+    const client = this.clients.get(socket);
+    if (stalledFreeState(client)) {
+      queueNewestFreeState(client, state);
+      return this.resendStalledFreeState(socket);
+    }
+    return super.offerFreeState(socket, state);
   }
 
   flushFreeState(socket) {
