@@ -52,7 +52,7 @@ test("a surviving crew member stays aboard but does not magically inherit the ph
   assert.equal(boat.turrets[1].assignedPlayer, 1);
 });
 
-test("sinking clears every seat and recovery restores the same registered boat", () => {
+test("a genuinely sunk patrol clears every seat and recovers the same registered boat after sixty seconds", () => {
   const world = createFreeWorld();
   const boat = prepareDualTurretBoatRoom(world);
   const original = boat;
@@ -60,17 +60,27 @@ test("sinking clears every seat and recovery restores the same registered boat",
   boat.crew = [0, 1];
   placeAboard(world, 0, boat);
   placeAboard(world, 1, boat);
-  boat.sunk = true;
-  world.freeDualTurretBoat.recoveryRemaining = 0.04;
-  world.freeDualTurretBoat.recoveryWarned30 = true;
-  world.freeDualTurretBoat.recoveryWarned10 = true;
 
-  stepFreeWorld(world, 0.05);
+  boat.hull = 0;
+  boat.water = 100;
+  boat.leak = 16;
+  boat.engineStalled = true;
+  boat.sunk = true;
+
+  const start = world.events.length;
+  stepFreeWorld(world, 0.1);
+  assert.equal(boat.sunk, true);
+  assert.ok(Number(world.freeDualTurretBoat.recoveryRemaining) > 59 && Number(world.freeDualTurretBoat.recoveryRemaining) < 60);
+  assert.ok(world.events.slice(start).some(event => event.type === "dual-turret-recovery-start"));
+
+  for (let index = 0; index < 600; index += 1) stepFreeWorld(world, 0.1);
 
   assert.equal(world.boats[boat.id], original);
   assert.equal(boat.sunk, false);
   assert.equal(boat.hull, 300);
   assert.equal(boat.armor, 200);
+  assert.equal(boat.water, 0);
+  assert.equal(boat.leak, 0);
   assert.equal(boat.driver, null);
   assert.deepEqual(boat.crew, [null, null]);
   assert.equal(world.freeDualTurretBoat.recoveryRemaining, null);
