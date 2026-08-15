@@ -39,18 +39,28 @@ function refreshMegaBombExplosionCounts(world, events, explosions) {
   const snapshot = snapshotFor(world, "mega-bomb");
   for (const explosion of explosions) {
     const projectileId = String(explosion.projectileId || "");
-    const playerEvents = events.filter(event => event?.type === "mega-bomb-player-hit" && String(event.projectileId || "") === projectileId);
-    const correctedHits = playerEvents.filter(event => finite(event.damage) > 1);
+    const correctedEvents = events.filter(event => (
+      event?.type === "mega-bomb-player-hit"
+      && event.spatialVesselCorrected === true
+      && String(event.projectileId || "") === projectileId
+    ));
+    if (!correctedEvents.length) continue;
+
+    const legacyHits = correctedEvents.filter(event => event.legacyHit === true).length;
+    const legacyDeaths = correctedEvents.filter(event => event.legacyDeath === true).length;
+    const legacyStuns = correctedEvents.filter(event => event.legacyStunned === true).length;
+    const correctedHits = correctedEvents.filter(event => finite(event.damage) > 1);
     const correctedDeaths = correctedHits.filter(event => {
       const playerIndex = Number(event.targetPlayer);
       return snapshot?.players?.[playerIndex]?.alive && world.players?.[playerIndex]?.combat?.alive === false;
     }).length;
     const correctedStuns = correctedHits.filter(event => event.spatialStunned === true).length;
-    const legacyPlayerHits = Math.max(0, finite(explosion.playerHitCount));
-    explosion.hitCount = Math.max(0, finite(explosion.hitCount) - legacyPlayerHits + correctedHits.length);
-    explosion.playerHitCount = correctedHits.length;
-    explosion.playerDeathCount = correctedDeaths;
-    explosion.stunnedCount = correctedStuns;
+    const hitDelta = correctedHits.length - legacyHits;
+
+    explosion.hitCount = Math.max(0, finite(explosion.hitCount) + hitDelta);
+    explosion.playerHitCount = Math.max(0, finite(explosion.playerHitCount) + hitDelta);
+    explosion.playerDeathCount = Math.max(0, finite(explosion.playerDeathCount) + correctedDeaths - legacyDeaths);
+    explosion.stunnedCount = Math.max(0, finite(explosion.stunnedCount) + correctedStuns - legacyStuns);
     if (explosion.hitCount > 0) explosion.text = `Взрыв поразил объектов: ${explosion.hitCount}. Противников уничтожено: ${Math.max(0, finite(explosion.destroyedCount))}.`;
     else if (finite(explosion.blockedCount) > 0) explosion.text = "Твёрдый берег или корпус судна ослабил ударную волну.";
     else explosion.text = "Взрыв не задел цели.";
@@ -98,14 +108,24 @@ export function reconcileMegaBombVesselSpatialDamage(world, eventStart, nativeVe
     const sameDeck = local && deck && local.deckId === deck.id;
     const protection = sameDeck && localImpact ? clamp(1 - distance(local, localImpact) / 10, 0.18, 0.75) : 0.06;
     const legacyDamage = finite(event.damage);
+    const legacyPlayer = world.players?.[event.targetPlayer];
+    const legacyAliveAfter = legacyPlayer?.combat?.alive !== false;
+    const legacyKnockedDownAfter = Boolean(legacyPlayer?.combat?.knockedDown);
+    const legacyHit = legacyDamage > 1;
+    const legacyDeath = Boolean(before?.alive && !legacyAliveAfter);
+    const legacyStunned = Boolean(before && !before.knockedDown && legacyKnockedDownAfter);
     const correctDamage = legacyDamage * protection;
     compensateLegacyPlayerDamage(world, entry, event.targetPlayer, legacyDamage, correctDamage, {weapon: "mega-bomb", heavy: true, sourcePoint: explosion || null}, "mega-bomb");
     const spatialStunned = normalizeMegaBombOccupantEffects(world, entry, event, before, local, deck, localImpact, correctDamage, explosion);
     event.legacyDamage = legacyDamage;
+    event.legacyHit = legacyHit;
+    event.legacyDeath = legacyDeath;
+    event.legacyStunned = legacyStunned;
     event.damage = correctDamage;
     event.health = world.players?.[event.targetPlayer]?.combat?.health;
     event.spatialDamage = Math.round(correctDamage * 10) / 10;
     event.spatialStunned = spatialStunned;
+    event.spatialVesselCorrected = true;
     event.deckId = deck?.id || null;
     event.zoneId = boatEvent?.zoneId || null;
     event.vesselSpatialDamageVersion = VESSEL_SPATIAL_DAMAGE_VERSION;
