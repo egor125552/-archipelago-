@@ -5,12 +5,14 @@ import {applyVesselDamage} from "../vessel-damage.js";
 import {listCombatTargets, resolveCombatTarget} from "../../free-roam-targeting.js?v=39";
 import {applyBoatDamage} from "../../collision-model.js";
 import {applyCombatDamage} from "../../free-roam-combat-v2.js?v=6";
+import {spawnRareCrate} from "../../free-roam-activities.js?v=44";
 import {damageEnemyBoat} from "../../free-roam-enemy-boats.js?v=3";
 import {damageEscort} from "../../free-roam-pursuer-squad.js?v=33";
 import {damageHostileGunner} from "../../free-roam-hostile-gunners.js?v=32";
-import {damageHostileActor} from "../../free-roam-hostile-actors.js?v=3";
+import {damageHostileActor, releaseCrewFromBoat} from "../../free-roam-hostile-actors.js?v=3";
 import {damageHeavyPursuer} from "../../free-roam-heavy-pursuer.js?v=4";
 import {damageEliteBoatBoss} from "../../free-roam-elite-boat.js?v=2";
+import {notifyThreatBoatDestroyed} from "../../free-roam-threat-director.js?v=4";
 import {releaseStolenCargo} from "../../free-roam-marauder.js?v=33";
 
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, Number(value) || 0));
@@ -22,6 +24,14 @@ function emit(world, type, text, targets = [0, 1], extra = {}) {
   world.events.push({type, text, targets, at: world.time, operationEvent: true, ...extra});
   if (world.events.length > 260) world.events.splice(0, world.events.length - 260);
 }
+
+const MOUNTED_ENEMY_BOAT_HELPERS = Object.freeze({
+  spawnRareCrate,
+  onEnemyBoatDestroyed(world, boat, sourcePlayer) {
+    releaseCrewFromBoat(world, boat);
+    notifyThreatBoatDestroyed(world, boat, sourcePlayer);
+  },
+});
 
 function currentInput(world, playerIndex) {
   return {
@@ -109,17 +119,20 @@ function operatorInput(entry, world, playerIndex) {
 function destroyMarauder(world, target, sourcePlayer, weapon, label) {
   const marauder = target?.point;
   if (!marauder || marauder.destroyed) return false;
+  releaseStolenCargo(world, marauder);
   marauder.hull = 0;
   marauder.destroyed = true;
   marauder.active = false;
   marauder.speed = 0;
-  releaseStolenCargo(world, marauder);
-  emit(world, "pursuer-destroyed", `Катер-преследователь уничтожен: ${label}.`, [0, 1], {
+  marauder.respawnAt = 0;
+  emit(world, "pursuer-destroyed", `Катер-преследователь уничтожен: ${label}. Остался редкий ящик.`, [0, 1], {
     sourcePlayer,
     weapon,
     x: marauder.x,
     y: marauder.y,
   });
+  MOUNTED_ENEMY_BOAT_HELPERS.spawnRareCrate(world, marauder.x, marauder.y, "valuable", "pursuer");
+  MOUNTED_ENEMY_BOAT_HELPERS.onEnemyBoatDestroyed(world, marauder, sourcePlayer);
   return true;
 }
 
@@ -195,10 +208,10 @@ function damageTarget(context, target, amount, sourcePlayer, weapon, label, sour
   }
   if (target.kind === "gunner") return damageHostileGunner(world, target.gunnerId, amount, sourcePlayer);
   if (["hostileActor", "elite"].includes(target.kind)) return damageHostileActor(world, target.actorId, amount, sourcePlayer, {weapon});
-  if (target.kind === "escort") return damageEscort(world, target.pursuerId, amount, sourcePlayer, {});
-  if (target.kind === "enemyBoat") return damageEnemyBoat(world, target.enemyBoatId, amount, sourcePlayer, {}, {weapon});
+  if (target.kind === "escort") return damageEscort(world, target.pursuerId, amount, sourcePlayer, MOUNTED_ENEMY_BOAT_HELPERS, {weapon});
+  if (target.kind === "enemyBoat") return damageEnemyBoat(world, target.enemyBoatId, amount, sourcePlayer, MOUNTED_ENEMY_BOAT_HELPERS, {weapon});
   if (["heavyHull", "heavyTurret", "heavyEngine"].includes(target.kind)) {
-    return damageHeavyPursuer(world, target.component || "hull", amount, sourcePlayer, {}, {weapon});
+    return damageHeavyPursuer(world, target.component || "hull", amount, sourcePlayer, MOUNTED_ENEMY_BOAT_HELPERS, {weapon});
   }
   if (["eliteArmor", "eliteHull", "eliteTurret", "eliteBombBay"].includes(target.kind)) {
     return damageEliteBoatBoss(world, target.component || "hull", amount, sourcePlayer, {weapon, turretId: target.turretId});
