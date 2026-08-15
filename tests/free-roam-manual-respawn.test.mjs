@@ -41,29 +41,27 @@ test("manual respawn action survives a press and release before the next server 
   assert.ok(snapshot.events.some(event => event.type === "player-respawn"));
 });
 
-test("explicit respawn pulse also uses the existing authoritative respawn path", () => {
+test("ordinary action while alive does not trigger a respawn", () => {
   const room = createServerFreeRoom(2_000);
-  setServerFreePresence(room, "crew", true);
-  const player = killForRespawn(room, 1);
+  setServerFreePresence(room, "captain", true);
+  const player = room.world.players[0];
+  player.x = 320;
+  player.y = 220;
 
-  applyServerFreeInput(room, "crew", {respawn: true}, 1);
-  applyServerFreeInput(room, "crew", {respawn: false}, 2);
+  applyServerFreeInput(room, "captain", {action: true}, 1);
+  applyServerFreeInput(room, "captain", {action: false}, 2);
   const snapshot = tickServerFreeRoom(room, 2_040);
 
   assert.equal(player.combat.alive, true);
-  assert.equal(player.mode, "foot");
-  assert.equal(player.x, 218);
-  assert.equal(player.y, 58);
-  assert.ok(snapshot.events.some(event => event.type === "player-respawn"));
+  assert.equal(snapshot.events.some(event => event.type === "player-respawn"), false);
 });
 
-test("client exposes a dedicated respawn button and the R shortcut", () => {
+test("client exposes a dedicated respawn button and the R shortcut through the normal action button", () => {
   const client = fs.readFileSync(new URL("../public/src/free-roam-manual-respawn-client.js", import.meta.url), "utf8");
-  const gestures = fs.readFileSync(new URL("../public/src/free-roam-action-gestures.js", import.meta.url), "utf8");
+  const html = fs.readFileSync(new URL("../public/free-roam.html", import.meta.url), "utf8");
 
-  assert.match(client, /RESPAWN_LABEL = "Возродиться"/);
   assert.match(client, /event\.code !== "KeyR"/);
-  assert.match(client, /aria-keyshortcuts/);
-  assert.match(client, /setControl\("action", true\)/);
-  assert.match(gestures, /free-roam-manual-respawn-client\.js\?v=1/);
+  assert.match(client, /actionButton\.click\(\)/);
+  assert.match(html, /id="respawnButton"[^>]*aria-keyshortcuts="R"[^>]*>Возродиться<\/button>/);
+  assert.match(html, /free-roam-manual-respawn-client\.js\?v=1/);
 });
