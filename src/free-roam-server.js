@@ -27,12 +27,12 @@ const MAX_ELAPSED_SECONDS = 0.2;
 const MAX_STEP_SECONDS = 0.05;
 const INPUT_KEYS = Object.freeze([
   "up", "down", "left", "right", "run", "pump", "repair", "action",
-  "jump", "attack", "weapon", "sonar", "guide", "megaBomb",
+  "jump", "attack", "weapon", "sonar", "guide", "megaBomb", "respawn",
   "shopPrevious", "shopNext", "shopBuy", "shopClose",
   "boardPrevious", "boardNext", "boardAccept", "boardClose",
 ]);
 const PULSE_INPUT_KEYS = Object.freeze([
-  "action", "jump", "weapon", "sonar", "guide", "megaBomb",
+  "action", "jump", "weapon", "sonar", "guide", "megaBomb", "respawn",
   "shopPrevious", "shopNext", "shopBuy", "shopClose",
   "boardPrevious", "boardNext", "boardAccept", "boardClose",
 ]);
@@ -83,6 +83,17 @@ function deliverPendingPulses(serverRoom) {
   ensureInputBuffers(serverRoom);
   for (let index = 0; index < serverRoom.world.players.length; index += 1) {
     setPlayerInput(serverRoom.world, index, bufferedInput(serverRoom, index));
+  }
+}
+
+function armObservedManualRespawns(serverRoom) {
+  ensureInputBuffers(serverRoom);
+  const observed = serverRoom.world?.freeThreatIntelligence?.lastAlive || [];
+  for (let index = 0; index < serverRoom.world.players.length; index += 1) {
+    if (!serverRoom.pendingPulses[index]?.respawn) continue;
+    const combat = serverRoom.world.players[index]?.combat;
+    if (combat?.alive !== false || observed[index] !== false) continue;
+    combat.respawnRemaining = 0;
   }
 }
 
@@ -203,6 +214,7 @@ export function tickServerFreeRoom(serverRoom, now = Date.now()) {
     deliverPendingPulses(serverRoom);
     launchPendingMegaBombs(serverRoom);
     stepInChunks(serverRoom.world, elapsedSeconds);
+    armObservedManualRespawns(serverRoom);
     clearDeliveredPulses(serverRoom);
   }
   const events = drainEvents(serverRoom.world);
