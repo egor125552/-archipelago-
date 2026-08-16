@@ -1,5 +1,7 @@
 "use strict";
 
+import {AudioEngine} from "../../audio-engine-v13.js?free=2";
+import {playSpatialTone} from "../../spatial/spatial-audio-adapter.js";
 import {createSpatialLab} from "./location.js";
 
 const {runtime} = createSpatialLab();
@@ -10,7 +12,7 @@ runtime.refreshActivity();
 const status = document.querySelector("#status");
 const announcement = document.querySelector("#announcement");
 let saved = runtime.saveState();
-let audioContext = null;
+let audioEngine = null;
 
 function say(message) {
   announcement.textContent = "";
@@ -41,29 +43,21 @@ function render() {
     <dt>Диагностика</dt><dd>${diagnostics.length ? diagnostics.map(entry => `${entry.code}: ${entry.message}`).join("; ") : "ошибок и предупреждений нет"}</dd>`;
 }
 
+async function ensureAudioEngine() {
+  audioEngine ||= new AudioEngine();
+  await audioEngine.init();
+  return audioEngine;
+}
+
 async function playAcousticTest() {
   const model = runtime.getModule("lab.acoustics").compute({sourceSpaceId: "lab.yard", listenerSpaceId: "lab.upper.room"});
-  audioContext ||= new AudioContext();
-  await audioContext.resume();
-  const now = audioContext.currentTime;
-  const oscillator = audioContext.createOscillator();
-  const filter = audioContext.createBiquadFilter();
-  const dry = audioContext.createGain();
-  const delay = audioContext.createDelay(0.5);
-  const wet = audioContext.createGain();
-  oscillator.type = "sine";
-  oscillator.frequency.setValueAtTime(330, now);
-  filter.type = "lowpass";
-  filter.frequency.setValueAtTime(model.lowpassHz, now);
-  dry.gain.setValueAtTime(Math.max(0.015, model.gain * (1 - model.reverb * 0.45)), now);
-  delay.delayTime.setValueAtTime(0.12 + model.reverb * 0.15, now);
-  wet.gain.setValueAtTime(model.gain * model.reverb * 0.45, now);
-  oscillator.connect(filter);
-  filter.connect(dry).connect(audioContext.destination);
-  filter.connect(delay).connect(wet).connect(audioContext.destination);
-  oscillator.start(now);
-  oscillator.stop(now + 0.55);
-  say(`Акустический тест. Передача ${(model.transmission * 100).toFixed(0)} процентов, фильтр ${Math.round(model.lowpassHz)} герц, реверберация ${(model.reverb * 100).toFixed(0)} процентов.`);
+  const engine = await ensureAudioEngine();
+  if (!engine.ctx || !engine.master) {
+    say("Аудиодвижок браузера недоступен.");
+    return;
+  }
+  playSpatialTone(engine, model, {frequency: 330, duration: 0.55, gain: 0.22});
+  say(`Акустический тест через общий аудиодвижок. Передача ${(model.transmission * 100).toFixed(0)} процентов, фильтр ${Math.round(model.lowpassHz)} герц, реверберация ${(model.reverb * 100).toFixed(0)} процентов.`);
 }
 
 function respawnPlayerOne() {
