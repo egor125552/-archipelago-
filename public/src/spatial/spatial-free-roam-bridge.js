@@ -40,14 +40,17 @@ function ensureBridgeState(world) {
     gatewayHeld: Array.from({length: count}, () => false),
     boundaryAt: Array.from({length: count}, () => -999),
     proximityNear: Array.from({length: count}, () => false),
+    actionReadyNear: Array.from({length: count}, () => false),
   };
   const state = world.freeSpatialBridge;
   state.gatewayHeld ||= [];
   state.boundaryAt ||= [];
   state.proximityNear ||= [];
+  state.actionReadyNear ||= [];
   while (state.gatewayHeld.length < count) state.gatewayHeld.push(false);
   while (state.boundaryAt.length < count) state.boundaryAt.push(-999);
   while (state.proximityNear.length < count) state.proximityNear.push(false);
+  while (state.actionReadyNear.length < count) state.actionReadyNear.push(false);
   for (const player of world.players || []) ensurePlayerSpatialState(player);
   return state;
 }
@@ -151,13 +154,34 @@ function announceNearbyEntrance(world, playerIndex, player, binding, state) {
   const metres = distance2d(player, entrance.position);
   const discoverRadius = Math.max(Number(entrance.discoverRadius) || 0, Number(entrance.radius) || 3);
   const near = Boolean(discoverRadius && metres <= discoverRadius);
+  const actionRadius = Math.max(0.5, Number(entrance.radius) || 3);
+  const actionReady = metres <= actionRadius;
   if (!near) {
     state.proximityNear[playerIndex] = false;
+    state.actionReadyNear[playerIndex] = false;
     return;
   }
-  if (state.proximityNear[playerIndex]) return;
-  state.proximityNear[playerIndex] = true;
-  emit(world, "location-nearby", `Рядом вход в ${binding.label}, примерно ${Math.max(1, Math.round(metres))} метров. Подойди и нажми действие.`, [playerIndex], {
+
+  const direction = relativeDirection(player, entrance.position);
+  if (!state.proximityNear[playerIndex]) {
+    state.proximityNear[playerIndex] = true;
+    emit(world, "location-nearby", `Рядом ${binding.label}: вход примерно в ${Math.max(1, Math.round(metres))} метрах ${direction}. Иди к нему.`, [playerIndex], {
+      sourcePlayer: playerIndex,
+      locationId: binding.id,
+      x: entrance.position.x,
+      y: entrance.position.y,
+      z: entrance.position.z || 0,
+      distance: metres,
+    });
+  }
+
+  if (!actionReady) {
+    state.actionReadyNear[playerIndex] = false;
+    return;
+  }
+  if (state.actionReadyNear[playerIndex]) return;
+  state.actionReadyNear[playerIndex] = true;
+  emit(world, "location-action-ready", `Вход в ${binding.label} рядом, примерно ${Math.max(1, Math.round(metres))} метров ${direction}. Теперь нажми действие.`, [playerIndex], {
     sourcePlayer: playerIndex,
     locationId: binding.id,
     x: entrance.position.x,

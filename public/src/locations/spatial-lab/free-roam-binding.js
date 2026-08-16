@@ -73,7 +73,7 @@ export const SPATIAL_LAB_FREE_ROAM_BINDING = Object.freeze({
         position: Object.freeze({x: 210, y: 55, z: 0}),
         floorZ: 0,
         heading: 0,
-        radius: 4,
+        radius: 13,
         discoverRadius: 18,
       }),
       to: Object.freeze({...entry, heading: 0}),

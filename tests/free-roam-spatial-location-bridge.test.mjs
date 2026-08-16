@@ -72,6 +72,24 @@ test("the existing action enters and exits the location without creating another
   assert.ok(world.events.some(event => event.type === "location-exit"));
 });
 
+test("the shore entrance is accessible from the approach seen in the developer log", () => {
+  const gate = passage("world.passage.shore-to-spatial-lab");
+  assert.equal(gate.from.radius, 13);
+
+  const world = worldAt(202.08, 44.94);
+  world.players[0].heading = 96.77;
+  initializeFreeRoamSpatialBridge(world, SPATIAL_LAB_FREE_ROAM_BINDING);
+
+  const ready = world.events.find(event => event.type === "location-action-ready");
+  assert.ok(ready, "the player should be told when the entrance can actually be activated");
+  assert.match(ready.text, /Теперь нажми действие/);
+
+  const prepared = prepareFreeRoamSpatialInput(world, 0, {action: true}, SPATIAL_LAB_FREE_ROAM_BINDING);
+  assert.equal(prepared.action, false);
+  assert.equal(world.players[0].spatialLocationId, SPATIAL_LAB_FREE_ROAM_BINDING.id);
+  assert.ok(world.events.some(event => event.type === "location-enter"));
+});
+
 test("the spatial bridge reads the existing jump height as real z and stairs change only the floor height", () => {
   const gate = passage("world.passage.shore-to-spatial-lab");
   const stairs = passage("lab.connection.stairs");
