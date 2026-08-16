@@ -49,6 +49,15 @@ function renderVesselArchitecture(world) {
 
 export function replicatedFreeWorld(world) {
   const snapshot = base.replicatedFreeWorld(world);
+  for (let index = 0; index < (world?.players || []).length; index += 1) {
+    const source = world.players[index];
+    const target = snapshot.players?.[index];
+    if (!source || !target) continue;
+    target.spatialLocationId = source.spatialLocationId || null;
+    target.spatialSpaceId = source.spatialSpaceId || null;
+    target.spatialFloorZ = rounded(source.spatialFloorZ);
+    target.z = rounded(source.z);
+  }
   for (let index = 0; index < (world?.boats || []).length; index += 1) {
     const source = world.boats[index];
     const target = snapshot.boats?.[index];

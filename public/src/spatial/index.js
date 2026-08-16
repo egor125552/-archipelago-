@@ -8,3 +8,5 @@ export * from "./spatial-navigation.js";
 export * from "./spatial-acoustics.js";
 export * from "./spatial-standard-modules.js";
 export * from "./spatial-world.js";
+
+export * from "./spatial-free-roam-bridge.js";
