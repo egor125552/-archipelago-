@@ -1,6 +1,6 @@
 "use strict";
 
-import {STRESS_TEST_VESSEL_SYSTEMS} from "./systems/stress-test-vessel-system.js?v=2";
+import {STRESS_TEST_VESSEL_SYSTEMS} from "./systems/stress-test-vessel-system.js?v=3";
 import {MEDIUM_CREW_VESSEL_SYSTEMS} from "./systems/medium-crew-vessel-system.js?v=4";
 import {VESSEL_MOUNTED_WEAPON_SYSTEMS} from "./systems/vessel-mounted-weapon-system.js?v=3";
 import {VESSEL_ZONE_WATER_SYSTEMS} from "./systems/vessel-zone-water-system-v3.js?v=1";

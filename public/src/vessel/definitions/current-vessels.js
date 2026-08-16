@@ -374,6 +374,7 @@ export const CURRENT_VESSEL_TYPES = Object.freeze([
         mounts: ["stress-pistol-hardpoint"],
         config: {
           inputMode: "station-attack",
+          runtimeSystem: "station-hitscan-v1",
           stationResourceId: "stress-pistol-control",
           weaponId: "stress-pistol",
           label: "сверхскоростной пистолет",
