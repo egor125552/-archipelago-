@@ -18,6 +18,80 @@ function isPlayer(entity) {
   return entity?.kind === "player";
 }
 
+function versionNumber(value, {field, fallback, minimum}) {
+  const version = value == null ? fallback : Number(value);
+  if (!Number.isInteger(version) || version < minimum) {
+    throw new SpatialRuntimeError(`${field} must be an integer >= ${minimum}`, {field, value});
+  }
+  return version;
+}
+
+function migrateSnapshotVersion(snapshot, {
+  field,
+  currentVersion,
+  defaultVersion,
+  minimumVersion,
+  migrations,
+  label,
+  locationId,
+}) {
+  let candidate = cloneSpatialData(snapshot);
+  let version = versionNumber(candidate?.[field], {field, fallback: defaultVersion, minimum: minimumVersion});
+  if (version > currentVersion) {
+    throw new SpatialRuntimeError(`unsupported ${label} version ${version}; current version is ${currentVersion}`, {
+      field,
+      version,
+      currentVersion,
+    });
+  }
+  while (version < currentVersion) {
+    const nextVersion = version + 1;
+    const migration = [...(migrations || [])].find(entry => Number(entry?.from) === version && Number(entry?.to) === nextVersion);
+    if (!migration || typeof migration.run !== "function") {
+      throw new SpatialRuntimeError(`missing ${label} migration ${version} to ${nextVersion}`, {
+        field,
+        version,
+        nextVersion,
+      });
+    }
+    let migrated;
+    try {
+      migrated = migration.run(cloneSpatialData(candidate), {
+        field,
+        from: version,
+        to: nextVersion,
+        locationId,
+      });
+    } catch (error) {
+      throw new SpatialRuntimeError(`${label} migration ${version} to ${nextVersion} failed: ${error?.message || error}`, {
+        field,
+        version,
+        nextVersion,
+      });
+    }
+    if (!migrated || typeof migrated !== "object" || Array.isArray(migrated)) {
+      throw new SpatialRuntimeError(`${label} migration ${version} to ${nextVersion} must return a snapshot object`, {
+        field,
+        version,
+        nextVersion,
+      });
+    }
+    candidate = cloneSpatialData(migrated);
+    if (candidate.locationId !== locationId) {
+      throw new SpatialRuntimeError(`${label} migration ${version} to ${nextVersion} changed location identity`, {
+        field,
+        version,
+        nextVersion,
+        locationId: candidate.locationId,
+        expectedLocationId: locationId,
+      });
+    }
+    candidate[field] = nextVersion;
+    version = nextVersion;
+  }
+  return candidate;
+}
+
 export class SpatialRuntimeError extends Error {
   constructor(message, details = {}) {
     super(message);
@@ -41,18 +115,31 @@ export class SpatialRuntime {
     this.diagnostics = [...compiledLocation.diagnostics];
     this.events = [];
     this.listeners = new Set();
+    this.transactionEvents = null;
     this.#startModules();
   }
 
   #commit(kind, payload = {}) {
     this.revision += 1;
     const event = Object.freeze({revision: this.revision, time: this.clock(), kind, ...cloneSpatialData(payload)});
+    if (this.transactionEvents) {
+      this.transactionEvents.push(event);
+      return event;
+    }
+    this.#publishEvent(event);
+    return event;
+  }
+
+  #publishEvent(event) {
     this.events.push(event);
     if (this.events.length > 256) this.events.splice(0, this.events.length - 256);
     for (const listener of this.listeners) {
       try { listener(event); } catch {}
     }
-    return event;
+  }
+
+  #flushTransactionEvents(events) {
+    for (const event of events || []) this.#publishEvent(event);
   }
 
   #diagnose(level, code, message, details = {}) {
@@ -410,11 +497,33 @@ export class SpatialRuntime {
     });
   }
 
-  saveState() {
+  #captureModuleState() {
     const moduleState = {};
     for (const [id, service] of this.moduleInstances) {
       if (typeof service?.serialize === "function") moduleState[id] = cloneSpatialData(service.serialize());
     }
+    return moduleState;
+  }
+
+  #validateTransactionalModuleRestore(moduleState) {
+    for (const id of Object.keys(moduleState || {})) {
+      const service = this.moduleInstances.get(id);
+      if (!service || typeof service.restore !== "function") continue;
+      if (typeof service.serialize !== "function") {
+        throw new SpatialRuntimeError(`module ${id} cannot restore transactionally without serialize()`, {moduleId: id});
+      }
+    }
+  }
+
+  #applyModuleState(moduleState) {
+    for (const [id, state] of Object.entries(moduleState || {})) {
+      const service = this.moduleInstances.get(id);
+      if (!service || typeof service.restore !== "function") continue;
+      service.restore(cloneSpatialData(state));
+    }
+  }
+
+  saveState() {
     return immutableCopy({
       saveVersion: SPATIAL_SAVE_VERSION,
       locationId: this.location.id,
@@ -424,7 +533,7 @@ export class SpatialRuntime {
       connectionStates: asMapObject(this.connectionStates),
       dynamicTransforms: asMapObject(this.dynamicTransforms),
       entities: [...this.entities.values()].map(cloneSpatialData),
-      moduleState,
+      moduleState: this.#captureModuleState(),
     });
   }
 
@@ -441,19 +550,35 @@ export class SpatialRuntime {
     };
   }
 
-  restoreState(snapshot, {migrations = []} = {}) {
+  beginRestoreTransaction(snapshot, {migrations = [], persistenceMigrations = []} = {}) {
+    if (this.transactionEvents) throw new SpatialRuntimeError("nested spatial restore transactions are not supported");
     let candidate = cloneSpatialData(snapshot);
-    if (!candidate || typeof candidate !== "object") throw new SpatialRuntimeError("save snapshot must be an object");
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) throw new SpatialRuntimeError("save snapshot must be an object");
     if (candidate.locationId !== this.location.id) throw new SpatialRuntimeError(`save belongs to ${candidate.locationId}, not ${this.location.id}`, {locationId: candidate.locationId});
-    let version = Number(candidate.saveVersion || 0);
-    while (version < SPATIAL_SAVE_VERSION) {
-      const migration = migrations.find(entry => entry.from === version && entry.to === version + 1);
-      if (!migration || typeof migration.run !== "function") throw new SpatialRuntimeError(`missing save migration ${version} to ${version + 1}`, {version});
-      const migrated = migration.run(cloneSpatialData(candidate));
-      candidate = cloneSpatialData(migrated);
-      version = Number(candidate.saveVersion || 0);
-    }
-    if (version !== SPATIAL_SAVE_VERSION) throw new SpatialRuntimeError(`unsupported save version ${version}`, {version});
+
+    candidate = migrateSnapshotVersion(candidate, {
+      field: "saveVersion",
+      currentVersion: SPATIAL_SAVE_VERSION,
+      defaultVersion: 0,
+      minimumVersion: 0,
+      migrations,
+      label: "save format",
+      locationId: this.location.id,
+    });
+    const currentPersistenceVersion = versionNumber(this.location.persistence?.version, {
+      field: "location.persistence.version",
+      fallback: 1,
+      minimum: 1,
+    });
+    candidate = migrateSnapshotVersion(candidate, {
+      field: "persistenceVersion",
+      currentVersion: currentPersistenceVersion,
+      defaultVersion: 1,
+      minimumVersion: 1,
+      migrations: persistenceMigrations,
+      label: "location persistence",
+      locationId: this.location.id,
+    });
 
     const nextConnections = new Map();
     for (const connection of this.location.connections) {
@@ -468,6 +593,7 @@ export class SpatialRuntime {
       try { nextTransforms.set(spaceId, normalizeTransform(value, `saved transform ${spaceId}`)); } catch {}
     }
 
+    const pendingDiagnostics = [];
     const nextEntities = new Map();
     for (const raw of candidate.entities || []) {
       let id;
@@ -493,34 +619,89 @@ export class SpatialRuntime {
       }
       if (!restored) {
         restored = this.#fallbackEntityState({...raw, id});
-        this.#diagnose("warning", "spatial.save.entity-recovered", `entity ${id} was restored at the safe fallback spawn`, {entityId: id, previousSpaceId: raw.spaceId || null});
+        pendingDiagnostics.push({
+          level: "warning",
+          code: "spatial.save.entity-recovered",
+          message: `entity ${id} was restored at the safe fallback spawn`,
+          details: {entityId: id, previousSpaceId: raw.spaceId || null},
+        });
       }
       nextEntities.set(id, restored);
     }
 
+    this.#validateTransactionalModuleRestore(candidate.moduleState || {});
     const previous = {
       connectionStates: this.connectionStates,
       dynamicTransforms: this.dynamicTransforms,
+      spaceActivity: this.spaceActivity,
       entities: this.entities,
+      moduleState: this.#captureModuleState(),
       revision: this.revision,
+      diagnosticsLength: this.diagnostics.length,
     };
+    let completed = false;
+    let rolledBack = false;
+    this.transactionEvents = [];
+
+    const rollback = () => {
+      if (completed) throw new SpatialRuntimeError("cannot roll back a committed spatial restore transaction");
+      if (rolledBack) return [];
+      const rollbackErrors = [];
+      this.connectionStates = previous.connectionStates;
+      this.dynamicTransforms = previous.dynamicTransforms;
+      this.spaceActivity = previous.spaceActivity;
+      this.entities = previous.entities;
+      for (const [id, state] of Object.entries(previous.moduleState)) {
+        const service = this.moduleInstances.get(id);
+        if (!service || typeof service.restore !== "function") continue;
+        try {
+          service.restore(cloneSpatialData(state));
+        } catch (rollbackError) {
+          rollbackErrors.push(`${id}: ${rollbackError?.message || rollbackError}`);
+        }
+      }
+      this.revision = previous.revision;
+      this.diagnostics.splice(previous.diagnosticsLength);
+      this.transactionEvents = null;
+      rolledBack = true;
+      return rollbackErrors;
+    };
+
     try {
       this.connectionStates = nextConnections;
       this.dynamicTransforms = nextTransforms;
+      this.spaceActivity = new Map(previous.spaceActivity);
       this.entities = nextEntities;
       this.revision = Math.max(0, Number(candidate.revision) || 0);
-      for (const [id, service] of this.moduleInstances) {
-        if (typeof service?.restore === "function" && Object.hasOwn(candidate.moduleState || {}, id)) service.restore(cloneSpatialData(candidate.moduleState[id]));
-      }
-      this.#commit("world.restore", {entityCount: this.entities.size});
+      this.#applyModuleState(candidate.moduleState || {});
+      for (const entry of pendingDiagnostics) this.#diagnose(entry.level, entry.code, entry.message, entry.details);
+      this.refreshActivity();
+      this.#commit("world.restore", {entityCount: this.entities.size, persistenceVersion: currentPersistenceVersion});
     } catch (error) {
-      this.connectionStates = previous.connectionStates;
-      this.dynamicTransforms = previous.dynamicTransforms;
-      this.entities = previous.entities;
-      this.revision = previous.revision;
-      throw new SpatialRuntimeError(`restore failed transactionally: ${error?.message || error}`);
+      const rollbackErrors = rollback();
+      throw new SpatialRuntimeError(`restore failed transactionally: ${error?.message || error}`, {
+        cause: error?.message || String(error),
+        rollbackErrors,
+      });
     }
-    this.refreshActivity();
+
+    return Object.freeze({
+      commit: () => {
+        if (rolledBack) throw new SpatialRuntimeError("cannot commit a rolled-back spatial restore transaction");
+        if (completed) return true;
+        const committedEvents = this.transactionEvents;
+        this.transactionEvents = null;
+        completed = true;
+        this.#flushTransactionEvents(committedEvents);
+        return true;
+      },
+      rollback,
+    });
+  }
+
+  restoreState(snapshot, options = {}) {
+    const transaction = this.beginRestoreTransaction(snapshot, options);
+    transaction.commit();
     return true;
   }
 }

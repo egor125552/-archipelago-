@@ -23,14 +23,27 @@ export class SpatialWorld {
     this.diagnostics = [];
     this.events = [];
     this.revision = 0;
+    this.transactionEvents = null;
   }
 
   #event(kind, payload = {}) {
     this.revision += 1;
     const event = Object.freeze({revision: this.revision, time: this.clock(), kind, ...cloneSpatialData(payload)});
+    if (this.transactionEvents) {
+      this.transactionEvents.push(event);
+      return event;
+    }
+    this.#publishEvent(event);
+    return event;
+  }
+
+  #publishEvent(event) {
     this.events.push(event);
     if (this.events.length > 256) this.events.splice(0, this.events.length - 256);
-    return event;
+  }
+
+  #flushTransactionEvents(events) {
+    for (const event of events || []) this.#publishEvent(event);
   }
 
   addLocation(definition, {optional = false} = {}) {
@@ -163,24 +176,42 @@ export class SpatialWorld {
     });
   }
 
-  restoreWorld(snapshot) {
+  restoreWorld(snapshot, {restoreOptionsByLocation = {}} = {}) {
+    if (this.transactionEvents) throw new SpatialWorldError("nested world restore transactions are not supported");
     if (!snapshot || Number(snapshot.worldSaveVersion) !== 1) throw new SpatialWorldError("unsupported world save");
-    const backups = new Map([...this.locations].map(([id, entry]) => [id, entry.runtime.saveState()]));
+    const previousRevision = this.revision;
+    const transactions = [];
+    this.transactionEvents = [];
     try {
       for (const [id, state] of Object.entries(snapshot.locations || {})) {
         const runtime = this.getLocationRuntime(id);
-        if (runtime) runtime.restoreState(state);
+        if (!runtime) continue;
+        const transaction = runtime.beginRestoreTransaction(state, restoreOptionsByLocation[id] || {});
+        transactions.push({id, transaction});
       }
+      for (const {transaction} of transactions) transaction.commit();
+      this.#event("world.restore", {locationCount: this.locations.size});
+      const committedEvents = this.transactionEvents;
+      this.transactionEvents = null;
+      this.#flushTransactionEvents(committedEvents);
     } catch (error) {
-      for (const [id, state] of backups) {
-        try { this.getLocationRuntime(id)?.restoreState(state); } catch {}
+      const rollbackErrors = [];
+      for (const {id, transaction} of [...transactions].reverse()) {
+        try {
+          for (const rollbackError of transaction.rollback()) rollbackErrors.push(`${id}: ${rollbackError}`);
+        } catch (rollbackError) {
+          rollbackErrors.push(`${id}: ${rollbackError?.message || rollbackError}`);
+        }
       }
-      throw new SpatialWorldError(`world restore rolled back: ${error?.message || error}`);
+      this.revision = previousRevision;
+      this.transactionEvents = null;
+      throw new SpatialWorldError(`world restore rolled back: ${error?.message || error}`, {
+        cause: error?.message || String(error),
+        rollbackErrors,
+      });
     }
-    this.#event("world.restore", {locationCount: this.locations.size});
     return true;
   }
-
   getDiagnostics() {
     const locationDiagnostics = [...this.locations].flatMap(([locationId, entry]) => entry.runtime.getDiagnostics().map(item => ({...item, locationId})));
     return Object.freeze([...this.diagnostics, ...locationDiagnostics].map(entry => Object.freeze(cloneSpatialData(entry))));
