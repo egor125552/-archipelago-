@@ -2,6 +2,7 @@
 
 import {computeSpatialAcoustics} from "./spatial-acoustics.js";
 import {describeRoute, findSpatialRoute} from "./spatial-navigation.js";
+import {filterSpatialInterestSnapshot} from "./spatial-interest.js";
 
 function ensureObject(value, name) {
   if (value == null) return;
@@ -54,7 +55,9 @@ export const STANDARD_SPATIAL_MODULE_TYPES = Object.freeze([
     validateConfig(config) { ensureObject(config, "replication"); },
     create(context) {
       return Object.freeze({
-        snapshot(viewerId, options) { return context.buildInterestSnapshot(viewerId, options); },
+        snapshot(viewerId, options) {
+          return filterSpatialInterestSnapshot(context.read, context.buildInterestSnapshot(viewerId, options), viewerId, options);
+        },
       });
     },
   }),
