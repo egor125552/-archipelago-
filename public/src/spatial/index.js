@@ -10,3 +10,4 @@ export * from "./spatial-standard-modules.js";
 export * from "./spatial-world.js";
 export * from "./spatial-spawn-contract.js";
 export * from "./spatial-physics-adapter.js";
+export * from "./spatial-moving-space-adapter.js";
