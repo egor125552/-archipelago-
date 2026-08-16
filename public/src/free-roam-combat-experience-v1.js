@@ -158,6 +158,8 @@ function syncControls() {
   }
 }
 
+globalThis.__echoFreeRoamSpeechAllowed = speechAllowed;
+
 function installSpeechFilter() {
   const synth = globalThis.speechSynthesis;
   if (!synth || synth.__echoCombatGuidanceInstalled) return;

@@ -1,6 +1,6 @@
 "use strict";
 
-import "./free-roam-combat-experience-v1.js?v=1";
+import "./free-roam-combat-experience-v1.js?v=2";
 import {FreeRoamAudio} from "./free-roam-audio-v5.js?v=43";
 import {installSpeechReliability} from "./free-roam-speech-reliability-v1.js?v=1";
 
