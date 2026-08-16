@@ -1,7 +1,7 @@
 "use strict";
 
 import "./free-roam-speech-runtime-v2.js?v=2";
-import "./free-roam-combat-experience-v2.js?v=1";
+import "./free-roam-combat-experience-v2.js?v=2";
 
 function targetMenuPhrase(text) {
   const value = String(text || "").toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " ").trim();

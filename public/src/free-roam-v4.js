@@ -173,7 +173,10 @@ function announce(text, assertive = false, spoken = true) {
   requestAnimationFrame(() => {
     if (version === messageVersion) live.textContent = text;
   });
-  if (spoken) speech.speak(text, {interrupt: assertive});
+  const speechGate = globalThis.__echoFreeRoamSpeechAllowed;
+  if (spoken && (typeof speechGate !== "function" || speechGate(text))) {
+    speech.speak(text, {interrupt: assertive});
+  }
 }
 
 function socketUrl(role, targetRoom = "") {
