@@ -93,12 +93,12 @@ test("format identifier is explicit", () => {
   assert.deepEqual(applyTrackDelta({}, encodeTrackDelta(null, {x: 1, y: 2})), {x: 1, y: 2});
 });
 
-test("live loader chain cache-busts developer log v3", async () => {
+test("live loader chain uses developer log v4 with v3 format helpers", async () => {
   const fs = await import("node:fs");
   const wrapper = fs.readFileSync(new URL("../public/src/free-roam-developer-log-v1.js", import.meta.url), "utf8");
   const html = fs.readFileSync(new URL("../public/free-roam.html", import.meta.url), "utf8");
   const logger = fs.readFileSync(new URL("../public/src/free-roam-developer-log-v3.js", import.meta.url), "utf8");
-  assert.match(wrapper, /free-roam-developer-log-v3\.js\?v=1/);
+  assert.match(wrapper, /free-roam-developer-log-v4\.js\?v=1/);
   assert.match(html, /free-roam-developer-log-v1\.js\?v=3/);
   assert.match(logger, /CompressionStream\("gzip"\)/);
   assert.match(logger, /CHECKPOINT_INTERVAL_MS = 10000/);

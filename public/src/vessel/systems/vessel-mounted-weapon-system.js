@@ -71,6 +71,26 @@ function emptyImpact(source, heading, range) {
   };
 }
 
+export function mountedWeaponDamageAtDistance(config, baseDamage, metres) {
+  const damage = Math.max(0.1, Number(baseDamage) || 0.1);
+  const fullDamageRange = Math.max(0, Number(config?.fullDamageRange) || 0);
+  const configuredEnd = Number(config?.damageFalloffEndRange);
+  const falloffEndRange = Math.max(
+    fullDamageRange,
+    Number.isFinite(configuredEnd) ? configuredEnd : fullDamageRange,
+  );
+  const configuredMinimum = Number(config?.minimumDamageMultiplier);
+  const minimumDamageMultiplier = Number.isFinite(configuredMinimum)
+    ? clamp(configuredMinimum, 0.05, 1)
+    : 1;
+  if (falloffEndRange <= fullDamageRange || minimumDamageMultiplier >= 1) return damage;
+  const distance = Math.max(0, Number(metres) || 0);
+  if (distance <= fullDamageRange) return damage;
+  const progress = clamp((distance - fullDamageRange) / (falloffEndRange - fullDamageRange), 0, 1);
+  const multiplier = 1 - progress * (1 - minimumDamageMultiplier);
+  return Math.max(0.1, Math.round(damage * multiplier * 100) / 100);
+}
+
 function mountedWeapons(entry) {
   const result = [];
   for (const definition of entry?.definition?.modules || []) {
@@ -259,11 +279,20 @@ function updateMountedWeapons(context) {
       if (mounted.state.cooldown > 0) continue;
 
       const range = Math.max(10, Number(config.range) || 620);
-      const damage = Math.max(0.1, Number(config.damage) || 10);
+      const baseDamage = Math.max(0.1, Number(config.damage) || 10);
       const interval = Math.max(0.04, Number(config.interval) || 0.18);
       const weapon = String(config.weaponId || mounted.definition.id);
       const sourcePoint = weaponSourcePoint(entry, mounted);
       const target = selectTarget(world, playerIndex, boat, range);
+      const targetDistance = target?.point
+        ? Math.hypot(
+          (Number(target.point.x) || 0) - (Number(sourcePoint.x) || 0),
+          (Number(target.point.y) || 0) - (Number(sourcePoint.y) || 0),
+        )
+        : 0;
+      const damage = target
+        ? mountedWeaponDamageAtDistance(config, baseDamage, targetDistance)
+        : baseDamage;
       const heading = target ? targetBearing(sourcePoint, target.point) : Number(boat.heading) || 0;
       const fallbackImpact = emptyImpact(sourcePoint, heading, range);
       const impactX = Number.isFinite(Number(target?.point?.x)) ? Number(target.point.x) : fallbackImpact.x;
