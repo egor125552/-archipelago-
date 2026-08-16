@@ -3,6 +3,7 @@
 import * as base from "./free-roam-replication.js";
 import {isDualTurretBoat} from "./free-roam-dual-turret-boat.js?v=4";
 import {replicatedVesselArchitecture} from "./vessel/vessel-runtime.js?v=2";
+import {buildFreeRoamSpatialInterest} from "./spatial/spatial-free-roam-integration.js";
 
 export * from "./free-roam-replication.js";
 
@@ -49,6 +50,22 @@ function renderVesselArchitecture(world) {
 
 export function replicatedFreeWorld(world) {
   const snapshot = base.replicatedFreeWorld(world);
+  for (let index = 0; index < (world?.players || []).length; index += 1) {
+    const source = world.players[index];
+    const target = snapshot.players?.[index];
+    if (!source || !target) continue;
+    target.spatialLocationId = source.spatialLocationId || null;
+    target.spatialSpaceId = source.spatialSpaceId || null;
+    target.spatialFloorZ = rounded(source.spatialFloorZ);
+    target.z = rounded(source.z);
+    target.spatialBounds = source.spatialBounds ? {
+      minX: rounded(source.spatialBounds.minX), maxX: rounded(source.spatialBounds.maxX),
+      minY: rounded(source.spatialBounds.minY), maxY: rounded(source.spatialBounds.maxY),
+      floorZ: rounded(source.spatialBounds.floorZ),
+    } : null;
+    target.spatialTransition = source.spatialTransition ? {...source.spatialTransition} : null;
+    target.spatialFalling = Boolean(source.spatialFalling);
+  }
   for (let index = 0; index < (world?.boats || []).length; index += 1) {
     const source = world.boats[index];
     const target = snapshot.boats?.[index];
@@ -82,6 +99,13 @@ export function replicatedFreeWorld(world) {
     }));
   }
   snapshot.vesselArchitecture = renderVesselArchitecture(world);
+  snapshot.spatialLocationCatalog = (world?.spatialLocationCatalog || []).map(entry => ({
+    id: String(entry.id || ""),
+    label: String(entry.label || ""),
+    navigationTargetId: String(entry.navigationTargetId || ""),
+    position: entry.position ? {x: rounded(entry.position.x), y: rounded(entry.position.y), z: rounded(entry.position.z)} : null,
+  }));
+  snapshot.spatialInterestByPlayer = (world?.players || []).map((_, playerIndex) => buildFreeRoamSpatialInterest(world, playerIndex));
   const controller = world?.freeDualTurretBoat;
   if (controller) {
     snapshot.freeDualTurretBoat = {

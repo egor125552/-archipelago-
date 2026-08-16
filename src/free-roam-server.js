@@ -44,7 +44,7 @@ export function freePlayerIndex(role) {
 function normalizeNavigationTargetId(value) {
   const targetId = typeof value === "string" ? value.slice(0, 160) : "objective";
   if (["objective", "merchant", "board"].includes(targetId)) return targetId;
-  if (targetId.startsWith("vessel:") || targetId.startsWith("vessel-id:")) return targetId;
+  if (targetId.startsWith("vessel:") || targetId.startsWith("vessel-id:") || targetId.startsWith("location:")) return targetId;
   return "objective";
 }
 

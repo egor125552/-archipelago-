@@ -28,12 +28,19 @@ import {
 import {isPlayerNearMerchant} from "./free-roam-shop.js?v=5";
 import {attachVesselArchitecture, runVesselSystems} from "./vessel/vessel-runtime.js?v=2";
 import {runVesselPhysics} from "./vessel/vessel-runtime-v3.js?v=1";
+import {FreeRoamSpatialManager} from "./spatial/spatial-free-roam-integration.js";
+import {FREE_ROAM_SPATIAL_LOCATIONS} from "./locations/free-roam-location-registry.js";
 
 export * from "./free-roam-core-v7.js?v=1";
 export {prepareDualTurretBoatRoom};
 export const WORLD = base.WORLD;
 
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, Number(value) || 0));
+
+const spatialIntegration = new FreeRoamSpatialManager({
+  locations: FREE_ROAM_SPATIAL_LOCATIONS,
+  mode: "production",
+});
 
 function ensureController(world, options) {
   const state = ensureDualTurretBoatState(world, options);
@@ -152,6 +159,7 @@ export function createFreeWorld() {
   prepareDualTurretBoatRoom(world);
   ensureDualTurretPhysicsProfile(world);
   attachVesselArchitecture(world);
+  spatialIntegration.initialize(world);
   return world;
 }
 
@@ -160,12 +168,13 @@ export function setPlayerInput(world, playerIndex, nextInput) {
   attachVesselArchitecture(world);
   const eventStart = world.events?.length || 0;
   const previousBoatIds = activeBoatIds(world);
-  runVesselSystems("before-input", {world, playerIndex, input: nextInput, eventStart});
-  base.setPlayerInput(world, playerIndex, prepareFreeRoamPlayerInput(world, playerIndex, nextInput));
+  const spatialInput = spatialIntegration.prepareInput(world, playerIndex, nextInput);
+  runVesselSystems("before-input", {world, playerIndex, input: spatialInput, eventStart});
+  base.setPlayerInput(world, playerIndex, prepareFreeRoamPlayerInput(world, playerIndex, spatialInput));
   normalizeDualTurretOwnership(world, playerIndex, eventStart);
   attachBoatTransitionMetadata(world, eventStart, previousBoatIds);
   applyDualTurretSpeech(world, eventStart);
-  runVesselSystems("after-input", {world, playerIndex, input: nextInput, eventStart});
+  runVesselSystems("after-input", {world, playerIndex, input: spatialInput, eventStart});
 }
 
 export function stepFreeWorld(world, dt) {
@@ -179,7 +188,11 @@ export function stepFreeWorld(world, dt) {
   const boatContext = prepareDualTurretBoatStep(world);
   const weaponContext = prepareDualTurretWeaponStep(world);
   runVesselSystems("before-step", {world, dt: safeDt, eventStart});
-  const result = base.stepFreeWorld(world, safeDt);
+  const previousPresence = spatialIntegration.prepareLegacyStep(world);
+  let result;
+  try { result = base.stepFreeWorld(world, safeDt); }
+  finally { spatialIntegration.finishLegacyStep(world, previousPresence); }
+  spatialIntegration.sync(world, safeDt, {eventStart});
   rebalanceDualTurretGunHits(world, eventStart, previousDurability);
   applyBoatPhysicsProfiles(world, previousPhysics, safeDt, {tuning: CONFIG, eventStart});
   runVesselPhysics({world, dt: safeDt, eventStart, previousStates: previousPhysics, tuning: CONFIG});
@@ -193,9 +206,11 @@ export function stepFreeWorld(world, dt) {
 
 export function playerStatus(world, playerIndex) {
   const inherited = base.playerStatus(world, playerIndex);
+  const spatial = spatialIntegration.status(world, playerIndex);
+  const status = spatial ? `${inherited} ${spatial}` : inherited;
   const player = world?.players?.[playerIndex];
   const boat = player?.mode === "boat" ? world.boats?.[player.activeBoat] : null;
-  if (boat !== dualTurretBoat(world)) return inherited;
+  if (boat !== dualTurretBoat(world)) return status;
   const turret = playerDualTurret(world, playerIndex);
-  return `${inherited} Двухместный бронекатер: корпус ${Math.round(boat.hull)} из ${Math.round(boat.hullMax)}, броня ${Math.round(boat.armor)} из ${Math.round(boat.armorMax)}. ${turret ? `${turret.label}: патронов ${turret.ammo}.` : "Установка не назначена."}`;
+  return `${status} Двухместный бронекатер: корпус ${Math.round(boat.hull)} из ${Math.round(boat.hullMax)}, броня ${Math.round(boat.armor)} из ${Math.round(boat.armorMax)}. ${turret ? `${turret.label}: патронов ${turret.ammo}.` : "Установка не назначена."}`;
 }

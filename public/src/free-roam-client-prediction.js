@@ -35,13 +35,7 @@ function predictionPhysics(boat) {
   const inherited = resolveBoatPhysicsProfile(boat, CONFIG);
   const profile = boat?.predictionPhysicsProfile;
   if (!profile || typeof profile !== "object") {
-    return {
-      ...inherited,
-      deceleration: inherited.acceleration,
-      releaseBehavior: "coast",
-      applyDrag: true,
-      propulsionAvailable: true,
-    };
+    return {...inherited, deceleration: inherited.acceleration, releaseBehavior: "coast", applyDrag: true, propulsionAvailable: true};
   }
   return {
     ...inherited,
@@ -62,10 +56,18 @@ function clampBoatState(boat, physics = predictionPhysics(boat)) {
   return boat;
 }
 
+function spatialAuthorityChanged(previousPlayer, nextPlayer) {
+  return (previousPlayer?.spatialLocationId || null) !== (nextPlayer?.spatialLocationId || null)
+    || (previousPlayer?.spatialSpaceId || null) !== (nextPlayer?.spatialSpaceId || null)
+    || Boolean(nextPlayer?.spatialTransition)
+    || Boolean(nextPlayer?.spatialFalling);
+}
+
 export function reconcileLocalPrediction(previousWorld, nextWorld, playerIndex) {
   const previousPlayer = previousWorld?.players?.[playerIndex];
   const nextPlayer = nextWorld?.players?.[playerIndex];
   if (!previousPlayer || !nextPlayer || previousPlayer.mode !== nextPlayer.mode) return nextWorld;
+  if (spatialAuthorityChanged(previousPlayer, nextPlayer)) return nextWorld;
 
   if (nextPlayer.mode === "boat" && previousPlayer.activeBoat === nextPlayer.activeBoat) {
     const previousBoat = previousWorld.boats?.[previousPlayer.activeBoat];
@@ -78,18 +80,13 @@ export function reconcileLocalPrediction(previousWorld, nextWorld, playerIndex) 
     nextBoat.x += (previousBoat.x - nextBoat.x) * keep;
     nextBoat.y += (previousBoat.y - nextBoat.y) * keep;
     const authoritativeHeadingDelta = Math.abs(wrapDeg((Number(nextBoat.heading) || 0) - (Number(previousBoat.heading) || 0)));
-    const reconciledHeading = authoritativeHeadingDelta >= 45
-      ? wrapDeg(Number(nextBoat.heading) || 0)
-      : blendAngle(nextBoat.heading, previousBoat.heading, keep);
+    const reconciledHeading = authoritativeHeadingDelta >= 45 ? wrapDeg(Number(nextBoat.heading) || 0) : blendAngle(nextBoat.heading, previousBoat.heading, keep);
     nextBoat.heading = reconciledHeading;
     nextBoat.speed += (previousBoat.speed - nextBoat.speed) * keep;
     nextBoat.throttle += (previousBoat.throttle - nextBoat.throttle) * keep;
     clampBoatState(nextBoat);
 
     if (occupant) {
-      // A deck occupant has an independent vessel-local position and heading.
-      // Smooth that world position directly instead of snapping the person to
-      // the boat centre or forcing the person's heading to the hull heading.
       const playerError = Math.hypot((Number(previousPlayer.x) || 0) - (Number(nextPlayer.x) || 0), (Number(previousPlayer.y) || 0) - (Number(nextPlayer.y) || 0));
       if (playerError <= 7) {
         const personKeep = 0.52;
@@ -133,35 +130,23 @@ function predictBoat(world, playerIndex, input, dt) {
   const physics = predictionPhysics(boat);
   const steer = Number(Boolean(input.right)) - Number(Boolean(input.left));
   const thrust = Number(Boolean(input.up)) - Number(Boolean(input.down));
-  if (thrust) {
-    boat.throttle += (thrust - (Number(boat.throttle) || 0)) * Math.min(1, dt * 4.5);
-  } else {
-    boat.throttle = 0;
-  }
+  if (thrust) boat.throttle += (thrust - (Number(boat.throttle) || 0)) * Math.min(1, dt * 4.5);
+  else boat.throttle = 0;
   const propulsionUnavailable = boat.engineStalled || boat.emergencyActive || physics.propulsionAvailable === false;
   if (propulsionUnavailable) boat.throttle = 0;
 
   if (propulsionUnavailable || !thrust) {
-    if (physics.releaseBehavior === "target-zero") {
-      boat.speed = approachZero(boat.speed, physics.deceleration * dt);
-    } else if (!boat.engineStalled && !boat.emergencyActive) {
-      boat.speed *= Math.exp(-0.028 * physics.dragFactor * dt);
-    }
+    if (physics.releaseBehavior === "target-zero") boat.speed = approachZero(boat.speed, physics.deceleration * dt);
+    else if (!boat.engineStalled && !boat.emergencyActive) boat.speed *= Math.exp(-0.028 * physics.dragFactor * dt);
   } else {
-    const targetSpeed = boat.throttle >= 0
-      ? boat.throttle * physics.maxForwardSpeed
-      : boat.throttle * physics.maxReverseSpeed;
+    const targetSpeed = boat.throttle >= 0 ? boat.throttle * physics.maxForwardSpeed : boat.throttle * physics.maxReverseSpeed;
     const accelerating = Math.abs(targetSpeed) > Math.abs(Number(boat.speed) || 0);
     const response = accelerating ? physics.acceleration : physics.deceleration;
     boat.speed += clamp(targetSpeed - boat.speed, -response * dt, response * dt);
-    if (physics.applyDrag) {
-      boat.speed *= Math.max(0, 1 - physics.drag * dt * (0.12 + Math.abs(boat.speed) / Math.max(0.001, physics.maxForwardSpeed) * 0.16));
-    }
+    if (physics.applyDrag) boat.speed *= Math.max(0, 1 - physics.drag * dt * (0.12 + Math.abs(boat.speed) / Math.max(0.001, physics.maxForwardSpeed) * 0.16));
   }
   clampBoatState(boat, physics);
-  if (steer) {
-    boat.heading = wrapDeg(boat.heading + operationSteeringDelta(boat.speed, steer, dt) * physics.turnFactor);
-  }
+  if (steer) boat.heading = wrapDeg(boat.heading + operationSteeringDelta(boat.speed, steer, dt) * physics.turnFactor);
   const radius = Math.max(1, Number(boat.collisionRadius) || WORLD.boatRadius);
   boat.x = clamp(boat.x + Math.sin(rad(boat.heading)) * boat.speed * dt, radius, WORLD.width - radius);
   boat.y = clamp(boat.y - Math.cos(rad(boat.heading)) * boat.speed * dt, WORLD.shoreY + 4, WORLD.height - radius);
@@ -178,7 +163,7 @@ function predictBoat(world, playerIndex, input, dt) {
 
 function predictPerson(world, playerIndex, input, dt) {
   const player = world.players?.[playerIndex];
-  if (!player || !["foot", "swim"].includes(player.mode) || player.combat?.knockedDown) return;
+  if (!player || !["foot", "swim"].includes(player.mode) || player.combat?.knockedDown || player.spatialTransition || player.spatialFalling) return;
   let dx = Number(Boolean(input.right)) - Number(Boolean(input.left));
   let dy = Number(Boolean(input.down)) - Number(Boolean(input.up));
   const length = Math.hypot(dx, dy);
@@ -186,8 +171,14 @@ function predictPerson(world, playerIndex, input, dt) {
   dx /= length;
   dy /= length;
   const speed = player.mode === "swim" ? 6 : input.run ? 13.76 : 8;
-  player.x = clamp(player.x + dx * speed * dt, 5, WORLD.width - 5);
-  player.y = clamp(player.y + dy * speed * dt, 5, WORLD.height - 5);
+  let nextX = clamp(player.x + dx * speed * dt, 5, WORLD.width - 5);
+  let nextY = clamp(player.y + dy * speed * dt, 5, WORLD.height - 5);
+  if (player.spatialLocationId && player.spatialBounds) {
+    nextX = clamp(nextX, player.spatialBounds.minX, player.spatialBounds.maxX);
+    nextY = clamp(nextY, player.spatialBounds.minY, player.spatialBounds.maxY);
+  }
+  player.x = nextX;
+  player.y = nextY;
   player.heading = Math.atan2(dx, -dy) * 180 / Math.PI;
 }
 
