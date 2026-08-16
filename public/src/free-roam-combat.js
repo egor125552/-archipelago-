@@ -15,6 +15,7 @@ import {activeEnemyBoats, damageEnemyBoat} from "./free-roam-enemy-boats.js?v=3"
 import {activeHostileActors, damageHostileActor} from "./free-roam-hostile-actors.js?v=3";
 import {activeHeavyPursuer, damageHeavyPursuer} from "./free-roam-heavy-pursuer.js?v=4";
 import {damageEliteBoatBoss} from "./free-roam-elite-boat.js?v=2";
+import {applyFreeRoamDockRespawn, resolveFreeRoamDockRespawn} from "./free-roam-player-spawn.js";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const distance = (a, b) => Math.hypot((a?.x || 0) - (b?.x || 0), (a?.y || 0) - (b?.y || 0));
@@ -532,6 +533,19 @@ function cycleWeapon(world, playerIndex) {
 function respawnPlayer(world, playerIndex) {
   const player = world.players[playerIndex];
   const combat = player.combat;
+  let spawn;
+  try {
+    spawn = resolveFreeRoamDockRespawn(playerIndex);
+  } catch (error) {
+    combat.respawnRemaining = 1;
+    emit(world, "player-respawn-blocked", "Возрождение временно недоступно: безопасная точка не найдена.", [playerIndex], {
+      sourcePlayer: playerIndex,
+      reason: error?.message || String(error),
+      x: player.x,
+      y: player.y,
+    });
+    return;
+  }
   combat.health = 100;
   combat.alive = true;
   combat.respawnRemaining = 0;
@@ -543,13 +557,10 @@ function respawnPlayer(world, playerIndex) {
   combat.pendingDamage = 0;
   combat.lastDamageAt = -999;
   combat.recoveryStarted = false;
-  player.mode = "foot";
-  player.activeBoat = null;
-  player.x = 210 + (playerIndex ? 8 : -8);
-  player.y = 58;
-  player.heading = 180;
+  applyFreeRoamDockRespawn(player, spawn);
   emit(world, "player-respawn", "Ты снова у причала.", [playerIndex], {
     sourcePlayer: playerIndex,
+    spawnId: spawn.id,
     x: player.x,
     y: player.y,
   });

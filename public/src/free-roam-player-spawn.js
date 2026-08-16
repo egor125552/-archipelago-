@@ -1,8 +1,47 @@
 "use strict";
 
 import {activateReservedBoat} from "./free-roam-reserve-boats.js";
+import {requireSafeSpawn} from "./spatial/spatial-spawn-contract.js";
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+const LEGACY_SHORE_BOUNDS = Object.freeze({minX: 122, maxX: 298, minY: 12, maxY: 70});
+
+export function freeRoamDockRespawnCandidates(playerIndex) {
+  return [Object.freeze({
+    id: `spawn.free-roam.dock.player-${playerIndex + 1}`,
+    label: "Причал",
+    position: Object.freeze({x: 210 + (playerIndex ? 8 : -8), y: 58, z: 0}),
+    heading: 180,
+    mode: "foot",
+    data: Object.freeze({legacyWorld: "free-roam"}),
+  })];
+}
+
+function isSafeLegacyShoreSpawn(spawn) {
+  const {x, y, z} = spawn.position;
+  return Number.isFinite(x)
+    && Number.isFinite(y)
+    && Number.isFinite(z)
+    && x >= LEGACY_SHORE_BOUNDS.minX
+    && x <= LEGACY_SHORE_BOUNDS.maxX
+    && y >= LEGACY_SHORE_BOUNDS.minY
+    && y <= LEGACY_SHORE_BOUNDS.maxY
+    && Math.abs(z) <= 1e-9;
+}
+
+export function resolveFreeRoamDockRespawn(playerIndex) {
+  return requireSafeSpawn(freeRoamDockRespawnCandidates(playerIndex), {isSafe: isSafeLegacyShoreSpawn});
+}
+
+export function applyFreeRoamDockRespawn(player, spawn) {
+  if (!player || !spawn) throw new TypeError("player and spawn are required");
+  player.mode = spawn.mode || "foot";
+  player.activeBoat = null;
+  player.x = spawn.position.x;
+  player.y = spawn.position.y;
+  player.heading = spawn.heading ?? 180;
+  return player;
+}
 
 function placeFirstPlayer(player, boat, playerIndex) {
   const x = playerIndex === 0 ? 199 : 219;

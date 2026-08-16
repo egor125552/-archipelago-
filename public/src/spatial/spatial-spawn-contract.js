@@ -1,0 +1,58 @@
+"use strict";
+
+import {assertSpatialId, cloneSpatialData, normalizeVec3} from "./spatial-contract.js";
+
+export class SpatialSpawnError extends Error {
+  constructor(message, details = {}) {
+    super(message);
+    this.name = "SpatialSpawnError";
+    this.details = details;
+  }
+}
+
+function finiteOptional(value, field) {
+  if (value == null) return null;
+  const number = Number(value);
+  if (!Number.isFinite(number)) throw new SpatialSpawnError(`${field} must be finite`, {field, value});
+  return number;
+}
+
+export function normalizeSpawnDestination(value, field = "spawn") {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new SpatialSpawnError(`${field} must be an object`, {field, value});
+  }
+  const id = assertSpatialId(value.id, `${field}.id`);
+  const label = String(value.label || id).trim();
+  if (!label) throw new SpatialSpawnError(`${field}.label is required`, {field, id});
+  const position = normalizeVec3(value.position, `${field}.position`);
+  const heading = finiteOptional(value.heading, `${field}.heading`);
+  const mode = value.mode == null ? null : String(value.mode);
+  const locationId = value.locationId == null ? null : assertSpatialId(value.locationId, `${field}.locationId`);
+  const spaceId = value.spaceId == null ? null : assertSpatialId(value.spaceId, `${field}.spaceId`);
+  return Object.freeze({
+    id,
+    label,
+    position,
+    heading,
+    mode,
+    locationId,
+    spaceId,
+    data: Object.freeze(cloneSpatialData(value.data || {})),
+  });
+}
+
+export function selectSafeSpawn(candidates, {isSafe = () => true, score = () => 0} = {}) {
+  const normalized = [...(candidates || [])].map((candidate, index) => normalizeSpawnDestination(candidate, `spawn[${index}]`));
+  const valid = normalized.filter(candidate => isSafe(candidate) !== false);
+  if (!valid.length) return null;
+  valid.sort((a, b) => Number(score(a) || 0) - Number(score(b) || 0));
+  return valid[0];
+}
+
+export function requireSafeSpawn(candidates, options = {}) {
+  const spawn = selectSafeSpawn(candidates, options);
+  if (spawn) return spawn;
+  throw new SpatialSpawnError("no safe spawn destination is available", {
+    candidateIds: [...(candidates || [])].map(candidate => String(candidate?.id || "unknown")),
+  });
+}
