@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Пространственная лаборатория Архипелага</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 52rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
+    .controls { display: grid; gap: .65rem; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); margin: 1rem 0; }
+    button { min-height: 3rem; font: inherit; }
+    #status, #announcement { border: 1px solid currentColor; border-radius: .5rem; padding: .8rem; margin-top: 1rem; }
+    dt { font-weight: 700; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Пространственная лаборатория</h1>
+    <p>Отдельная маленькая локация для практической проверки новой архитектуры. Она не заменяет рабочий free-roam.</p>
+
+    <div class="controls" aria-label="Действия тестовой локации">
+      <button type="button" data-action="announce">Описать положение игрока</button>
+      <button type="button" data-action="route">Построить маршрут до склада</button>
+      <button type="button" data-action="stairs">Пройти по лестнице</button>
+      <button type="button" data-action="reset">Вернуть игрока ко входу</button>
+      <button type="button" data-action="lift-enter">Войти в лифт</button>
+      <button type="button" data-action="lift-up">Поднять лифт</button>
+      <button type="button" data-action="lift-door">Открыть или закрыть верхнюю дверь лифта</button>
+      <button type="button" data-action="lift-exit">Выйти из лифта наверху</button>
+      <button type="button" data-action="stairs-door">Открыть или закрыть лестничный переход</button>
+      <button type="button" data-action="sound">Проиграть акустический тест</button>
+      <button type="button" data-action="save">Сохранить состояние</button>
+      <button type="button" data-action="restore">Восстановить сохранённое состояние</button>
+      <button type="button" data-action="second-player">Убрать или вернуть второго игрока</button>
+    </div>
+
+    <section aria-labelledby="state-title">
+      <h2 id="state-title">Состояние</h2>
+      <dl id="status"></dl>
+    </section>
+
+    <p id="announcement" role="status" aria-live="polite" aria-atomic="true">Лаборатория готова.</p>
+  </main>
+  <script type="module" src="/src/locations/spatial-lab/app.js"></script>
+</body>
+</html>
