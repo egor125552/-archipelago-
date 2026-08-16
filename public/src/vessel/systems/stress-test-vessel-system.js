@@ -9,7 +9,6 @@ import {
   STRESS_TEST_VESSEL_TYPE,
 } from "../stress-test-vessel-config.js?v=2";
 
-
 function emit(world, type, text, targets = [0, 1], extra = {}) {
   world.events ||= [];
   world.events.push({type, text, targets, at: world.time, operationEvent: true, ...extra});
@@ -97,17 +96,17 @@ export const STRESS_TEST_VESSEL_SYSTEMS = Object.freeze([
     },
   }),
   Object.freeze({
-  id: "stress-test-ammo-bridge-v1",
-  phase: "before-step",
-  order: 9,
-  run: syncStressAmmo,
-}),
-Object.freeze({
-  id: "stress-test-ammo-bridge-after-step-v1",
-  phase: "after-step",
-  order: 9,
-  run: syncStressAmmo,
-}),
+    id: "stress-test-ammo-bridge-v1",
+    phase: "before-step",
+    order: 9,
+    run: syncStressAmmo,
+  }),
+  Object.freeze({
+    id: "stress-test-ammo-bridge-after-step-v1",
+    phase: "after-step",
+    order: 9,
+    run: syncStressAmmo,
+  }),
   Object.freeze({
     id: "stress-test-boarding-announcer-after-input-v4",
     phase: "after-input",
