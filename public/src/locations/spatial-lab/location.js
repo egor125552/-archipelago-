@@ -19,7 +19,7 @@ export const SPATIAL_LAB_LOCATION = Object.freeze({
     description: "Маленькая тестовая локация новой пространственной архитектуры",
     role: "location",
   },
-  worldTransform: {position: {x: 272, y: 14, z: 2}, yaw: 0},
+  worldTransform: {position: {x: 120, y: 80, z: 2}, yaw: 15},
   persistence: {version: 1},
   spaces: [
     {

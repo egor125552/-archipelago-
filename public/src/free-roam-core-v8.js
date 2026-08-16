@@ -28,13 +28,6 @@ import {
 import {isPlayerNearMerchant} from "./free-roam-shop.js?v=5";
 import {attachVesselArchitecture, runVesselSystems} from "./vessel/vessel-runtime.js?v=2";
 import {runVesselPhysics} from "./vessel/vessel-runtime-v3.js?v=1";
-import {
-  freeRoamSpatialStatus,
-  initializeFreeRoamSpatialBridge,
-  prepareFreeRoamSpatialInput,
-  syncFreeRoamSpatialBridge,
-} from "./spatial/spatial-free-roam-bridge.js";
-import {SPATIAL_LAB_FREE_ROAM_BINDING} from "./locations/spatial-lab/free-roam-binding.js";
 
 export * from "./free-roam-core-v7.js?v=1";
 export {prepareDualTurretBoatRoom};
@@ -159,7 +152,6 @@ export function createFreeWorld() {
   prepareDualTurretBoatRoom(world);
   ensureDualTurretPhysicsProfile(world);
   attachVesselArchitecture(world);
-  initializeFreeRoamSpatialBridge(world, SPATIAL_LAB_FREE_ROAM_BINDING);
   return world;
 }
 
@@ -168,13 +160,12 @@ export function setPlayerInput(world, playerIndex, nextInput) {
   attachVesselArchitecture(world);
   const eventStart = world.events?.length || 0;
   const previousBoatIds = activeBoatIds(world);
-  const spatialInput = prepareFreeRoamSpatialInput(world, playerIndex, nextInput, SPATIAL_LAB_FREE_ROAM_BINDING);
-  runVesselSystems("before-input", {world, playerIndex, input: spatialInput, eventStart});
-  base.setPlayerInput(world, playerIndex, prepareFreeRoamPlayerInput(world, playerIndex, spatialInput));
+  runVesselSystems("before-input", {world, playerIndex, input: nextInput, eventStart});
+  base.setPlayerInput(world, playerIndex, prepareFreeRoamPlayerInput(world, playerIndex, nextInput));
   normalizeDualTurretOwnership(world, playerIndex, eventStart);
   attachBoatTransitionMetadata(world, eventStart, previousBoatIds);
   applyDualTurretSpeech(world, eventStart);
-  runVesselSystems("after-input", {world, playerIndex, input: spatialInput, eventStart});
+  runVesselSystems("after-input", {world, playerIndex, input: nextInput, eventStart});
 }
 
 export function stepFreeWorld(world, dt) {
@@ -189,7 +180,6 @@ export function stepFreeWorld(world, dt) {
   const weaponContext = prepareDualTurretWeaponStep(world);
   runVesselSystems("before-step", {world, dt: safeDt, eventStart});
   const result = base.stepFreeWorld(world, safeDt);
-  syncFreeRoamSpatialBridge(world, SPATIAL_LAB_FREE_ROAM_BINDING);
   rebalanceDualTurretGunHits(world, eventStart, previousDurability);
   applyBoatPhysicsProfiles(world, previousPhysics, safeDt, {tuning: CONFIG, eventStart});
   runVesselPhysics({world, dt: safeDt, eventStart, previousStates: previousPhysics, tuning: CONFIG});
@@ -203,11 +193,9 @@ export function stepFreeWorld(world, dt) {
 
 export function playerStatus(world, playerIndex) {
   const inherited = base.playerStatus(world, playerIndex);
-  const spatial = freeRoamSpatialStatus(world, playerIndex, SPATIAL_LAB_FREE_ROAM_BINDING);
-  const status = spatial ? `${inherited} ${spatial}` : inherited;
   const player = world?.players?.[playerIndex];
   const boat = player?.mode === "boat" ? world.boats?.[player.activeBoat] : null;
-  if (boat !== dualTurretBoat(world)) return status;
+  if (boat !== dualTurretBoat(world)) return inherited;
   const turret = playerDualTurret(world, playerIndex);
-  return `${status} Двухместный бронекатер: корпус ${Math.round(boat.hull)} из ${Math.round(boat.hullMax)}, броня ${Math.round(boat.armor)} из ${Math.round(boat.armorMax)}. ${turret ? `${turret.label}: патронов ${turret.ammo}.` : "Установка не назначена."}`;
+  return `${inherited} Двухместный бронекатер: корпус ${Math.round(boat.hull)} из ${Math.round(boat.hullMax)}, броня ${Math.round(boat.armor)} из ${Math.round(boat.armorMax)}. ${turret ? `${turret.label}: патронов ${turret.ammo}.` : "Установка не назначена."}`;
 }
