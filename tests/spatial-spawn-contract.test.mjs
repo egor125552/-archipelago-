@@ -6,6 +6,7 @@ import {
   SpatialSpawnError,
   normalizeSpawnDestination,
   requireSafeSpawn,
+  resolveDeclaredSpawn,
   selectSafeSpawn,
 } from "../public/src/spatial/spatial-spawn-contract.js";
 import {
@@ -25,6 +26,29 @@ test("spawn destinations normalize stable identity and true 3D position", () => 
   assert.equal(spawn.id, "spawn.test.entry");
   assert.deepEqual(spawn.position, {x: 3, y: 4, z: 5});
   assert.equal(spawn.heading, 90);
+});
+
+test("declared spatial spawns resolve through the same common contract", () => {
+  const safeAnchor = {id: "anchor.safe", safe: true, position: {x: 2, y: 3, z: 4}};
+  const location = {
+    id: "location.test",
+    spawnsById: new Map([["spawn.anchor", {id: "spawn.anchor", spaceId: "space.room", anchorId: "anchor.safe", position: null, mode: "foot"}]]),
+    anchorsById: new Map([["anchor.safe", {spaceId: "space.room", anchor: safeAnchor}]]),
+  };
+  const resolved = resolveDeclaredSpawn(location, "spawn.anchor");
+  assert.equal(resolved.id, "spawn.anchor");
+  assert.equal(resolved.spaceId, "space.room");
+  assert.deepEqual(resolved.position, {x: 2, y: 3, z: 4});
+  assert.equal(resolved.mode, "foot");
+});
+
+test("declared spatial spawn rejects an unsafe anchor instead of bypassing it", () => {
+  const location = {
+    id: "location.test",
+    spawnsById: new Map([["spawn.anchor", {id: "spawn.anchor", spaceId: "space.room", anchorId: "anchor.unsafe", position: null, mode: "foot"}]]),
+    anchorsById: new Map([["anchor.unsafe", {spaceId: "space.room", anchor: {id: "anchor.unsafe", safe: false, position: {x: 2, y: 3, z: 4}}}]]),
+  };
+  assert.equal(resolveDeclaredSpawn(location, "spawn.anchor"), null);
 });
 
 test("safe spawn selection skips an unsafe primary candidate and uses a fallback", () => {

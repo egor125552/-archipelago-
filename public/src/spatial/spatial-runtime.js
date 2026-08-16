@@ -1,6 +1,7 @@
 "use strict";
 
 import {assertSpatialId, cloneSpatialData, normalizeTransform, normalizeVec3} from "./spatial-contract.js";
+import {resolveDeclaredSpawn} from "./spatial-spawn-contract.js";
 import {distance3d, localToWorld, resolveSpaceWorldTransform, spaceContainsLocalPoint} from "./spatial-transform.js";
 
 export const SPATIAL_SAVE_VERSION = 1;
@@ -166,14 +167,12 @@ export class SpatialRuntime {
   }
 
   #resolveSpawn(spawnId) {
-    const spawn = this.location.spawnsById.get(spawnId);
-    if (!spawn) throw new SpatialRuntimeError(`unknown spawn ${spawnId}`, {spawnId});
-    if (spawn.anchorId) {
-      const entry = this.#findAnchor(spawn.anchorId, spawn.spaceId);
-      if (!entry || !entry.anchor.safe) throw new SpatialRuntimeError(`spawn ${spawnId} has unavailable anchor ${spawn.anchorId}`, {spawnId});
-      return {spaceId: spawn.spaceId, position: entry.anchor.position, mode: spawn.mode};
-    }
-    return {spaceId: spawn.spaceId, position: spawn.position, mode: spawn.mode};
+    if (!this.location.spawnsById.has(spawnId)) throw new SpatialRuntimeError(`unknown spawn ${spawnId}`, {spawnId});
+    const resolved = resolveDeclaredSpawn(this.location, spawnId, {
+      findAnchor: (anchorId, spaceId) => this.#findAnchor(anchorId, spaceId),
+    });
+    if (!resolved) throw new SpatialRuntimeError(`spawn ${spawnId} is not safe or cannot be resolved`, {spawnId});
+    return resolved;
   }
 
   spawnEntity({id, kind = "player", spawnId = this.location.spawns[0].id, data = {}, label = null} = {}) {

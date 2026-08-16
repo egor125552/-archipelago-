@@ -56,3 +56,33 @@ export function requireSafeSpawn(candidates, options = {}) {
     candidateIds: [...(candidates || [])].map(candidate => String(candidate?.id || "unknown")),
   });
 }
+
+export function resolveDeclaredSpawn(location, spawnId, {findAnchor = null, isSafe = null} = {}) {
+  const spawn = location?.spawnsById?.get?.(spawnId) || location?.spawns?.find?.(entry => entry.id === spawnId) || null;
+  if (!spawn) return null;
+
+  let position = spawn.position || null;
+  if (spawn.anchorId) {
+    const entry = typeof findAnchor === "function"
+      ? findAnchor(spawn.anchorId, spawn.spaceId)
+      : location?.anchorsById?.get?.(spawn.anchorId) || null;
+    const anchor = entry?.anchor || entry;
+    const ownerSpaceId = entry?.spaceId || spawn.spaceId;
+    if (!anchor || ownerSpaceId !== spawn.spaceId || anchor.safe === false) return null;
+    position = anchor.position || null;
+  }
+  if (!position) return null;
+
+  const candidate = normalizeSpawnDestination({
+    id: spawn.id,
+    label: spawn.label || spawn.presentation?.label || spawn.id,
+    locationId: location.id,
+    spaceId: spawn.spaceId,
+    position,
+    heading: spawn.heading,
+    mode: spawn.mode || "foot",
+    data: {anchorId: spawn.anchorId || null},
+  });
+  if (typeof isSafe === "function" && isSafe(candidate) === false) return null;
+  return candidate;
+}
