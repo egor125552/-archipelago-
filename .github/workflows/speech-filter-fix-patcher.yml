@@ -1,0 +1,108 @@
+name: Speech filter fix patcher
+
+on:
+  push:
+    branches:
+      - fix/speech-filter-before-controller-1.7.18
+    paths:
+      - .github/workflows/speech-filter-fix-patcher.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.head_commit.message == 'Run speech filter fix patcher'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/speech-filter-before-controller-1.7.18
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Apply narrow speech-filter integration fix
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          import json
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected exactly one match, got {count}: {old!r}")
+              p.write_text(text.replace(old, new, 1))
+
+          # Expose the already-existing combat narration policy as a read-only callable
+          # for the higher-level announcer. The predicate itself remains the single source
+          # of truth for user filter preferences.
+          replace_once(
+              'public/src/free-roam-combat-experience-v1.js',
+              'function installSpeechFilter() {',
+              'globalThis.__echoFreeRoamSpeechAllowed = speechAllowed;\n\nfunction installSpeechFilter() {'
+          )
+
+          # Reject filtered narration before the high-level speech controller can cancel
+          # or replace an allowed phrase already being spoken.
+          replace_once(
+              'public/src/free-roam-v4.js',
+              '  if (spoken) speech.speak(text, {interrupt: assertive});',
+              '  const speechGate = globalThis.__echoFreeRoamSpeechAllowed;\n  if (spoken && (typeof speechGate !== "function" || speechGate(text))) {\n    speech.speak(text, {interrupt: assertive});\n  }'
+          )
+
+          # Cache-buster chain: both edited runtime modules must get fresh Safari URLs.
+          replace_once(
+              'public/src/free-roam-combat-experience-v2.js',
+              'import "./free-roam-combat-experience-v1.js?v=1";',
+              'import "./free-roam-combat-experience-v1.js?v=2";'
+          )
+          replace_once(
+              'public/src/free-roam-combat-experience-v3.js',
+              'import "./free-roam-combat-experience-v2.js?v=1";',
+              'import "./free-roam-combat-experience-v2.js?v=2";'
+          )
+          replace_once(
+              'public/free-roam.html',
+              '<script type="module" src="src/free-roam-v4.js?v=66"></script>',
+              '<script type="module" src="src/free-roam-v4.js?v=67"></script>'
+          )
+          replace_once(
+              'public/free-roam.html',
+              '<script type="module" src="src/free-roam-combat-experience-v3.js?v=1"></script>',
+              '<script type="module" src="src/free-roam-combat-experience-v3.js?v=2"></script>'
+          )
+
+          for path in ['package.json', 'package-lock.json']:
+              p = Path(path)
+              data = json.loads(p.read_text())
+              data['version'] = '1.7.18'
+              if path == 'package-lock.json' and isinstance(data.get('packages'), dict) and '' in data['packages']:
+                  data['packages']['']['version'] = '1.7.18'
+              p.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n')
+
+          test = '''import test from "node:test";\nimport assert from "node:assert/strict";\nimport fs from "node:fs";\n\nconst combat = fs.readFileSync(new URL("../public/src/free-roam-combat-experience-v1.js", import.meta.url), "utf8");\nconst client = fs.readFileSync(new URL("../public/src/free-roam-v4.js", import.meta.url), "utf8");\n\ntest("filtered narration is rejected before the high-level speech controller", () => {\n  assert.match(combat, /globalThis\\.__echoFreeRoamSpeechAllowed = speechAllowed;/);\n  const announceStart = client.indexOf("function announce(");\n  const socketStart = client.indexOf("function socketUrl(", announceStart);\n  assert.ok(announceStart >= 0 && socketStart > announceStart);\n  const announce = client.slice(announceStart, socketStart);\n  const gate = announce.indexOf("speechGate(text)");\n  const speak = announce.indexOf("speech.speak(text");\n  assert.ok(gate >= 0, "announce must consult the narration filter");\n  assert.ok(speak > gate, "filter must run before speech controller speak/cancel path");\n  assert.match(announce, /\\$\\(\"message\"\\)\\.textContent = text;/, "filtered narration must remain visible on screen");\n});\n\ntest("combat filter cache-buster chain points at the updated policy module", () => {\n  const v2 = fs.readFileSync(new URL("../public/src/free-roam-combat-experience-v2.js", import.meta.url), "utf8");\n  const v3 = fs.readFileSync(new URL("../public/src/free-roam-combat-experience-v3.js", import.meta.url), "utf8");\n  const html = fs.readFileSync(new URL("../public/free-roam.html", import.meta.url), "utf8");\n  assert.match(v2, /free-roam-combat-experience-v1\\.js\\?v=2/);\n  assert.match(v3, /free-roam-combat-experience-v2\\.js\\?v=2/);\n  assert.match(html, /free-roam-v4\\.js\\?v=67/);\n  assert.match(html, /free-roam-combat-experience-v3\\.js\\?v=2/);\n});\n'''
+          Path('tests/free-roam-speech-filter-controller.test.mjs').write_text(test)
+
+          release = '''# Релиз 1.7.18 — фильтр озвучки до речевого контроллера\n\nИсправлен баг фильтров озвучки: отключённые категории, включая подробности попаданий и сообщения о смерти, больше не доходят до речевого контроллера и не могут прерывать уже произносимую разрешённую фразу.\n\nЧто изменено:\n- существующий `speechAllowed()` остаётся единым правилом фильтрации и теперь доступен высокоуровневому `announce()`;\n- `announce()` проверяет фильтр до вызова речевого контроллера, поэтому запрещённое сообщение не вызывает `cancel()` и не попадает в очередь речи;\n- текст сообщения по-прежнему обновляется на экране, а существующая фильтрация live-region для VoiceOver сохраняется;\n- обновлена cache-buster-цепочка изменённых модулей для Safari;\n- добавлен регрессионный тест, проверяющий порядок «фильтр раньше speech controller».\n'''
+          Path('RELEASE_1.7.18.md').write_text(release)
+
+          notes = Path('RELEASE_NOTES.md')
+          old_notes = notes.read_text()
+          notes.write_text('## 1.7.18 — фильтр озвучки не прерывает разрешённую речь\n\nОтключённые категории озвучки теперь отбрасываются до речевого контроллера: они не попадают в речевую очередь и не вызывают отмену текущей фразы. Экранные сообщения и VoiceOver-фильтрация сохранены.\n\n' + old_notes)
+          PY
+      - name: Run authoritative tests
+        run: npm test
+      - name: Remove patcher and commit final change
+        run: |
+          rm .github/workflows/speech-filter-fix-patcher.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "Исправить фильтр озвучки до речевого контроллера"
+          git push origin HEAD:fix/speech-filter-before-controller-1.7.18
