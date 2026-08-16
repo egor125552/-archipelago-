@@ -12,3 +12,4 @@ export * from "./spatial-spawn-contract.js";
 export * from "./spatial-physics-adapter.js";
 export * from "./spatial-moving-space-adapter.js";
 export * from "./spatial-interest.js";
+export * from "./spatial-accessibility.js";
