@@ -1,5 +1,6 @@
 "use strict";
 
+import {COAST_RESCUE_CENTER_LOCATION} from "./coast-rescue-center/location.js";
 import {SPATIAL_LAB_LOCATION} from "./spatial-lab/location.js";
 
 function freeRoamLabDefinition() {
@@ -27,6 +28,21 @@ export const FREE_ROAM_SPATIAL_LOCATIONS = Object.freeze([
       spawnId: "lab.spawn.entry",
       exitAnchorId: "lab.anchor.entry",
       outsideLabel: "берег",
+    }),
+  }),
+  Object.freeze({
+    definition: COAST_RESCUE_CENTER_LOCATION,
+    portal: Object.freeze({
+      id: "portal.coast.rescue-center.shore",
+      position: Object.freeze({x: 150, y: 18, z: 0}),
+      // The building is meant to be found by sound, not by pixel-perfect
+      // positioning. The action zone deliberately sits well inside discovery.
+      radius: 12,
+      exitRadius: 3.5,
+      discoverRadius: 22,
+      spawnId: "rescue.spawn.entry",
+      exitAnchorId: "rescue.anchor.entry",
+      outsideLabel: "берег у спасательного центра",
     }),
   }),
 ]);
