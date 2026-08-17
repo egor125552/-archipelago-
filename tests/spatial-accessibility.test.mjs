@@ -81,7 +81,7 @@ test("connection speech uses the action and destination instead of an unreliable
   const entry = nearbySpatialSemantics(runtimeFixture(), "player.one", {maximumDistance:10,heading:180}).find(item => item.id === "connection.up");
   assert.ok(entry.elevationDelta > 0);
   const text = describeNearbySpatialEntry(entry, {actionReady:true});
-  assert.match(text, /Нажми действие, чтобы подняться: Верхний этаж/);
+  assert.match(text, /Нажми действие, чтобы подняться\. Следующий уровень: Верхний этаж\./);
   assert.doesNotMatch(text, /прямо|слева|справа|позади/);
 });
 

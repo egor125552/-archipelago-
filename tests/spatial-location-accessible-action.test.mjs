@@ -73,6 +73,6 @@ test("ready stair cue says what action will do instead of giving an unreliable d
   m.sync(w);
   const event=[...w.events].reverse().find(item=>item.type==="location-nearby"&&item.semanticId==="stairs");
   assert.ok(event);
-  assert.match(event.text,/Нажми действие, чтобы подняться: Второй этаж/);
+  assert.match(event.text,/Нажми действие, чтобы подняться\. Следующий уровень: Второй этаж\./);
   assert.doesNotMatch(event.text,/прямо|слева|справа|позади/);
 });
