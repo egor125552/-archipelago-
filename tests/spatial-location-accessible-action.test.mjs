@@ -57,6 +57,8 @@ test("spatial location owns action and never leaks a too-far stair press to lega
   m.prepareInput(w,0,{action:true,sonar:false,guide:false});
   assert.equal(w.players[0].spatialLocationId,"location.speech.test");
   m.prepareInput(w,0,{action:false,sonar:false,guide:false});
+  w.players[0].x=105;w.players[0].y=55;
+  m.sync(w);
   const input=m.prepareInput(w,0,{action:true,sonar:false,guide:false});
   assert.equal(input.action,false);
   assert.equal(w.events.at(-1).type,"location-action-too-far");
