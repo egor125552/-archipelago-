@@ -37,8 +37,7 @@ function world(){
   return {time:0,players:[{id:0,mode:"foot",activeBoat:null,x:100,y:50,heading:180,jumpHeight:0,jumpVelocity:0,airborne:false}],events:[],freeActivities:{presence:[true]},freeScenario:{phase:"salvage",targets:[null],guideEnabled:[false],sonarCooldown:[0],beaconUntil:[0]},freeContracts:{encounterActive:false}};
 }
 
-function manager(){
-  const def=definition();
+function manager(def=definition()){
   return new FreeRoamSpatialManager({locations:[{definition:def,portal:{position:{x:100,y:50,z:0},radius:6,exitRadius:2,discoverRadius:30,spawnId:"spawn",exitAnchorId:"entry",outsideLabel:"берег"}}]});
 }
 
@@ -75,4 +74,70 @@ test("ready stair cue says what action will do instead of giving an unreliable d
   assert.ok(event);
   assert.match(event.text,/Нажми действие, чтобы подняться\. Следующий уровень: Второй этаж\./);
   assert.doesNotMatch(event.text,/прямо|слева|справа|позади/);
+});
+
+test("ordinary object cue does not repeat when crossing two metres",()=>{
+  const def=definition();
+  def.spaces[0].objects.push({id:"locker",kind:"storage",label:"Шкаф",presentation:{label:"Шкаф",description:"Снаряжение"},position:[19,4,0],userFacing:true});
+  const m=manager(def);const w=world();m.initialize(w);
+  m.prepareInput(w,0,{action:true,sonar:false,guide:false});
+  m.prepareInput(w,0,{action:false,sonar:false,guide:false});
+  w.players[0].x=119;w.players[0].y=51;
+  m.sync(w);
+  const first=w.events.filter(item=>item.type==="location-nearby"&&item.semanticId==="locker").length;
+  assert.equal(first,1);
+  w.players[0].x=119;w.players[0].y=52.5;
+  m.sync(w);
+  const second=w.events.filter(item=>item.type==="location-nearby"&&item.semanticId==="locker").length;
+  assert.equal(second,1);
+});
+
+test("exit cue holds through a small six metre boundary wobble",()=>{
+  const m=manager();const w=world();m.initialize(w);
+  m.prepareInput(w,0,{action:true,sonar:false,guide:false});
+  m.prepareInput(w,0,{action:false,sonar:false,guide:false});
+  w.players[0].x=107.9;w.players[0].y=52;
+  m.sync(w);
+  const first=w.events.filter(item=>item.type==="location-nearby").length;
+  w.players[0].x=108.2;w.players[0].y=52;
+  m.sync(w);
+  w.players[0].x=107.9;w.players[0].y=52;
+  m.sync(w);
+  assert.equal(w.events.filter(item=>item.type==="location-nearby").length,first);
+});
+
+test("stair ready cue uses hysteresis instead of flipping on one small step",()=>{
+  const m=manager();const w=world();m.initialize(w);
+  m.prepareInput(w,0,{action:true,sonar:false,guide:false});
+  m.prepareInput(w,0,{action:false,sonar:false,guide:false});
+  w.players[0].x=110;w.players[0].y=57;
+  m.sync(w);
+  w.players[0].x=110;w.players[0].y=57.3;
+  m.sync(w);
+  const readyCount=w.events.filter(item=>item.type==="location-nearby"&&item.semanticId==="stairs").length;
+  assert.equal(readyCount,2);
+  w.players[0].x=110;w.players[0].y=57.1;
+  m.sync(w);
+  assert.equal(w.events.filter(item=>item.type==="location-nearby"&&item.semanticId==="stairs").length,readyCount);
+  w.players[0].x=110;w.players[0].y=56.3;
+  m.sync(w);
+  assert.equal(w.events.filter(item=>item.type==="location-nearby"&&item.semanticId==="stairs").length,readyCount+1);
+});
+
+test("announced object stays focused when a farther stair only barely enters range",()=>{
+  const def=definition();
+  def.spaces[0].objects.push({id:"locker",kind:"storage",label:"Шкаф",presentation:{label:"Шкаф",description:"Снаряжение"},position:[19,4,0],userFacing:true});
+  const m=manager(def);const w=world();m.initialize(w);
+  m.prepareInput(w,0,{action:true,sonar:false,guide:false});
+  m.prepareInput(w,0,{action:false,sonar:false,guide:false});
+  w.players[0].x=119;w.players[0].y=51;
+  m.sync(w);
+  const first=w.events.filter(item=>item.type==="location-nearby").length;
+  w.players[0].x=117;w.players[0].y=53;
+  m.sync(w);
+  assert.equal(w.events.filter(item=>item.type==="location-nearby").length,first);
+  w.players[0].x=113;w.players[0].y=57;
+  m.sync(w);
+  const latest=[...w.events].reverse().find(item=>item.type==="location-nearby");
+  assert.equal(latest.semanticId,"stairs");
 });

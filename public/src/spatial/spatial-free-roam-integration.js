@@ -11,6 +11,8 @@ import {turnBoatToSonar} from "../free-roam-sonar-guide.js";
 const runtimesByWorld = new WeakMap();
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, Number(value) || 0));
 const distance2d = (a, b) => Math.hypot((Number(a?.x) || 0) - (Number(b?.x) || 0), (Number(a?.y) || 0) - (Number(b?.y) || 0));
+const PROXIMITY_HOLD_MARGIN = 1.5;
+const PROXIMITY_READY_MARGIN = 0.75;
 
 function emit(world, type, text, targets, extra = {}) {
   world.events ||= [];
@@ -323,13 +325,19 @@ class FreeRoamSpatialLocationIntegration {
     const id = playerEntityId(playerIndex);
     const entity = runtime.getEntity(id);
     if (!entity) return null;
+    const previousState = String(proximityState || "");
     if (this.portal.exitAnchorId) {
       const found = this.compiled.anchorsById.get(this.portal.exitAnchorId);
       if (found?.spaceId === entity.spaceId) {
         const target = localToWorld(this.compiled, entity.spaceId, found.anchor.position, runtime.dynamicTransforms);
         const metres = distance3d(runtime.getEntityWorldPosition(id), target);
-        if (metres <= Math.max(6, this.portal.exitRadius + 2)) {
-          const ready = metres <= this.portal.exitRadius;
+        const wasExit = previousState.startsWith(`${this.compiled.id}:exit:`);
+        const exitRange = Math.max(6, this.portal.exitRadius + 2) + (wasExit ? PROXIMITY_HOLD_MARGIN : 0);
+        if (metres <= exitRange) {
+          const wasReady = previousState === `${this.compiled.id}:exit:ready`;
+          const ready = wasReady
+            ? metres <= this.portal.exitRadius + PROXIMITY_READY_MARGIN
+            : metres <= this.portal.exitRadius;
           const key = `${this.compiled.id}:exit:${ready ? "ready" : "near"}`;
           if (proximityState !== key) {
             emit(world, "location-nearby", ready
@@ -342,16 +350,35 @@ class FreeRoamSpatialLocationIntegration {
         }
       }
     }
-    const entries = nearbySpatialSemantics(runtime, id, {maximumDistance: 10, heading: player.heading});
-    const candidate = entries.find(entry => this.compiled.connectionsById.has(entry.id)) || entries[0];
+
+    const entries = nearbySpatialSemantics(runtime, id, {maximumDistance: 10 + PROXIMITY_HOLD_MARGIN, heading: player.heading})
+      .filter(entry => entry.id !== this.portal.exitAnchorId);
+    const maximumFor = entry => {
+      const connection = this.compiled.connectionsById.get(entry.id);
+      return connection ? Math.min(10, discoverRange(connection)) : 5;
+    };
+    const eligible = entries.filter(entry => entry.metres <= maximumFor(entry));
+    const defaultCandidate = eligible.find(entry => this.compiled.connectionsById.has(entry.id)) || eligible[0] || null;
+    const previousCandidate = entries.find(entry =>
+      previousState.startsWith(`${this.compiled.id}:${entry.id}:`) &&
+      entry.metres <= maximumFor(entry) + PROXIMITY_HOLD_MARGIN
+    ) || null;
+
+    let candidate = previousCandidate || defaultCandidate;
+    if (previousCandidate && defaultCandidate && previousCandidate.id !== defaultCandidate.id &&
+        defaultCandidate.metres + PROXIMITY_HOLD_MARGIN < previousCandidate.metres) {
+      candidate = defaultCandidate;
+    }
     if (!candidate) return null;
+
     const connection = this.compiled.connectionsById.get(candidate.id);
-    const maximum = connection ? discoverRange(connection) : 5;
-    if (candidate.metres > maximum) return null;
-    const ready = connection ? candidate.metres <= interactionRange(connection) : candidate.metres <= 2;
+    const wasReady = Boolean(connection) && previousState.startsWith(`${this.compiled.id}:${candidate.id}:ready:`);
+    const ready = Boolean(connection) && (wasReady
+      ? candidate.metres <= interactionRange(connection) + PROXIMITY_READY_MARGIN
+      : candidate.metres <= interactionRange(connection));
     const key = `${this.compiled.id}:${candidate.id}:${ready ? "ready" : "near"}:${candidate.available === false ? "closed" : "open"}`;
     if (proximityState !== key) {
-      emit(world, "location-nearby", describeNearbySpatialEntry(candidate, {actionReady: ready && Boolean(connection)}), [playerIndex], {
+      emit(world, "location-nearby", describeNearbySpatialEntry(candidate, {actionReady: ready}), [playerIndex], {
         sourcePlayer: playerIndex, locationId: this.compiled.id, spaceId: entity.spaceId, semanticId: candidate.id, distance: candidate.metres, x: candidate.position.x, y: candidate.position.y, z: candidate.position.z,
       });
     }
@@ -568,8 +595,14 @@ export class FreeRoamSpatialManager {
         const nearest = this.nearestIntegration(player);
         if (player.mode === "foot" && nearest) {
           const metres = distance2d(player, nearest.portal.position);
-          if (metres <= nearest.portal.discoverRadius) {
-            const ready = metres <= nearest.portal.radius;
+          const previousState = String(state.proximity[index] || "");
+          const wasPortal = previousState.startsWith(`${nearest.compiled.id}:portal:`);
+          const discoverLimit = nearest.portal.discoverRadius + (wasPortal ? PROXIMITY_HOLD_MARGIN : 0);
+          if (metres <= discoverLimit) {
+            const wasReady = previousState === `${nearest.compiled.id}:portal:ready`;
+            const ready = wasReady
+              ? metres <= nearest.portal.radius + PROXIMITY_READY_MARGIN
+              : metres <= nearest.portal.radius;
             const key = `${nearest.compiled.id}:portal:${ready ? "ready" : "near"}`;
             if (state.proximity[index] !== key) {
               emit(world, "location-nearby", ready
