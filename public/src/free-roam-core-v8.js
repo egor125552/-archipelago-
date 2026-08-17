@@ -30,7 +30,7 @@ import {applyCombatDamage} from "./free-roam-combat-v2.js?v=6";
 import {attachVesselArchitecture, listNativeVessels, runVesselSystems} from "./vessel/vessel-runtime.js?v=2";
 import {runVesselPhysics} from "./vessel/vessel-runtime-v3.js?v=1";
 import {FreeRoamSpatialManager} from "./spatial/spatial-free-roam-integration.js";
-import {syncFreeRoamVesselSpatialMirrors} from "./spatial/spatial-vessel-adapter.js";
+import {syncFreeRoamVesselSpatialMirrors} from "./vessel/adapters/spatial-vessel-adapter.js";
 import {
   announceFreeRoamSpatialGameplay,
   finishFreeRoamSpatialGameplayStep,

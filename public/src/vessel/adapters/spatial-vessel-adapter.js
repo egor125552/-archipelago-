@@ -1,9 +1,9 @@
 "use strict";
 
-import {compileSpatialLocation,createSpatialModuleRegistry} from "./spatial-compiler.js";
-import {SpatialRuntime} from "./spatial-runtime.js";
-import {STANDARD_SPATIAL_MODULE_TYPES} from "./spatial-standard-modules.js";
-import {applyMovingSpaceSample} from "./spatial-moving-space-adapter.js";
+import {compileSpatialLocation,createSpatialModuleRegistry} from "../../spatial/spatial-compiler.js";
+import {SpatialRuntime} from "../../spatial/spatial-runtime.js";
+import {STANDARD_SPATIAL_MODULE_TYPES} from "../../spatial/spatial-standard-modules.js";
+import {applyMovingSpaceSample} from "../../spatial/spatial-moving-space-adapter.js";
 import {projectVesselDefinitionToSpatial,vesselDeckSpatialSpaceId,vesselOccupantToSpatialLocal} from "./spatial-vessel-projection.js";
 
 const mirrorsByWorld=new WeakMap();

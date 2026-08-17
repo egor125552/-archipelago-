@@ -26,5 +26,3 @@ export * from "./spatial-quest-module.js";
 export * from "./spatial-fall-module.js";
 export * from "./spatial-gameplay-modules.js";
 
-export * from "./spatial-vessel-projection.js";
-export * from "./spatial-vessel-adapter.js";

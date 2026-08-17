@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import {projectVesselDefinitionToSpatial,vesselOccupantToSpatialLocal} from "../public/src/spatial/spatial-vessel-projection.js";
+import {projectVesselDefinitionToSpatial,vesselOccupantToSpatialLocal} from "../public/src/vessel/adapters/spatial-vessel-projection.js";
 
 const vessel={
  id:"dual-turret-patrol",label:"двухместный бронекатер",capabilities:{walkableInterior:true},
@@ -36,7 +36,7 @@ test("vessel local coordinates are converted once at the adapter boundary",()=>{
 });
 
 test("live adapter reuses the shared moving-space adapter and core keeps vessel behavior owner unchanged",()=>{
- const adapter=fs.readFileSync(new URL("../public/src/spatial/spatial-vessel-adapter.js",import.meta.url),"utf8");
+ const adapter=fs.readFileSync(new URL("../public/src/vessel/adapters/spatial-vessel-adapter.js",import.meta.url),"utf8");
  const core=fs.readFileSync(new URL("../public/src/free-roam-core-v8.js",import.meta.url),"utf8");
  assert.match(adapter,/applyMovingSpaceSample/);
  assert.match(adapter,/dual-turret-patrol/);
