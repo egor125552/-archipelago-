@@ -19,6 +19,7 @@ export * from "./spatial-location-catalog.js";
 export * from "./spatial-materials-module.js";
 export * from "./spatial-water-module.js";
 export * from "./spatial-destruction-module.js";
+export * from "./spatial-actor-contract.js";
 export * from "./spatial-actor-module.js";
 export * from "./spatial-combat-module.js";
 export * from "./spatial-items-module.js";
