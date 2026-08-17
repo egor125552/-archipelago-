@@ -3,7 +3,7 @@
 import {compileSpatialLocation, createSpatialModuleRegistry} from "./spatial-compiler.js";
 import {createSpatialRuntime} from "./spatial-runtime.js";
 import {STANDARD_SPATIAL_MODULE_TYPES} from "./spatial-standard-modules.js";
-import {describeNearbySpatialEntry, nearbySpatialSemantics, relativeSpatialDirection} from "./spatial-accessibility.js";
+import {describeNearbySpatialEntry, nearbySpatialSemantics} from "./spatial-accessibility.js";
 import {distance3d, localToWorld, resolveSpaceWorldTransform, spaceContainsLocalPoint, worldToLocal} from "./spatial-transform.js";
 import {spatialLocationIdFromNavigationTargetId, spatialLocationNavigationTargetId} from "./spatial-location-catalog.js";
 import {turnBoatToSonar} from "../free-roam-sonar-guide.js";
@@ -207,13 +207,13 @@ class FreeRoamSpatialLocationIntegration {
     return Boolean(found && found.spaceId === entity.spaceId && distance3d(entity.localPosition, found.anchor.position) <= this.portal.exitRadius);
   }
 
-  nearestConnection(runtime, entity) {
+  nearestConnection(runtime, entity, maximumResolver = interactionRange) {
     let best = null;
     for (const connection of this.compiled.connections) {
       const endpoint = endpointForEntity(runtime, entity, connection);
       if (!endpoint) continue;
       const metres = distance3d(entity.localPosition, endpoint.position);
-      if (metres > interactionRange(connection)) continue;
+      if (metres > maximumResolver(connection)) continue;
       if (!best || metres < best.metres) best = {connection, metres};
     }
     return best;
@@ -228,10 +228,18 @@ class FreeRoamSpatialLocationIntegration {
     if (player.spatialLocationId !== this.compiled.id) return false;
     const runtime = this.runtime(world);
     const entity = this.ensurePlayerMirror(world, playerIndex, runtime);
-    if (!entity) return false;
+    if (!entity) return true;
     if (this.nearExit(runtime, entity)) return this.exit(world, playerIndex);
     const selected = this.nearestConnection(runtime, entity);
-    if (!selected) return false;
+    if (!selected) {
+      const nearby = this.nearestConnection(runtime, entity, discoverRange);
+      if (nearby) {
+        emit(world, "location-action-too-far", `${nearby.connection.presentation?.label || nearby.connection.label || "Переход"}: ${Math.max(1, Math.round(nearby.metres))} метров. Подойди ближе.`, [playerIndex], {
+          sourcePlayer: playerIndex, locationId: this.compiled.id, connectionId: nearby.connection.id, distance: nearby.metres,
+        });
+      }
+      return true;
+    }
     const {connection} = selected;
     const state = runtime.getConnectionState(connection.id);
     if (!connection.passableStates.includes(state)) {
@@ -313,9 +321,11 @@ class FreeRoamSpatialLocationIntegration {
           const ready = metres <= this.portal.exitRadius;
           const key = `${this.compiled.id}:exit:${ready ? "ready" : "near"}`;
           if (proximityState !== key) {
-            emit(world, "location-nearby", `Выход на ${this.portal.outsideLabel}: ${Math.max(1, Math.round(metres))} метров ${relativeSpatialDirection(player, target)}.${ready ? " Нажми действие." : ""}`, [playerIndex], {
-              sourcePlayer: playerIndex, locationId: this.compiled.id, semanticId: this.portal.exitAnchorId, distance: metres, x: target.x, y: target.y, z: target.z,
-            });
+            emit(world, "location-nearby", ready
+              ? `Выход на ${this.portal.outsideLabel} рядом. Нажми действие, чтобы выйти.`
+              : `Выход на ${this.portal.outsideLabel}: ${Math.max(1, Math.round(metres))} метров.`, [playerIndex], {
+                sourcePlayer: playerIndex, locationId: this.compiled.id, semanticId: this.portal.exitAnchorId, distance: metres, x: target.x, y: target.y, z: target.z,
+              });
           }
           return key;
         }
@@ -344,7 +354,7 @@ class FreeRoamSpatialLocationIntegration {
       if (player.mode !== "foot") return "";
       const metres = distance2d(player, this.portal.position);
       if (metres > 100) return "";
-      return `Вход в ${this.compiled.presentation.label}: ${Math.max(1, Math.round(metres))} метров ${relativeSpatialDirection(player, this.portal.position)}.`;
+      return `Вход в ${this.compiled.presentation.label}: ${Math.max(1, Math.round(metres))} метров.`;
     }
     const runtime = this.runtime(world);
     const entity = runtime.getEntity(playerEntityId(playerIndex));
@@ -457,7 +467,7 @@ export class FreeRoamSpatialManager {
     scenario.sonarCooldown[playerIndex] = 1.1;
     scenario.beaconUntil[playerIndex] = Number.MAX_SAFE_INTEGER;
     const metres = distance2d(player, target);
-    emit(world, "scenario-sonar", `Сонар: цель — ${target.label}, ${Math.max(1, Math.round(metres))} метров, ${relativeSpatialDirection(player, target)}.`, [playerIndex], {
+    emit(world, "scenario-sonar", `Сонар: цель — ${target.label}, ${Math.max(1, Math.round(metres))} метров.`, [playerIndex], {
       sourcePlayer: playerIndex, targetId: target.id, targetKind: "location", locationId: integration.compiled.id, x: target.x, y: target.y, z: target.z, distance: metres,
     });
     return true;
@@ -549,8 +559,8 @@ export class FreeRoamSpatialManager {
             const key = `${nearest.compiled.id}:portal:${ready ? "ready" : "near"}`;
             if (state.proximity[index] !== key) {
               emit(world, "location-nearby", ready
-                ? `Вход в ${nearest.compiled.presentation.label} рядом, ${Math.max(1, Math.round(metres))} метров ${relativeSpatialDirection(player, nearest.portal.position)}. Нажми действие.`
-                : `Рядом вход в ${nearest.compiled.presentation.label}: ${Math.max(1, Math.round(metres))} метров ${relativeSpatialDirection(player, nearest.portal.position)}.`, [index], {
+                ? `Вход в ${nearest.compiled.presentation.label} рядом. Нажми действие, чтобы войти.`
+                : `Рядом вход в ${nearest.compiled.presentation.label}: ${Math.max(1, Math.round(metres))} метров.`, [index], {
                   sourcePlayer: index, locationId: nearest.compiled.id, distance: metres, x: nearest.portal.position.x, y: nearest.portal.position.y, z: nearest.portal.position.z,
                 });
             }
