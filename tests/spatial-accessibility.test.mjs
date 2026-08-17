@@ -77,7 +77,15 @@ test("connection availability follows the live common connection state", () => {
   assert.match(describeNearbySpatialEntry(entry), /закрыт/);
 });
 
-test("directions are relative to heading and reusable by sonar or speech", () => {
+test("connection speech uses the action and destination instead of an unreliable relative direction", () => {
+  const entry = nearbySpatialSemantics(runtimeFixture(), "player.one", {maximumDistance:10,heading:180}).find(item => item.id === "connection.up");
+  assert.ok(entry.elevationDelta > 0);
+  const text = describeNearbySpatialEntry(entry, {actionReady:true});
+  assert.match(text, /Нажми действие, чтобы подняться: Верхний этаж/);
+  assert.doesNotMatch(text, /прямо|слева|справа|позади/);
+});
+
+test("directions remain available as data for systems that explicitly need them", () => {
   assert.equal(relativeSpatialDirection({x:0,y:0,heading:0},{x:0,y:-5}), "прямо");
   assert.equal(relativeSpatialDirection({x:0,y:0,heading:0},{x:5,y:0}), "справа");
   assert.equal(relativeSpatialDirection({x:0,y:0,heading:0},{x:-5,y:0}), "слева");
