@@ -3,6 +3,7 @@
 import {computeSpatialAcoustics} from "./spatial-acoustics.js";
 import {describeRoute, findSpatialRoute} from "./spatial-navigation.js";
 import {filterSpatialInterestSnapshot} from "./spatial-interest.js";
+import {SPATIAL_GAMEPLAY_MODULE_TYPES} from "./spatial-gameplay-modules.js";
 
 function ensureObject(value, name) {
   if (value == null) return;
@@ -72,4 +73,5 @@ export const STANDARD_SPATIAL_MODULE_TYPES = Object.freeze([
       });
     },
   }),
+  ...SPATIAL_GAMEPLAY_MODULE_TYPES,
 ]);

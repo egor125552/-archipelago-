@@ -16,15 +16,42 @@ function standardRegistry(extra = []) {
   return createSpatialModuleRegistry([...STANDARD_SPATIAL_MODULE_TYPES, ...extra]);
 }
 
-test("spatial lab compiles as an isolated config and rejects broken references", () => {
+const REQUIRED_SPACE_IDS = [
+  "lab.yard",
+  "lab.upper.room",
+  "lab.high.platform",
+  "lab.water.basin",
+  "lab.lift",
+  "lab.remote.store",
+];
+const REQUIRED_MODULE_TYPES = [
+  "spatial.navigation",
+  "spatial.acoustics",
+  "spatial.accessibility",
+  "spatial.lifecycle",
+  "spatial.replication",
+  "spatial.persistence",
+  "spatial.materials",
+  "spatial.water",
+  "spatial.destruction",
+  "spatial.actors",
+  "spatial.combat",
+  "spatial.items",
+  "spatial.quests",
+  "spatial.fall",
+];
+
+test("spatial lab declares the shared foundation and rejects broken references", () => {
   const {compiled, runtime} = createSpatialLab();
   assert.equal(compiled.id, "location.spatial.lab");
-  assert.equal(compiled.spaces.length, 4);
-  assert.equal(compiled.modules.length, 6);
+  for (const id of REQUIRED_SPACE_IDS) assert.ok(compiled.spacesById.has(id), `${id} must be declared`);
+  const moduleTypes = new Set(compiled.modules.map(module => module.type));
+  for (const type of REQUIRED_MODULE_TYPES) assert.ok(moduleTypes.has(type), `${type} must be declared`);
   assert.equal(runtime.getDiagnostics().length, 0);
-  for (const id of ["lab.navigation", "lab.acoustics", "lab.accessibility", "lab.lifecycle", "lab.replication", "lab.persistence"]) {
-    assert.ok(runtime.getModule(id), `${id} must be active`);
-  }
+  for (const id of [
+    "lab.navigation", "lab.acoustics", "lab.accessibility", "lab.lifecycle", "lab.replication", "lab.persistence",
+    "lab.materials", "lab.water", "lab.destruction", "lab.actors", "lab.combat", "lab.items", "lab.quests", "lab.fall",
+  ]) assert.ok(runtime.getModule(id), `${id} must be active`);
 
   const broken = clone(SPATIAL_LAB_LOCATION);
   broken.connections[0].to.spaceId = "lab.missing.space";
@@ -59,17 +86,26 @@ test("height, safe transitions and moving nested spaces preserve local coordinat
   runtime.setConnectionState("lab.connection.lift.exit", "open");
   runtime.transitionEntity("player.one", "lab.connection.lift.exit");
   assert.equal(runtime.getEntity("player.one").spaceId, "lab.upper.room");
+
+  runtime.transitionEntity("player.one", "lab.connection.high.ladder");
+  assert.equal(runtime.getEntity("player.one").spaceId, "lab.high.platform");
+  assert.equal(runtime.getEntityWorldPosition("player.one").z, 14);
 });
 
-test("navigation, accessibility semantics and acoustics use the same live connection state", () => {
+test("destruction, navigation, accessibility and acoustics share live connection state", () => {
   const {runtime} = createSpatialLab();
   runtime.spawnEntity({id: "player.one", spawnId: "lab.spawn.entry"});
 
   const navigation = runtime.getModule("lab.navigation");
+  assert.equal(navigation.findRoute({fromSpaceId: "lab.yard", toSpaceId: "lab.remote.store"}), null,
+    "intact service barrier must block navigation");
+
+  const destruction = runtime.getModule("lab.destruction");
+  destruction.damage(runtime, "lab.destructible.store-door", 60, {sourceId: "player.one", kind: "acceptance"});
   const route = navigation.findRoute({fromSpaceId: "lab.yard", toSpaceId: "lab.remote.store"});
   assert.deepEqual(route.spaces, ["lab.yard", "lab.upper.room", "lab.remote.store"]);
   assert.match(navigation.describeRoute(route), /Лестница наверх/);
-  assert.match(navigation.describeRoute(route), /Удалённый склад/);
+  assert.match(navigation.describeRoute(route), /Служебный переход к складу/);
 
   const accessibility = runtime.getModule("lab.accessibility");
   const context = accessibility.describe("player.one");
@@ -89,6 +125,11 @@ test("navigation, accessibility semantics and acoustics use the same live connec
   runtime.setConnectionState("lab.connection.lift.exit", "open");
   const alternate = navigation.findRoute({fromSpaceId: "lab.yard", toSpaceId: "lab.remote.store"});
   assert.deepEqual(alternate.spaces, ["lab.yard", "lab.lift", "lab.upper.room", "lab.remote.store"]);
+
+  destruction.repair(runtime, "lab.destructible.store-door", 60);
+  destruction.sync(runtime);
+  assert.equal(runtime.getConnectionState("lab.connection.store"), "blocked");
+  assert.equal(navigation.findRoute({fromSpaceId: "lab.yard", toSpaceId: "lab.remote.store"}), null);
 });
 
 test("complete state restores transactionally and broken entity references recover to a safe spawn", () => {

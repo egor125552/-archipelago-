@@ -18,7 +18,10 @@ export const FREE_ROAM_SPATIAL_LOCATIONS = Object.freeze([
     portal: Object.freeze({
       id: "portal.spatial.lab.shore",
       position: Object.freeze({x: 210, y: 55, z: 0}),
-      radius: 4,
+      // The developer log showed the blind approach repeatedly passing the
+      // entrance at 7.9-12.8 m. Discovery is 18 m, so the action radius must
+      // remain usable inside the spoken guidance envelope.
+      radius: 13,
       exitRadius: 3,
       discoverRadius: 18,
       spawnId: "lab.spawn.entry",
