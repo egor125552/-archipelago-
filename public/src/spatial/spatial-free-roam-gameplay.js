@@ -1,8 +1,6 @@
 "use strict";
 
 import {computeSpatialFallDamage} from "./spatial-fall-module.js";
-import {relativeSpatialDirection} from "./spatial-accessibility.js";
-import {localToWorld} from "./spatial-transform.js";
 
 const PLAYER_ENTITY_PREFIX="player.free.";
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
@@ -51,8 +49,7 @@ function announceDropEdges(world,manager,index,player,state){
  if(!player||player.mode!=="foot"||player.airborne||!player.spatialLocationId)return;
  const integration=manager?.byId?.get(player.spatialLocationId);if(!integration)return;const runtime=integration.runtime(world);const fall=moduleService(runtime,"spatial.fall");if(!fall)return;const entity=runtime.getEntity(entityId(index));if(!entity)return;
  let best=null;for(const drop of fall.list()){if(drop.fromSpaceId!==entity.spaceId)continue;const space=runtime.location.spacesById.get(entity.spaceId);const xs=space.shape.outer.map(p=>p.x),ys=space.shape.outer.map(p=>p.y);const b={minX:Math.min(...xs),maxX:Math.max(...xs),minY:Math.min(...ys),maxY:Math.max(...ys)};const axis=drop.edge.axis,other=axis==="x"?"y":"x",boundary=axis==="x"?(drop.edge.side==="min"?b.minX:b.maxX):(drop.edge.side==="min"?b.minY:b.maxY);const along=clamp(entity.localPosition[other],drop.edge.rangeMin,drop.edge.rangeMax);const metres=Math.hypot(entity.localPosition[axis]-boundary,entity.localPosition[other]-along);if(metres<=4&&(!best||metres<best.metres))best={drop,metres};}
- if(best){const drop=best.drop,space=runtime.location.spacesById.get(entity.spaceId);const axis=drop.edge.axis,other=axis==="x"?"y":"x";const xs=space.shape.outer.map(p=>p.x),ys=space.shape.outer.map(p=>p.y);const b={minX:Math.min(...xs),maxX:Math.max(...xs),minY:Math.min(...ys),maxY:Math.max(...ys)};const boundary=axis==="x"?(drop.edge.side==="min"?b.minX:b.maxX):(drop.edge.side==="min"?b.minY:b.maxY);const localTarget={x:entity.localPosition.x,y:entity.localPosition.y,z:entity.localPosition.z};localTarget[axis]=boundary;localTarget[other]=clamp(entity.localPosition[other],drop.edge.rangeMin,drop.edge.rangeMax);const target=localToWorld(runtime.location,entity.spaceId,localTarget,runtime.dynamicTransforms);best.direction=relativeSpatialDirection(player,target);}
- const key=best?`${player.spatialLocationId}:${best.drop.id}:${best.metres<=1.5?"ready":"near"}:${best.direction}`:null;if(key&&state.fallCue[index]!==key){emit(world,"location-fall-edge",best.metres<=1.5?`Край ${best.drop.label} рядом ${best.direction}. Шагни дальше ${best.direction}, чтобы спрыгнуть.`:`Рядом ${best.drop.label}, примерно ${Math.max(1,Math.round(best.metres))} метров ${best.direction}.`,[index],{sourcePlayer:index,locationId:player.spatialLocationId,dropId:best.drop.id,distance:best.metres,direction:best.direction});}state.fallCue[index]=key;
+ const key=best?`${player.spatialLocationId}:${best.drop.id}:${best.metres<=1.5?"ready":"near"}`:null;if(key&&state.fallCue[index]!==key){emit(world,"location-fall-edge",best.metres<=1.5?`Опасность: ${best.drop.label} рядом. За границей площадки начинается падение.`:`Рядом ${best.drop.label}, примерно ${Math.max(1,Math.round(best.metres))} метров.`,[index],{sourcePlayer:index,locationId:player.spatialLocationId,dropId:best.drop.id,distance:best.metres});}state.fallCue[index]=key;
 }
 
 export function finishFreeRoamSpatialGameplayStep(world,manager,context,dt,{applyCombatDamage=null}={}){
