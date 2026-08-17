@@ -10,6 +10,27 @@ function freezeEntry(value) {
   return Object.freeze({...value, position: value.position ? Object.freeze({...value.position}) : null});
 }
 
+function metreWord(value) {
+  const numeric = Math.abs(Number(value) || 0);
+  if (!Number.isInteger(numeric)) return "метра";
+  const lastTwo = numeric % 100;
+  if (lastTwo >= 11 && lastTwo <= 14) return "метров";
+  const last = numeric % 10;
+  if (last === 1) return "метр";
+  if (last >= 2 && last <= 4) return "метра";
+  return "метров";
+}
+
+export function formatSpatialMetres(value, {minimum = 0, precision = 0} = {}) {
+  const safeMinimum = Math.max(0, Number(minimum) || 0);
+  const safePrecision = Math.max(0, Math.min(3, Math.trunc(Number(precision) || 0)));
+  const factor = 10 ** safePrecision;
+  const numeric = Math.max(safeMinimum, Number(value) || 0);
+  const rounded = Math.round(numeric * factor) / factor;
+  const rendered = String(rounded).replace(".", ",");
+  return `${rendered} ${metreWord(rounded)}`;
+}
+
 export function relativeSpatialDirection(listener, target) {
   const dx = (Number(target?.x) || 0) - (Number(listener?.x) || 0);
   const dy = (Number(target?.y) || 0) - (Number(listener?.y) || 0);
@@ -160,11 +181,11 @@ function connectionAction(entry) {
 }
 
 export function describeNearbySpatialEntry(entry, {actionReady = false} = {}) {
-  const distance = Math.max(1, Math.round(Number(entry?.metres) || 0));
+  const distance = formatSpatialMetres(entry?.metres, {minimum: 1});
   const label = entry?.label || "Объект";
   if (entry?.available === false) {
-    return `${label}: ${distance} метров. Переход сейчас закрыт.${actionReady ? " Нажми действие, чтобы открыть." : ""}`;
+    return `${label}: ${distance}. Переход сейчас закрыт.${actionReady ? " Нажми действие, чтобы открыть." : ""}`;
   }
   const action = actionReady ? connectionAction(entry) : "";
-  return `${label}: ${distance} метров.${action}`;
+  return `${label}: ${distance}.${action}`;
 }
