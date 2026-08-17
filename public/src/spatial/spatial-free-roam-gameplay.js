@@ -11,6 +11,12 @@ function emit(world,type,text,targets,extra={}){world.events||=[];world.events.p
 function moduleService(runtime,type){const plan=runtime?.location?.modulePlans?.find(entry=>entry?.instance?.type===type&&!entry.disabledReason);return plan?runtime.getModule(plan.instance.id):null;}
 function ensureState(world){world.spatialArchitecture||={};const state=world.spatialArchitecture;state.falls||=Array.from({length:world.players?.length||0},()=>null);while(state.falls.length<(world.players?.length||0))state.falls.push(null);state.gameplayRevision||={};state.fallCue||=Array.from({length:world.players?.length||0},()=>null);while(state.fallCue.length<(world.players?.length||0))state.fallCue.push(null);return state;}
 
+export function spatialFallWarningThresholds(player){
+ if(player?.airborne)return {near:8,danger:3.5,mode:"airborne"};
+ if(player?.running)return {near:7,danger:3,mode:"running"};
+ return {near:4,danger:1.5,mode:"walking"};
+}
+
 export function prepareFreeRoamSpatialGameplayStep(world,manager){
  const state=ensureState(world);const players=(world.players||[]).map(player=>({mode:player.mode,airborne:Boolean(player.airborne),jumpHeight:Number(player.jumpHeight)||0,jumpVelocity:Number(player.jumpVelocity)||0,z:Number(player.z)||0,x:Number(player.x)||0,y:Number(player.y)||0,spatialLocationId:player.spatialLocationId||null,spatialSpaceId:player.spatialSpaceId||null}));
  const revisions={};for(const integration of manager?.integrations||[]){try{const runtime=integration.runtime(world);revisions[integration.compiled.id]=runtime.revision;}catch{}}
@@ -37,7 +43,6 @@ function finishLanding(world,manager,index,player,before,state,applyCombatDamage
  if(result.damage>0&&typeof applyCombatDamage==="function")applyCombatDamage(world,index,result.damage,-1,{weapon:"fall",heavy:result.damage>=35,eventType:"fall-damage",announceHealth:true,sourcePoint:{x:player.x,y:player.y}});
  state.falls[index]=null;return true;
 }
-
 function tickRuntimeModules(world,integration,runtime,dt,fromRevision){
  const water=moduleService(runtime,"spatial.water");water?.tick?.(dt);
  const destruction=moduleService(runtime,"spatial.destruction");destruction?.sync?.(runtime);
@@ -48,10 +53,11 @@ function tickRuntimeModules(world,integration,runtime,dt,fromRevision){
 }
 
 function announceDropEdges(world,manager,index,player,state){
- if(!player||player.mode!=="foot"||player.airborne||!player.spatialLocationId)return;
+ if(!player||player.mode!=="foot"||!player.spatialLocationId||state.falls[index])return;
  const integration=manager?.byId?.get(player.spatialLocationId);if(!integration)return;const runtime=integration.runtime(world);const fall=moduleService(runtime,"spatial.fall");if(!fall)return;const entity=runtime.getEntity(entityId(index));if(!entity)return;
- let best=null;for(const drop of fall.list()){if(drop.fromSpaceId!==entity.spaceId)continue;const space=runtime.location.spacesById.get(entity.spaceId);const xs=space.shape.outer.map(p=>p.x),ys=space.shape.outer.map(p=>p.y);const b={minX:Math.min(...xs),maxX:Math.max(...xs),minY:Math.min(...ys),maxY:Math.max(...ys)};const axis=drop.edge.axis,other=axis==="x"?"y":"x",boundary=axis==="x"?(drop.edge.side==="min"?b.minX:b.maxX):(drop.edge.side==="min"?b.minY:b.maxY);const along=clamp(entity.localPosition[other],drop.edge.rangeMin,drop.edge.rangeMax);const metres=Math.hypot(entity.localPosition[axis]-boundary,entity.localPosition[other]-along);const localPosition=axis==="x"?{x:boundary,y:along,z:0}:{x:along,y:boundary,z:0};const position=localToWorld(runtime.location,entity.spaceId,localPosition,runtime.dynamicTransforms);if(metres<=4&&(!best||metres<best.metres))best={drop,metres,position};}
- const key=best?`${player.spatialLocationId}:${best.drop.id}:${best.metres<=1.5?"ready":"near"}`:null;if(key&&state.fallCue[index]!==key){emit(world,"location-fall-edge",best.metres<=1.5?"Опасность: край рядом. За границей площадки начинается падение.":`До опасного края примерно ${formatSpatialMetres(best.metres,{minimum:1})}.`,[index],{sourcePlayer:index,locationId:player.spatialLocationId,dropId:best.drop.id,distance:best.metres,x:best.position.x,y:best.position.y,z:best.position.z});}state.fallCue[index]=key;
+ const warning=spatialFallWarningThresholds(player);
+ let best=null;for(const drop of fall.list()){if(drop.fromSpaceId!==entity.spaceId)continue;const space=runtime.location.spacesById.get(entity.spaceId);const xs=space.shape.outer.map(p=>p.x),ys=space.shape.outer.map(p=>p.y);const b={minX:Math.min(...xs),maxX:Math.max(...xs),minY:Math.min(...ys),maxY:Math.max(...ys)};const axis=drop.edge.axis,other=axis==="x"?"y":"x",boundary=axis==="x"?(drop.edge.side==="min"?b.minX:b.maxX):(drop.edge.side==="min"?b.minY:b.maxY);const along=clamp(entity.localPosition[other],drop.edge.rangeMin,drop.edge.rangeMax);const metres=Math.hypot(entity.localPosition[axis]-boundary,entity.localPosition[other]-along);const localPosition=axis==="x"?{x:boundary,y:along,z:0}:{x:along,y:boundary,z:0};const position=localToWorld(runtime.location,entity.spaceId,localPosition,runtime.dynamicTransforms);if(metres<=warning.near&&(!best||metres<best.metres))best={drop,metres,position};}
+ const danger=Boolean(best&&best.metres<=warning.danger);const key=best?`${player.spatialLocationId}:${best.drop.id}:${danger?"ready":"near"}:${warning.mode}`:null;if(key&&state.fallCue[index]!==key){emit(world,"location-fall-edge",danger?"Опасность: край рядом. За границей площадки начинается падение.":`До опасного края примерно ${formatSpatialMetres(best.metres,{minimum:1})}.`,[index],{sourcePlayer:index,locationId:player.spatialLocationId,dropId:best.drop.id,distance:best.metres,x:best.position.x,y:best.position.y,z:best.position.z,warningMode:warning.mode,nearThreshold:warning.near,dangerThreshold:warning.danger});}state.fallCue[index]=key;
 }
 
 export function finishFreeRoamSpatialGameplayStep(world,manager,context,dt,{applyCombatDamage=null}={}){

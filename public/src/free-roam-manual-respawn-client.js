@@ -21,12 +21,29 @@ function ensureRespawnControl(api) {
   return true;
 }
 
+function logManualRespawnRequest(api) {
+  try {
+    const currentWorld = api?.getWorld?.();
+    const index = api?.playerIndex?.();
+    globalThis.__freeRoamDeveloperLog?.captureServerEvents?.([{
+      type: "manual-respawn-request",
+      at: Number(currentWorld?.time) || 0,
+      sourcePlayer: Number.isInteger(index) ? index : null,
+      clientInput: true,
+    }]);
+  } catch (_) {}
+}
+
 function requestRespawn() {
   if (!playerIsDead()) return false;
   const api = freeRoamApi();
   if (!ensureRespawnControl(api)) return false;
   clearTimeout(releaseTimer);
   api.setControl("respawn", true);
+  // The pulse lasts only 120 ms while the developer logger polls ordinary
+  // input every 250 ms. Record the manual request explicitly so Bug Hunt logs
+  // can distinguish a real manual respawn from an automatic one.
+  logManualRespawnRequest(api);
   releaseTimer = setTimeout(() => api.setControl("respawn", false), RESPAWN_PULSE_MS);
   return true;
 }

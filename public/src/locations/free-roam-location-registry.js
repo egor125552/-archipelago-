@@ -18,7 +18,10 @@ export const FREE_ROAM_SPATIAL_LOCATIONS = Object.freeze([
     definition: freeRoamLabDefinition(),
     portal: Object.freeze({
       id: "portal.spatial.lab.shore",
-      position: Object.freeze({x: 210, y: 55, z: 0}),
+      // Keep the laboratory outside the merchant's 35 m audio envelope plus
+      // the laboratory's own 18 m discovery envelope. The old portal at
+      // (210, 55) was only about three metres from the merchant at (210, 58).
+      position: Object.freeze({x: 270, y: 55, z: 0}),
       // The developer log showed the blind approach repeatedly passing the
       // entrance at 7.9-12.8 m. Discovery is 18 m, so the action radius must
       // remain usable inside the spoken guidance envelope.
