@@ -13,7 +13,7 @@ import {
 function runtimeFixture() {
   const upper={id:"upper",transform:{position:{x:0,y:0,z:12},yaw:0},parentSpaceId:null,shape:{outer:[{x:0,y:0,z:0},{x:10,y:0,z:0},{x:10,y:10,z:0},{x:0,y:10,z:0}],minZ:0,maxZ:3}};
   const lower={id:"lower",transform:{position:{x:0,y:0,z:0},yaw:0},parentSpaceId:null,shape:{outer:[{x:0,y:0,z:0},{x:20,y:0,z:0},{x:20,y:20,z:0},{x:0,y:20,z:0}],minZ:0,maxZ:20}};
-  const fall=createSpatialFallService({drops:[{id:"drop.high",label:"двенадцатиметрового обрыва",fromSpaceId:"upper",toSpaceId:"lower",edge:{axis:"y",side:"max",rangeMin:1,rangeMax:9,approach:1.7},materialId:"concrete"}]});
+  const fall=createSpatialFallService({drops:[{id:"drop.high",label:"двенадцатиметровый обрыв",fromSpaceId:"upper",toSpaceId:"lower",edge:{axis:"y",side:"max",rangeMin:1,rangeMax:9,approach:1.7},materialId:"concrete"}]});
   const materials=createSpatialMaterialCatalog({defaultMaterial:"concrete"});
   const services=new Map([["fall",fall],["materials",materials]]);
   const entities=new Map([["player.free.1",{id:"player.free.1",kind:"player",label:"Игрок 1",spaceId:"upper",localPosition:{x:5,y:9.4,z:0},mode:"foot",data:{}}]]);
@@ -42,7 +42,7 @@ function fixture() {
 test("free-roam fall changes support but leaves gravity to the existing jump arc",()=>{
   const {runtime,manager,world}=fixture();
   const before=prepareFreeRoamSpatialGameplayStep(world,manager);
-  world.players[0].y=10.25; // ordinary free-roam movement crossed the declared edge
+  world.players[0].y=10.25;
   finishFreeRoamSpatialGameplayStep(world,manager,before,0.05,{});
   assert.equal(world.players[0].spatialSpaceId,"lower");
   assert.equal(world.players[0].spatialFloorZ,0);
@@ -65,7 +65,6 @@ test("landing damage is handed to the existing combat callback and a high fall c
   world.players[0].airborne=true;
   world.players[0].jumpVelocity=-22;
   before=prepareFreeRoamSpatialGameplayStep(world,manager);
-  // This is what the existing free-roam jump arc looks like immediately after landing.
   world.players[0].airborne=false;
   world.players[0].jumpHeight=0;
   world.players[0].jumpVelocity=0;
@@ -79,7 +78,7 @@ test("landing damage is handed to the existing combat callback and a high fall c
   assert.ok(world.events.some(event=>event.type==="location-fall-land"&&event.severity==="lethal"));
 });
 
-test("drop-edge cue uses the shared relative direction vocabulary",()=>{
+test("drop-edge cue is direction-neutral and does not repeat just because heading changed",()=>{
   const {runtime,manager,world}=fixture();
   runtime.removeEntity("player.free.1");
   runtime.placeEntity({id:"player.free.1",kind:"player",label:"Игрок 1",spaceId:"upper",position:{x:5,y:9.2,z:0},mode:"foot",data:{}});
@@ -87,8 +86,12 @@ test("drop-edge cue uses the shared relative direction vocabulary",()=>{
   announceFreeRoamSpatialGameplay(world,manager);
   const cue=world.events.find(event=>event.type==="location-fall-edge");
   assert.ok(cue);
-  assert.match(cue.text,/позади/);
-  assert.equal(cue.direction,"позади");
+  assert.doesNotMatch(cue.text,/прямо|слева|справа|позади/);
+  assert.equal(Object.hasOwn(cue,"direction"),false);
+  const count=world.events.filter(event=>event.type==="location-fall-edge").length;
+  world.players[0].heading=180;
+  announceFreeRoamSpatialGameplay(world,manager);
+  assert.equal(world.events.filter(event=>event.type==="location-fall-edge").length,count);
 });
 
 test("core calls fall adapter after legacy physics and before spatial boundary reconciliation",()=>{
