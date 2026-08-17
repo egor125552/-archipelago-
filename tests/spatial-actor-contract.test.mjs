@@ -42,9 +42,9 @@ test("actor contract rejects duplicate stable ids and invalid coordinates", () =
 
 test("actor state contract clamps restored health and derives alive consistently", () => {
   const definition = normalizeSpatialActorDefinition({id: "dummy", spaceId: "room", maxHealth: 80});
-  assert.deepEqual(createSpatialActorState(definition), {health: 80, alive: true, spawned: false});
-  assert.deepEqual(createSpatialActorState(definition, {health: 200, alive: true, spawned: true}), {health: 80, alive: true, spawned: true});
-  assert.deepEqual(createSpatialActorState(definition, {health: 0, alive: true}), {health: 0, alive: false, spawned: false});
+  assert.deepEqual(createSpatialActorState(definition), {health: 80, alive: true, sleeping: false, spawned: false});
+  assert.deepEqual(createSpatialActorState(definition, {health: 200, alive: true, spawned: true}), {health: 80, alive: true, sleeping: false, spawned: true});
+  assert.deepEqual(createSpatialActorState(definition, {health: 0, alive: true}), {health: 0, alive: false, sleeping: false, spawned: false});
 });
 
 test("actor service is built on the shared actor contract instead of a second schema", () => {
@@ -53,4 +53,34 @@ test("actor service is built on the shared actor contract instead of a second sc
   assert.equal(actor.schemaVersion, SPATIAL_ACTOR_SCHEMA_VERSION);
   assert.equal(actor.entityId, "actor.dummy");
   assert.deepEqual(actor.position, {x: 1, y: 2, z: 0});
+});
+
+
+test("actor can sleep independently and wake with the same health", () => {
+  const entities = new Map();
+  const runtime = {
+    getEntity(id) { return entities.get(id) || null; },
+    placeEntity(value) { entities.set(value.id, {...value, localPosition: {...value.position}}); return entities.get(value.id); },
+    removeEntity(id) { return entities.delete(id); },
+  };
+  const service = createSpatialActorService({actors: [{id: "guard", spaceId: "room", maxHealth: 60}]});
+  service.spawn(runtime, "guard");
+  service.damage(runtime, "guard", 17);
+  assert.equal(service.get("guard").health, 43);
+  service.sleep(runtime, "guard");
+  assert.equal(service.get("guard").sleeping, true);
+  assert.equal(service.get("guard").spawned, false);
+  assert.equal(runtime.getEntity("actor.guard"), null);
+  assert.equal(service.list().some(actor => actor.id === "guard"), false, "sleeping actor must stay out of the active list used by free-roam");
+  assert.equal(service.listAll().find(actor => actor.id === "guard").sleeping, true);
+  const saved = service.serialize();
+  const restored = createSpatialActorService({actors: [{id: "guard", spaceId: "room", maxHealth: 60}]});
+  restored.restore(saved);
+  assert.equal(restored.get("guard").health, 43);
+  assert.equal(restored.get("guard").sleeping, true);
+  restored.wake(runtime, "guard");
+  assert.equal(restored.get("guard").health, 43);
+  assert.equal(restored.get("guard").sleeping, false);
+  assert.equal(restored.get("guard").spawned, true);
+  assert.ok(runtime.getEntity("actor.guard"));
 });

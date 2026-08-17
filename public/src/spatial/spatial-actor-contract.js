@@ -68,6 +68,7 @@ export function createSpatialActorState(definition, snapshot = null) {
   return {
     health,
     alive: snapshot?.alive !== false && health > 0,
-    spawned: Boolean(snapshot?.spawned),
+    sleeping: snapshot?.sleeping === true && health > 0,
+    spawned: snapshot?.sleeping === true ? false : Boolean(snapshot?.spawned),
   };
 }

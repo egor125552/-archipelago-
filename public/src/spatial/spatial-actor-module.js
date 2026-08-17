@@ -25,11 +25,13 @@ export function createSpatialActorService(config = {}, {emit = () => {}} = {}) {
 
   return Object.freeze({
     get,
-    list() { return Object.freeze([...defs.keys()].map(get)); },
+    list() { return Object.freeze([...defs.keys()].map(get).filter(actor => !actor.sleeping)); },
+    listAll() { return Object.freeze([...defs.keys()].map(get)); },
     spawn(runtime, id) {
       const definition = def(id);
       const state = states.get(id);
       if (!state.alive) return get(id);
+      state.sleeping = false;
       const entityId = spatialActorEntityId(id);
       if (!runtime.getEntity(entityId)) {
         runtime.placeEntity({
@@ -55,9 +57,30 @@ export function createSpatialActorService(config = {}, {emit = () => {}} = {}) {
     despawn(runtime, id) {
       def(id);
       runtime.removeEntity(spatialActorEntityId(id));
-      states.get(id).spawned = false;
+      const state = states.get(id);
+      state.spawned = false;
+      state.sleeping = false;
       emit("actor.despawn", {actorId: id});
       return get(id);
+    },
+    sleep(runtime, id) {
+      def(id);
+      const state = states.get(id);
+      if (!state.alive) return get(id);
+      runtime?.removeEntity?.(spatialActorEntityId(id));
+      state.spawned = false;
+      state.sleeping = true;
+      emit("actor.sleep", {actorId: id, health: state.health});
+      return get(id);
+    },
+    wake(runtime, id) {
+      def(id);
+      const state = states.get(id);
+      if (!state.alive) return get(id);
+      state.sleeping = false;
+      const actor = this.spawn(runtime, id);
+      emit("actor.wake", {actorId: id, health: actor.health});
+      return actor;
     },
     damage(runtime, id, amount, {sourceId = null} = {}) {
       def(id);
@@ -69,6 +92,7 @@ export function createSpatialActorService(config = {}, {emit = () => {}} = {}) {
       if (state.health <= 0) {
         state.alive = false;
         state.spawned = false;
+        state.sleeping = false;
         runtime?.removeEntity?.(spatialActorEntityId(id));
         emit("actor.death", {actorId: id, sourceId});
       }
