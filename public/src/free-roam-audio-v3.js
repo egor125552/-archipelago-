@@ -62,8 +62,24 @@ export class FreeRoamAudio extends BaseFreeRoamAudio {
     }
   }
 
+  playLocationLocator(event) {
+    if (!this.listenerPoint || !Number.isFinite(Number(event?.x)) || !Number.isFinite(Number(event?.y))) return;
+    const metres = distance(this.listenerPoint, event);
+    const pan = relativeMovementPan(this.listenerPoint, event);
+    const proximity = clamp(1 - metres / 18, 0, 1);
+    const danger = event.type === "location-fall-edge";
+    const baseFrequency = danger ? 260 : 820;
+    const gain = (danger ? 0.09 : 0.055) + proximity * (danger ? 0.06 : 0.045);
+    this.playSynthPip({pan, frequency: baseFrequency, gain, duration: danger ? 0.11 : 0.07});
+    this.playSynthPip({pan, frequency: danger ? 210 : 1040, gain: gain * 0.86, duration: danger ? 0.13 : 0.055, delay: 0.11});
+  }
+
   handleFreeEvent(event, playerIndex) {
     if (!event?.targets?.includes(playerIndex)) return;
+    if (["location-nearby", "location-fall-edge"].includes(event.type)) {
+      this.playLocationLocator(event);
+      return;
+    }
     if (["footstep", "swim-step"].includes(event.type) && Number.isInteger(event.sourcePlayer)) {
       this.playSpatialMovement(event, playerIndex);
       return;

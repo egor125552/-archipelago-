@@ -172,12 +172,12 @@ export function describeSpatialSemanticContext(runtime, entityId, options = {}) 
 
 function connectionAction(entry) {
   if (entry?.type !== "connection") return "";
-  const destination = entry.destinationLabel ? `: ${entry.destinationLabel}` : "";
+  const destination = entry.destinationLabel ? ` Следующий уровень: ${entry.destinationLabel}.` : "";
   const vertical = ["stairs", "ladder", "lift"].includes(entry.kind);
   const delta = Number(entry.elevationDelta) || 0;
-  if (vertical && delta > 0.25) return ` Нажми действие, чтобы подняться${destination}.`;
-  if (vertical && delta < -0.25) return ` Нажми действие, чтобы спуститься${destination}.`;
-  return ` Нажми действие, чтобы пройти${destination}.`;
+  if (vertical && delta > 0.25) return ` Нажми действие, чтобы подняться.${destination}`;
+  if (vertical && delta < -0.25) return ` Нажми действие, чтобы спуститься.${destination}`;
+  return ` Нажми действие, чтобы пройти.${destination}`;
 }
 
 export function describeNearbySpatialEntry(entry, {actionReady = false} = {}) {

@@ -1,6 +1,8 @@
 "use strict";
 
 import {computeSpatialFallDamage} from "./spatial-fall-module.js";
+import {formatSpatialMetres} from "./spatial-accessibility.js";
+import {localToWorld} from "./spatial-transform.js";
 
 const PLAYER_ENTITY_PREFIX="player.free.";
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
@@ -21,7 +23,7 @@ function startDrop(world,manager,index,player,state){
  fall.begin(runtime,entityId(index),crossing);const dropHeight=Math.max(0,worldZ-crossing.targetFloorZ);player.spatialSpaceId=crossing.toSpaceId;player.spatialFloorZ=crossing.targetFloorZ;player.jumpHeight=dropHeight;player.z=worldZ;player.airborne=true;if(!Number.isFinite(player.jumpVelocity))player.jumpVelocity=0;
  state.falls[index]={locationId:player.spatialLocationId,dropId:crossing.id,materialId:crossing.materialId,waterVolumeId:crossing.waterVolumeId||null,fromSpaceId:crossing.fromSpaceId,toSpaceId:crossing.toSpaceId,startWorldZ:worldZ,targetFloorZ:crossing.targetFloorZ,peakDownwardSpeed:Math.min(0,Number(player.jumpVelocity)||0)};
  state.fallCue[index]=null;
- emit(world,"location-fall-start",`Ты сорвался вниз. До нижней поверхности примерно ${Math.max(1,Math.round(dropHeight))} метров.`,[index],{sourcePlayer:index,locationId:player.spatialLocationId,dropId:crossing.id,fromSpaceId:crossing.fromSpaceId,spaceId:crossing.toSpaceId,x:player.x,y:player.y,z:worldZ,dropHeight});return true;
+ emit(world,"location-fall-start",`Ты сорвался вниз. До нижней поверхности примерно ${formatSpatialMetres(dropHeight,{minimum:1})}.`,[index],{sourcePlayer:index,locationId:player.spatialLocationId,dropId:crossing.id,fromSpaceId:crossing.fromSpaceId,spaceId:crossing.toSpaceId,x:player.x,y:player.y,z:worldZ,dropHeight});return true;
 }
 
 function landingText(result,waterDepth){if(result.damage<=0)return waterDepth>0?"Ты вошёл в воду после падения без травмы.":"Ты приземлился без травмы.";if(result.damage>=100)return "Удар после падения оказался смертельным.";if(result.damage>=45)return `Очень тяжёлое приземление. Урон ${Math.round(result.damage)}.`;return `Жёсткое приземление. Урон ${Math.round(result.damage)}.`;}
@@ -48,8 +50,8 @@ function tickRuntimeModules(world,integration,runtime,dt,fromRevision){
 function announceDropEdges(world,manager,index,player,state){
  if(!player||player.mode!=="foot"||player.airborne||!player.spatialLocationId)return;
  const integration=manager?.byId?.get(player.spatialLocationId);if(!integration)return;const runtime=integration.runtime(world);const fall=moduleService(runtime,"spatial.fall");if(!fall)return;const entity=runtime.getEntity(entityId(index));if(!entity)return;
- let best=null;for(const drop of fall.list()){if(drop.fromSpaceId!==entity.spaceId)continue;const space=runtime.location.spacesById.get(entity.spaceId);const xs=space.shape.outer.map(p=>p.x),ys=space.shape.outer.map(p=>p.y);const b={minX:Math.min(...xs),maxX:Math.max(...xs),minY:Math.min(...ys),maxY:Math.max(...ys)};const axis=drop.edge.axis,other=axis==="x"?"y":"x",boundary=axis==="x"?(drop.edge.side==="min"?b.minX:b.maxX):(drop.edge.side==="min"?b.minY:b.maxY);const along=clamp(entity.localPosition[other],drop.edge.rangeMin,drop.edge.rangeMax);const metres=Math.hypot(entity.localPosition[axis]-boundary,entity.localPosition[other]-along);if(metres<=4&&(!best||metres<best.metres))best={drop,metres};}
- const key=best?`${player.spatialLocationId}:${best.drop.id}:${best.metres<=1.5?"ready":"near"}`:null;if(key&&state.fallCue[index]!==key){emit(world,"location-fall-edge",best.metres<=1.5?`Опасность: ${best.drop.label} рядом. За границей площадки начинается падение.`:`Рядом ${best.drop.label}, примерно ${Math.max(1,Math.round(best.metres))} метров.`,[index],{sourcePlayer:index,locationId:player.spatialLocationId,dropId:best.drop.id,distance:best.metres});}state.fallCue[index]=key;
+ let best=null;for(const drop of fall.list()){if(drop.fromSpaceId!==entity.spaceId)continue;const space=runtime.location.spacesById.get(entity.spaceId);const xs=space.shape.outer.map(p=>p.x),ys=space.shape.outer.map(p=>p.y);const b={minX:Math.min(...xs),maxX:Math.max(...xs),minY:Math.min(...ys),maxY:Math.max(...ys)};const axis=drop.edge.axis,other=axis==="x"?"y":"x",boundary=axis==="x"?(drop.edge.side==="min"?b.minX:b.maxX):(drop.edge.side==="min"?b.minY:b.maxY);const along=clamp(entity.localPosition[other],drop.edge.rangeMin,drop.edge.rangeMax);const metres=Math.hypot(entity.localPosition[axis]-boundary,entity.localPosition[other]-along);const localPosition=axis==="x"?{x:boundary,y:along,z:0}:{x:along,y:boundary,z:0};const position=localToWorld(runtime.location,entity.spaceId,localPosition,runtime.dynamicTransforms);if(metres<=4&&(!best||metres<best.metres))best={drop,metres,position};}
+ const key=best?`${player.spatialLocationId}:${best.drop.id}:${best.metres<=1.5?"ready":"near"}`:null;if(key&&state.fallCue[index]!==key){emit(world,"location-fall-edge",best.metres<=1.5?"Опасность: край рядом. За границей площадки начинается падение.":`До опасного края примерно ${formatSpatialMetres(best.metres,{minimum:1})}.`,[index],{sourcePlayer:index,locationId:player.spatialLocationId,dropId:best.drop.id,distance:best.metres,x:best.position.x,y:best.position.y,z:best.position.z});}state.fallCue[index]=key;
 }
 
 export function finishFreeRoamSpatialGameplayStep(world,manager,context,dt,{applyCombatDamage=null}={}){
@@ -61,4 +63,4 @@ export function finishFreeRoamSpatialGameplayStep(world,manager,context,dt,{appl
 
 export function announceFreeRoamSpatialGameplay(world,manager){const state=ensureState(world);for(let index=0;index<(world.players||[]).length;index+=1)announceDropEdges(world,manager,index,world.players[index],state);return world;}
 
-export function spatialGameplayStatus(world,manager,index){const state=ensureState(world);const fall=state.falls[index];if(!fall)return "";const player=world.players?.[index];const metres=Math.max(0,(Number(player?.z)||0)-(Number(fall.targetFloorZ)||0));return `Падение: до поверхности примерно ${Math.max(1,Math.round(metres))} метров.`;}
+export function spatialGameplayStatus(world,manager,index){const state=ensureState(world);const fall=state.falls[index];if(!fall)return "";const player=world.players?.[index];const metres=Math.max(0,(Number(player?.z)||0)-(Number(fall.targetFloorZ)||0));return `Падение: до поверхности примерно ${formatSpatialMetres(metres,{minimum:1})}.`;}

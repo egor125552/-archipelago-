@@ -173,7 +173,7 @@ class FreeRoamSpatialLocationIntegration {
     player.jumpVelocity = 0;
     player.spatialBounds = spaceWorldBounds(runtime, entity.spaceId);
     ensureArchitecture(world).boundaryContact[playerIndex] = null;
-    emit(world, "location-enter", `Ты вошёл в ${this.compiled.presentation.label}. ${this.compiled.spacesById.get(entity.spaceId)?.presentation?.label || entity.spaceId}. Высота ${formatSpatialMetres(position.z, {precision: 1})}.`, [playerIndex], {
+    emit(world, "location-enter", `Ты вошёл в локацию «${this.compiled.presentation.label}». ${this.compiled.spacesById.get(entity.spaceId)?.presentation?.label || entity.spaceId}. Высота ${formatSpatialMetres(position.z, {precision: 1})}.`, [playerIndex], {
       sourcePlayer: playerIndex, locationId: this.compiled.id, spaceId: entity.spaceId, x: position.x, y: position.y, z: position.z,
     });
     this.persist(world, runtime);
@@ -198,7 +198,7 @@ class FreeRoamSpatialLocationIntegration {
     player.jumpHeight = 0;
     player.jumpVelocity = 0;
     ensureArchitecture(world).boundaryContact[playerIndex] = null;
-    emit(world, "location-exit", `Ты вышел из ${this.compiled.presentation.label} на ${this.portal.outsideLabel}.`, [playerIndex], {
+    emit(world, "location-exit", `Ты вышел из локации «${this.compiled.presentation.label}» на ${this.portal.outsideLabel}.`, [playerIndex], {
       sourcePlayer: playerIndex, locationId: this.compiled.id, x: player.x, y: player.y, z: 0,
     });
     this.persist(world, runtime);
@@ -365,7 +365,7 @@ class FreeRoamSpatialLocationIntegration {
       if (player.mode !== "foot") return "";
       const metres = distance2d(player, this.portal.position);
       if (metres > 100) return "";
-      return `Вход в ${this.compiled.presentation.label}: ${formatSpatialMetres(metres, {minimum: 1})}.`;
+      return `До входа в локацию «${this.compiled.presentation.label}» ${formatSpatialMetres(metres, {minimum: 1})}.`;
     }
     const runtime = this.runtime(world);
     const entity = runtime.getEntity(playerEntityId(playerIndex));
@@ -479,7 +479,7 @@ export class FreeRoamSpatialManager {
     scenario.sonarCooldown[playerIndex] = 1.1;
     scenario.beaconUntil[playerIndex] = Number.MAX_SAFE_INTEGER;
     const metres = distance2d(player, target);
-    emit(world, "scenario-sonar", `Сонар: цель — ${target.label}, ${formatSpatialMetres(metres, {minimum: 1})}.`, [playerIndex], {
+    emit(world, "scenario-sonar", `Сонар: цель — локация «${target.label}», ${formatSpatialMetres(metres, {minimum: 1})}.`, [playerIndex], {
       sourcePlayer: playerIndex, targetId: target.id, targetKind: "location", locationId: integration.compiled.id, x: target.x, y: target.y, z: target.z, distance: metres,
     });
     return true;
@@ -573,8 +573,8 @@ export class FreeRoamSpatialManager {
             const key = `${nearest.compiled.id}:portal:${ready ? "ready" : "near"}`;
             if (state.proximity[index] !== key) {
               emit(world, "location-nearby", ready
-                ? `Вход в ${nearest.compiled.presentation.label} рядом. Нажми действие, чтобы войти.`
-                : `Рядом вход в ${nearest.compiled.presentation.label}: ${formatSpatialMetres(metres, {minimum: 1})}.`, [index], {
+                ? `Вход в локацию «${nearest.compiled.presentation.label}» рядом. Нажми действие, чтобы войти.`
+                : `До входа в локацию «${nearest.compiled.presentation.label}» ${formatSpatialMetres(metres, {minimum: 1})}.`, [index], {
                   sourcePlayer: index, locationId: nearest.compiled.id, distance: metres, x: nearest.portal.position.x, y: nearest.portal.position.y, z: nearest.portal.position.z,
                 });
             }
