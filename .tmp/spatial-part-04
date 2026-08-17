@@ -1,0 +1,73 @@
+        const target = localToWorld(this.compiled, entity.spaceId, found.anchor.position, runtime.dynamicTransforms);
+        const metres = distance3d(runtime.getEntityWorldPosition(id), target);
+        const wasExit = previousState.startsWith(`${this.compiled.id}:exit:`);
+        const exitRange = Math.max(6, this.portal.exitRadius + 2) + (wasExit ? PROXIMITY_HOLD_MARGIN : 0);
+        if (metres <= exitRange) {
+          const wasReady = previousState === `${this.compiled.id}:exit:ready`;
+          const ready = wasReady
+            ? metres <= this.portal.exitRadius + PROXIMITY_READY_MARGIN
+            : metres <= this.portal.exitRadius;
+          const key = `${this.compiled.id}:exit:${ready ? "ready" : "near"}`;
+          if (proximityState !== key) {
+            emit(world, "location-nearby", ready
+              ? `Выход на ${this.portal.outsideLabel} рядом. Нажми действие, чтобы выйти.`
+              : `Выход на ${this.portal.outsideLabel}: ${formatSpatialMetres(metres, {minimum: 1})}.`, [playerIndex], {
+                sourcePlayer: playerIndex, locationId: this.compiled.id, semanticId: this.portal.exitAnchorId, distance: metres, x: target.x, y: target.y, z: target.z,
+              });
+          }
+          return key;
+        }
+      }
+    }
+
+    const entries = nearbySpatialSemantics(runtime, id, {maximumDistance: 10 + PROXIMITY_HOLD_MARGIN, heading: player.heading})
+      .filter(entry => entry.id !== this.portal.exitAnchorId);
+    const maximumFor = entry => {
+      const connection = this.compiled.connectionsById.get(entry.id);
+      return connection ? Math.min(10, discoverRange(connection)) : 5;
+    };
+    const eligible = entries.filter(entry => entry.metres <= maximumFor(entry));
+    const defaultCandidate = eligible.find(entry => this.compiled.connectionsById.has(entry.id)) || eligible[0] || null;
+    const previousCandidate = entries.find(entry =>
+      previousState.startsWith(`${this.compiled.id}:${entry.id}:`) &&
+      entry.metres <= maximumFor(entry) + PROXIMITY_HOLD_MARGIN
+    ) || null;
+
+    let candidate = previousCandidate || defaultCandidate;
+    if (previousCandidate && defaultCandidate && previousCandidate.id !== defaultCandidate.id &&
+        defaultCandidate.metres + PROXIMITY_HOLD_MARGIN < previousCandidate.metres) {
+      candidate = defaultCandidate;
+    }
+    if (!candidate) return null;
+
+    const connection = this.compiled.connectionsById.get(candidate.id);
+    const wasReady = Boolean(connection) && previousState.startsWith(`${this.compiled.id}:${candidate.id}:ready:`);
+    const ready = Boolean(connection) && (wasReady
+      ? candidate.metres <= interactionRange(connection) + PROXIMITY_READY_MARGIN
+      : candidate.metres <= interactionRange(connection));
+    const key = `${this.compiled.id}:${candidate.id}:${ready ? "ready" : "near"}:${candidate.available === false ? "closed" : "open"}`;
+    if (proximityState !== key) {
+      emit(world, "location-nearby", describeNearbySpatialEntry(candidate, {actionReady: ready}), [playerIndex], {
+        sourcePlayer: playerIndex, locationId: this.compiled.id, spaceId: entity.spaceId, semanticId: candidate.id, distance: candidate.metres, x: candidate.position.x, y: candidate.position.y, z: candidate.position.z,
+      });
+    }
+    return key;
+  }
+
+  status(world, playerIndex) {
+    const player = world?.players?.[playerIndex];
+    if (!player) return "";
+    if (player.spatialLocationId !== this.compiled.id) {
+      if (player.mode !== "foot") return "";
+      const metres = distance2d(player, this.portal.position);
+      if (metres > 100) return "";
+      return `До входа в локацию «${this.compiled.presentation.label}» ${formatSpatialMetres(metres, {minimum: 1})}.`;
+    }
+    const runtime = this.runtime(world);
+    const entity = runtime.getEntity(playerEntityId(playerIndex));
+    if (!entity) return "";
+    const space = this.compiled.spacesById.get(entity.spaceId);
+    return `${this.compiled.presentation.label}. ${space?.presentation?.label || space?.label || entity.spaceId}. Высота ${formatSpatialMetres(player.z, {precision: 1})}.`;
+  }
+}
+

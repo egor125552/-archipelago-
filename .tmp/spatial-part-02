@@ -1,0 +1,78 @@
+    emit(world, "location-enter", `Ты вошёл в локацию «${this.compiled.presentation.label}». ${this.compiled.spacesById.get(entity.spaceId)?.presentation?.label || entity.spaceId}. Высота ${formatSpatialMetres(position.z, {precision: 1})}.`, [playerIndex], {
+      sourcePlayer: playerIndex, locationId: this.compiled.id, spaceId: entity.spaceId, x: position.x, y: position.y, z: position.z,
+    });
+    this.persist(world, runtime);
+    return true;
+  }
+
+  exit(world, playerIndex) {
+    const player = world?.players?.[playerIndex];
+    if (!player || player.spatialLocationId !== this.compiled.id) return false;
+    const runtime = this.runtime(world);
+    runtime.removeEntity(playerEntityId(playerIndex));
+    player.mode = "foot";
+    player.activeBoat = null;
+    player.x = this.portal.position.x;
+    player.y = this.portal.position.y;
+    player.spatialLocationId = null;
+    player.spatialSpaceId = null;
+    player.spatialFloorZ = 0;
+    player.z = 0;
+    player.spatialBounds = null;
+    player.airborne = false;
+    player.jumpHeight = 0;
+    player.jumpVelocity = 0;
+    ensureArchitecture(world).boundaryContact[playerIndex] = null;
+    emit(world, "location-exit", `Ты вышел из локации «${this.compiled.presentation.label}» на ${this.portal.outsideLabel}.`, [playerIndex], {
+      sourcePlayer: playerIndex, locationId: this.compiled.id, x: player.x, y: player.y, z: 0,
+    });
+    this.persist(world, runtime);
+    return true;
+  }
+
+  nearExit(runtime, entity) {
+    if (!this.portal.exitAnchorId) return false;
+    const found = this.compiled.anchorsById.get(this.portal.exitAnchorId);
+    return Boolean(found && found.spaceId === entity.spaceId && distance3d(entity.localPosition, found.anchor.position) <= this.portal.exitRadius);
+  }
+
+  nearestConnection(runtime, entity, maximumResolver = interactionRange) {
+    let best = null;
+    for (const connection of this.compiled.connections) {
+      const endpoint = endpointForEntity(runtime, entity, connection);
+      if (!endpoint) continue;
+      const metres = distance3d(entity.localPosition, endpoint.position);
+      if (metres > maximumResolver(connection)) continue;
+      if (!best || metres < best.metres) best = {connection, metres};
+    }
+    return best;
+  }
+
+  activateAction(world, playerIndex) {
+    const player = world?.players?.[playerIndex];
+    if (!player || player.mode !== "foot" || player.airborne) return false;
+    if (!player.spatialLocationId) {
+      return distance2d(player, this.portal.position) <= this.portal.radius ? this.enter(world, playerIndex) : false;
+    }
+    if (player.spatialLocationId !== this.compiled.id) return false;
+    const runtime = this.runtime(world);
+    const entity = this.ensurePlayerMirror(world, playerIndex, runtime);
+    if (!entity) return true;
+    if (this.nearExit(runtime, entity)) return this.exit(world, playerIndex);
+    const selected = this.nearestConnection(runtime, entity);
+    if (!selected) {
+      const nearby = this.nearestConnection(runtime, entity, discoverRange);
+      if (nearby) {
+        emit(world, "location-action-too-far", `${nearby.connection.presentation?.label || nearby.connection.label || "Переход"}: ${formatSpatialMetres(nearby.metres, {minimum: 1})}. Подойди ближе.`, [playerIndex], {
+          sourcePlayer: playerIndex, locationId: this.compiled.id, connectionId: nearby.connection.id, distance: nearby.metres,
+        });
+      }
+      return true;
+    }
+    const {connection} = selected;
+    const state = runtime.getConnectionState(connection.id);
+    if (!connection.passableStates.includes(state)) {
+      if (["door", "hatch", "lift"].includes(connection.kind) && connection.states.includes("open")) {
+        runtime.setConnectionState(connection.id, "open");
+        emit(world, "location-connection-open", `${connection.presentation.label} открыта. Нажми действие ещё раз, чтобы пройти.`, [playerIndex], {sourcePlayer: playerIndex, connectionId: connection.id});
+      } else {

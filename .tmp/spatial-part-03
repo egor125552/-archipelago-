@@ -1,0 +1,76 @@
+        emit(world, "location-connection-blocked", `${connection.presentation.label} сейчас недоступна.`, [playerIndex], {sourcePlayer: playerIndex, connectionId: connection.id});
+      }
+      this.persist(world, runtime);
+      return true;
+    }
+    const beforeSpace = entity.spaceId;
+    const moved = runtime.transitionEntity(playerEntityId(playerIndex), connection.id);
+    const position = runtime.getEntityWorldPosition(playerEntityId(playerIndex));
+    const floor = resolveSpaceWorldTransform(this.compiled, moved.spaceId, runtime.dynamicTransforms).position.z;
+    player.mode = "foot";
+    player.activeBoat = null;
+    player.x = position.x;
+    player.y = position.y;
+    player.spatialSpaceId = moved.spaceId;
+    player.spatialFloorZ = floor;
+    player.z = position.z;
+    player.spatialBounds = spaceWorldBounds(runtime, moved.spaceId);
+    player.airborne = false;
+    player.jumpHeight = 0;
+    player.jumpVelocity = 0;
+    ensureArchitecture(world).boundaryContact[playerIndex] = null;
+    emit(world, "location-passage", `Переход: ${connection.presentation.label}. ${this.compiled.spacesById.get(moved.spaceId)?.presentation?.label || moved.spaceId}. Высота ${formatSpatialMetres(position.z, {precision: 1})}.`, [playerIndex], {
+      sourcePlayer: playerIndex, locationId: this.compiled.id, connectionId: connection.id, fromSpaceId: beforeSpace, spaceId: moved.spaceId, x: position.x, y: position.y, z: position.z,
+    });
+    this.persist(world, runtime);
+    return true;
+  }
+
+  syncInside(world, playerIndex) {
+    const player = world?.players?.[playerIndex];
+    if (!player || player.spatialLocationId !== this.compiled.id || player.mode === "dead") return;
+    const architecture = ensureArchitecture(world);
+    const runtime = this.runtime(world);
+    const id = playerEntityId(playerIndex);
+    const entity = this.ensurePlayerMirror(world, playerIndex, runtime);
+    if (!entity) return;
+    const space = this.compiled.spacesById.get(entity.spaceId);
+    const floor = resolveSpaceWorldTransform(this.compiled, entity.spaceId, runtime.dynamicTransforms).position.z;
+    const worldZ = floor + Math.max(0, Number(player.jumpHeight) || 0);
+    const local = worldToLocal(this.compiled, entity.spaceId, {x: player.x, y: player.y, z: worldZ}, runtime.dynamicTransforms);
+    if (spaceContainsLocalPoint(space, local)) {
+      try { runtime.moveEntity(id, local); } catch {}
+      player.spatialSpaceId = entity.spaceId;
+      player.spatialFloorZ = floor;
+      player.z = worldZ;
+      player.spatialBounds = spaceWorldBounds(runtime, entity.spaceId);
+      architecture.boundaryContact[playerIndex] = null;
+      return;
+    }
+    const previous = runtime.getEntityWorldPosition(id);
+    player.x = previous.x;
+    player.y = previous.y;
+    player.spatialSpaceId = entity.spaceId;
+    player.spatialFloorZ = floor;
+    player.z = floor + Math.max(0, Number(player.jumpHeight) || 0);
+    player.spatialBounds = spaceWorldBounds(runtime, entity.spaceId);
+    const boundaryKey = `${this.compiled.id}:${entity.spaceId}`;
+    if (architecture.boundaryContact[playerIndex] !== boundaryKey) {
+      emit(world, "location-boundary", `Граница: ${space?.presentation?.label || space?.label || entity.spaceId}. Дальше прохода нет.`, [playerIndex], {
+        sourcePlayer: playerIndex, locationId: this.compiled.id, spaceId: entity.spaceId, x: player.x, y: player.y, z: player.z,
+      });
+    }
+    architecture.boundaryContact[playerIndex] = boundaryKey;
+  }
+
+  announceInside(world, playerIndex, proximityState) {
+    const player = world?.players?.[playerIndex];
+    if (!player || player.spatialLocationId !== this.compiled.id || player.airborne) return null;
+    const runtime = this.runtime(world);
+    const id = playerEntityId(playerIndex);
+    const entity = runtime.getEntity(id);
+    if (!entity) return null;
+    const previousState = String(proximityState || "");
+    if (this.portal.exitAnchorId) {
+      const found = this.compiled.anchorsById.get(this.portal.exitAnchorId);
+      if (found?.spaceId === entity.spaceId) {
