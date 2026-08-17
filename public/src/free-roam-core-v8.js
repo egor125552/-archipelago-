@@ -26,9 +26,17 @@ import {
   attachBoatTransitionMetadata,
 } from "./free-roam-boat-events.js?v=1";
 import {isPlayerNearMerchant} from "./free-roam-shop.js?v=5";
-import {attachVesselArchitecture, runVesselSystems} from "./vessel/vessel-runtime.js?v=2";
+import {applyCombatDamage} from "./free-roam-combat-v2.js?v=6";
+import {attachVesselArchitecture, listNativeVessels, runVesselSystems} from "./vessel/vessel-runtime.js?v=2";
 import {runVesselPhysics} from "./vessel/vessel-runtime-v3.js?v=1";
 import {FreeRoamSpatialManager} from "./spatial/spatial-free-roam-integration.js";
+import {syncFreeRoamVesselSpatialMirrors} from "./spatial/spatial-vessel-adapter.js";
+import {
+  announceFreeRoamSpatialGameplay,
+  finishFreeRoamSpatialGameplayStep,
+  prepareFreeRoamSpatialGameplayStep,
+  spatialGameplayStatus,
+} from "./spatial/spatial-free-roam-gameplay.js";
 import {FREE_ROAM_SPATIAL_LOCATIONS} from "./locations/free-roam-location-registry.js";
 
 export * from "./free-roam-core-v7.js?v=1";
@@ -160,6 +168,7 @@ export function createFreeWorld() {
   ensureDualTurretPhysicsProfile(world);
   attachVesselArchitecture(world);
   spatialIntegration.initialize(world);
+  syncFreeRoamVesselSpatialMirrors(world, listNativeVessels(world));
   return world;
 }
 
@@ -187,12 +196,15 @@ export function stepFreeWorld(world, dt) {
   const previousDurability = captureDualTurretDurability(world);
   const boatContext = prepareDualTurretBoatStep(world);
   const weaponContext = prepareDualTurretWeaponStep(world);
+  const spatialGameplayContext = prepareFreeRoamSpatialGameplayStep(world, spatialIntegration);
   runVesselSystems("before-step", {world, dt: safeDt, eventStart});
   const previousPresence = spatialIntegration.prepareLegacyStep(world);
   let result;
   try { result = base.stepFreeWorld(world, safeDt); }
   finally { spatialIntegration.finishLegacyStep(world, previousPresence); }
+  finishFreeRoamSpatialGameplayStep(world, spatialIntegration, spatialGameplayContext, safeDt, {applyCombatDamage});
   spatialIntegration.sync(world, safeDt, {eventStart});
+  announceFreeRoamSpatialGameplay(world, spatialIntegration);
   rebalanceDualTurretGunHits(world, eventStart, previousDurability);
   applyBoatPhysicsProfiles(world, previousPhysics, safeDt, {tuning: CONFIG, eventStart});
   runVesselPhysics({world, dt: safeDt, eventStart, previousStates: previousPhysics, tuning: CONFIG});
@@ -201,13 +213,15 @@ export function stepFreeWorld(world, dt) {
   attachBoatTransitionMetadata(world, eventStart, previousBoatIds);
   applyDualTurretSpeech(world, eventStart);
   runVesselSystems("after-step", {world, dt: safeDt, eventStart});
+  syncFreeRoamVesselSpatialMirrors(world, listNativeVessels(world));
   return result;
 }
 
 export function playerStatus(world, playerIndex) {
   const inherited = base.playerStatus(world, playerIndex);
   const spatial = spatialIntegration.status(world, playerIndex);
-  const status = spatial ? `${inherited} ${spatial}` : inherited;
+  const gameplay = spatialGameplayStatus(world, spatialIntegration, playerIndex);
+  const status = [inherited, spatial, gameplay].filter(Boolean).join(" ");
   const player = world?.players?.[playerIndex];
   const boat = player?.mode === "boat" ? world.boats?.[player.activeBoat] : null;
   if (boat !== dualTurretBoat(world)) return status;
