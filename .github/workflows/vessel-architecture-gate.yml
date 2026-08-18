@@ -41,17 +41,17 @@ jobs:
           node --check tests/vessel-architecture.test.mjs
           node --check tests/vessel-stress-test.test.mjs
           node --check tests/deck-speech-light-respawn-audio.test.mjs
-          node --check tests/medium-crew-vessel.test.mjs
           node --check tests/vessel-authority.test.mjs
           node --check tests/vessel-authority-persistence.test.mjs
           node --check tests/vessel-extended-hull-combat.test.mjs
           node --check tests/vessel-repair-lifecycle.test.mjs
+          node --check tests/vessel-spatial-damage.test.mjs
 
       - name: Run vessel runtime smoke
         run: timeout 20s node tests/vessel-release-smoke.mjs
 
       - name: Run vessel gameplay integrations
-        run: timeout 90s node --test tests/vessel-stress-test.test.mjs tests/deck-speech-light-respawn-audio.test.mjs tests/medium-crew-vessel.test.mjs tests/vessel-authority.test.mjs tests/vessel-authority-persistence.test.mjs tests/vessel-extended-hull-combat.test.mjs tests/vessel-repair-lifecycle.test.mjs
+        run: timeout 90s node --test tests/vessel-stress-test.test.mjs tests/deck-speech-light-respawn-audio.test.mjs tests/vessel-authority.test.mjs tests/vessel-authority-persistence.test.mjs tests/vessel-extended-hull-combat.test.mjs tests/vessel-repair-lifecycle.test.mjs tests/vessel-spatial-damage.test.mjs
 
       - name: Run strict vessel architecture gate
         env:
