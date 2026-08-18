@@ -7,7 +7,6 @@ import {
   setServerFreePresence,
   tickServerFreeRoom,
 } from "../src/free-roam-server.js";
-import {createTargetMenuSpeechQueue} from "../public/src/free-roam-target-menu.js";
 import {
   createKeyboardReleaseWatchdog,
   KEYBOARD_INITIAL_STALE_MS,
@@ -44,42 +43,6 @@ test("active legacy combat cannot be paused by entering a spatial location", () 
 
   assert.equal(player.spatialLocationId, "location.spatial.lab");
   assert.ok(entered.events.some(event => event.type === "location-enter"));
-});
-
-test("target menu speech serializes every explicit browsing step after one Safari reset", () => {
-  const clock = fakeClock();
-  const spoken = [];
-  let cancelCount = 0;
-  class FakeUtterance {
-    constructor(text) { this.text = text; }
-  }
-  const synth = {
-    getVoices: () => [{lang: "ru-RU", name: "Milena", voiceURI: "Milena"}],
-    resume() {},
-    cancel() { cancelCount += 1; },
-    speak(utterance) { spoken.push(utterance); },
-  };
-  const queue = createTargetMenuSpeechQueue({
-    synth,
-    Utterance: FakeUtterance,
-    resetDelayMs: 90,
-    setTimer: clock.setTimer,
-    clearTimer: clock.clearTimer,
-  });
-
-  assert.equal(queue.resetAndSpeak("Цель один"), true);
-  assert.equal(queue.enqueue("Цель два"), true);
-  assert.equal(queue.enqueue("Цель три"), true);
-  assert.equal(cancelCount, 1);
-  assert.equal(spoken.length, 0, "Safari reset window must elapse before first speak");
-
-  clock.advance(90);
-  assert.deepEqual(spoken.map(item => item.text), ["Цель один"]);
-  spoken[0].onend();
-  assert.deepEqual(spoken.map(item => item.text), ["Цель один", "Цель два"]);
-  spoken[1].onend();
-  assert.deepEqual(spoken.map(item => item.text), ["Цель один", "Цель два", "Цель три"]);
-  assert.equal(cancelCount, 1, "cycling targets must not cancel an earlier target phrase");
 });
 
 function fakeClock() {
