@@ -2,11 +2,10 @@
 
 import "./free-roam-speech-runtime-v2.js?v=2";
 import "./free-roam-combat-experience-v2.js?v=2";
-
-function targetMenuPhrase(text) {
-  const value = String(text || "").toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " ").trim();
-  return /^(выбор цели\.|боевая цель\.|цель \d+ из|навигация \d+ из|живых боевых целей|доступных целей|цель подтвердить нельзя|навожусь на цель|навигационная цель выбрана)/.test(value);
-}
+import {
+  installTargetMenuSpeechGateBypass,
+  isTargetMenuSpeech,
+} from "./free-roam-target-speech-policy.js?v=1";
 
 function installTargetMenuSpeechBypass() {
   const synth = globalThis.speechSynthesis;
@@ -14,7 +13,7 @@ function installTargetMenuSpeechBypass() {
   if (!synth || !runtime?.speak || synth.__echoTargetMenuSpeechBypassInstalled) return;
   const filteredSpeak = synth.speak?.bind?.(synth);
   if (!filteredSpeak) return;
-  const speak = utterance => targetMenuPhrase(utterance?.text)
+  const speak = utterance => isTargetMenuSpeech(utterance?.text)
     ? runtime.speak(utterance)
     : filteredSpeak(utterance);
   try {
@@ -45,6 +44,7 @@ function refreshCombatStatusLabel() {
   }
 }
 
+installTargetMenuSpeechGateBypass();
 installTargetMenuSpeechBypass();
 queueMicrotask(refreshCombatStatusLabel);
 setTimeout(refreshCombatStatusLabel, 0);
