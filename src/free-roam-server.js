@@ -10,6 +10,8 @@ import {
 } from "../public/src/free-roam-core-v8.js";
 import {applyCombatDamage} from "../public/src/free-roam-combat-v2.js?v=6";
 import {applyCombatAiHotfixV163} from "../public/src/free-roam-combat-ai-hotfix-v163.js?v=1";
+import {combatMenuActive} from "../public/src/free-roam-combat-context.js?v=1";
+import {FREE_ROAM_SPATIAL_LOCATIONS} from "../public/src/locations/free-roam-location-registry.js";
 import {replicatedFreeWorld} from "../public/src/free-roam-replication-v2.js";
 import {reserveUnconnectedBoats} from "../public/src/free-roam-reserve-boats.js";
 import {enforceHostileRespawnGrace} from "../public/src/free-roam-hostile-respawn-grace.js?v=1";
@@ -139,6 +141,38 @@ function withSpatialLegacyCombatIsolation(world, callback) {
   }
 }
 
+function emitSpatialCombatEntryDenied(world, playerIndex, locationId) {
+  world.events ||= [];
+  world.events.push({
+    type: "location-entry-blocked-combat",
+    text: "Во время активного боя вход в отдельную локацию закрыт. Сначала заверши бой.",
+    targets: [playerIndex],
+    at: world.time,
+    operationEvent: true,
+    spatialEvent: true,
+    sourcePlayer: playerIndex,
+    locationId,
+    reason: "legacy-combat-boundary",
+  });
+  if (world.events.length > 220) world.events.splice(0, world.events.length - 220);
+}
+
+export function blockUnsafeSpatialEntryDuringCombat(world, playerIndex, input, previousInput = {}) {
+  const player = world?.players?.[playerIndex];
+  if (!player || !input?.action || previousInput?.action) return false;
+  if (player.mode !== "foot" || player.airborne || player.spatialLocationId) return false;
+  if (!combatMenuActive(world)) return false;
+  const portalEntry = FREE_ROAM_SPATIAL_LOCATIONS.find(entry => {
+    const portal = entry?.portal;
+    if (!portal) return false;
+    return Math.hypot((Number(player.x) || 0) - (Number(portal.position?.x) || 0), (Number(player.y) || 0) - (Number(portal.position?.y) || 0)) <= Math.max(1, Number(portal.radius) || 4);
+  });
+  if (!portalEntry) return false;
+  input.action = false;
+  emitSpatialCombatEntryDenied(world, playerIndex, portalEntry.definition?.id || null);
+  return true;
+}
+
 function clearDeliveredPulses(serverRoom) {
   ensureInputBuffers(serverRoom);
   for (let index = 0; index < serverRoom.world.players.length; index += 1) {
@@ -203,6 +237,7 @@ export function applyServerFreeInput(serverRoom, role, input, rawSequence) {
 
   const normalized = normalizeInput(input);
   const previous = serverRoom.receivedInputs[playerIndex] || normalizeInput({});
+  blockUnsafeSpatialEntryDuringCombat(serverRoom.world, playerIndex, normalized, previous);
   const pending = serverRoom.pendingPulses[playerIndex] || (serverRoom.pendingPulses[playerIndex] = {});
   for (const key of PULSE_INPUT_KEYS) if (normalized[key] && !previous[key]) pending[key] = true;
   serverRoom.receivedInputs[playerIndex] = normalized;

@@ -1,5 +1,6 @@
 "use strict";
 
+import "./free-roam-keyboard-release-watchdog-v1.js?v=1";
 import {describeCombatTarget, listCombatTargets} from "./free-roam-targeting.js?v=35";
 import {combatMenuActive} from "./free-roam-combat-context.js?v=1";
 import {listVesselNavigationTargets} from "./vessel/vessel-navigation.js?v=1";
@@ -11,6 +12,145 @@ const NAVIGATION_ENTRIES = Object.freeze([
   Object.freeze({id: "navigation-board", menuKind: "navigation", navigationTargetId: "board", label: "доска заказов"}),
   Object.freeze({id: "navigation-locations", menuKind: "submenu", submenu: "locations", label: "локации"}),
 ]);
+
+function normalizeVoiceText(value) {
+  return String(value || "").toLowerCase().replace(/ё/g, "е");
+}
+
+function targetMenuVoice(synth) {
+  const voices = [...(synth?.getVoices?.() || [])];
+  return voices
+    .filter(voice => normalizeVoiceText(voice?.lang).startsWith("ru"))
+    .sort((left, right) => {
+      const score = voice => {
+        const name = normalizeVoiceText(`${voice?.name || ""} ${voice?.voiceURI || ""}`);
+        let value = 10;
+        if (/milena|милена/.test(name)) value += 1000;
+        if (/enhanced|premium|improved|natural|neural|улучш/.test(name)) value += 500;
+        if (/compact|компакт/.test(name)) value -= 200;
+        return value;
+      };
+      return score(right) - score(left);
+    })[0] || null;
+}
+
+function targetMenuSpeechRate() {
+  try {
+    const value = Number(globalThis.localStorage?.getItem?.("echo-free-roam-speech-rate"));
+    if (Number.isFinite(value) && value > 0) return Math.max(0.6, Math.min(2, value));
+  } catch (_) {}
+  return 1.18;
+}
+
+function targetMenuSpeechEnabled() {
+  try { return globalThis.localStorage?.getItem?.("echo-free-roam-speech") !== "off"; }
+  catch (_) { return true; }
+}
+
+export function createTargetMenuSpeechQueue({
+  synth = globalThis.speechSynthesis,
+  Utterance = globalThis.SpeechSynthesisUtterance,
+  resetDelayMs = 90,
+  setTimer = (callback, delay) => setTimeout(callback, delay),
+  clearTimer = timer => clearTimeout(timer),
+} = {}) {
+  const available = Boolean(synth && Utterance && typeof synth.speak === "function");
+  let generation = 0;
+  let queue = [];
+  let activeUtterance = null;
+  let startTimer = 0;
+  let watchdogTimer = 0;
+
+  function clearTimers() {
+    if (startTimer) clearTimer(startTimer);
+    if (watchdogTimer) clearTimer(watchdogTimer);
+    startTimer = 0;
+    watchdogTimer = 0;
+  }
+
+  function buildUtterance(text) {
+    const utterance = new Utterance(text);
+    utterance.lang = "ru-RU";
+    utterance.rate = targetMenuSpeechRate();
+    utterance.pitch = 1;
+    const voice = targetMenuVoice(synth);
+    if (voice) utterance.voice = voice;
+    return utterance;
+  }
+
+  function startNext(delay = 0) {
+    if (!available || activeUtterance || startTimer || !queue.length) return false;
+    const expectedGeneration = generation;
+    const run = () => {
+      startTimer = 0;
+      if (expectedGeneration !== generation || activeUtterance || !queue.length) return;
+      const text = queue.shift();
+      const utterance = buildUtterance(text);
+      activeUtterance = utterance;
+      const finish = () => {
+        if (expectedGeneration !== generation || activeUtterance !== utterance) return;
+        if (watchdogTimer) clearTimer(watchdogTimer);
+        watchdogTimer = 0;
+        activeUtterance = null;
+        startNext(0);
+      };
+      utterance.onend = finish;
+      utterance.onerror = finish;
+      try {
+        synth.resume?.();
+        synth.speak(utterance);
+        watchdogTimer = setTimer(finish, Math.max(5_000, Math.min(20_000, text.length * 115)));
+      } catch (_) {
+        finish();
+      }
+    };
+    if (delay > 0) startTimer = setTimer(run, delay);
+    else run();
+    return true;
+  }
+
+  function enqueue(text) {
+    const normalized = String(text || "").replace(/\s+/g, " ").trim();
+    if (!available || !targetMenuSpeechEnabled() || !normalized) return false;
+    queue.push(normalized);
+    startNext(0);
+    return true;
+  }
+
+  function resetAndSpeak(text) {
+    if (!available || !targetMenuSpeechEnabled()) return false;
+    generation += 1;
+    clearTimers();
+    queue = [];
+    activeUtterance = null;
+    try { synth.cancel?.(); } catch (_) {}
+    const normalized = String(text || "").replace(/\s+/g, " ").trim();
+    if (!normalized) return true;
+    queue.push(normalized);
+    // Safari may discard speech started in the same task as cancel(). One
+    // short reset window is enough; later target steps are a true FIFO queue.
+    startNext(Math.max(32, Number(resetDelayMs) || 90));
+    return true;
+  }
+
+  function clear({cancel = true} = {}) {
+    generation += 1;
+    clearTimers();
+    queue = [];
+    activeUtterance = null;
+    if (cancel) {
+      try { synth?.cancel?.(); } catch (_) {}
+    }
+  }
+
+  return {
+    available,
+    enqueue,
+    resetAndSpeak,
+    clear,
+    snapshot: () => ({queued: queue.length, active: Boolean(activeUtterance), delayed: Boolean(startTimer)}),
+  };
+}
 
 export function createTargetMenu({
   getWorld,
@@ -28,6 +168,7 @@ export function createTargetMenu({
   let menuLevel = "root";
   let cursor = 0;
   let targets = [];
+  const targetSpeech = createTargetMenuSpeechQueue();
 
   function rootTargets() {
     const world = getWorld();
@@ -88,6 +229,17 @@ export function createTargetMenu({
     return `Боевая цель. ${describeCombatTarget(target, combatIndex, combatTargets.length)}`;
   }
 
+  function announceBrowsedTarget(text) {
+    if (!text) return;
+    if (targetSpeech.enqueue(text)) announce(text, true, false);
+    else announce(text, true);
+  }
+
+  function announceTargetMenuStart(text) {
+    if (targetSpeech.resetAndSpeak(text)) announce(text, true, false);
+    else announce(text, true);
+  }
+
   function openLocations() {
     menuLevel = "locations";
     cursor = 0;
@@ -98,11 +250,10 @@ export function createTargetMenu({
       if (selected >= 0) cursor = selected;
     }
     const target = refresh();
-    announce(
+    announceTargetMenuStart(
       target
         ? `Локации. ${describe(target)} Листай и подтверди нужную локацию.`
         : "Подменю локаций пусто: сервер пока не зарегистрировал ни одной локации.",
-      true,
     );
     render();
   }
@@ -123,17 +274,17 @@ export function createTargetMenu({
     const navigationIndex = targets.findIndex(target => target.id === navigationId);
     cursor = selectedIndex >= 0 ? selectedIndex : navigationIndex >= 0 ? navigationIndex : 0;
     const target = refresh();
-    announce(
+    announceTargetMenuStart(
       target
         ? `Выбор цели. ${describe(target)} Листай, подтверди нужную или отмени выбор.`
         : combatMenuActive(world)
           ? "Бой ещё отмечен активным, но живых физических целей сервер сейчас не видит."
           : "Доступных целей сейчас нет.",
-      true,
     );
   }
 
   function close(announceCancellation = false) {
+    targetSpeech.clear();
     open = false;
     menuLevel = "root";
     targets = [];
@@ -146,13 +297,13 @@ export function createTargetMenu({
     if (!open) return;
     cursor += direction;
     const target = refresh();
-    announce(describe(target), true);
+    announceBrowsedTarget(describe(target));
   }
 
   function reportCurrent() {
     if (!open) return false;
     const target = refresh();
-    announce(target ? describe(target) : describe(null), true);
+    announceBrowsedTarget(target ? describe(target) : describe(null));
     return Boolean(target);
   }
 
@@ -168,6 +319,7 @@ export function createTargetMenu({
       return;
     }
     if (target.menuKind === "navigation") {
+      targetSpeech.clear();
       setNavigationTargetId(target.navigationTargetId);
       const locationId = spatialLocationIdFromNavigationTargetId(target.navigationTargetId);
       open = false;
@@ -184,6 +336,7 @@ export function createTargetMenu({
       render();
       return;
     }
+    targetSpeech.clear();
     setTargetId(target.id);
     open = false;
     menuLevel = "root";
