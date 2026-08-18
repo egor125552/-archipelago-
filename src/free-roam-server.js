@@ -97,10 +97,45 @@ function armObservedManualRespawns(serverRoom) {
   }
 }
 
+function emitSpatialBombDenied(world, playerIndex) {
+  world.events ||= [];
+  world.events.push({
+    type: "mega-bomb-denied",
+    text: "Мега-бомбу нельзя запускать через границу отдельной локации. Сначала выйди наружу.",
+    targets: [playerIndex],
+    at: world.time,
+    operationEvent: true,
+    sourcePlayer: playerIndex,
+    reason: "spatial-boundary",
+  });
+  if (world.events.length > 180) world.events.splice(0, world.events.length - 180);
+}
+
 function launchPendingMegaBombs(serverRoom) {
   ensureInputBuffers(serverRoom);
   for (let index = 0; index < serverRoom.world.players.length; index += 1) {
-    if (serverRoom.pendingPulses[index]?.megaBomb) launchMegaBomb(serverRoom.world, index);
+    if (!serverRoom.pendingPulses[index]?.megaBomb) continue;
+    const player = serverRoom.world.players[index];
+    if (player?.spatialLocationId && player.mode !== "dead") {
+      emitSpatialBombDenied(serverRoom.world, index);
+      continue;
+    }
+    launchMegaBomb(serverRoom.world, index);
+  }
+}
+
+function withSpatialLegacyCombatIsolation(world, callback) {
+  const presence = world?.freeActivities?.presence;
+  if (!Array.isArray(presence)) return callback();
+  const previous = [...presence];
+  for (let index = 0; index < (world.players || []).length; index += 1) {
+    const player = world.players[index];
+    if (player?.spatialLocationId && player.mode !== "dead") presence[index] = false;
+  }
+  try {
+    return callback();
+  } finally {
+    for (let index = 0; index < previous.length; index += 1) presence[index] = previous[index];
   }
 }
 
@@ -182,14 +217,16 @@ function stepInChunks(world, elapsedSeconds) {
   while (remaining > 0.0001) {
     const chunk = Math.min(MAX_STEP_SECONDS, remaining);
     enforceHostileRespawnGrace(world);
-    applyAuthoritativeCombatHotfix(world, 0);
+    withSpatialLegacyCombatIsolation(world, () => applyAuthoritativeCombatHotfix(world, 0));
     stepFreeWorld(world, chunk);
     recoverOrphanedHeavyPhase(world);
     enforceHostileRespawnGrace(world);
-    launchPendingEliteBossBombs(world);
-    stepMegaBombs(world, chunk);
+    withSpatialLegacyCombatIsolation(world, () => {
+      launchPendingEliteBossBombs(world);
+      stepMegaBombs(world, chunk);
+      applyAuthoritativeCombatHotfix(world, chunk);
+    });
     enforceHostileRespawnGrace(world);
-    applyAuthoritativeCombatHotfix(world, chunk);
     remaining -= chunk;
   }
 }
